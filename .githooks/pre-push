@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+protected_branch="refs/heads/main"
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  if [[ "$remote_ref" == "$protected_branch" ]]; then
+    cat >&2 <<'EOF'
+Direct pushes to main are disabled for this repository.
+
+Use a feature branch and open a pull request instead:
+
+  git switch -c feature/my-change
+  git push -u origin feature/my-change
+  gh pr create --base main --head feature/my-change
+
+EOF
+    exit 1
+  fi
+done
