@@ -1,0 +1,14 @@
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# Tauri / Rust
+src-tauri/target/
+src-tauri/Cargo.lock
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

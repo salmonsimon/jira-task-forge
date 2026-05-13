@@ -6,7 +6,9 @@ This document captures the product scope decisions from the grill session. UI co
 
 - Jira Task Forge is a Windows desktop app for preparing Jira work locally before creating issues through the Jira Cloud REST API.
 - The app is primarily personal-use in v1, but should not block future team distribution.
-- The app should feel familiar to Jira: dense tables, issue links, compact controls, side/detail panels, and restrained visual styling.
+- The app should feel familiar to Jira: dense tables, issue links, compact controls, focused issue windows, and restrained visual styling.
+- The app supports theme selection from Settings: `Light`, `Dark`, or `System`.
+- The prototype should default to a Jira-like dark theme for easier comparison with the user's current Jira workflow.
 - The app starts on the `Trays` tab with the tray selector. It does not reopen the last used tray automatically.
 - Main tabs are `Trays` and `JQL`.
 - Global chip-style actions are `Categories` and `Settings`.
@@ -38,6 +40,7 @@ This document captures the product scope decisions from the grill session. UI co
   - tasks with started notes
   - tasks with attachments
   - tasks with failed sync state and visible sync log
+- Clicking a task should open a focused floating task window, similar to Jira's issue focus view, instead of a persistent right-side inspector.
 
 ## Trays
 
@@ -111,7 +114,7 @@ This document captures the product scope decisions from the grill session. UI co
   - `Title`
   - `Priority`
   - possibly issue type when needed
-- Advanced editing opens a task detail panel and includes:
+- Advanced editing opens a focused task window and includes:
   - assisted description
   - images/attachments
   - language override
@@ -305,6 +308,7 @@ The AI should avoid inventing missing details and should ask follow-up questions
   - Jira connection/authentication
   - AI provider/model
   - default content language
+  - appearance theme: Light, Dark, or System
   - local data and backup/export
   - update-related configuration if needed
 - Jira auth should support OAuth 2.0 if setup is reasonable.
