@@ -35,6 +35,19 @@ http://127.0.0.1:1420
 npm run build
 ```
 
+## Local Git Guard
+
+This repo uses a local Git hook to block direct pushes to `main` from this workspace.
+
+Enable it after cloning:
+
+```bash
+git config core.hooksPath .githooks
+chmod +x .githooks/pre-push
+```
+
+GitHub branch protection is still preferred when available for the repository owner/plan.
+
 ## Tauri Notes
 
 The Tauri skeleton is present under `src-tauri/`, but running the native app requires Rust/Cargo to be installed in the development environment.
