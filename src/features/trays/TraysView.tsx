@@ -1,6 +1,6 @@
 import { Archive, Download, Filter, Loader2, UploadCloud } from "lucide-react";
 import { Button, TrayStateBadge } from "../../components/ui";
-import type { LocalTask, Tray } from "../../lib/types";
+import type { LocalTask, Priority, Tray } from "../../lib/types";
 import { groupTasksByProject } from "./groupTasksByProject";
 import { ProjectTaskGroup } from "./ProjectTaskGroup";
 import { QuickCapture } from "./QuickCapture";
@@ -11,13 +11,25 @@ export function TraysView({
   selectedTray,
   onOpenTray,
   onBackToSelector,
-  onOpenTask
+  onOpenTask,
+  onAddTask,
+  onDuplicateTask,
+  onDeleteTask,
+  selectedTaskId,
+  projects,
+  areas
 }: {
   trays: Tray[];
   selectedTray: Tray | null;
   onOpenTray: (tray: Tray) => void;
   onBackToSelector: () => void;
   onOpenTask: (task: LocalTask) => void;
+  onAddTask: (task: { project: string; area: string; title: string; priority: Priority }) => void;
+  onDuplicateTask: (taskId: string) => void;
+  onDeleteTask: (taskId: string) => void;
+  selectedTaskId: string | null;
+  projects: string[];
+  areas: string[];
 }) {
   if (!selectedTray) {
     return <TraySelector trays={trays} onOpenTray={onOpenTray} />;
@@ -51,7 +63,7 @@ export function TraysView({
         </div>
       </div>
 
-      <QuickCapture />
+      <QuickCapture projects={projects} areas={areas} onAddTask={onAddTask} />
 
       <div className="mt-4 rounded border border-[#dfe1e6] bg-white">
         <div className="flex items-center justify-between border-b border-[#dfe1e6] px-4 py-3">
@@ -71,7 +83,15 @@ export function TraysView({
 
         <div className="space-y-5 p-4">
           {Object.entries(grouped).map(([project, tasks]) => (
-            <ProjectTaskGroup key={project} project={project} tasks={tasks} onOpenTask={onOpenTask} />
+            <ProjectTaskGroup
+              key={project}
+              project={project}
+              tasks={tasks}
+              selectedTaskId={selectedTaskId}
+              onOpenTask={onOpenTask}
+              onDuplicateTask={onDuplicateTask}
+              onDeleteTask={onDeleteTask}
+            />
           ))}
         </div>
       </div>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AppHeader } from "./components/shell";
 import { CategoriesPanel } from "./features/categories";
 import { JqlView } from "./features/jql";
@@ -6,12 +6,15 @@ import { SettingsPanel } from "./features/settings";
 import { TaskFocusWindow } from "./features/task-detail";
 import { TraysView } from "./features/trays";
 import { mockAppDataAdapter } from "./lib/adapters";
-import type { LocalTask, MainTab, Panel, Tray } from "./lib/types";
+import { canDeleteTask, canDuplicateTask, deriveIssueTypeFromArea, deriveTrayStateFromTasks, duplicateLocalTask } from "./lib/domain";
+import type { LocalTask, MainTab, Panel, Priority, Tray } from "./lib/types";
 import { cn } from "./lib/utils";
 
 const appData = mockAppDataAdapter;
 
 export default function App() {
+  const taskIdCounter = useRef(0);
+  const [trays, setTrays] = useState<Tray[]>(() => cloneTrays(appData.listTrays()));
   const [activeTab, setActiveTab] = useState<MainTab>("trays");
   const [openPanel, setOpenPanel] = useState<Panel>(null);
   const [selectedTrayId, setSelectedTrayId] = useState<string | null>(null);
@@ -22,13 +25,17 @@ export default function App() {
   const [systemPrefersDark, setSystemPrefersDark] = useState(false);
 
   const selectedTray = useMemo(
-    () => appData.getTrayById(selectedTrayId),
-    [selectedTrayId]
+    () => trays.find((tray) => tray.id === selectedTrayId) ?? null,
+    [selectedTrayId, trays]
   );
 
   const selectedTask = useMemo(() => {
-    return appData.getTaskById(selectedTaskId);
-  }, [selectedTaskId]);
+    return trays.flatMap((tray) => tray.tasks).find((task) => task.id === selectedTaskId) ?? null;
+  }, [selectedTaskId, trays]);
+
+  const activeTrays = useMemo(() => trays.filter((tray) => tray.state !== "Archived"), [trays]);
+  const projectOptions = useMemo(() => appData.listProjects().filter((project) => !project.hidden).map((project) => project.name), []);
+  const areaOptions = useMemo(() => appData.listAreas().filter((area) => !area.hidden).map((area) => area.name), []);
 
   useEffect(() => {
     if (openPanel !== "detail") return;
@@ -53,6 +60,12 @@ export default function App() {
 
   const resolvedTheme = themeMode === "system" ? (systemPrefersDark ? "dark" : "light") : themeMode;
 
+  useEffect(() => {
+    if (openPanel === "detail" && !selectedTask) {
+      setOpenPanel(null);
+    }
+  }, [openPanel, selectedTask]);
+
   function openTask(task: LocalTask) {
     setSelectedTaskId(task.id);
     setOpenPanel("detail");
@@ -65,6 +78,72 @@ export default function App() {
     if (firstTask) setSelectedTaskId(firstTask.id);
   }
 
+  function nextTaskId() {
+    taskIdCounter.current += 1;
+    return `ltask-local-${Date.now().toString(36)}-${taskIdCounter.current}`;
+  }
+
+  function addTaskToSelectedTray(taskInput: { project: string; area: string; title: string; priority: Priority }) {
+    if (!selectedTrayId) return;
+
+    const nextTask: LocalTask = {
+      id: nextTaskId(),
+      project: taskInput.project,
+      area: taskInput.area,
+      title: taskInput.title,
+      priority: taskInput.priority,
+      issueType: deriveIssueTypeFromArea(taskInput.area),
+      syncStatus: "Pending",
+      descriptionStatus: "Missing",
+      language: "Spanish"
+    };
+
+    setTrays((currentTrays) =>
+      currentTrays.map((tray) =>
+        tray.id === selectedTrayId ? updateTrayTasks(tray, [...tray.tasks, nextTask]) : tray
+      )
+    );
+    setSelectedTaskId(nextTask.id);
+  }
+
+  function duplicateTask(taskId: string) {
+    const sourceTask = trays.flatMap((tray) => tray.tasks).find((task) => task.id === taskId);
+    if (!sourceTask || !canDuplicateTask(sourceTask)) return;
+
+    const duplicate = duplicateLocalTask(sourceTask, nextTaskId());
+
+    setTrays((currentTrays) =>
+      currentTrays.map((tray) => {
+        const taskIndex = tray.tasks.findIndex((task) => task.id === taskId);
+        if (taskIndex === -1) return tray;
+
+        const nextTasks = [...tray.tasks];
+        nextTasks.splice(taskIndex + 1, 0, duplicate);
+        return updateTrayTasks(tray, nextTasks);
+      })
+    );
+    setSelectedTaskId(duplicate.id);
+  }
+
+  function deleteTask(taskId: string) {
+    const tray = trays.find((candidate) => candidate.tasks.some((task) => task.id === taskId));
+    const task = tray?.tasks.find((candidate) => candidate.id === taskId);
+    if (!tray || !task || !canDeleteTask(task)) return;
+
+    if (selectedTaskId === taskId) {
+      const taskIndex = tray.tasks.findIndex((candidate) => candidate.id === taskId);
+      const replacementTask = tray.tasks[taskIndex + 1] ?? tray.tasks[taskIndex - 1] ?? null;
+      setSelectedTaskId(replacementTask?.id ?? null);
+      if (!replacementTask) setOpenPanel(null);
+    }
+
+    setTrays((currentTrays) =>
+      currentTrays.map((candidate) =>
+        candidate.id === tray.id ? updateTrayTasks(candidate, candidate.tasks.filter((candidateTask) => candidateTask.id !== taskId)) : candidate
+      )
+    );
+  }
+
   return (
     <div className={cn("min-h-screen bg-[#f7f8fa] text-[#172b4d]", resolvedTheme === "dark" && "theme-dark")}>
       <div className="flex min-h-screen">
@@ -72,11 +151,17 @@ export default function App() {
           <AppHeader activeTab={activeTab} setActiveTab={setActiveTab} openPanel={setOpenPanel} />
           {activeTab === "trays" ? (
             <TraysView
-              trays={appData.listActiveTrays()}
+              trays={activeTrays}
               selectedTray={selectedTray}
               onOpenTray={openTray}
               onBackToSelector={() => setSelectedTrayId(null)}
               onOpenTask={openTask}
+              onAddTask={addTaskToSelectedTray}
+              onDuplicateTask={duplicateTask}
+              onDeleteTask={deleteTask}
+              selectedTaskId={selectedTaskId}
+              projects={projectOptions}
+              areas={areaOptions}
             />
           ) : (
             <JqlView
@@ -106,4 +191,48 @@ export default function App() {
       </div>
     </div>
   );
+}
+
+function cloneTrays(trays: Tray[]): Tray[] {
+  return trays.map((tray) => ({
+    ...tray,
+    tasks: tray.tasks.map((task) => ({
+      ...task,
+      attachments: task.attachments?.map((attachment) => ({ ...attachment })),
+      syncLog: task.syncLog?.map((entry) => ({ ...entry })),
+      subtasks: task.subtasks ? [...task.subtasks] : undefined
+    }))
+  }));
+}
+
+function updateTrayTasks(tray: Tray, tasks: LocalTask[]): Tray {
+  return {
+    ...tray,
+    tasks,
+    state: deriveTrayStateFromTasks(tasks, tray.state),
+    summary: summarizeTrayTasks(tasks),
+    updatedAt: "Just now"
+  };
+}
+
+function summarizeTrayTasks(tasks: LocalTask[]): string {
+  if (tasks.length === 0) return "No tasks";
+
+  const counts = tasks.reduce(
+    (summary, task) => {
+      summary[task.syncStatus] += 1;
+      return summary;
+    },
+    { Pending: 0, Failed: 0, Exported: 0, Created: 0 } satisfies Record<LocalTask["syncStatus"], number>
+  );
+
+  return [
+    `${tasks.length} ${tasks.length === 1 ? "task" : "tasks"}`,
+    counts.Pending ? `${counts.Pending} pending` : null,
+    counts.Failed ? `${counts.Failed} failed` : null,
+    counts.Exported ? `${counts.Exported} exported` : null,
+    counts.Created ? `${counts.Created} created` : null
+  ]
+    .filter(Boolean)
+    .join(" · ");
 }

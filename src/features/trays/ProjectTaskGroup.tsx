@@ -1,15 +1,23 @@
-import { Copy, Layers3, Link2, PanelRightOpen } from "lucide-react";
+import { Copy, Layers3, Link2, PanelRightOpen, Trash2 } from "lucide-react";
 import { AreaBadge, DescriptionBadge, IconButton, IssueTypeBadge, PriorityBadge, SyncBadge } from "../../components/ui";
+import { canDeleteTask, canDuplicateTask } from "../../lib/domain";
 import type { LocalTask } from "../../lib/types";
+import { cn } from "../../lib/utils";
 
 export function ProjectTaskGroup({
   project,
   tasks,
-  onOpenTask
+  selectedTaskId,
+  onOpenTask,
+  onDuplicateTask,
+  onDeleteTask
 }: {
   project: string;
   tasks: LocalTask[];
+  selectedTaskId: string | null;
   onOpenTask: (task: LocalTask) => void;
+  onDuplicateTask: (taskId: string) => void;
+  onDeleteTask: (taskId: string) => void;
 }) {
   return (
     <div className="overflow-hidden rounded border border-[#dfe1e6] bg-white shadow-sm">
@@ -37,7 +45,10 @@ export function ProjectTaskGroup({
             <tbody>
               {tasks.map((task) => (
                 <tr
-                  className="cursor-pointer border-t border-[#ebecf0] bg-white hover:bg-[#f4f8ff]"
+                  className={cn(
+                    "cursor-pointer border-t border-[#ebecf0] bg-white hover:bg-[#f4f8ff]",
+                    selectedTaskId === task.id && "bg-[#deebff]"
+                  )}
                   key={task.id}
                   onClick={() => onOpenTask(task)}
                 >
@@ -67,9 +78,28 @@ export function ProjectTaskGroup({
                   </td>
                   <td className="px-3 py-2">
                     <div className="flex justify-end gap-1">
-                      <IconButton title="Duplicate task" onClick={(event) => event.stopPropagation()}>
-                        <Copy size={14} />
-                      </IconButton>
+                      {canDuplicateTask(task) ? (
+                        <IconButton
+                          title="Duplicate task"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            onDuplicateTask(task.id);
+                          }}
+                        >
+                          <Copy size={14} />
+                        </IconButton>
+                      ) : null}
+                      {canDeleteTask(task) ? (
+                        <IconButton
+                          title="Delete local task"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            onDeleteTask(task.id);
+                          }}
+                        >
+                          <Trash2 size={14} />
+                        </IconButton>
+                      ) : null}
                       <IconButton
                         title="Open detail"
                         onClick={(event) => {
