@@ -2,6 +2,82 @@
 
 This document is the default execution path for the repo. It is meant to support AFK implementation through parallel branches while keeping architecture and security-sensitive decisions human-in-the-loop.
 
+## Current Checkpoint
+
+Date: 2026-05-17
+
+Main is up to date at:
+
+```text
+e90dcf0 Merge pull request #6 from salmonsimon/feature/frontend-tray-interactions
+```
+
+Merged since the initial prototype:
+
+- PR #2: added `AGENTS.md` and this AFK/HITL implementation plan.
+- PR #3: extracted the single-file frontend prototype into shell, shared UI, and feature modules.
+- PR #4: added frontend domain contracts, mock data adapter, and pure task/tray/preflight helpers.
+- PR #5: added a pure CSV fallback export helper.
+- PR #6: added in-memory tray interactions for quick capture, duplicate, and delete.
+
+Open for HITL review:
+
+- Draft PR #7: proposed v1 architecture ADRs for SQLite, secrets, Jira sync/idempotency, backup/import, attachment path policy, and audit log redaction/retention.
+
+Current validation:
+
+- `npm run build` passes on `main`.
+- The prototype runs with `npm run dev` at:
+
+```text
+http://localhost:1420/
+```
+
+## Resume Checklist
+
+When starting a new chat/session, first do:
+
+```bash
+git fetch origin
+git checkout main
+git pull origin
+npm run build
+npm run dev
+```
+
+Then review the prototype at:
+
+```text
+http://localhost:1420/
+```
+
+Human QA to run before choosing the next implementation slice:
+
+- Open `Trays`.
+- Open an existing tray.
+- Add a task with Quick Capture and confirm it appears as a `Pending` local task.
+- Duplicate an editable task and confirm the copy appears after the original with `(copy)`.
+- Delete `Pending`, `Failed`, or `Exported` tasks.
+- Confirm `Created` tasks do not expose duplicate/delete actions.
+- Open task detail and confirm it still feels like a Jira-style focused task window.
+- Visit `JQL`, `Categories`, and `Settings` and confirm navigation still works.
+- Refresh the page and confirm changes disappear; this is expected because persistence is still in-memory.
+
+Expected limitations right now:
+
+- `Create in Jira` is not wired.
+- `Export CSV` is not wired to the UI yet, although a pure CSV helper exists.
+- SQLite persistence does not exist yet.
+- Jira, AI, credentials, attachments, backup/import, and audit log storage are not implemented.
+- In-memory changes are intentionally lost on refresh.
+
+Recommended next decision:
+
+- If the QA flow feels right, review Draft PR #7 and decide which proposed ADRs should become accepted or need changes.
+- Do not start SQLite, secret storage, Jira writes, attachment filesystem work, backup/import, or audit log persistence until the relevant ADRs are reviewed.
+- After HITL architecture review, the next implementation slice should be `feature/local-persistence`.
+- If QA reveals product/UI friction, do a small frontend-only fix branch before persistence.
+
 ## Working Model
 
 - Keep `main` protected and use short-lived feature branches.
