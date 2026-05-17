@@ -1,20 +1,24 @@
 import { Bot, History, Search, Sparkles, Star } from "lucide-react";
 import { Button, IssueTypeBadge, PriorityBadge, SegmentedControl } from "../../components/ui";
-import { jqlFavorites, jqlResults } from "../../lib/data";
+import type { JqlFavorite, JqlResult } from "../../lib/types";
 import { cn } from "../../lib/utils";
 
 export function JqlView({
   jqlMode,
   setJqlMode,
   selectedFavoriteId,
-  setSelectedFavoriteId
+  setSelectedFavoriteId,
+  favorites,
+  results
 }: {
   jqlMode: "direct" | "ai";
   setJqlMode: (mode: "direct" | "ai") => void;
   selectedFavoriteId: string | undefined;
   setSelectedFavoriteId: (id: string) => void;
+  favorites: JqlFavorite[];
+  results: JqlResult[];
 }) {
-  const selectedFavorite = jqlFavorites.find((favorite) => favorite.id === selectedFavoriteId) ?? jqlFavorites[0];
+  const selectedFavorite = favorites.find((favorite) => favorite.id === selectedFavoriteId) ?? favorites[0];
 
   return (
     <section className="grid flex-1 grid-cols-[280px_1fr] gap-4 px-5 py-4">
@@ -26,7 +30,7 @@ export function JqlView({
           </div>
         </div>
         <div className="p-2">
-          {jqlFavorites.map((favorite) => (
+          {favorites.map((favorite) => (
             <button
               className={cn(
                 "mb-1 w-full rounded px-3 py-2 text-left hover:bg-[#f4f8ff]",
@@ -118,7 +122,7 @@ export function JqlView({
                 </tr>
               </thead>
               <tbody>
-                {jqlResults.map((result) => (
+                {results.map((result) => (
                   <tr className="border-t border-[#ebecf0] hover:bg-[#f4f8ff]" key={result.key}>
                     <td className="px-3 py-2 font-medium text-[#0052cc]">{result.key}</td>
                     <td className="px-3 py-2">{result.project}</td>

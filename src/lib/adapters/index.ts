@@ -1,0 +1,1 @@
+export { mockAppDataAdapter } from "./mockAppDataAdapter";

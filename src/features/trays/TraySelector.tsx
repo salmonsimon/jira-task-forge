@@ -1,11 +1,8 @@
 import { Archive, FolderKanban, PanelRightOpen, Plus } from "lucide-react";
 import { Button, TrayStateBadge } from "../../components/ui";
-import { trays } from "../../lib/data";
 import type { Tray } from "../../lib/types";
 
-export function TraySelector({ onOpenTray }: { onOpenTray: (tray: Tray) => void }) {
-  const activeTrays = trays.filter((tray) => tray.state !== "Archived");
-
+export function TraySelector({ trays, onOpenTray }: { trays: Tray[]; onOpenTray: (tray: Tray) => void }) {
   return (
     <section className="flex-1 px-5 py-5">
       <div className="mb-4 flex items-center justify-between">
@@ -17,7 +14,7 @@ export function TraySelector({ onOpenTray }: { onOpenTray: (tray: Tray) => void 
       </div>
 
       <div className="grid gap-3">
-        {activeTrays.map((tray) => (
+        {trays.map((tray) => (
           <button
             className="flex items-center justify-between rounded border border-[#dfe1e6] bg-white px-4 py-3 text-left shadow-sm transition hover:border-[#4c9aff] hover:bg-[#f4f8ff]"
             key={tray.id}
