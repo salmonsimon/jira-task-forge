@@ -1,9 +1,16 @@
 import { EyeOff, Plus, RefreshCw, Tags } from "lucide-react";
 import { Button, PanelHeader } from "../../components/ui";
-import { areas, projects } from "../../lib/data";
 import type { Category } from "../../lib/types";
 
-export function CategoriesPanel({ onClose }: { onClose: () => void }) {
+export function CategoriesPanel({
+  projects,
+  areas,
+  onClose
+}: {
+  projects: Category[];
+  areas: Category[];
+  onClose: () => void;
+}) {
   return (
     <aside className="fixed right-0 top-0 z-30 flex h-screen w-[420px] flex-col border-l border-[#dfe1e6] bg-white shadow-xl">
       <PanelHeader title="Categories" subtitle="Projects and areas available in capture controls" onClose={onClose} />

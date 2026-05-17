@@ -1,10 +1,11 @@
 import { ChevronDown, CircleAlert, Image, Link2, Settings, Sparkles, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button, DescriptionBadge, IconButton, IssueTypeBadge, PriorityBadge, SyncBadge } from "../../components/ui";
+import { isTaskReadOnly } from "../../lib/domain";
 import type { LocalTask } from "../../lib/types";
 
 export function TaskFocusWindow({ task, onClose }: { task: LocalTask; onClose: () => void }) {
-  const readOnly = task.syncStatus === "Created";
+  const readOnly = isTaskReadOnly(task);
 
   return (
     <div className="fixed inset-0 z-40 bg-[#091e42]/60 px-8 py-8 backdrop-blur-[1px]" onMouseDown={onClose}>

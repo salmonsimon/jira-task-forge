@@ -7,18 +7,20 @@ import { QuickCapture } from "./QuickCapture";
 import { TraySelector } from "./TraySelector";
 
 export function TraysView({
+  trays,
   selectedTray,
   onOpenTray,
   onBackToSelector,
   onOpenTask
 }: {
+  trays: Tray[];
   selectedTray: Tray | null;
   onOpenTray: (tray: Tray) => void;
   onBackToSelector: () => void;
   onOpenTask: (task: LocalTask) => void;
 }) {
   if (!selectedTray) {
-    return <TraySelector onOpenTray={onOpenTray} />;
+    return <TraySelector trays={trays} onOpenTray={onOpenTray} />;
   }
 
   const grouped = groupTasksByProject(selectedTray.tasks);

@@ -5,6 +5,14 @@ export type SyncStatus = "Pending" | "Failed" | "Exported" | "Created";
 export type TrayState = "Active" | "Needs attention" | "Completed" | "Archived";
 export type IssueType = "Story" | "Bug" | "Sub-task";
 export type AttachmentPurpose = "AI only" | "Jira attachment" | "AI + Jira attachment";
+export type PreflightWarningSeverity = "blocking" | "resolvable";
+export type PreflightWarningCode =
+  | "missing-project"
+  | "missing-area"
+  | "missing-title"
+  | "missing-description"
+  | "missing-epic"
+  | "retry-failed-task";
 
 export type Attachment = {
   id: string;
@@ -69,4 +77,11 @@ export type JqlResult = {
   status: string;
   summary: string;
   assignee: string;
+};
+
+export type PreflightWarning = {
+  code: PreflightWarningCode;
+  severity: PreflightWarningSeverity;
+  taskId?: string;
+  message: string;
 };

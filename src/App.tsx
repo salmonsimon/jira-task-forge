@@ -5,28 +5,29 @@ import { JqlView } from "./features/jql";
 import { SettingsPanel } from "./features/settings";
 import { TaskFocusWindow } from "./features/task-detail";
 import { TraysView } from "./features/trays";
-import { jqlFavorites, trays } from "./lib/data";
+import { mockAppDataAdapter } from "./lib/adapters";
 import type { LocalTask, MainTab, Panel, Tray } from "./lib/types";
 import { cn } from "./lib/utils";
+
+const appData = mockAppDataAdapter;
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<MainTab>("trays");
   const [openPanel, setOpenPanel] = useState<Panel>(null);
   const [selectedTrayId, setSelectedTrayId] = useState<string | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>("ltask-timer");
-  const [selectedFavoriteId, setSelectedFavoriteId] = useState(jqlFavorites[0]?.id);
+  const [selectedFavoriteId, setSelectedFavoriteId] = useState(appData.listJqlFavorites()[0]?.id);
   const [jqlMode, setJqlMode] = useState<"direct" | "ai">("ai");
   const [themeMode, setThemeMode] = useState<"light" | "dark" | "system">("dark");
   const [systemPrefersDark, setSystemPrefersDark] = useState(false);
 
   const selectedTray = useMemo(
-    () => trays.find((tray) => tray.id === selectedTrayId) ?? null,
+    () => appData.getTrayById(selectedTrayId),
     [selectedTrayId]
   );
 
   const selectedTask = useMemo(() => {
-    if (!selectedTaskId) return null;
-    return trays.flatMap((tray) => tray.tasks).find((task) => task.id === selectedTaskId) ?? null;
+    return appData.getTaskById(selectedTaskId);
   }, [selectedTaskId]);
 
   useEffect(() => {
@@ -71,6 +72,7 @@ export default function App() {
           <AppHeader activeTab={activeTab} setActiveTab={setActiveTab} openPanel={setOpenPanel} />
           {activeTab === "trays" ? (
             <TraysView
+              trays={appData.listActiveTrays()}
               selectedTray={selectedTray}
               onOpenTray={openTray}
               onBackToSelector={() => setSelectedTrayId(null)}
@@ -82,6 +84,8 @@ export default function App() {
               setJqlMode={setJqlMode}
               selectedFavoriteId={selectedFavoriteId}
               setSelectedFavoriteId={setSelectedFavoriteId}
+              favorites={appData.listJqlFavorites()}
+              results={appData.listJqlResults()}
             />
           )}
         </main>
@@ -89,7 +93,13 @@ export default function App() {
         {openPanel === "detail" && selectedTask ? (
           <TaskFocusWindow task={selectedTask} onClose={() => setOpenPanel(null)} />
         ) : null}
-        {openPanel === "categories" ? <CategoriesPanel onClose={() => setOpenPanel(null)} /> : null}
+        {openPanel === "categories" ? (
+          <CategoriesPanel
+            projects={appData.listProjects()}
+            areas={appData.listAreas()}
+            onClose={() => setOpenPanel(null)}
+          />
+        ) : null}
         {openPanel === "settings" ? (
           <SettingsPanel themeMode={themeMode} setThemeMode={setThemeMode} onClose={() => setOpenPanel(null)} />
         ) : null}
