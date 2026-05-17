@@ -1,0 +1,54 @@
+# Jira Task Forge Agent Notes
+
+This repo is Saimon's local-first Windows desktop app for preparing Jira work
+before creating issues through Jira Cloud.
+
+## Platform
+
+Use the WSL2 Ubuntu checkout:
+
+```text
+/home/saimon/Development/jira-task-forge
+```
+
+## Project Context
+
+Before product, architecture, or implementation work, read:
+
+- `README.md`
+- `CONTEXT.md`
+- relevant ADRs in `docs/adr/`
+- `docs/product-decisions.md` when touching product behavior
+- `docs/HANDOFF.md` when continuing planned work
+
+User-facing UI copy is English. Jira task content, descriptions, areas, epics,
+and user-authored text may remain Spanish.
+
+## Delivery Workflow
+
+Use an AFK-first implementation flow:
+
+- Use PRDs when product direction is clear enough to specify.
+- Break PRDs and plans into thin vertical issues or implementation slices.
+- Treat implementation slices as AFK when an agent can complete them without
+  Saimon after the slice is ready.
+- Reserve HITL for product direction, architecture tradeoffs, provider choices,
+  integration risk, and final PR review.
+- Use TDD for deep modules and high-risk behavior.
+
+The Matt Pocock-style skills are global workflow tools for this project:
+`to-prd`, `to-issues`, `triage`, `grill-with-docs`, `tdd`, `diagnose`,
+`improve-codebase-architecture`, and `zoom-out`.
+
+## Framework Inbox
+
+Use the global `framework-inbox` skill when reusable UI, architecture, testing,
+workflow, or agent-pattern candidates appear. Capture candidates in:
+
+```text
+/home/saimon/Development/salmon-simon-framework/docs/framework-inbox.md
+```
+
+Good Jira Task Forge candidates include local-first state modules, Tauri app
+shell patterns, command adapters, tray editors, dropdowns, popovers, config
+editors, and Jira sync testing patterns.
