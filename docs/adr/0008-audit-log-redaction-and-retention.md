@@ -27,6 +27,31 @@ For v1, retain audit logs locally until the related tray is deleted or until a
 manual cleanup/export policy is accepted. Backups may include redacted audit
 summaries by default, with full redacted audit export requiring explicit review.
 
+For v1, retain audit logs for as long as the related tray exists. Archived trays
+keep their audit logs. Deleting a tray deletes its local audit logs along with
+other local tray data. Users may manually clear audit logs for a tray through a
+confirmed action. Do not apply an automatic date-based TTL in v1.
+
+Full backup exports should include redacted audit summaries by default. Full
+redacted audit events may be included only through an explicit advanced export
+option with UI warning copy, never silently.
+
+Audit error details should use an allowlist. Allowed fields include
+provider/integration name, operation name, HTTP status code, Jira error key/code
+when available, error category, retryable flag, local correlation ids, sync
+attempt id, relevant counts, endpoint path without sensitive query values, AI
+provider/model name, and a redacted short message capped at 500 characters.
+Disallowed fields include authorization headers, API tokens, raw request or
+response bodies, full AI prompts, full Jira descriptions, attachment bytes or
+base64, and absolute filesystem paths when a managed relative path is enough.
+
+Temporary diagnostic logging is allowed only for development/debug builds or
+behind an explicit feature flag. It must be off by default, redacted, excluded
+from backups, and written under `logs/diagnostics/` when persisted. Diagnostic
+logs may include payload shapes, status codes, timing, endpoint paths, and local
+correlation ids, but still must not include secrets. Persisted raw request or
+response bodies are out of scope for v1.
+
 ## Consequences
 
 - Failed syncs are explainable without turning logs into a privacy risk.
@@ -38,9 +63,4 @@ summaries by default, with full redacted audit export requiring explicit review.
 
 ## HITL Decisions Still Needed
 
-- Exact retention period or cleanup trigger for v1.
-- Whether backups include full redacted audit events or only summaries.
-- Whether users can manually clear audit logs per tray.
-- Allowed fields for Jira and AI error details.
-- Whether temporary diagnostic logging is permitted during development and where
-  it may be written.
+- None for v1 architecture review.
