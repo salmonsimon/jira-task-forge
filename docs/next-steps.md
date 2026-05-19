@@ -104,6 +104,7 @@ Goal:
 
 - Convert the current product direction into implementation slices.
 - Add ADRs for SQLite schema, secret storage, sync safety, and backup/import behavior before those areas become code.
+- Review proposed ADRs 0003-0008 before implementation branches finalize migrations, secret handling, Jira writes, backup/import behavior, attachment filesystem rules, or audit-log retention/redaction.
 
 HITL:
 
