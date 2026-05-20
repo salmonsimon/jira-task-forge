@@ -11,6 +11,7 @@ export function TraysView({
   selectedTray,
   onOpenTray,
   onCreateTray,
+  onRenameTray,
   onBackToSelector,
   onOpenTask,
   onAddTask,
@@ -24,6 +25,7 @@ export function TraysView({
   selectedTray: Tray | null;
   onOpenTray: (tray: Tray) => void;
   onCreateTray: () => void;
+  onRenameTray: (trayId: string, name: string) => void;
   onBackToSelector: () => void;
   onOpenTask: (task: LocalTask) => void;
   onAddTask: (task: { project: string; area: string; title: string; priority: Priority }) => void;
@@ -34,7 +36,7 @@ export function TraysView({
   areas: string[];
 }) {
   if (!selectedTray) {
-    return <TraySelector trays={trays} onOpenTray={onOpenTray} onCreateTray={onCreateTray} />;
+    return <TraySelector trays={trays} onOpenTray={onOpenTray} onCreateTray={onCreateTray} onRenameTray={onRenameTray} />;
   }
 
   const grouped = groupTasksByProject(selectedTray.tasks);
@@ -47,10 +49,7 @@ export function TraysView({
             Back to tray selector
           </button>
           <div className="flex items-center gap-2">
-            <input
-              className="h-8 w-[340px] rounded border border-transparent bg-transparent px-1 text-xl font-semibold outline-none hover:border-[#dfe1e6] focus:border-[#4c9aff] focus:bg-white"
-              defaultValue={selectedTray.name}
-            />
+            <h1 className="px-1 text-xl font-semibold">{selectedTray.name}</h1>
             <TrayStateBadge state={selectedTray.state} />
           </div>
         </div>

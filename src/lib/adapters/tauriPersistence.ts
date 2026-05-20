@@ -66,6 +66,20 @@ export async function createPersistedTray(name: string): Promise<Tray> {
   };
 }
 
+export async function renamePersistedTray(trayId: string, name: string): Promise<Tray | null> {
+  const tray = await invoke<BackendTray | null>("rename_tray", { trayId, name });
+  if (!tray) return null;
+
+  return {
+    id: tray.id,
+    name: tray.name,
+    state: mapTrayState(tray.state),
+    summary: "No tasks",
+    updatedAt: formatTimestamp(tray.updated_at),
+    tasks: []
+  };
+}
+
 export async function createPersistedTask(
   task: Pick<LocalTask, "project" | "area" | "title" | "priority" | "issueType" | "language">,
   trayId: string

@@ -3,7 +3,7 @@ import { useState, type FormEvent } from "react";
 import { Button, SelectLike } from "../../components/ui";
 import type { Priority } from "../../lib/types";
 
-const priorities: Priority[] = ["Lowest", "Low", "Medium", "High", "Highest"];
+const priorities: Priority[] = ["Highest", "High", "Medium", "Low", "Lowest"];
 
 export function QuickCapture({
   projects,

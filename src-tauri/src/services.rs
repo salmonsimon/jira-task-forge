@@ -27,6 +27,11 @@ impl AppServices {
         TrayRepository::new(&connection).list()
     }
 
+    pub fn rename_tray(&self, tray_id: &str, name: &str) -> DbResult<Option<Tray>> {
+        let connection = self.connection.lock().expect("database lock poisoned");
+        TrayRepository::new(&connection).update_name(tray_id, name)
+    }
+
     pub fn create_task(&self, new_task: NewTask) -> DbResult<LocalTask> {
         let connection = self.connection.lock().expect("database lock poisoned");
         TaskRepository::new(&connection).create(new_task)

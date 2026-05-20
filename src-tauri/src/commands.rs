@@ -16,6 +16,17 @@ pub fn list_trays(services: State<'_, AppServices>) -> Result<Vec<Tray>, String>
 }
 
 #[tauri::command]
+pub fn rename_tray(
+    services: State<'_, AppServices>,
+    tray_id: String,
+    name: String,
+) -> Result<Option<Tray>, String> {
+    services
+        .rename_tray(&tray_id, &name)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 pub fn create_task(
     services: State<'_, AppServices>,
     tray_id: String,

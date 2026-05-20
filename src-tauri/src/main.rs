@@ -30,6 +30,7 @@ pub fn run() {
             app_version,
             commands::create_tray,
             commands::list_trays,
+            commands::rename_tray,
             commands::create_task,
             commands::list_tasks,
             commands::delete_task

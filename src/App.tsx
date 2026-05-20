@@ -6,7 +6,13 @@ import { SettingsPanel } from "./features/settings";
 import { TaskFocusWindow } from "./features/task-detail";
 import { TraysView } from "./features/trays";
 import { mockAppDataAdapter } from "./lib/adapters";
-import { createPersistedTask, createPersistedTray, deletePersistedTask, listPersistedTrays } from "./lib/adapters/tauriPersistence";
+import {
+  createPersistedTask,
+  createPersistedTray,
+  deletePersistedTask,
+  listPersistedTrays,
+  renamePersistedTray
+} from "./lib/adapters/tauriPersistence";
 import { canDeleteTask, canDuplicateTask, deriveIssueTypeFromArea, deriveTrayStateFromTasks, duplicateLocalTask } from "./lib/domain";
 import type { LocalTask, MainTab, Panel, Priority, Tray } from "./lib/types";
 import { cn } from "./lib/utils";
@@ -25,6 +31,7 @@ export default function App() {
   const [themeMode, setThemeMode] = useState<"light" | "dark" | "system">("dark");
   const [systemPrefersDark, setSystemPrefersDark] = useState(false);
   const [usesTauriPersistence, setUsesTauriPersistence] = useState(false);
+  const lastSelectedTrayId = useRef<string | null>(null);
 
   const selectedTray = useMemo(
     () => trays.find((tray) => tray.id === selectedTrayId) ?? null,
@@ -101,6 +108,7 @@ export default function App() {
   }
 
   function openTray(tray: Tray) {
+    lastSelectedTrayId.current = tray.id;
     setSelectedTrayId(tray.id);
     setActiveTab("trays");
     const firstTask = tray.tasks[0];
@@ -126,8 +134,25 @@ export default function App() {
         };
 
     setTrays((currentTrays) => [nextTray, ...currentTrays]);
+    lastSelectedTrayId.current = nextTray.id;
     setSelectedTrayId(nextTray.id);
     setSelectedTaskId(null);
+  }
+
+  async function renameTray(trayId: string, name: string) {
+    const persistedTray = usesTauriPersistence ? await renamePersistedTray(trayId, name) : null;
+    setTrays((currentTrays) =>
+      currentTrays.map((tray) =>
+        tray.id === trayId
+          ? {
+              ...tray,
+              name: persistedTray?.name ?? name,
+              state: persistedTray?.state ?? tray.state,
+              updatedAt: persistedTray?.updatedAt ?? "Just now"
+            }
+          : tray
+      )
+    );
   }
 
   async function addTaskToSelectedTray(taskInput: { project: string; area: string; title: string; priority: Priority }) {
@@ -198,6 +223,29 @@ export default function App() {
     );
   }
 
+  useEffect(() => {
+    function handleSecondaryMouseNavigation(event: MouseEvent) {
+      if (event.button === 3) {
+        if (openPanel === "detail") {
+          setOpenPanel(null);
+          return;
+        }
+        if (selectedTrayId) {
+          lastSelectedTrayId.current = selectedTrayId;
+          setSelectedTrayId(null);
+        }
+      }
+
+      if (event.button === 4 && !selectedTrayId && lastSelectedTrayId.current) {
+        const tray = trays.find((candidate) => candidate.id === lastSelectedTrayId.current);
+        if (tray) openTray(tray);
+      }
+    }
+
+    window.addEventListener("mouseup", handleSecondaryMouseNavigation);
+    return () => window.removeEventListener("mouseup", handleSecondaryMouseNavigation);
+  }, [openPanel, selectedTrayId, trays]);
+
   return (
     <div className={cn("min-h-screen bg-[#f7f8fa] text-[#172b4d]", resolvedTheme === "dark" && "theme-dark")}>
       <div className="flex min-h-screen">
@@ -209,6 +257,7 @@ export default function App() {
               selectedTray={selectedTray}
               onOpenTray={openTray}
               onCreateTray={createTray}
+              onRenameTray={renameTray}
               onBackToSelector={() => setSelectedTrayId(null)}
               onOpenTask={openTask}
               onAddTask={addTaskToSelectedTray}

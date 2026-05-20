@@ -272,6 +272,20 @@ impl<'connection> TrayRepository<'connection> {
             Err(error) => Err(error.into()),
         }
     }
+
+    pub fn update_name(&self, id: &str, name: &str) -> DbResult<Option<Tray>> {
+        let updated_at = utc_now_string()?;
+        let changed = self.connection.execute(
+            "UPDATE trays SET name = ?1, updated_at = ?2 WHERE id = ?3",
+            (name, updated_at, id),
+        )?;
+
+        if changed == 0 {
+            return Ok(None);
+        }
+
+        self.find_by_id(id)
+    }
 }
 
 #[cfg(test)]
@@ -356,5 +370,25 @@ mod tests {
             task_repository.list_for_tray(&tray.id).expect("tasks list"),
             vec![second]
         );
+    }
+
+    #[test]
+    fn updates_tray_name_and_timestamp() {
+        let connection = open_in_memory_database().expect("database opens");
+        let repository = TrayRepository::new(&connection);
+        let tray = repository
+            .create(NewTray {
+                name: "Old name".to_string(),
+            })
+            .expect("tray creates");
+
+        let updated = repository
+            .update_name(&tray.id, "Launch prep")
+            .expect("update succeeds")
+            .expect("tray exists");
+
+        assert_eq!(updated.name, "Launch prep");
+        assert_eq!(updated.id, tray.id);
+        assert_ne!(updated.updated_at, "");
     }
 }
