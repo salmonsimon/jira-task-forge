@@ -10,6 +10,7 @@ export function TraysView({
   trays,
   selectedTray,
   onOpenTray,
+  onCreateTray,
   onBackToSelector,
   onOpenTask,
   onAddTask,
@@ -22,6 +23,7 @@ export function TraysView({
   trays: Tray[];
   selectedTray: Tray | null;
   onOpenTray: (tray: Tray) => void;
+  onCreateTray: () => void;
   onBackToSelector: () => void;
   onOpenTask: (task: LocalTask) => void;
   onAddTask: (task: { project: string; area: string; title: string; priority: Priority }) => void;
@@ -32,7 +34,7 @@ export function TraysView({
   areas: string[];
 }) {
   if (!selectedTray) {
-    return <TraySelector trays={trays} onOpenTray={onOpenTray} />;
+    return <TraySelector trays={trays} onOpenTray={onOpenTray} onCreateTray={onCreateTray} />;
   }
 
   const grouped = groupTasksByProject(selectedTray.tasks);

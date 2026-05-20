@@ -6,6 +6,7 @@ import { SettingsPanel } from "./features/settings";
 import { TaskFocusWindow } from "./features/task-detail";
 import { TraysView } from "./features/trays";
 import { mockAppDataAdapter } from "./lib/adapters";
+import { createPersistedTask, createPersistedTray, deletePersistedTask, listPersistedTrays } from "./lib/adapters/tauriPersistence";
 import { canDeleteTask, canDuplicateTask, deriveIssueTypeFromArea, deriveTrayStateFromTasks, duplicateLocalTask } from "./lib/domain";
 import type { LocalTask, MainTab, Panel, Priority, Tray } from "./lib/types";
 import { cn } from "./lib/utils";
@@ -23,6 +24,7 @@ export default function App() {
   const [jqlMode, setJqlMode] = useState<"direct" | "ai">("ai");
   const [themeMode, setThemeMode] = useState<"light" | "dark" | "system">("dark");
   const [systemPrefersDark, setSystemPrefersDark] = useState(false);
+  const [usesTauriPersistence, setUsesTauriPersistence] = useState(false);
 
   const selectedTray = useMemo(
     () => trays.find((tray) => tray.id === selectedTrayId) ?? null,
@@ -36,6 +38,33 @@ export default function App() {
   const activeTrays = useMemo(() => trays.filter((tray) => tray.state !== "Archived"), [trays]);
   const projectOptions = useMemo(() => appData.listProjects().filter((project) => !project.hidden).map((project) => project.name), []);
   const areaOptions = useMemo(() => appData.listAreas().filter((area) => !area.hidden).map((area) => area.name), []);
+
+  useEffect(() => {
+    let isCurrent = true;
+
+    listPersistedTrays()
+      .then((persistedTrays) => {
+        if (!isCurrent) return;
+        setUsesTauriPersistence(true);
+        setTrays(persistedTrays);
+        setSelectedTrayId((currentTrayId) =>
+          currentTrayId && persistedTrays.some((tray) => tray.id === currentTrayId) ? currentTrayId : null
+        );
+        setSelectedTaskId((currentTaskId) =>
+          currentTaskId && persistedTrays.some((tray) => tray.tasks.some((task) => task.id === currentTaskId))
+            ? currentTaskId
+            : null
+        );
+      })
+      .catch(() => {
+        if (!isCurrent) return;
+        setUsesTauriPersistence(false);
+      });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (openPanel !== "detail") return;
@@ -83,10 +112,28 @@ export default function App() {
     return `ltask-local-${Date.now().toString(36)}-${taskIdCounter.current}`;
   }
 
-  function addTaskToSelectedTray(taskInput: { project: string; area: string; title: string; priority: Priority }) {
+  async function createTray() {
+    const trayName = "New tray";
+    const nextTray = usesTauriPersistence
+      ? await createPersistedTray(trayName)
+      : {
+          id: `tray-local-${Date.now().toString(36)}`,
+          name: trayName,
+          state: "Active" as const,
+          summary: "No tasks",
+          updatedAt: "Just now",
+          tasks: []
+        };
+
+    setTrays((currentTrays) => [nextTray, ...currentTrays]);
+    setSelectedTrayId(nextTray.id);
+    setSelectedTaskId(null);
+  }
+
+  async function addTaskToSelectedTray(taskInput: { project: string; area: string; title: string; priority: Priority }) {
     if (!selectedTrayId) return;
 
-    const nextTask: LocalTask = {
+    const draftTask: LocalTask = {
       id: nextTaskId(),
       project: taskInput.project,
       area: taskInput.area,
@@ -97,6 +144,7 @@ export default function App() {
       descriptionStatus: "Missing",
       language: "Spanish"
     };
+    const nextTask = usesTauriPersistence ? await createPersistedTask(draftTask, selectedTrayId) : draftTask;
 
     setTrays((currentTrays) =>
       currentTrays.map((tray) =>
@@ -106,11 +154,13 @@ export default function App() {
     setSelectedTaskId(nextTask.id);
   }
 
-  function duplicateTask(taskId: string) {
-    const sourceTask = trays.flatMap((tray) => tray.tasks).find((task) => task.id === taskId);
-    if (!sourceTask || !canDuplicateTask(sourceTask)) return;
+  async function duplicateTask(taskId: string) {
+    const sourceTray = trays.find((tray) => tray.tasks.some((task) => task.id === taskId));
+    const sourceTask = sourceTray?.tasks.find((task) => task.id === taskId);
+    if (!sourceTray || !sourceTask || !canDuplicateTask(sourceTask)) return;
 
     const duplicate = duplicateLocalTask(sourceTask, nextTaskId());
+    const persistedDuplicate = usesTauriPersistence ? await createPersistedTask(duplicate, sourceTray.id) : duplicate;
 
     setTrays((currentTrays) =>
       currentTrays.map((tray) => {
@@ -118,17 +168,21 @@ export default function App() {
         if (taskIndex === -1) return tray;
 
         const nextTasks = [...tray.tasks];
-        nextTasks.splice(taskIndex + 1, 0, duplicate);
+        nextTasks.splice(taskIndex + 1, 0, persistedDuplicate);
         return updateTrayTasks(tray, nextTasks);
       })
     );
-    setSelectedTaskId(duplicate.id);
+    setSelectedTaskId(persistedDuplicate.id);
   }
 
-  function deleteTask(taskId: string) {
+  async function deleteTask(taskId: string) {
     const tray = trays.find((candidate) => candidate.tasks.some((task) => task.id === taskId));
     const task = tray?.tasks.find((candidate) => candidate.id === taskId);
     if (!tray || !task || !canDeleteTask(task)) return;
+    if (usesTauriPersistence) {
+      const deleted = await deletePersistedTask(taskId);
+      if (!deleted) return;
+    }
 
     if (selectedTaskId === taskId) {
       const taskIndex = tray.tasks.findIndex((candidate) => candidate.id === taskId);
@@ -154,6 +208,7 @@ export default function App() {
               trays={activeTrays}
               selectedTray={selectedTray}
               onOpenTray={openTray}
+              onCreateTray={createTray}
               onBackToSelector={() => setSelectedTrayId(null)}
               onOpenTask={openTask}
               onAddTask={addTaskToSelectedTray}

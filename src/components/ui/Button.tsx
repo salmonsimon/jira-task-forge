@@ -1,17 +1,19 @@
-import type { ReactNode } from "react";
+import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { cn } from "../../lib/utils";
 
 export function Button({
   children,
   icon,
-  variant = "primary"
+  variant = "primary",
+  ...buttonProps
 }: {
   children: ReactNode;
   icon?: ReactNode;
   variant?: "primary" | "secondary" | "ghost" | "darkPrimary" | "darkSecondary" | "darkGhost";
-}) {
+} & ButtonHTMLAttributes<HTMLButtonElement>) {
   return (
     <button
+      {...buttonProps}
       className={cn(
         "inline-flex h-8 items-center justify-center gap-1.5 rounded px-3 text-sm font-medium transition",
         variant === "primary" && "bg-[#0052cc] text-white hover:bg-[#0747a6]",
@@ -19,7 +21,8 @@ export function Button({
         variant === "ghost" && "text-[#42526e] hover:bg-[#f4f5f7]",
         variant === "darkPrimary" && "bg-[#0c66e4] text-white hover:bg-[#0052cc]",
         variant === "darkSecondary" && "border border-[#5c606a] bg-[#303238] text-[#dfe1e6] hover:bg-[#3a3d43]",
-        variant === "darkGhost" && "text-[#dfe1e6] hover:bg-[#3a3d43]"
+        variant === "darkGhost" && "text-[#dfe1e6] hover:bg-[#3a3d43]",
+        buttonProps.className
       )}
     >
       {icon}

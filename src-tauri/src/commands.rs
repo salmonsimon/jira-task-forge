@@ -1,6 +1,6 @@
 use tauri::State;
 
-use crate::models::{NewTray, Tray};
+use crate::models::{LocalTask, NewTask, NewTray, Tray};
 use crate::services::AppServices;
 
 #[tauri::command]
@@ -13,4 +13,40 @@ pub fn create_tray(services: State<'_, AppServices>, name: String) -> Result<Tra
 #[tauri::command]
 pub fn list_trays(services: State<'_, AppServices>) -> Result<Vec<Tray>, String> {
     services.list_trays().map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn create_task(
+    services: State<'_, AppServices>,
+    tray_id: String,
+    project: String,
+    area: String,
+    title: String,
+    priority: String,
+    issue_type: String,
+    content_language: String,
+) -> Result<LocalTask, String> {
+    services
+        .create_task(NewTask {
+            tray_id,
+            project,
+            area,
+            title,
+            priority,
+            issue_type,
+            content_language,
+        })
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn list_tasks(services: State<'_, AppServices>) -> Result<Vec<LocalTask>, String> {
+    services.list_tasks().map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn delete_task(services: State<'_, AppServices>, task_id: String) -> Result<bool, String> {
+    services
+        .delete_task(&task_id)
+        .map_err(|error| error.to_string())
 }

@@ -29,7 +29,10 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             app_version,
             commands::create_tray,
-            commands::list_trays
+            commands::list_trays,
+            commands::create_task,
+            commands::list_tasks,
+            commands::delete_task
         ])
         .run(tauri::generate_context!())
         .expect("error while running Jira Task Forge");

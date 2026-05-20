@@ -43,3 +43,35 @@ impl TrayState {
 pub struct NewTray {
     pub name: String,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LocalTask {
+    pub id: String,
+    pub tray_id: String,
+    pub project: String,
+    pub area: String,
+    pub title: String,
+    pub priority: String,
+    pub issue_type: String,
+    pub sync_status: String,
+    pub description_status: String,
+    pub content_language: String,
+    pub jira_key: Option<String>,
+    pub jira_url: Option<String>,
+    pub epic_key: Option<String>,
+    pub parent_task_id: Option<String>,
+    pub task_order: i64,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NewTask {
+    pub tray_id: String,
+    pub project: String,
+    pub area: String,
+    pub title: String,
+    pub priority: String,
+    pub issue_type: String,
+    pub content_language: String,
+}
