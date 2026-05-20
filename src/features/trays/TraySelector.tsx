@@ -1,5 +1,5 @@
 import { Archive, Check, FolderKanban, PanelRightOpen, Pencil, Plus, X } from "lucide-react";
-import { useState } from "react";
+import { useState, type MouseEvent } from "react";
 import { Button, IconButton, TrayStateBadge } from "../../components/ui";
 import type { Tray } from "../../lib/types";
 
@@ -35,6 +35,10 @@ export function TraySelector({
     cancelRename();
   }
 
+  function stopCardClick(event: MouseEvent) {
+    event.stopPropagation();
+  }
+
   return (
     <section className="flex-1 px-5 py-5">
       <div className="mb-4 flex items-center justify-between">
@@ -55,15 +59,18 @@ export function TraySelector({
           </div>
         ) : null}
         {trays.map((tray) => (
-          <div
-            className="flex items-center justify-between rounded border border-[#dfe1e6] bg-white px-4 py-3 text-left shadow-sm transition hover:border-[#4c9aff] hover:bg-[#f4f8ff]"
+          <button
+            className="flex w-full items-center justify-between rounded border border-[#dfe1e6] bg-white px-4 py-3 text-left shadow-sm transition hover:border-[#4c9aff] hover:bg-[#f4f8ff]"
             key={tray.id}
+            onClick={() => {
+              if (editingTrayId !== tray.id) onOpenTray(tray);
+            }}
           >
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <FolderKanban size={16} className="text-[#42526e]" />
                 {editingTrayId === tray.id ? (
-                  <>
+                  <span className="flex items-center gap-2" onClick={stopCardClick}>
                     <input
                       autoFocus
                       className="h-8 min-w-[260px] rounded border border-[#4c9aff] bg-white px-2 text-sm font-medium outline-none ring-2 ring-[#deebff]"
@@ -80,13 +87,17 @@ export function TraySelector({
                     <IconButton title="Cancel tray rename" onClick={cancelRename}>
                       <X size={16} />
                     </IconButton>
-                  </>
+                  </span>
                 ) : (
                   <>
-                    <button className="font-medium hover:underline" onClick={() => onOpenTray(tray)}>
-                      {tray.name}
-                    </button>
-                    <IconButton title="Rename tray" onClick={() => beginRename(tray)}>
+                    <span className="font-medium">{tray.name}</span>
+                    <IconButton
+                      title="Rename tray"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        beginRename(tray);
+                      }}
+                    >
                       <Pencil size={14} />
                     </IconButton>
                   </>
@@ -95,11 +106,11 @@ export function TraySelector({
               </div>
               <div className="mt-1 text-xs text-[#6b778c]">{tray.summary}</div>
             </div>
-            <button className="flex items-center gap-3 text-xs text-[#6b778c]" onClick={() => onOpenTray(tray)}>
+            <span className="flex items-center gap-3 text-xs text-[#6b778c]">
               <span>{tray.updatedAt}</span>
               <PanelRightOpen size={16} />
-            </button>
-          </div>
+            </span>
+          </button>
         ))}
       </div>
 
