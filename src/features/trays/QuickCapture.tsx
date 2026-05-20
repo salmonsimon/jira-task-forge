@@ -74,7 +74,7 @@ function CaptureSelect({
   return (
     <select
       aria-label={ariaLabel}
-      className={`${width} h-9 rounded border border-[#c1c7d0] bg-white px-3 text-sm outline-none focus:border-[#4c9aff] focus:ring-2 focus:ring-[#deebff]`}
+      className={`${width} h-9 rounded border border-[#c1c7d0] bg-white px-3 text-sm outline-none focus:border-[#4c9aff] focus:ring-2 focus:ring-[#deebff] dark:border-[#5c606a] dark:bg-[#303238] dark:text-[#f4f5f7] dark:focus:border-[#85b8ff] dark:focus:ring-[#1d355c]`}
       value={value}
       onChange={(event) => onChange(event.target.value)}
     >
