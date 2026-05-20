@@ -84,7 +84,7 @@ export function TraysView({
             Export CSV
           </Button>
           {isArchived ? (
-            <Button variant="secondary" icon={<RotateCcw size={14} />} onClick={() => onRestoreTray(selectedTray.id)}>
+            <Button icon={<RotateCcw size={14} />} onClick={() => onRestoreTray(selectedTray.id)}>
               Restore
             </Button>
           ) : (
