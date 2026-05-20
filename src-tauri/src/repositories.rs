@@ -286,6 +286,41 @@ impl<'connection> TrayRepository<'connection> {
 
         self.find_by_id(id)
     }
+
+    pub fn archive(&self, id: &str) -> DbResult<Option<Tray>> {
+        let now = utc_now_string()?;
+        let changed = self.connection.execute(
+            "UPDATE trays SET state = ?1, archived_at = ?2, updated_at = ?2 WHERE id = ?3",
+            (TrayState::Archived.as_db_value(), &now, id),
+        )?;
+
+        if changed == 0 {
+            return Ok(None);
+        }
+
+        self.find_by_id(id)
+    }
+
+    pub fn restore(&self, id: &str) -> DbResult<Option<Tray>> {
+        let now = utc_now_string()?;
+        let changed = self.connection.execute(
+            "UPDATE trays SET state = ?1, archived_at = NULL, updated_at = ?2 WHERE id = ?3",
+            (TrayState::Active.as_db_value(), now, id),
+        )?;
+
+        if changed == 0 {
+            return Ok(None);
+        }
+
+        self.find_by_id(id)
+    }
+
+    pub fn delete(&self, id: &str) -> DbResult<bool> {
+        let changed = self
+            .connection
+            .execute("DELETE FROM trays WHERE id = ?1", [id])?;
+        Ok(changed > 0)
+    }
 }
 
 #[cfg(test)]
@@ -390,5 +425,36 @@ mod tests {
         assert_eq!(updated.name, "Launch prep");
         assert_eq!(updated.id, tray.id);
         assert_ne!(updated.updated_at, "");
+    }
+
+    #[test]
+    fn archives_restores_and_deletes_trays() {
+        let connection = open_in_memory_database().expect("database opens");
+        let repository = TrayRepository::new(&connection);
+        let tray = repository
+            .create(NewTray {
+                name: "Lifecycle tray".to_string(),
+            })
+            .expect("tray creates");
+
+        let archived = repository
+            .archive(&tray.id)
+            .expect("archive succeeds")
+            .expect("tray exists");
+        assert_eq!(archived.state, TrayState::Archived);
+        assert!(archived.archived_at.is_some());
+
+        let restored = repository
+            .restore(&tray.id)
+            .expect("restore succeeds")
+            .expect("tray exists");
+        assert_eq!(restored.state, TrayState::Active);
+        assert_eq!(restored.archived_at, None);
+
+        assert!(repository.delete(&tray.id).expect("delete succeeds"));
+        assert_eq!(
+            repository.find_by_id(&tray.id).expect("query succeeds"),
+            None
+        );
     }
 }

@@ -13,6 +13,11 @@ export function TraysView({
   onOpenTray,
   onCreateTray,
   onRenameTray,
+  onArchiveTray,
+  onRestoreTray,
+  onDeleteTray,
+  showArchived,
+  onToggleArchived,
   onBackToSelector,
   onOpenTask,
   onAddTask,
@@ -27,6 +32,11 @@ export function TraysView({
   onOpenTray: (tray: Tray) => void;
   onCreateTray: () => void;
   onRenameTray: (trayId: string, name: string) => void;
+  onArchiveTray: (trayId: string) => void;
+  onRestoreTray: (trayId: string) => void;
+  onDeleteTray: (trayId: string) => void;
+  showArchived: boolean;
+  onToggleArchived: () => void;
   onBackToSelector: () => void;
   onOpenTask: (task: LocalTask) => void;
   onAddTask: (task: { project: string; area: string; title: string; priority: Priority }) => void;
@@ -37,7 +47,18 @@ export function TraysView({
   areas: string[];
 }) {
   if (!selectedTray) {
-    return <TraySelector trays={trays} onOpenTray={onOpenTray} onCreateTray={onCreateTray} onRenameTray={onRenameTray} />;
+    return (
+      <TraySelector
+        trays={trays}
+        onOpenTray={onOpenTray}
+        onCreateTray={onCreateTray}
+        onRenameTray={onRenameTray}
+        onRestoreTray={onRestoreTray}
+        onDeleteTray={onDeleteTray}
+        showArchived={showArchived}
+        onToggleArchived={onToggleArchived}
+      />
+    );
   }
 
   const grouped = groupTasksByProject(selectedTray.tasks);
@@ -55,7 +76,7 @@ export function TraysView({
           <Button variant="secondary" icon={<Download size={14} />}>
             Export CSV
           </Button>
-          <Button variant="secondary" icon={<Archive size={14} />}>
+          <Button variant="secondary" icon={<Archive size={14} />} onClick={() => onArchiveTray(selectedTray.id)}>
             Archive
           </Button>
           <Button icon={<UploadCloud size={14} />}>Create in Jira</Button>

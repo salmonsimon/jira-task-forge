@@ -7,11 +7,14 @@ import { TaskFocusWindow } from "./features/task-detail";
 import { TraysView } from "./features/trays";
 import { mockAppDataAdapter } from "./lib/adapters";
 import {
+  archivePersistedTray,
   createPersistedTask,
   createPersistedTray,
+  deletePersistedTray,
   deletePersistedTask,
   listPersistedTrays,
-  renamePersistedTray
+  renamePersistedTray,
+  restorePersistedTray
 } from "./lib/adapters/tauriPersistence";
 import { canDeleteTask, canDuplicateTask, deriveIssueTypeFromArea, deriveTrayStateFromTasks, duplicateLocalTask } from "./lib/domain";
 import type { LocalTask, MainTab, Panel, Priority, Tray } from "./lib/types";
@@ -31,6 +34,7 @@ export default function App() {
   const [themeMode, setThemeMode] = useState<"light" | "dark" | "system">("dark");
   const [systemPrefersDark, setSystemPrefersDark] = useState(false);
   const [usesTauriPersistence, setUsesTauriPersistence] = useState(false);
+  const [showArchivedTrays, setShowArchivedTrays] = useState(false);
   const lastSelectedTrayId = useRef<string | null>(null);
 
   const selectedTray = useMemo(
@@ -42,7 +46,10 @@ export default function App() {
     return trays.flatMap((tray) => tray.tasks).find((task) => task.id === selectedTaskId) ?? null;
   }, [selectedTaskId, trays]);
 
-  const activeTrays = useMemo(() => trays.filter((tray) => tray.state !== "Archived"), [trays]);
+  const visibleTrays = useMemo(
+    () => trays.filter((tray) => (showArchivedTrays ? tray.state === "Archived" : tray.state !== "Archived")),
+    [showArchivedTrays, trays]
+  );
   const projectOptions = useMemo(() => appData.listProjects().filter((project) => !project.hidden).map((project) => project.name), []);
   const areaOptions = useMemo(() => appData.listAreas().filter((area) => !area.hidden).map((area) => area.name), []);
 
@@ -155,6 +162,54 @@ export default function App() {
     );
   }
 
+  async function archiveTray(trayId: string) {
+    const persistedTray = usesTauriPersistence ? await archivePersistedTray(trayId) : null;
+    setTrays((currentTrays) =>
+      currentTrays.map((tray) =>
+        tray.id === trayId
+          ? {
+              ...tray,
+              state: persistedTray?.state ?? "Archived",
+              updatedAt: persistedTray?.updatedAt ?? "Just now"
+            }
+          : tray
+      )
+    );
+    setSelectedTrayId(null);
+  }
+
+  async function restoreTray(trayId: string) {
+    const persistedTray = usesTauriPersistence ? await restorePersistedTray(trayId) : null;
+    setTrays((currentTrays) =>
+      currentTrays.map((tray) =>
+        tray.id === trayId
+          ? {
+              ...tray,
+              state: persistedTray?.state ?? "Active",
+              updatedAt: persistedTray?.updatedAt ?? "Just now"
+            }
+          : tray
+      )
+    );
+  }
+
+  async function deleteTray(trayId: string) {
+    const tray = trays.find((candidate) => candidate.id === trayId);
+    if (!tray) return;
+
+    const confirmed = window.confirm(`Delete "${tray.name}" from local app data? Jira issues will not be deleted.`);
+    if (!confirmed) return;
+
+    if (usesTauriPersistence) {
+      const deleted = await deletePersistedTray(trayId);
+      if (!deleted) return;
+    }
+
+    setTrays((currentTrays) => currentTrays.filter((candidate) => candidate.id !== trayId));
+    if (selectedTrayId === trayId) setSelectedTrayId(null);
+    if (lastSelectedTrayId.current === trayId) lastSelectedTrayId.current = null;
+  }
+
   async function addTaskToSelectedTray(taskInput: { project: string; area: string; title: string; priority: Priority }) {
     if (!selectedTrayId) return;
 
@@ -253,11 +308,16 @@ export default function App() {
           <AppHeader activeTab={activeTab} setActiveTab={setActiveTab} openPanel={setOpenPanel} />
           {activeTab === "trays" ? (
             <TraysView
-              trays={activeTrays}
+              trays={visibleTrays}
               selectedTray={selectedTray}
               onOpenTray={openTray}
               onCreateTray={createTray}
               onRenameTray={renameTray}
+              onArchiveTray={archiveTray}
+              onRestoreTray={restoreTray}
+              onDeleteTray={deleteTray}
+              showArchived={showArchivedTrays}
+              onToggleArchived={() => setShowArchivedTrays((current) => !current)}
               onBackToSelector={() => setSelectedTrayId(null)}
               onOpenTask={openTask}
               onAddTask={addTaskToSelectedTray}

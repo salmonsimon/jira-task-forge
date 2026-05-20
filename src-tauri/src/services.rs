@@ -32,6 +32,21 @@ impl AppServices {
         TrayRepository::new(&connection).update_name(tray_id, name)
     }
 
+    pub fn archive_tray(&self, tray_id: &str) -> DbResult<Option<Tray>> {
+        let connection = self.connection.lock().expect("database lock poisoned");
+        TrayRepository::new(&connection).archive(tray_id)
+    }
+
+    pub fn restore_tray(&self, tray_id: &str) -> DbResult<Option<Tray>> {
+        let connection = self.connection.lock().expect("database lock poisoned");
+        TrayRepository::new(&connection).restore(tray_id)
+    }
+
+    pub fn delete_tray(&self, tray_id: &str) -> DbResult<bool> {
+        let connection = self.connection.lock().expect("database lock poisoned");
+        TrayRepository::new(&connection).delete(tray_id)
+    }
+
     pub fn create_task(&self, new_task: NewTask) -> DbResult<LocalTask> {
         let connection = self.connection.lock().expect("database lock poisoned");
         TaskRepository::new(&connection).create(new_task)

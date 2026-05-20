@@ -1,4 +1,4 @@
-import { Archive, Check, FolderKanban, PanelRightOpen, Pencil, Plus, X } from "lucide-react";
+import { Archive, Check, FolderKanban, PanelRightOpen, Pencil, RotateCcw, Trash2, Plus, X } from "lucide-react";
 import { useState, type MouseEvent } from "react";
 import { Button, IconButton, TrayStateBadge } from "../../components/ui";
 import type { Tray } from "../../lib/types";
@@ -7,12 +7,20 @@ export function TraySelector({
   trays,
   onOpenTray,
   onCreateTray,
-  onRenameTray
+  onRenameTray,
+  onRestoreTray,
+  onDeleteTray,
+  showArchived,
+  onToggleArchived
 }: {
   trays: Tray[];
   onOpenTray: (tray: Tray) => void;
   onCreateTray: () => void;
   onRenameTray: (trayId: string, name: string) => void;
+  onRestoreTray: (trayId: string) => void;
+  onDeleteTray: (trayId: string) => void;
+  showArchived: boolean;
+  onToggleArchived: () => void;
 }) {
   const [editingTrayId, setEditingTrayId] = useState<string | null>(null);
   const [draftName, setDraftName] = useState("");
@@ -54,8 +62,10 @@ export function TraySelector({
       <div className="grid gap-3">
         {trays.length === 0 ? (
           <div className="rounded border border-dashed border-[#c1c7d0] bg-white px-4 py-8 text-center">
-            <p className="text-sm font-medium text-[#172b4d]">No trays yet</p>
-            <p className="mt-1 text-xs text-[#6b778c]">Create a tray to start preparing local Jira tasks.</p>
+            <p className="text-sm font-medium text-[#172b4d]">{showArchived ? "No archived trays" : "No trays yet"}</p>
+            <p className="mt-1 text-xs text-[#6b778c]">
+              {showArchived ? "Archived trays will appear here." : "Create a tray to start preparing local Jira tasks."}
+            </p>
           </div>
         ) : null}
         {trays.map((tray) => (
@@ -106,8 +116,28 @@ export function TraySelector({
               </div>
               <div className="mt-1 text-xs text-[#6b778c]">{tray.summary}</div>
             </div>
-            <span className="flex items-center gap-3 text-xs text-[#6b778c]">
+            <span className="flex items-center gap-2 text-xs text-[#6b778c]">
               <span>{tray.updatedAt}</span>
+              {tray.state === "Archived" ? (
+                <IconButton
+                  title="Restore tray"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onRestoreTray(tray.id);
+                  }}
+                >
+                  <RotateCcw size={15} />
+                </IconButton>
+              ) : null}
+              <IconButton
+                title="Delete tray"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onDeleteTray(tray.id);
+                }}
+              >
+                <Trash2 size={15} />
+              </IconButton>
               <PanelRightOpen size={16} />
             </span>
           </button>
@@ -115,8 +145,8 @@ export function TraySelector({
       </div>
 
       <div className="mt-5">
-        <Button variant="secondary" icon={<Archive size={14} />}>
-          View archived
+        <Button variant="secondary" icon={<Archive size={14} />} onClick={onToggleArchived}>
+          {showArchived ? "View active" : "View archived"}
         </Button>
       </div>
     </section>
