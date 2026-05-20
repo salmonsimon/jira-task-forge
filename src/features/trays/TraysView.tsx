@@ -1,4 +1,4 @@
-import { Archive, Check, Download, Filter, Loader2, Pencil, UploadCloud, X } from "lucide-react";
+import { Archive, Check, Download, Filter, Loader2, Pencil, RotateCcw, UploadCloud, X } from "lucide-react";
 import { useState } from "react";
 import { Button, IconButton, TrayStateBadge } from "../../components/ui";
 import type { LocalTask, Priority, Tray } from "../../lib/types";
@@ -53,6 +53,7 @@ export function TraysView({
         onOpenTray={onOpenTray}
         onCreateTray={onCreateTray}
         onRenameTray={onRenameTray}
+        onArchiveTray={onArchiveTray}
         onRestoreTray={onRestoreTray}
         onDeleteTray={onDeleteTray}
         showArchived={showArchived}
@@ -62,6 +63,7 @@ export function TraysView({
   }
 
   const grouped = groupTasksByProject(selectedTray.tasks);
+  const isArchived = selectedTray.state === "Archived";
 
   return (
     <section className="flex-1 px-5 py-4">
@@ -71,19 +73,32 @@ export function TraysView({
             Back to tray selector
           </button>
           <TrayHeaderName tray={selectedTray} onRenameTray={onRenameTray} />
+          {isArchived ? (
+            <p className="mt-2 max-w-[560px] text-xs text-[#6b778c]">
+              This tray is archived. You can inspect its tasks, export it, or restore it before editing.
+            </p>
+          ) : null}
         </div>
         <div className="flex items-center gap-2">
           <Button variant="secondary" icon={<Download size={14} />}>
             Export CSV
           </Button>
-          <Button variant="secondary" icon={<Archive size={14} />} onClick={() => onArchiveTray(selectedTray.id)}>
-            Archive
-          </Button>
-          <Button icon={<UploadCloud size={14} />}>Create in Jira</Button>
+          {isArchived ? (
+            <Button variant="secondary" icon={<RotateCcw size={14} />} onClick={() => onRestoreTray(selectedTray.id)}>
+              Restore
+            </Button>
+          ) : (
+            <>
+              <Button variant="secondary" icon={<Archive size={14} />} onClick={() => onArchiveTray(selectedTray.id)}>
+                Archive
+              </Button>
+              <Button icon={<UploadCloud size={14} />}>Create in Jira</Button>
+            </>
+          )}
         </div>
       </div>
 
-      <QuickCapture projects={projects} areas={areas} onAddTask={onAddTask} />
+      <QuickCapture disabled={isArchived} projects={projects} areas={areas} onAddTask={onAddTask} />
 
       <div className="mt-4 rounded border border-[#dfe1e6] bg-white">
         <div className="flex items-center justify-between border-b border-[#dfe1e6] px-4 py-3">
@@ -93,9 +108,9 @@ export function TraysView({
           </div>
           <div className="flex items-center gap-2 text-xs text-[#6b778c]">
             <span className="inline-flex items-center gap-1">
-              <Loader2 size={13} /> Sync ready
+              <Loader2 size={13} /> {isArchived ? "Archived read-only" : "Sync ready"}
             </span>
-            <Button variant="ghost" icon={<Filter size={14} />}>
+            <Button disabled={isArchived} variant="ghost" icon={<Filter size={14} />}>
               Review order
             </Button>
           </div>
@@ -111,6 +126,7 @@ export function TraysView({
               onOpenTask={onOpenTask}
               onDuplicateTask={onDuplicateTask}
               onDeleteTask={onDeleteTask}
+              readOnly={isArchived}
             />
           ))}
         </div>

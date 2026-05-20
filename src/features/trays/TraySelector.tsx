@@ -8,6 +8,7 @@ export function TraySelector({
   onOpenTray,
   onCreateTray,
   onRenameTray,
+  onArchiveTray,
   onRestoreTray,
   onDeleteTray,
   showArchived,
@@ -17,6 +18,7 @@ export function TraySelector({
   onOpenTray: (tray: Tray) => void;
   onCreateTray: () => void;
   onRenameTray: (trayId: string, name: string) => void;
+  onArchiveTray: (trayId: string) => void;
   onRestoreTray: (trayId: string) => void;
   onDeleteTray: (trayId: string) => void;
   showArchived: boolean;
@@ -128,7 +130,17 @@ export function TraySelector({
                 >
                   <RotateCcw size={15} />
                 </IconButton>
-              ) : null}
+              ) : (
+                <IconButton
+                  title="Archive tray"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onArchiveTray(tray.id);
+                  }}
+                >
+                  <Archive size={15} />
+                </IconButton>
+              )}
               <IconButton
                 title="Delete tray"
                 onClick={(event) => {
