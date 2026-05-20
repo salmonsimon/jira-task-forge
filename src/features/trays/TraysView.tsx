@@ -1,5 +1,6 @@
-import { Archive, Download, Filter, Loader2, UploadCloud } from "lucide-react";
-import { Button, TrayStateBadge } from "../../components/ui";
+import { Archive, Check, Download, Filter, Loader2, Pencil, UploadCloud, X } from "lucide-react";
+import { useState } from "react";
+import { Button, IconButton, TrayStateBadge } from "../../components/ui";
 import type { LocalTask, Priority, Tray } from "../../lib/types";
 import { groupTasksByProject } from "./groupTasksByProject";
 import { ProjectTaskGroup } from "./ProjectTaskGroup";
@@ -10,6 +11,8 @@ export function TraysView({
   trays,
   selectedTray,
   onOpenTray,
+  onCreateTray,
+  onRenameTray,
   onBackToSelector,
   onOpenTask,
   onAddTask,
@@ -22,6 +25,8 @@ export function TraysView({
   trays: Tray[];
   selectedTray: Tray | null;
   onOpenTray: (tray: Tray) => void;
+  onCreateTray: () => void;
+  onRenameTray: (trayId: string, name: string) => void;
   onBackToSelector: () => void;
   onOpenTask: (task: LocalTask) => void;
   onAddTask: (task: { project: string; area: string; title: string; priority: Priority }) => void;
@@ -32,7 +37,7 @@ export function TraysView({
   areas: string[];
 }) {
   if (!selectedTray) {
-    return <TraySelector trays={trays} onOpenTray={onOpenTray} />;
+    return <TraySelector trays={trays} onOpenTray={onOpenTray} onCreateTray={onCreateTray} onRenameTray={onRenameTray} />;
   }
 
   const grouped = groupTasksByProject(selectedTray.tasks);
@@ -44,13 +49,7 @@ export function TraysView({
           <button className="mb-1 text-xs font-medium text-[#0052cc] hover:underline" onClick={onBackToSelector}>
             Back to tray selector
           </button>
-          <div className="flex items-center gap-2">
-            <input
-              className="h-8 w-[340px] rounded border border-transparent bg-transparent px-1 text-xl font-semibold outline-none hover:border-[#dfe1e6] focus:border-[#4c9aff] focus:bg-white"
-              defaultValue={selectedTray.name}
-            />
-            <TrayStateBadge state={selectedTray.state} />
-          </div>
+          <TrayHeaderName tray={selectedTray} onRenameTray={onRenameTray} />
         </div>
         <div className="flex items-center gap-2">
           <Button variant="secondary" icon={<Download size={14} />}>
@@ -96,5 +95,68 @@ export function TraysView({
         </div>
       </div>
     </section>
+  );
+}
+
+function TrayHeaderName({
+  tray,
+  onRenameTray
+}: {
+  tray: Tray;
+  onRenameTray: (trayId: string, name: string) => void;
+}) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [draftName, setDraftName] = useState(tray.name);
+
+  function beginRename() {
+    setDraftName(tray.name);
+    setIsEditing(true);
+  }
+
+  function cancelRename() {
+    setDraftName(tray.name);
+    setIsEditing(false);
+  }
+
+  function acceptRename() {
+    const nextName = draftName.trim();
+    if (nextName && nextName !== tray.name) {
+      onRenameTray(tray.id, nextName);
+    }
+    setIsEditing(false);
+  }
+
+  if (isEditing) {
+    return (
+      <div className="flex items-center gap-2">
+        <input
+          autoFocus
+          className="h-9 w-[340px] rounded border border-[#4c9aff] bg-white px-2 text-xl font-semibold outline-none ring-2 ring-[#deebff]"
+          value={draftName}
+          onChange={(event) => setDraftName(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") acceptRename();
+            if (event.key === "Escape") cancelRename();
+          }}
+        />
+        <IconButton title="Save tray name" onClick={acceptRename}>
+          <Check size={16} />
+        </IconButton>
+        <IconButton title="Cancel tray rename" onClick={cancelRename}>
+          <X size={16} />
+        </IconButton>
+        <TrayStateBadge state={tray.state} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <h1 className="px-1 text-xl font-semibold">{tray.name}</h1>
+      <IconButton title="Rename tray" onClick={beginRename}>
+        <Pencil size={14} />
+      </IconButton>
+      <TrayStateBadge state={tray.state} />
+    </div>
   );
 }

@@ -1,9 +1,9 @@
-import { FolderKanban, Plus } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { Check, ChevronDown, FolderKanban, Plus } from "lucide-react";
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { Button, SelectLike } from "../../components/ui";
 import type { Priority } from "../../lib/types";
 
-const priorities: Priority[] = ["Lowest", "Low", "Medium", "High", "Highest"];
+const priorities: Priority[] = ["Highest", "High", "Medium", "Low", "Lowest"];
 
 export function QuickCapture({
   projects,
@@ -67,22 +67,106 @@ function CaptureSelect({
   onChange: (value: string) => void;
   width?: string;
 }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [isOpen, setIsOpen] = useState(false);
+  const selectedIndex = Math.max(0, options.indexOf(value));
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    function closeOnOutsideClick(event: MouseEvent) {
+      if (!containerRef.current?.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+
+    window.addEventListener("mousedown", closeOnOutsideClick);
+    return () => window.removeEventListener("mousedown", closeOnOutsideClick);
+  }, [isOpen]);
+
   if (options.length === 0) {
     return <SelectLike value={value} width={width} />;
   }
 
+  function choose(nextValue: string) {
+    onChange(nextValue);
+    setIsOpen(false);
+  }
+
+  function moveSelection(direction: 1 | -1) {
+    const nextIndex = (selectedIndex + direction + options.length) % options.length;
+    onChange(options[nextIndex]);
+  }
+
+  function handleKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      if (!isOpen) {
+        setIsOpen(true);
+        return;
+      }
+      moveSelection(1);
+    }
+
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      if (!isOpen) {
+        setIsOpen(true);
+        return;
+      }
+      moveSelection(-1);
+    }
+
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      setIsOpen((current) => !current);
+    }
+
+    if (event.key === "Escape") {
+      setIsOpen(false);
+    }
+  }
+
   return (
-    <select
-      aria-label={ariaLabel}
-      className={`${width} h-9 rounded border border-[#c1c7d0] bg-white px-3 text-sm outline-none focus:border-[#4c9aff] focus:ring-2 focus:ring-[#deebff]`}
-      value={value}
-      onChange={(event) => onChange(event.target.value)}
-    >
-      {options.map((option) => (
-        <option key={option} value={option}>
-          {option}
-        </option>
-      ))}
-    </select>
+    <div className={`relative ${width}`} ref={containerRef}>
+      <button
+        aria-expanded={isOpen}
+        aria-haspopup="listbox"
+        aria-label={ariaLabel}
+        className="flex h-9 w-full items-center justify-between rounded border border-[#c1c7d0] bg-white px-3 text-left text-sm outline-none focus:border-[#4c9aff] focus:ring-2 focus:ring-[#deebff] dark:border-[#5c606a] dark:bg-[#303238] dark:text-[#f4f5f7] dark:focus:border-[#85b8ff] dark:focus:ring-[#1d355c]"
+        onClick={() => setIsOpen((current) => !current)}
+        onKeyDown={handleKeyDown}
+        type="button"
+      >
+        <span className="truncate">{value}</span>
+        <ChevronDown size={15} className="shrink-0 text-[#6b778c] dark:text-[#dfe1e6]" />
+      </button>
+
+      {isOpen ? (
+        <div
+          className="absolute left-0 top-[calc(100%+4px)] z-30 max-h-60 w-full overflow-y-auto rounded border border-[#5c606a] bg-[#2b2d31] py-1 text-sm text-[#f4f5f7] shadow-xl"
+          role="listbox"
+        >
+          {options.map((option) => {
+            const isSelected = option === value;
+            return (
+              <button
+                aria-selected={isSelected}
+                className={`flex h-8 w-full items-center justify-between px-3 text-left hover:bg-[#1d355c] ${
+                  isSelected ? "bg-[#0c66e4] text-white" : "text-[#dfe1e6]"
+                }`}
+                key={option}
+                onClick={() => choose(option)}
+                role="option"
+                type="button"
+              >
+                <span className="truncate">{option}</span>
+                {isSelected ? <Check size={14} /> : null}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+    </div>
   );
 }
