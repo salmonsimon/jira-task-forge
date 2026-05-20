@@ -70,6 +70,7 @@ Expected limitations right now:
 - SQLite persistence does not exist yet.
 - Jira, AI, credentials, attachments, backup/import, and audit log storage are not implemented.
 - In-memory changes are intentionally lost on refresh.
+- Task detail `Details` fields are still display-only. A later task editing slice should make project, area, and priority editable for non-archived editable tasks; keep auto-generated epic and labels visible but muted/read-only; remove the language row because Jira task content defaults to Spanish.
 
 Recommended next decision:
 

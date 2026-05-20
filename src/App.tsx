@@ -318,7 +318,10 @@ export default function App() {
               onDeleteTray={deleteTray}
               showArchived={showArchivedTrays}
               onToggleArchived={() => setShowArchivedTrays((current) => !current)}
-              onBackToSelector={() => setSelectedTrayId(null)}
+              onBackToSelector={() => {
+                setShowArchivedTrays(false);
+                setSelectedTrayId(null);
+              }}
               onOpenTask={openTask}
               onAddTask={addTaskToSelectedTray}
               onDuplicateTask={duplicateTask}
