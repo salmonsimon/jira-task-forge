@@ -1,3 +1,12 @@
+mod commands;
+mod db;
+mod models;
+mod repositories;
+mod services;
+
+use services::AppServices;
+use tauri::Manager;
+
 #[tauri::command]
 fn app_version() -> &'static str {
     env!("CARGO_PKG_VERSION")
@@ -6,7 +15,22 @@ fn app_version() -> &'static str {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![app_version])
+        .setup(|app| {
+            let app_data_dir = app
+                .path()
+                .app_data_dir()
+                .map_err(|error| format!("failed to resolve app data directory: {error}"))?;
+            let connection = db::open_app_database(&app_data_dir)
+                .map_err(|error| format!("failed to open app database: {error}"))?;
+
+            app.manage(AppServices::new(connection));
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            app_version,
+            commands::create_tray,
+            commands::list_trays
+        ])
         .run(tauri::generate_context!())
         .expect("error while running Jira Task Forge");
 }
