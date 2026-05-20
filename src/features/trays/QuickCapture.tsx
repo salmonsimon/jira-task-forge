@@ -8,11 +8,13 @@ const priorities: Priority[] = ["Highest", "High", "Medium", "Low", "Lowest"];
 export function QuickCapture({
   projects,
   areas,
-  onAddTask
+  onAddTask,
+  disabled = false
 }: {
   projects: string[];
   areas: string[];
   onAddTask: (task: { project: string; area: string; title: string; priority: Priority }) => void;
+  disabled?: boolean;
 }) {
   const [project, setProject] = useState(projects[0] ?? "STT");
   const [area, setArea] = useState(areas[0] ?? "Bug");
@@ -35,20 +37,21 @@ export function QuickCapture({
         <div className="flex items-center gap-2 text-sm font-semibold">
           <FolderKanban size={16} />
           Active project
-          <CaptureSelect ariaLabel="Active project" options={projects} value={project} onChange={setProject} width="w-44" />
+          <CaptureSelect ariaLabel="Active project" disabled={disabled} options={projects} value={project} onChange={setProject} width="w-44" />
         </div>
         <span className="text-xs text-[#6b778c]">Project can be changed before adding the next group of tasks.</span>
       </div>
       <div className="grid grid-cols-[160px_1fr_150px_auto] gap-2">
-        <CaptureSelect ariaLabel="Area" options={areas} value={area} onChange={setArea} />
+        <CaptureSelect ariaLabel="Area" disabled={disabled} options={areas} value={area} onChange={setArea} />
         <input
-          className="h-9 rounded border border-[#c1c7d0] px-3 text-sm outline-none focus:border-[#4c9aff] focus:ring-2 focus:ring-[#deebff]"
+          className="h-9 rounded border border-[#c1c7d0] px-3 text-sm outline-none focus:border-[#4c9aff] focus:ring-2 focus:ring-[#deebff] disabled:cursor-not-allowed disabled:opacity-45"
+          disabled={disabled}
           placeholder="Task title"
           value={title}
           onChange={(event) => setTitle(event.target.value)}
         />
-        <CaptureSelect ariaLabel="Priority" options={priorities} value={priority} onChange={(value) => setPriority(value as Priority)} />
-        <Button icon={<Plus size={14} />}>Add task</Button>
+        <CaptureSelect ariaLabel="Priority" disabled={disabled} options={priorities} value={priority} onChange={(value) => setPriority(value as Priority)} />
+        <Button disabled={disabled} icon={<Plus size={14} />}>Add task</Button>
       </div>
     </form>
   );
@@ -59,12 +62,14 @@ function CaptureSelect({
   options,
   value,
   onChange,
+  disabled = false,
   width = "w-full"
 }: {
   ariaLabel: string;
   options: string[];
   value: string;
   onChange: (value: string) => void;
+  disabled?: boolean;
   width?: string;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -133,7 +138,8 @@ function CaptureSelect({
         aria-expanded={isOpen}
         aria-haspopup="listbox"
         aria-label={ariaLabel}
-        className="flex h-9 w-full items-center justify-between rounded border border-[#c1c7d0] bg-white px-3 text-left text-sm outline-none focus:border-[#4c9aff] focus:ring-2 focus:ring-[#deebff] dark:border-[#5c606a] dark:bg-[#303238] dark:text-[#f4f5f7] dark:focus:border-[#85b8ff] dark:focus:ring-[#1d355c]"
+        className="flex h-9 w-full items-center justify-between rounded border border-[#c1c7d0] bg-white px-3 text-left text-sm outline-none focus:border-[#4c9aff] focus:ring-2 focus:ring-[#deebff] disabled:cursor-not-allowed disabled:opacity-45 dark:border-[#5c606a] dark:bg-[#303238] dark:text-[#f4f5f7] dark:focus:border-[#85b8ff] dark:focus:ring-[#1d355c]"
+        disabled={disabled}
         onClick={() => setIsOpen((current) => !current)}
         onKeyDown={handleKeyDown}
         type="button"

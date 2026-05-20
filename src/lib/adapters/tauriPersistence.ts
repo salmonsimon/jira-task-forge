@@ -43,41 +43,34 @@ export async function listPersistedTrays(): Promise<Tray[]> {
 
   return backendTrays.map((tray) => {
     const tasks = tasksByTray.get(tray.id) ?? [];
-    return {
-      id: tray.id,
-      name: tray.name,
-      state: mapTrayState(tray.state),
-      summary: summarizeTrayTasks(tasks),
-      updatedAt: formatTimestamp(tray.updated_at),
-      tasks
-    };
+    return mapTray(tray, tasks);
   });
 }
 
 export async function createPersistedTray(name: string): Promise<Tray> {
   const tray = await invoke<BackendTray>("create_tray", { name });
-  return {
-    id: tray.id,
-    name: tray.name,
-    state: mapTrayState(tray.state),
-    summary: "No tasks",
-    updatedAt: formatTimestamp(tray.updated_at),
-    tasks: []
-  };
+  return mapTray(tray, []);
 }
 
 export async function renamePersistedTray(trayId: string, name: string): Promise<Tray | null> {
   const tray = await invoke<BackendTray | null>("rename_tray", { trayId, name });
   if (!tray) return null;
 
-  return {
-    id: tray.id,
-    name: tray.name,
-    state: mapTrayState(tray.state),
-    summary: "No tasks",
-    updatedAt: formatTimestamp(tray.updated_at),
-    tasks: []
-  };
+  return mapTray(tray, []);
+}
+
+export async function archivePersistedTray(trayId: string): Promise<Tray | null> {
+  const tray = await invoke<BackendTray | null>("archive_tray", { trayId });
+  return tray ? mapTray(tray, []) : null;
+}
+
+export async function restorePersistedTray(trayId: string): Promise<Tray | null> {
+  const tray = await invoke<BackendTray | null>("restore_tray", { trayId });
+  return tray ? mapTray(tray, []) : null;
+}
+
+export async function deletePersistedTray(trayId: string): Promise<boolean> {
+  return invoke<boolean>("delete_tray", { trayId });
 }
 
 export async function createPersistedTask(
@@ -114,6 +107,17 @@ function mapTask(task: BackendTask): LocalTask {
     language: task.content_language,
     jiraKey: task.jira_key ?? undefined,
     epic: task.epic_key ?? undefined
+  };
+}
+
+function mapTray(tray: BackendTray, tasks: LocalTask[]): Tray {
+  return {
+    id: tray.id,
+    name: tray.name,
+    state: mapTrayState(tray.state),
+    summary: summarizeTrayTasks(tasks),
+    updatedAt: formatTimestamp(tray.updated_at),
+    tasks
   };
 }
 

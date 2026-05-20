@@ -10,7 +10,8 @@ export function ProjectTaskGroup({
   selectedTaskId,
   onOpenTask,
   onDuplicateTask,
-  onDeleteTask
+  onDeleteTask,
+  readOnly = false
 }: {
   project: string;
   tasks: LocalTask[];
@@ -18,6 +19,7 @@ export function ProjectTaskGroup({
   onOpenTask: (task: LocalTask) => void;
   onDuplicateTask: (taskId: string) => void;
   onDeleteTask: (taskId: string) => void;
+  readOnly?: boolean;
 }) {
   return (
     <div className="overflow-hidden rounded border border-[#dfe1e6] bg-white shadow-sm">
@@ -78,7 +80,7 @@ export function ProjectTaskGroup({
                   </td>
                   <td className="px-3 py-2">
                     <div className="flex justify-end gap-1">
-                      {canDuplicateTask(task) ? (
+                      {!readOnly && canDuplicateTask(task) ? (
                         <IconButton
                           title="Duplicate task"
                           onClick={(event) => {
@@ -89,7 +91,7 @@ export function ProjectTaskGroup({
                           <Copy size={14} />
                         </IconButton>
                       ) : null}
-                      {canDeleteTask(task) ? (
+                      {!readOnly && canDeleteTask(task) ? (
                         <IconButton
                           title="Delete local task"
                           onClick={(event) => {

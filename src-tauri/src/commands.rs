@@ -27,6 +27,33 @@ pub fn rename_tray(
 }
 
 #[tauri::command]
+pub fn archive_tray(
+    services: State<'_, AppServices>,
+    tray_id: String,
+) -> Result<Option<Tray>, String> {
+    services
+        .archive_tray(&tray_id)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn restore_tray(
+    services: State<'_, AppServices>,
+    tray_id: String,
+) -> Result<Option<Tray>, String> {
+    services
+        .restore_tray(&tray_id)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn delete_tray(services: State<'_, AppServices>, tray_id: String) -> Result<bool, String> {
+    services
+        .delete_tray(&tray_id)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 pub fn create_task(
     services: State<'_, AppServices>,
     tray_id: String,

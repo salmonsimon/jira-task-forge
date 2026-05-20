@@ -7,11 +7,14 @@ import { TaskFocusWindow } from "./features/task-detail";
 import { TraysView } from "./features/trays";
 import { mockAppDataAdapter } from "./lib/adapters";
 import {
+  archivePersistedTray,
   createPersistedTask,
   createPersistedTray,
+  deletePersistedTray,
   deletePersistedTask,
   listPersistedTrays,
-  renamePersistedTray
+  renamePersistedTray,
+  restorePersistedTray
 } from "./lib/adapters/tauriPersistence";
 import { canDeleteTask, canDuplicateTask, deriveIssueTypeFromArea, deriveTrayStateFromTasks, duplicateLocalTask } from "./lib/domain";
 import type { LocalTask, MainTab, Panel, Priority, Tray } from "./lib/types";
@@ -31,6 +34,8 @@ export default function App() {
   const [themeMode, setThemeMode] = useState<"light" | "dark" | "system">("dark");
   const [systemPrefersDark, setSystemPrefersDark] = useState(false);
   const [usesTauriPersistence, setUsesTauriPersistence] = useState(false);
+  const [showArchivedTrays, setShowArchivedTrays] = useState(false);
+  const [trayPendingDelete, setTrayPendingDelete] = useState<Tray | null>(null);
   const lastSelectedTrayId = useRef<string | null>(null);
 
   const selectedTray = useMemo(
@@ -42,7 +47,10 @@ export default function App() {
     return trays.flatMap((tray) => tray.tasks).find((task) => task.id === selectedTaskId) ?? null;
   }, [selectedTaskId, trays]);
 
-  const activeTrays = useMemo(() => trays.filter((tray) => tray.state !== "Archived"), [trays]);
+  const visibleTrays = useMemo(
+    () => trays.filter((tray) => (showArchivedTrays ? tray.state === "Archived" : tray.state !== "Archived")),
+    [showArchivedTrays, trays]
+  );
   const projectOptions = useMemo(() => appData.listProjects().filter((project) => !project.hidden).map((project) => project.name), []);
   const areaOptions = useMemo(() => appData.listAreas().filter((area) => !area.hidden).map((area) => area.name), []);
 
@@ -155,6 +163,56 @@ export default function App() {
     );
   }
 
+  async function archiveTray(trayId: string) {
+    const persistedTray = usesTauriPersistence ? await archivePersistedTray(trayId) : null;
+    setTrays((currentTrays) =>
+      currentTrays.map((tray) =>
+        tray.id === trayId
+          ? {
+              ...tray,
+              state: persistedTray?.state ?? "Archived",
+              updatedAt: persistedTray?.updatedAt ?? "Just now"
+            }
+          : tray
+      )
+    );
+  }
+
+  async function restoreTray(trayId: string) {
+    const persistedTray = usesTauriPersistence ? await restorePersistedTray(trayId) : null;
+    setTrays((currentTrays) =>
+      currentTrays.map((tray) =>
+        tray.id === trayId
+          ? {
+              ...tray,
+              state: persistedTray?.state ?? "Active",
+              updatedAt: persistedTray?.updatedAt ?? "Just now"
+            }
+          : tray
+      )
+    );
+  }
+
+  async function deleteTray(trayId: string) {
+    const tray = trays.find((candidate) => candidate.id === trayId);
+    if (!tray) return;
+    setTrayPendingDelete(tray);
+  }
+
+  async function confirmDeleteTray() {
+    if (!trayPendingDelete) return;
+    const trayId = trayPendingDelete.id;
+    if (usesTauriPersistence) {
+      const deleted = await deletePersistedTray(trayId);
+      if (!deleted) return;
+    }
+
+    setTrays((currentTrays) => currentTrays.filter((candidate) => candidate.id !== trayId));
+    if (selectedTrayId === trayId) setSelectedTrayId(null);
+    if (lastSelectedTrayId.current === trayId) lastSelectedTrayId.current = null;
+    setTrayPendingDelete(null);
+  }
+
   async function addTaskToSelectedTray(taskInput: { project: string; area: string; title: string; priority: Priority }) {
     if (!selectedTrayId) return;
 
@@ -253,12 +311,20 @@ export default function App() {
           <AppHeader activeTab={activeTab} setActiveTab={setActiveTab} openPanel={setOpenPanel} />
           {activeTab === "trays" ? (
             <TraysView
-              trays={activeTrays}
+              trays={visibleTrays}
               selectedTray={selectedTray}
               onOpenTray={openTray}
               onCreateTray={createTray}
               onRenameTray={renameTray}
-              onBackToSelector={() => setSelectedTrayId(null)}
+              onArchiveTray={archiveTray}
+              onRestoreTray={restoreTray}
+              onDeleteTray={deleteTray}
+              showArchived={showArchivedTrays}
+              onToggleArchived={() => setShowArchivedTrays((current) => !current)}
+              onBackToSelector={() => {
+                setShowArchivedTrays(false);
+                setSelectedTrayId(null);
+              }}
               onOpenTask={openTask}
               onAddTask={addTaskToSelectedTray}
               onDuplicateTask={duplicateTask}
@@ -292,7 +358,71 @@ export default function App() {
         {openPanel === "settings" ? (
           <SettingsPanel themeMode={themeMode} setThemeMode={setThemeMode} onClose={() => setOpenPanel(null)} />
         ) : null}
+        {trayPendingDelete ? (
+          <ConfirmDialog
+            title="Delete local tray?"
+            message={`Delete "${trayPendingDelete.name}" from local app data? Jira issues will not be deleted.`}
+            confirmLabel="Delete tray"
+            onCancel={() => setTrayPendingDelete(null)}
+            onConfirm={confirmDeleteTray}
+          />
+        ) : null}
       </div>
+    </div>
+  );
+}
+
+function ConfirmDialog({
+  title,
+  message,
+  confirmLabel,
+  onCancel,
+  onConfirm
+}: {
+  title: string;
+  message: string;
+  confirmLabel: string;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  useEffect(() => {
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") onCancel();
+    }
+
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [onCancel]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#091e42]/60 px-4 backdrop-blur-[1px]" onMouseDown={onCancel}>
+      <section
+        className="w-full max-w-[440px] rounded border border-[#3b4454] bg-[#2b2d31] text-[#dfe1e6] shadow-2xl"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <div className="border-b border-[#454852] px-5 py-4">
+          <h2 className="text-base font-semibold text-[#f4f5f7]">{title}</h2>
+        </div>
+        <div className="px-5 py-4">
+          <p className="text-sm leading-relaxed text-[#b7bbc4]">{message}</p>
+        </div>
+        <div className="flex justify-end gap-2 border-t border-[#454852] px-5 py-4">
+          <button
+            className="inline-flex h-8 items-center justify-center rounded px-3 text-sm font-medium text-[#dfe1e6] hover:bg-[#3a3d43]"
+            onClick={onCancel}
+            type="button"
+          >
+            Cancel
+          </button>
+          <button
+            className="inline-flex h-8 items-center justify-center rounded bg-[#de350b] px-3 text-sm font-medium text-white hover:bg-[#bf2600]"
+            onClick={onConfirm}
+            type="button"
+          >
+            {confirmLabel}
+          </button>
+        </div>
+      </section>
     </div>
   );
 }

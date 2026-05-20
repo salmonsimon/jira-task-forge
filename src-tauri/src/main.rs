@@ -31,6 +31,9 @@ pub fn run() {
             commands::create_tray,
             commands::list_trays,
             commands::rename_tray,
+            commands::archive_tray,
+            commands::restore_tray,
+            commands::delete_tray,
             commands::create_task,
             commands::list_tasks,
             commands::delete_task

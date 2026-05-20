@@ -70,6 +70,15 @@ Expected limitations right now:
 - SQLite persistence does not exist yet.
 - Jira, AI, credentials, attachments, backup/import, and audit log storage are not implemented.
 - In-memory changes are intentionally lost on refresh.
+- Task detail `Details` fields are still display-only. A later task editing slice should make project, area, and priority editable for non-archived editable tasks; keep auto-generated epic and labels visible but muted/read-only; remove the language row because Jira task content defaults to Spanish.
+
+Near-term decided follow-ups after tray lifecycle:
+
+- Wire `Export CSV` to the existing CSV helper for pending/failed/exported tasks.
+- Add task detail editing for project, area, and priority on editable non-archived tasks.
+- Keep epic and labels visible but muted/read-only because they are generated.
+- Remove the language row from task detail because Jira task content defaults to Spanish.
+- Expand destructive tray delete confirmation later based on task/Jira-link risk level.
 
 Recommended next decision:
 
