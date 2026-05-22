@@ -171,6 +171,7 @@ export default function App() {
     setActiveTab("trays");
     const firstTask = tray.tasks[0];
     if (firstTask) setSelectedTaskId(firstTask.id);
+    requestAnimationFrame(() => window.scrollTo({ top: 0, left: 0 }));
   }
 
   function nextTaskId() {

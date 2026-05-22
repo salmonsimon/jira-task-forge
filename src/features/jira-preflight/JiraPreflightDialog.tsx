@@ -59,11 +59,23 @@ export function JiraPreflightDialog({
 
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
           <div className="rounded border border-[#3b4454] bg-[#292c31] px-3 py-3">
-            <div className="flex items-center gap-2 text-sm font-semibold text-[#f4f5f7]">
-              {preflight.credentialStatus === "checking" ? <Loader2 className="animate-spin" size={16} /> : <ShieldCheck size={16} />}
-              Credential check
-            </div>
-            <p className="mt-2 text-sm text-[#b7bbc4]">{credentialMessage}</p>
+            {preflight.credentialStatus === "checking" ? (
+              <div className="flex min-h-[88px] flex-col items-center justify-center gap-3 text-center">
+                <Loader2 className="animate-spin text-[#85b8ff]" size={28} />
+                <div>
+                  <div className="text-sm font-semibold text-[#f4f5f7]">Credential check</div>
+                  <p className="mt-1 text-sm text-[#b7bbc4]">{credentialMessage}</p>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center gap-2 text-sm font-semibold text-[#f4f5f7]">
+                  <ShieldCheck size={16} />
+                  Credential check
+                </div>
+                <p className="mt-2 text-sm text-[#b7bbc4]">{credentialMessage}</p>
+              </>
+            )}
           </div>
 
           <div className="rounded border border-[#3b4454] bg-[#292c31] px-3 py-3">
