@@ -61,5 +61,27 @@ export function classifyTaskPreflightWarnings(task: LocalTask): PreflightWarning
 }
 
 export function classifyTrayPreflightWarnings(tasks: LocalTask[]): PreflightWarning[] {
-  return tasks.flatMap(classifyTaskPreflightWarnings);
+  const createableTasks = tasks.filter((task) => task.syncStatus !== "Created");
+  const warnings = createableTasks.flatMap(classifyTaskPreflightWarnings);
+
+  if (createableTasks.length === 0) {
+    warnings.push({
+      code: "empty-tray",
+      severity: "blocking",
+      message: "There are no pending, failed, or exported tasks to create in Jira."
+    });
+  }
+
+  for (const task of createableTasks) {
+    if (task.syncStatus === "Exported") {
+      warnings.push({
+        code: "exported-duplicate-risk",
+        severity: "resolvable",
+        taskId: task.id,
+        message: "This task was exported to CSV. Confirm it was not already imported into Jira before creating it through the API."
+      });
+    }
+  }
+
+  return warnings;
 }

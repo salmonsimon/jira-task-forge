@@ -8,12 +8,16 @@ export type IssueType = "Story" | "Bug" | "Sub-task";
 export type AttachmentPurpose = "AI only" | "Jira attachment" | "AI + Jira attachment";
 export type PreflightWarningSeverity = "blocking" | "resolvable";
 export type PreflightWarningCode =
+  | "empty-tray"
+  | "missing-credential"
+  | "invalid-credential"
   | "missing-project"
   | "missing-area"
   | "missing-title"
   | "missing-description"
   | "missing-epic"
-  | "retry-failed-task";
+  | "retry-failed-task"
+  | "exported-duplicate-risk";
 
 export type Attachment = {
   id: string;

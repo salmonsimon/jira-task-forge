@@ -17,7 +17,9 @@ export function TraysView({
   onRestoreTray,
   onDeleteTray,
   onExportCsv,
+  onCreateInJira,
   csvExportMessage,
+  isRunningJiraPreflight,
   showArchived,
   onToggleArchived,
   onBackToSelector,
@@ -38,7 +40,9 @@ export function TraysView({
   onRestoreTray: (trayId: string) => void;
   onDeleteTray: (trayId: string) => void;
   onExportCsv: (tray: Tray) => void | Promise<void>;
+  onCreateInJira: (tray: Tray) => void | Promise<void>;
   csvExportMessage: string | null;
+  isRunningJiraPreflight: boolean;
   showArchived: boolean;
   onToggleArchived: () => void;
   onBackToSelector: () => void;
@@ -101,7 +105,13 @@ export function TraysView({
               <Button variant="secondary" icon={<Archive size={14} />} onClick={() => onArchiveTray(selectedTray.id)}>
                 Archive
               </Button>
-              <Button icon={<UploadCloud size={14} />}>Create in Jira</Button>
+              <Button
+                disabled={isRunningJiraPreflight}
+                icon={isRunningJiraPreflight ? <Loader2 size={14} /> : <UploadCloud size={14} />}
+                onClick={() => onCreateInJira(selectedTray)}
+              >
+                {isRunningJiraPreflight ? "Checking" : "Create in Jira"}
+              </Button>
             </>
           )}
         </div>
