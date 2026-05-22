@@ -1,5 +1,5 @@
 import { Bot, Download, KeyRound, Settings, UploadCloud } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button, DetailBlock, PanelHeader, SegmentedControl } from "../../components/ui";
 import type { AppSettings, JiraConnectionTestResult, ThemeMode } from "../../lib/types";
 
@@ -26,6 +26,7 @@ export function SettingsPanel({
   onTestJiraConnection: () => void;
   onClose: () => void;
 }) {
+  const panelRef = useRef<HTMLElement | null>(null);
   const [jiraApiTokenDraft, setJiraApiTokenDraft] = useState("");
   const canTestJiraConnection =
     Boolean(settings.jiraSiteUrl.trim()) &&
@@ -38,8 +39,18 @@ export function SettingsPanel({
     if (saved) setJiraApiTokenDraft("");
   }
 
+  useEffect(() => {
+    function handlePointerDown(event: PointerEvent) {
+      if (!panelRef.current || panelRef.current.contains(event.target as Node)) return;
+      onClose();
+    }
+
+    window.addEventListener("pointerdown", handlePointerDown);
+    return () => window.removeEventListener("pointerdown", handlePointerDown);
+  }, [onClose]);
+
   return (
-    <aside className="fixed right-0 top-0 z-30 flex h-screen w-[420px] flex-col border-l border-[#dfe1e6] bg-white shadow-xl">
+    <aside ref={panelRef} className="fixed right-0 top-0 z-30 flex h-screen w-[420px] flex-col border-l border-[#dfe1e6] bg-white shadow-xl">
       <PanelHeader title="Settings" subtitle="Local configuration without secrets in backups" onClose={onClose} />
       <div className="flex-1 overflow-y-auto p-4">
         <DetailBlock icon={<Settings size={15} />} title="Appearance">
