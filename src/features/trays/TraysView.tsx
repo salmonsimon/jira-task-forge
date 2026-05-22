@@ -107,10 +107,10 @@ export function TraysView({
               </Button>
               <Button
                 disabled={isRunningJiraPreflight}
-                icon={isRunningJiraPreflight ? <Loader2 size={14} /> : <UploadCloud size={14} />}
+                icon={isRunningJiraPreflight ? <Loader2 className="animate-spin" size={14} /> : <UploadCloud size={14} />}
                 onClick={() => onCreateInJira(selectedTray)}
               >
-                {isRunningJiraPreflight ? "Checking" : "Create in Jira"}
+                {isRunningJiraPreflight ? "Preparing preflight" : "Create in Jira"}
               </Button>
             </>
           )}

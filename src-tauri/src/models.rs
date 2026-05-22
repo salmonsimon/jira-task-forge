@@ -83,6 +83,8 @@ pub struct AppSettings {
     pub jira_site_url: String,
     pub jira_account_email: String,
     pub jira_auth_method: String,
+    #[serde(default, alias = "jiraSandboxProjectKey")]
+    pub jira_creation_project_key: String,
     pub ai_provider: String,
     pub ai_model: String,
     pub default_content_language: String,
@@ -104,6 +106,7 @@ impl Default for AppSettings {
             jira_site_url: "https://dts.atlassian.net".to_string(),
             jira_account_email: String::new(),
             jira_auth_method: "api-token".to_string(),
+            jira_creation_project_key: String::new(),
             ai_provider: "OpenAI".to_string(),
             ai_model: "gpt-4.1".to_string(),
             default_content_language: "Spanish".to_string(),

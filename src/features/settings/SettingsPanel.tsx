@@ -1,5 +1,5 @@
 import { Bot, Download, KeyRound, Settings, UploadCloud } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button, DetailBlock, PanelHeader, SegmentedControl } from "../../components/ui";
 import type { AppSettings, JiraConnectionTestResult, ThemeMode } from "../../lib/types";
 
@@ -26,6 +26,7 @@ export function SettingsPanel({
   onTestJiraConnection: () => void;
   onClose: () => void;
 }) {
+  const panelRef = useRef<HTMLElement | null>(null);
   const [jiraApiTokenDraft, setJiraApiTokenDraft] = useState("");
   const canTestJiraConnection =
     Boolean(settings.jiraSiteUrl.trim()) &&
@@ -38,8 +39,18 @@ export function SettingsPanel({
     if (saved) setJiraApiTokenDraft("");
   }
 
+  useEffect(() => {
+    function handlePointerDown(event: PointerEvent) {
+      if (!panelRef.current || panelRef.current.contains(event.target as Node)) return;
+      onClose();
+    }
+
+    window.addEventListener("pointerdown", handlePointerDown);
+    return () => window.removeEventListener("pointerdown", handlePointerDown);
+  }, [onClose]);
+
   return (
-    <aside className="fixed right-0 top-0 z-30 flex h-screen w-[420px] flex-col border-l border-[#dfe1e6] bg-white shadow-xl">
+    <aside ref={panelRef} className="fixed right-0 top-0 z-30 flex h-screen w-[420px] flex-col border-l border-[#dfe1e6] bg-white shadow-xl">
       <PanelHeader title="Settings" subtitle="Local configuration without secrets in backups" onClose={onClose} />
       <div className="flex-1 overflow-y-auto p-4">
         <DetailBlock icon={<Settings size={15} />} title="Appearance">
@@ -79,6 +90,17 @@ export function SettingsPanel({
           <p className="mt-2 text-xs leading-relaxed text-[#6b778c]">
             Tokens are never stored in SQLite or backups. The backend stores the token in the OS credential store.
           </p>
+          <div className="mt-3 rounded border border-[#dfe1e6] bg-[#f7f8fa] p-3">
+            <SettingsInput
+              label="Jira project key for creation"
+              placeholder="JTFTEST"
+              value={settings.jiraCreationProjectKey}
+              onChange={(jiraCreationProjectKey) => onChange({ jiraCreationProjectKey: jiraCreationProjectKey.toUpperCase() })}
+            />
+            <p className="text-xs leading-relaxed text-[#6b778c]">
+              Every Jira upload uses this single project key for the whole tray. Internal app projects remain preparation categories.
+            </p>
+          </div>
           <div className="mt-3 rounded border border-[#dfe1e6] bg-[#f7f8fa] p-3">
             <div className="mb-2 flex items-center justify-between gap-2">
               <div>

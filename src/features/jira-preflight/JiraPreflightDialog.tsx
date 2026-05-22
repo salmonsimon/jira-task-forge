@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle2, Info, ShieldCheck, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Info, Loader2, ShieldCheck, XCircle } from "lucide-react";
 import { useEffect, type ReactNode } from "react";
 import { Button } from "../../components/ui";
 import type { JiraConnectionTestResult, PreflightWarning, PreflightWarningCode, Tray } from "../../lib/types";
@@ -7,8 +7,10 @@ import { cn } from "../../lib/utils";
 export type JiraCreatePreflight = {
   tray: Tray;
   credentialResult: JiraConnectionTestResult | null;
+  credentialStatus: "idle" | "checking" | "checked";
   warnings: PreflightWarning[];
   createableTaskCount: number;
+  creationTarget: string;
 };
 
 export function JiraPreflightDialog({
@@ -21,6 +23,12 @@ export function JiraPreflightDialog({
   const blockingWarnings = preflight.warnings.filter((warning) => warning.severity === "blocking");
   const reviewWarnings = preflight.warnings.filter((warning) => warning.severity !== "blocking");
   const canProceedLater = blockingWarnings.length === 0 && preflight.createableTaskCount > 0;
+  const credentialMessage =
+    preflight.credentialStatus === "checking"
+      ? "Checking Jira credentials..."
+      : preflight.credentialResult
+        ? preflight.credentialResult.message
+        : "Using saved Jira connection settings for this preflight.";
 
   useEffect(() => {
     function handleEscape(event: KeyboardEvent) {
@@ -51,15 +59,30 @@ export function JiraPreflightDialog({
 
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
           <div className="rounded border border-[#3b4454] bg-[#292c31] px-3 py-3">
-            <div className="flex items-center gap-2 text-sm font-semibold text-[#f4f5f7]">
-              <ShieldCheck size={16} />
-              Credential check
+            {preflight.credentialStatus === "checking" ? (
+              <div className="flex min-h-[88px] flex-col items-center justify-center gap-3 text-center">
+                <Loader2 className="animate-spin text-[#85b8ff]" size={28} />
+                <div>
+                  <div className="text-sm font-semibold text-[#f4f5f7]">Credential check</div>
+                  <p className="mt-1 text-sm text-[#b7bbc4]">{credentialMessage}</p>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center gap-2 text-sm font-semibold text-[#f4f5f7]">
+                  <ShieldCheck size={16} />
+                  Credential check
+                </div>
+                <p className="mt-2 text-sm text-[#b7bbc4]">{credentialMessage}</p>
+              </>
+            )}
+          </div>
+
+          <div className="rounded border border-[#3b4454] bg-[#292c31] px-3 py-3">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-sm font-semibold text-[#f4f5f7]">Creation target</span>
+              <span className="rounded bg-[#102d50] px-2 py-1 text-xs font-medium text-[#85b8ff]">{preflight.creationTarget}</span>
             </div>
-            <p className="mt-2 text-sm text-[#b7bbc4]">
-              {preflight.credentialResult
-                ? preflight.credentialResult.message
-                : "Using saved Jira connection settings for this preflight."}
-            </p>
           </div>
 
           {blockingWarnings.length ? (
@@ -175,6 +198,7 @@ function getWarningTitle(code: PreflightWarningCode): string {
     "empty-tray": "No createable tasks",
     "missing-credential": "Missing Jira credentials",
     "invalid-credential": "Invalid Jira credentials",
+    "missing-creation-project": "Missing Jira project",
     "missing-project": "Missing project",
     "missing-area": "Missing area",
     "missing-title": "Missing title",
@@ -192,6 +216,7 @@ function getWarningSummary(code: PreflightWarningCode, warning: PreflightWarning
     "empty-tray": warning.message,
     "missing-credential": warning.message,
     "invalid-credential": warning.message,
+    "missing-creation-project": warning.message,
     "missing-project": "These tasks need a Jira project before they can be created.",
     "missing-area": "These tasks need an area before Jira issue type and labels can be derived.",
     "missing-title": "These tasks need a title before they can be created.",

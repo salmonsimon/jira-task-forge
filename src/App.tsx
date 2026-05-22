@@ -48,6 +48,7 @@ const defaultAppSettings: AppSettings = {
   jiraSiteUrl: "https://dts.atlassian.net",
   jiraAccountEmail: "",
   jiraAuthMethod: "api-token",
+  jiraCreationProjectKey: "",
   aiProvider: "OpenAI",
   aiModel: "gpt-4.1",
   defaultContentLanguage: "Spanish"
@@ -170,6 +171,7 @@ export default function App() {
     setActiveTab("trays");
     const firstTask = tray.tasks[0];
     if (firstTask) setSelectedTaskId(firstTask.id);
+    requestAnimationFrame(() => window.scrollTo({ top: 0, left: 0 }));
   }
 
   function nextTaskId() {
@@ -495,7 +497,16 @@ export default function App() {
 
     const warnings = classifyTrayPreflightWarnings(tray.tasks);
     const createableTaskCount = tray.tasks.filter((task) => task.syncStatus !== "Created").length;
-    let credentialResult: JiraConnectionTestResult | null = null;
+    const creationProjectKey = appSettings.jiraCreationProjectKey.trim().toUpperCase();
+    const creationTarget = `Jira project ${creationProjectKey || "not set"}`;
+
+    if (!creationProjectKey) {
+      warnings.push({
+        code: "missing-creation-project",
+        severity: "blocking",
+        message: "A Jira project key is required before creating issues."
+      });
+    }
 
     const hasRequiredSettings = Boolean(appSettings.jiraSiteUrl.trim() && appSettings.jiraAccountEmail.trim() && hasJiraApiToken);
     if (!hasRequiredSettings) {
@@ -504,35 +515,67 @@ export default function App() {
         severity: "blocking",
         message: "Jira site URL, account email, and saved API token are required before creating issues."
       });
-    } else if (usesTauriPersistence) {
-      try {
-        credentialResult = await testPersistedJiraConnection();
-        setJiraConnectionResult(credentialResult);
-        if (!credentialResult.ok) {
-          warnings.push({
-            code: "invalid-credential",
-            severity: "blocking",
-            message: credentialResult.message
-          });
-        }
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Could not test Jira credentials.";
-        credentialResult = { ok: false, message };
-        warnings.push({
-          code: "invalid-credential",
-          severity: "blocking",
-          message
-        });
-      }
     }
+
+    const shouldCheckCredential = hasRequiredSettings && usesTauriPersistence;
 
     setJiraCreatePreflight({
       tray,
-      credentialResult,
+      credentialResult: null,
+      credentialStatus: shouldCheckCredential ? "checking" : "idle",
       warnings,
-      createableTaskCount
+      createableTaskCount,
+      creationTarget
     });
     setIsRunningJiraPreflight(false);
+
+    if (!shouldCheckCredential) return;
+
+    await delay(350);
+
+    try {
+      const credentialResult = await testPersistedJiraConnection();
+      setJiraConnectionResult(credentialResult);
+      setJiraCreatePreflight((currentPreflight) => {
+        if (!currentPreflight || currentPreflight.tray.id !== tray.id) return currentPreflight;
+
+        return {
+          ...currentPreflight,
+          credentialResult,
+          credentialStatus: "checked",
+          warnings: credentialResult.ok
+            ? currentPreflight.warnings
+            : [
+                ...currentPreflight.warnings,
+                {
+                  code: "invalid-credential",
+                  severity: "blocking",
+                  message: credentialResult.message
+                }
+              ]
+        };
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not test Jira credentials.";
+      const credentialResult = { ok: false, message };
+      setJiraCreatePreflight((currentPreflight) => {
+        if (!currentPreflight || currentPreflight.tray.id !== tray.id) return currentPreflight;
+
+        return {
+          ...currentPreflight,
+          credentialResult,
+          credentialStatus: "checked",
+          warnings: [
+            ...currentPreflight.warnings,
+            {
+              code: "invalid-credential",
+              severity: "blocking",
+              message
+            }
+          ]
+        };
+      });
+    }
   }
 
   useEffect(() => {
@@ -840,4 +883,10 @@ async function getDefaultCsvExportPath(filename: string): Promise<string> {
   } catch {
     return filename;
   }
+}
+
+function delay(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, milliseconds);
+  });
 }

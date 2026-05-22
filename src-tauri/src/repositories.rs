@@ -665,6 +665,7 @@ mod tests {
 
         assert_eq!(defaults.theme_mode, "dark");
         assert_eq!(defaults.jira_site_url, "https://dts.atlassian.net");
+        assert_eq!(defaults.jira_creation_project_key, "");
 
         let updated = repository
             .update_app_settings(AppSettings {
@@ -672,6 +673,7 @@ mod tests {
                 jira_site_url: "https://example.atlassian.net".to_string(),
                 jira_account_email: "saimon@example.com".to_string(),
                 jira_auth_method: "api-token".to_string(),
+                jira_creation_project_key: "JTFTEST".to_string(),
                 ai_provider: "OpenAI".to_string(),
                 ai_model: "gpt-4.1-mini".to_string(),
                 default_content_language: "Spanish".to_string(),

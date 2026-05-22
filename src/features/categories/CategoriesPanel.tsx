@@ -1,4 +1,5 @@
 import { EyeOff, Plus, RefreshCw, Tags } from "lucide-react";
+import { useEffect, useRef } from "react";
 import { Button, PanelHeader } from "../../components/ui";
 import type { Category } from "../../lib/types";
 
@@ -11,8 +12,20 @@ export function CategoriesPanel({
   areas: Category[];
   onClose: () => void;
 }) {
+  const panelRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    function handlePointerDown(event: PointerEvent) {
+      if (!panelRef.current || panelRef.current.contains(event.target as Node)) return;
+      onClose();
+    }
+
+    window.addEventListener("pointerdown", handlePointerDown);
+    return () => window.removeEventListener("pointerdown", handlePointerDown);
+  }, [onClose]);
+
   return (
-    <aside className="fixed right-0 top-0 z-30 flex h-screen w-[420px] flex-col border-l border-[#dfe1e6] bg-white shadow-xl">
+    <aside ref={panelRef} className="fixed right-0 top-0 z-30 flex h-screen w-[420px] flex-col border-l border-[#dfe1e6] bg-white shadow-xl">
       <PanelHeader title="Categories" subtitle="Projects and areas available in capture controls" onClose={onClose} />
       <div className="flex-1 overflow-y-auto p-4">
         <CategoryList title="Projects" categories={projects} />
