@@ -138,6 +138,38 @@ impl<'connection> TaskRepository<'connection> {
         Ok(changed > 0)
     }
 
+    pub fn update_details(
+        &self,
+        task_id: &str,
+        project: &str,
+        area: &str,
+        priority: &str,
+        issue_type: &str,
+    ) -> DbResult<Option<LocalTask>> {
+        let now = utc_now_string()?;
+        let tray_id = self.connection.query_row(
+            "SELECT tray_id FROM tasks WHERE id = ?1 AND sync_status != 'Created'",
+            [task_id],
+            |row| row.get::<_, String>(0),
+        );
+
+        let Ok(tray_id) = tray_id else {
+            return Ok(None);
+        };
+
+        self.connection.execute(
+            "
+            UPDATE tasks
+            SET project = ?1, area = ?2, priority = ?3, issue_type = ?4, updated_at = ?5
+            WHERE id = ?6 AND sync_status != 'Created'
+            ",
+            (project, area, priority, issue_type, now.as_str(), task_id),
+        )?;
+        self.touch_tray(&tray_id, &now)?;
+
+        Ok(self.list_all()?.into_iter().find(|task| task.id == task_id))
+    }
+
     pub fn mark_csv_exported(&self, task_ids: &[String]) -> DbResult<Vec<LocalTask>> {
         if task_ids.is_empty() {
             return Ok(Vec::new());
@@ -517,6 +549,64 @@ mod tests {
         assert!(statuses.contains(&(pending.id, "Exported".to_string())));
         assert!(statuses.contains(&(failed.id, "Exported".to_string())));
         assert!(statuses.contains(&(created.id, "Created".to_string())));
+    }
+
+    #[test]
+    fn updates_editable_task_details_but_not_created_tasks() {
+        let connection = open_in_memory_database().expect("database opens");
+        let tray_repository = TrayRepository::new(&connection);
+        let task_repository = TaskRepository::new(&connection);
+        let tray = tray_repository
+            .create(NewTray {
+                name: "Details tray".to_string(),
+            })
+            .expect("tray creates");
+
+        let editable = task_repository
+            .create(NewTask {
+                tray_id: tray.id.clone(),
+                project: "STT".to_string(),
+                area: "Bug".to_string(),
+                title: "Editable task".to_string(),
+                priority: "Medium".to_string(),
+                issue_type: "Bug".to_string(),
+                content_language: "Spanish".to_string(),
+            })
+            .expect("editable task creates");
+        let created = task_repository
+            .create(NewTask {
+                tray_id: tray.id.clone(),
+                project: "STT".to_string(),
+                area: "3D".to_string(),
+                title: "Created task".to_string(),
+                priority: "Low".to_string(),
+                issue_type: "Story".to_string(),
+                content_language: "Spanish".to_string(),
+            })
+            .expect("created task creates");
+
+        connection
+            .execute(
+                "UPDATE tasks SET sync_status = 'Created' WHERE id = ?1",
+                [created.id.as_str()],
+            )
+            .expect("created status updates");
+
+        let updated = task_repository
+            .update_details(&editable.id, "PilotLab", "Polish", "High", "Story")
+            .expect("task updates")
+            .expect("task remains editable");
+
+        assert_eq!(updated.project, "PilotLab");
+        assert_eq!(updated.area, "Polish");
+        assert_eq!(updated.priority, "High");
+        assert_eq!(updated.issue_type, "Story");
+
+        let blocked = task_repository
+            .update_details(&created.id, "PilotLab", "Bug", "Highest", "Bug")
+            .expect("created task update is ignored");
+
+        assert_eq!(blocked, None);
     }
 
     #[test]
