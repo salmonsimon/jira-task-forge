@@ -493,6 +493,7 @@ export default function App() {
 
   async function createInJiraPreflight(tray: Tray) {
     setIsRunningJiraPreflight(true);
+    await waitForBrowserPaint();
 
     const warnings = classifyTrayPreflightWarnings(tray.tasks);
     const createableTaskCount = tray.tasks.filter((task) => task.syncStatus !== "Created").length;
@@ -852,4 +853,12 @@ async function getDefaultCsvExportPath(filename: string): Promise<string> {
   } catch {
     return filename;
   }
+}
+
+function waitForBrowserPaint(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => resolve());
+    });
+  });
 }
