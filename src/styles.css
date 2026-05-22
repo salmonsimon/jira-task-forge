@@ -41,6 +41,10 @@ button {
   overflow: hidden;
 }
 
+.secret-input:not(:placeholder-shown) {
+  -webkit-text-security: disc;
+}
+
 .theme-dark {
   color-scheme: dark;
   background: #1d1f23;

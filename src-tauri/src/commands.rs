@@ -71,6 +71,31 @@ pub fn update_app_settings(
 }
 
 #[tauri::command]
+pub fn has_jira_api_token(services: State<'_, AppServices>) -> Result<bool, String> {
+    services
+        .has_jira_api_token()
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn save_jira_api_token(services: State<'_, AppServices>, token: String) -> Result<(), String> {
+    if token.trim().is_empty() {
+        return Err("Jira API token cannot be empty".to_string());
+    }
+
+    services
+        .save_jira_api_token(&token)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn delete_jira_api_token(services: State<'_, AppServices>) -> Result<(), String> {
+    services
+        .delete_jira_api_token()
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 pub fn create_task(
     services: State<'_, AppServices>,
     tray_id: String,

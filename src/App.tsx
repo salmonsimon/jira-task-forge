@@ -12,14 +12,17 @@ import {
   archivePersistedTray,
   createPersistedTask,
   createPersistedTray,
+  deletePersistedJiraApiToken,
   deletePersistedTray,
   deletePersistedTask,
   getPersistedAppSettings,
+  hasPersistedJiraApiToken,
   listPersistedTrays,
   markPersistedTasksCsvExported,
   renamePersistedTray,
   restorePersistedTray,
   saveCsvFile,
+  savePersistedJiraApiToken,
   updatePersistedAppSettings,
   updatePersistedTaskDetails
 } from "./lib/adapters/tauriPersistence";
@@ -62,6 +65,8 @@ export default function App() {
   const [showArchivedTrays, setShowArchivedTrays] = useState(false);
   const [trayPendingDelete, setTrayPendingDelete] = useState<Tray | null>(null);
   const [csvExportMessage, setCsvExportMessage] = useState<string | null>(null);
+  const [hasJiraApiToken, setHasJiraApiToken] = useState(false);
+  const [jiraCredentialMessage, setJiraCredentialMessage] = useState<string | null>(null);
   const lastSelectedTrayId = useRef<string | null>(null);
 
   const selectedTray = useMemo(
@@ -88,12 +93,13 @@ export default function App() {
   useEffect(() => {
     let isCurrent = true;
 
-    Promise.all([listPersistedTrays(), getPersistedAppSettings()])
-      .then(([persistedTrays, persistedSettings]) => {
+    Promise.all([listPersistedTrays(), getPersistedAppSettings(), hasPersistedJiraApiToken()])
+      .then(([persistedTrays, persistedSettings, hasPersistedToken]) => {
         if (!isCurrent) return;
         setUsesTauriPersistence(true);
         setTrays(persistedTrays);
         setAppSettings(persistedSettings);
+        setHasJiraApiToken(hasPersistedToken);
         setSelectedTrayId((currentTrayId) =>
           currentTrayId && persistedTrays.some((tray) => tray.id === currentTrayId) ? currentTrayId : null
         );
@@ -368,6 +374,33 @@ export default function App() {
     }
   }
 
+  async function saveJiraApiToken(token: string) {
+    if (!token.trim()) {
+      setJiraCredentialMessage("Token cannot be empty.");
+      return false;
+    }
+
+    try {
+      await savePersistedJiraApiToken(token);
+      setHasJiraApiToken(true);
+      setJiraCredentialMessage("Jira API token saved in the OS credential store.");
+      return true;
+    } catch {
+      setJiraCredentialMessage("Could not save Jira API token in the OS credential store.");
+      return false;
+    }
+  }
+
+  async function deleteJiraApiToken() {
+    try {
+      await deletePersistedJiraApiToken();
+      setHasJiraApiToken(false);
+      setJiraCredentialMessage("Jira API token removed from the OS credential store.");
+    } catch {
+      setJiraCredentialMessage("Could not remove Jira API token.");
+    }
+  }
+
   async function exportTrayCsv(tray: Tray) {
     const csvExportOptions = { includeExported: true };
     const exportableTasks = tray.tasks.filter((task) => isEligibleForCsvExport(task, csvExportOptions));
@@ -515,7 +548,15 @@ export default function App() {
           />
         ) : null}
         {openPanel === "settings" ? (
-          <SettingsPanel settings={appSettings} onChange={updateAppSettings} onClose={() => setOpenPanel(null)} />
+          <SettingsPanel
+            settings={appSettings}
+            hasJiraApiToken={hasJiraApiToken}
+            jiraCredentialMessage={jiraCredentialMessage}
+            onChange={updateAppSettings}
+            onSaveJiraApiToken={saveJiraApiToken}
+            onDeleteJiraApiToken={deleteJiraApiToken}
+            onClose={() => setOpenPanel(null)}
+          />
         ) : null}
         {trayPendingDelete ? (
           <ConfirmDialog

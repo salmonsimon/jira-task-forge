@@ -81,6 +81,18 @@ export async function updatePersistedAppSettings(settings: AppSettings): Promise
   return invoke<AppSettings>("update_app_settings", { settings });
 }
 
+export async function hasPersistedJiraApiToken(): Promise<boolean> {
+  return invoke<boolean>("has_jira_api_token");
+}
+
+export async function savePersistedJiraApiToken(token: string): Promise<void> {
+  await invoke("save_jira_api_token", { token });
+}
+
+export async function deletePersistedJiraApiToken(): Promise<void> {
+  await invoke("delete_jira_api_token");
+}
+
 export async function createPersistedTask(
   task: Pick<LocalTask, "project" | "area" | "title" | "priority" | "issueType" | "language">,
   trayId: string
