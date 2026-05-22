@@ -40,6 +40,7 @@ pub fn run() {
             commands::has_jira_api_token,
             commands::save_jira_api_token,
             commands::delete_jira_api_token,
+            commands::test_jira_connection,
             commands::create_task,
             commands::list_tasks,
             commands::delete_task,

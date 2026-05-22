@@ -1,26 +1,37 @@
 import { Bot, Download, KeyRound, Settings, UploadCloud } from "lucide-react";
 import { useState } from "react";
 import { Button, DetailBlock, PanelHeader, SegmentedControl } from "../../components/ui";
-import type { AppSettings, ThemeMode } from "../../lib/types";
+import type { AppSettings, JiraConnectionTestResult, ThemeMode } from "../../lib/types";
 
 export function SettingsPanel({
   settings,
   hasJiraApiToken,
   jiraCredentialMessage,
+  jiraConnectionResult,
+  isTestingJiraConnection,
   onChange,
   onSaveJiraApiToken,
   onDeleteJiraApiToken,
+  onTestJiraConnection,
   onClose
 }: {
   settings: AppSettings;
   hasJiraApiToken: boolean;
   jiraCredentialMessage: string | null;
+  jiraConnectionResult: JiraConnectionTestResult | null;
+  isTestingJiraConnection: boolean;
   onChange: (settings: Partial<AppSettings>) => void;
   onSaveJiraApiToken: (token: string) => Promise<boolean>;
   onDeleteJiraApiToken: () => void;
+  onTestJiraConnection: () => void;
   onClose: () => void;
 }) {
   const [jiraApiTokenDraft, setJiraApiTokenDraft] = useState("");
+  const canTestJiraConnection =
+    Boolean(settings.jiraSiteUrl.trim()) &&
+    Boolean(settings.jiraAccountEmail.trim()) &&
+    hasJiraApiToken &&
+    !isTestingJiraConnection;
 
   async function saveJiraToken() {
     const saved = await onSaveJiraApiToken(jiraApiTokenDraft);
@@ -100,8 +111,27 @@ export function SettingsPanel({
             ) : null}
           </div>
           <div className="mt-3">
-            <Button disabled variant="secondary">Test connection</Button>
+            <Button disabled={!canTestJiraConnection} variant="secondary" onClick={onTestJiraConnection}>
+              {isTestingJiraConnection ? "Testing..." : "Test connection"}
+            </Button>
           </div>
+          {jiraConnectionResult ? (
+            <div
+              className={`mt-3 rounded border px-3 py-2 text-sm ${
+                jiraConnectionResult.ok
+                  ? "border-[#abf5d1] bg-[#e3fcef] text-[#006644]"
+                  : "border-[#ffbdad] bg-[#ffebe6] text-[#bf2600]"
+              }`}
+            >
+              <div className="font-medium">{jiraConnectionResult.message}</div>
+              {jiraConnectionResult.ok && jiraConnectionResult.accountDisplayName ? (
+                <div className="mt-1 text-xs">
+                  Connected as {jiraConnectionResult.accountDisplayName}
+                  {jiraConnectionResult.accountEmail ? ` (${jiraConnectionResult.accountEmail})` : ""}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </DetailBlock>
 
         <DetailBlock icon={<Bot size={15} />} title="AI provider">
