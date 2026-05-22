@@ -91,15 +91,12 @@ impl AppServices {
             Ok(settings) => settings,
             Err(error) => return failed_result(format!("Could not load Jira settings: {error}")),
         };
-        let site_url = settings.jira_site_url.trim().trim_end_matches('/');
+        let site_url = match normalize_jira_site_url(&settings.jira_site_url) {
+            Ok(site_url) => site_url,
+            Err(message) => return failed_result(message),
+        };
         let account_email = settings.jira_account_email.trim();
 
-        if site_url.is_empty() {
-            return failed_result("Jira site URL is required.");
-        }
-        if !site_url.starts_with("https://") {
-            return failed_result("Jira site URL must start with https://.");
-        }
         if account_email.is_empty() {
             return failed_result("Jira account email is required.");
         }
@@ -136,7 +133,7 @@ impl AppServices {
                     account_email: body.email_address,
                 },
                 Err(error) => failed_result(format!(
-                    "Jira responded, but the account payload could not be read: {error}"
+                    "Jira responded with an unexpected payload. Check that the site URL is the Jira Cloud site root, for example https://your-site.atlassian.net. Details: {error}"
                 )),
             },
             Err(ureq::Error::Status(401, _)) | Err(ureq::Error::Status(403, _)) => {
@@ -190,11 +187,66 @@ struct JiraMyselfResponse {
     email_address: Option<String>,
 }
 
+fn normalize_jira_site_url(raw_site_url: &str) -> Result<String, String> {
+    let trimmed = raw_site_url.trim().trim_end_matches('/');
+    if trimmed.is_empty() {
+        return Err("Jira site URL is required.".to_string());
+    }
+    if !trimmed.starts_with("https://") {
+        return Err("Jira site URL must start with https://.".to_string());
+    }
+
+    let rest = &trimmed["https://".len()..];
+    let host_end = rest
+        .find(|character| matches!(character, '/' | '?' | '#'))
+        .unwrap_or(rest.len());
+    let host = &rest[..host_end];
+
+    if host.is_empty() {
+        return Err("Jira site URL must include a host.".to_string());
+    }
+    if host.chars().any(char::is_whitespace) {
+        return Err("Jira site URL must not include spaces.".to_string());
+    }
+
+    Ok(format!("https://{}", host.to_ascii_lowercase()))
+}
+
 fn failed_result(message: impl Into<String>) -> JiraConnectionTestResult {
     JiraConnectionTestResult {
         ok: false,
         message: message.into(),
         account_display_name: None,
         account_email: None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::normalize_jira_site_url;
+
+    #[test]
+    fn normalizes_jira_cloud_urls_to_site_root() {
+        assert_eq!(
+            normalize_jira_site_url(
+                "https://salmonsimondts.atlassian.net/jira/software/projects/STT/boards/1"
+            )
+            .expect("url should normalize"),
+            "https://salmonsimondts.atlassian.net"
+        );
+        assert_eq!(
+            normalize_jira_site_url("  https://SALMONSIMONDTS.atlassian.net/  ")
+                .expect("url should normalize"),
+            "https://salmonsimondts.atlassian.net"
+        );
+    }
+
+    #[test]
+    fn rejects_non_https_jira_urls() {
+        assert_eq!(
+            normalize_jira_site_url("http://salmonsimondts.atlassian.net")
+                .expect_err("http should fail"),
+            "Jira site URL must start with https://."
+        );
     }
 }
