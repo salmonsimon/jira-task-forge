@@ -1,6 +1,6 @@
 use tauri::State;
 
-use crate::models::{AppSettings, LocalTask, NewTask, NewTray, Tray};
+use crate::models::{AppSettings, JiraConnectionTestResult, LocalTask, NewTask, NewTray, Tray};
 use crate::services::AppServices;
 
 #[tauri::command]
@@ -93,6 +93,13 @@ pub fn delete_jira_api_token(services: State<'_, AppServices>) -> Result<(), Str
     services
         .delete_jira_api_token()
         .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn test_jira_connection(
+    services: State<'_, AppServices>,
+) -> Result<JiraConnectionTestResult, String> {
+    Ok(services.test_jira_connection())
 }
 
 #[tauri::command]

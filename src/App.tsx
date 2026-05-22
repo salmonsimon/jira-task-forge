@@ -23,6 +23,7 @@ import {
   restorePersistedTray,
   saveCsvFile,
   savePersistedJiraApiToken,
+  testPersistedJiraConnection,
   updatePersistedAppSettings,
   updatePersistedTaskDetails
 } from "./lib/adapters/tauriPersistence";
@@ -36,7 +37,7 @@ import {
   exportLocalTasksToCsv,
   isEligibleForCsvExport
 } from "./lib/domain";
-import type { AppSettings, LocalTask, MainTab, Panel, Priority, Tray } from "./lib/types";
+import type { AppSettings, JiraConnectionTestResult, LocalTask, MainTab, Panel, Priority, Tray } from "./lib/types";
 import { cn } from "./lib/utils";
 
 const appData = mockAppDataAdapter;
@@ -67,6 +68,8 @@ export default function App() {
   const [csvExportMessage, setCsvExportMessage] = useState<string | null>(null);
   const [hasJiraApiToken, setHasJiraApiToken] = useState(false);
   const [jiraCredentialMessage, setJiraCredentialMessage] = useState<string | null>(null);
+  const [jiraConnectionResult, setJiraConnectionResult] = useState<JiraConnectionTestResult | null>(null);
+  const [isTestingJiraConnection, setIsTestingJiraConnection] = useState(false);
   const lastSelectedTrayId = useRef<string | null>(null);
 
   const selectedTray = useMemo(
@@ -384,6 +387,7 @@ export default function App() {
       await savePersistedJiraApiToken(token);
       setHasJiraApiToken(true);
       setJiraCredentialMessage("Jira API token saved in the OS credential store.");
+      setJiraConnectionResult(null);
       return true;
     } catch {
       setJiraCredentialMessage("Could not save Jira API token in the OS credential store.");
@@ -396,8 +400,26 @@ export default function App() {
       await deletePersistedJiraApiToken();
       setHasJiraApiToken(false);
       setJiraCredentialMessage("Jira API token removed from the OS credential store.");
+      setJiraConnectionResult(null);
     } catch {
       setJiraCredentialMessage("Could not remove Jira API token.");
+    }
+  }
+
+  async function testJiraConnection() {
+    setIsTestingJiraConnection(true);
+    setJiraConnectionResult(null);
+
+    try {
+      const result = await testPersistedJiraConnection();
+      setJiraConnectionResult(result);
+    } catch (error) {
+      setJiraConnectionResult({
+        ok: false,
+        message: error instanceof Error ? error.message : "Could not test Jira connection."
+      });
+    } finally {
+      setIsTestingJiraConnection(false);
     }
   }
 
@@ -552,9 +574,12 @@ export default function App() {
             settings={appSettings}
             hasJiraApiToken={hasJiraApiToken}
             jiraCredentialMessage={jiraCredentialMessage}
+            jiraConnectionResult={jiraConnectionResult}
+            isTestingJiraConnection={isTestingJiraConnection}
             onChange={updateAppSettings}
             onSaveJiraApiToken={saveJiraApiToken}
             onDeleteJiraApiToken={deleteJiraApiToken}
+            onTestJiraConnection={testJiraConnection}
             onClose={() => setOpenPanel(null)}
           />
         ) : null}

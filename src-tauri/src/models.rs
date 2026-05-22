@@ -88,6 +88,15 @@ pub struct AppSettings {
     pub default_content_language: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JiraConnectionTestResult {
+    pub ok: bool,
+    pub message: String,
+    pub account_display_name: Option<String>,
+    pub account_email: Option<String>,
+}
+
 impl Default for AppSettings {
     fn default() -> Self {
         Self {

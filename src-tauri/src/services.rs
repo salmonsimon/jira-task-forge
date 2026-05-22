@@ -1,9 +1,11 @@
 use std::sync::Mutex;
 
+use base64::Engine;
 use rusqlite::Connection;
+use serde::Deserialize;
 
 use crate::db::DbResult;
-use crate::models::{AppSettings, LocalTask, NewTask, NewTray, Tray};
+use crate::models::{AppSettings, JiraConnectionTestResult, LocalTask, NewTask, NewTray, Tray};
 use crate::repositories::{SettingsRepository, TaskRepository, TrayRepository};
 
 pub struct AppServices {
@@ -84,6 +86,69 @@ impl AppServices {
         }
     }
 
+    pub fn test_jira_connection(&self) -> JiraConnectionTestResult {
+        let settings = match self.get_app_settings() {
+            Ok(settings) => settings,
+            Err(error) => return failed_result(format!("Could not load Jira settings: {error}")),
+        };
+        let site_url = settings.jira_site_url.trim().trim_end_matches('/');
+        let account_email = settings.jira_account_email.trim();
+
+        if site_url.is_empty() {
+            return failed_result("Jira site URL is required.");
+        }
+        if !site_url.starts_with("https://") {
+            return failed_result("Jira site URL must start with https://.");
+        }
+        if account_email.is_empty() {
+            return failed_result("Jira account email is required.");
+        }
+
+        let entry = match keyring::Entry::new(JIRA_CREDENTIAL_SERVICE, JIRA_API_TOKEN_ACCOUNT) {
+            Ok(entry) => entry,
+            Err(error) => {
+                return failed_result(format!("Could not open OS credential store: {error}"))
+            }
+        };
+        let token = match entry.get_password() {
+            Ok(token) => token,
+            Err(keyring::Error::NoEntry) => {
+                return failed_result("Save a Jira API token before testing the connection.")
+            }
+            Err(error) => return failed_result(format!("Could not read Jira API token: {error}")),
+        };
+
+        let credentials =
+            base64::engine::general_purpose::STANDARD.encode(format!("{account_email}:{token}"));
+        let request_url = format!("{site_url}/rest/api/3/myself");
+        let response = ureq::get(&request_url)
+            .set("Accept", "application/json")
+            .set("Authorization", &format!("Basic {credentials}"))
+            .timeout(std::time::Duration::from_secs(15))
+            .call();
+
+        match response {
+            Ok(response) => match response.into_json::<JiraMyselfResponse>() {
+                Ok(body) => JiraConnectionTestResult {
+                    ok: true,
+                    message: "Jira connection succeeded.".to_string(),
+                    account_display_name: body.display_name,
+                    account_email: body.email_address,
+                },
+                Err(error) => failed_result(format!(
+                    "Jira responded, but the account payload could not be read: {error}"
+                )),
+            },
+            Err(ureq::Error::Status(401, _)) | Err(ureq::Error::Status(403, _)) => {
+                failed_result("Jira rejected the email or API token.")
+            }
+            Err(ureq::Error::Status(status, _)) => {
+                failed_result(format!("Jira returned HTTP {status}."))
+            }
+            Err(error) => failed_result(format!("Could not reach Jira: {error}")),
+        }
+    }
+
     pub fn create_task(&self, new_task: NewTask) -> DbResult<LocalTask> {
         let connection = self.connection.lock().expect("database lock poisoned");
         TaskRepository::new(&connection).create(new_task)
@@ -115,5 +180,21 @@ impl AppServices {
     pub fn mark_tasks_csv_exported(&self, task_ids: &[String]) -> DbResult<Vec<LocalTask>> {
         let connection = self.connection.lock().expect("database lock poisoned");
         TaskRepository::new(&connection).mark_csv_exported(task_ids)
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct JiraMyselfResponse {
+    display_name: Option<String>,
+    email_address: Option<String>,
+}
+
+fn failed_result(message: impl Into<String>) -> JiraConnectionTestResult {
+    JiraConnectionTestResult {
+        ok: false,
+        message: message.into(),
+        account_display_name: None,
+        account_email: None,
     }
 }

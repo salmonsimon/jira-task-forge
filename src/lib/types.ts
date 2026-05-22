@@ -96,3 +96,10 @@ export type AppSettings = {
   aiModel: string;
   defaultContentLanguage: "Spanish" | "English";
 };
+
+export type JiraConnectionTestResult = {
+  ok: boolean;
+  message: string;
+  accountDisplayName?: string | null;
+  accountEmail?: string | null;
+};

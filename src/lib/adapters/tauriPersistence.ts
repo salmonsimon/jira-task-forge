@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { AppSettings, IssueType, LocalTask, Priority, SyncStatus, Tray, TrayState } from "../types";
+import type { AppSettings, IssueType, JiraConnectionTestResult, LocalTask, Priority, SyncStatus, Tray, TrayState } from "../types";
 
 type BackendTray = {
   id: string;
@@ -91,6 +91,10 @@ export async function savePersistedJiraApiToken(token: string): Promise<void> {
 
 export async function deletePersistedJiraApiToken(): Promise<void> {
   await invoke("delete_jira_api_token");
+}
+
+export async function testPersistedJiraConnection(): Promise<JiraConnectionTestResult> {
+  return invoke<JiraConnectionTestResult>("test_jira_connection");
 }
 
 export async function createPersistedTask(
