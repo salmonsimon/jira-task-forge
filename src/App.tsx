@@ -493,11 +493,9 @@ export default function App() {
 
   async function createInJiraPreflight(tray: Tray) {
     setIsRunningJiraPreflight(true);
-    await delay(1000);
 
     const warnings = classifyTrayPreflightWarnings(tray.tasks);
     const createableTaskCount = tray.tasks.filter((task) => task.syncStatus !== "Created").length;
-    let credentialResult: JiraConnectionTestResult | null = null;
     const creationProjectKey = appSettings.jiraCreationProjectKey.trim().toUpperCase();
     const creationTarget = `Jira project ${creationProjectKey || "not set"}`;
 
@@ -516,36 +514,67 @@ export default function App() {
         severity: "blocking",
         message: "Jira site URL, account email, and saved API token are required before creating issues."
       });
-    } else if (usesTauriPersistence) {
-      try {
-        credentialResult = await testPersistedJiraConnection();
-        setJiraConnectionResult(credentialResult);
-        if (!credentialResult.ok) {
-          warnings.push({
-            code: "invalid-credential",
-            severity: "blocking",
-            message: credentialResult.message
-          });
-        }
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Could not test Jira credentials.";
-        credentialResult = { ok: false, message };
-        warnings.push({
-          code: "invalid-credential",
-          severity: "blocking",
-          message
-        });
-      }
     }
+
+    const shouldCheckCredential = hasRequiredSettings && usesTauriPersistence;
 
     setJiraCreatePreflight({
       tray,
-      credentialResult,
+      credentialResult: null,
+      credentialStatus: shouldCheckCredential ? "checking" : "idle",
       warnings,
       createableTaskCount,
       creationTarget
     });
     setIsRunningJiraPreflight(false);
+
+    if (!shouldCheckCredential) return;
+
+    await delay(350);
+
+    try {
+      const credentialResult = await testPersistedJiraConnection();
+      setJiraConnectionResult(credentialResult);
+      setJiraCreatePreflight((currentPreflight) => {
+        if (!currentPreflight || currentPreflight.tray.id !== tray.id) return currentPreflight;
+
+        return {
+          ...currentPreflight,
+          credentialResult,
+          credentialStatus: "checked",
+          warnings: credentialResult.ok
+            ? currentPreflight.warnings
+            : [
+                ...currentPreflight.warnings,
+                {
+                  code: "invalid-credential",
+                  severity: "blocking",
+                  message: credentialResult.message
+                }
+              ]
+        };
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not test Jira credentials.";
+      const credentialResult = { ok: false, message };
+      setJiraCreatePreflight((currentPreflight) => {
+        if (!currentPreflight || currentPreflight.tray.id !== tray.id) return currentPreflight;
+
+        return {
+          ...currentPreflight,
+          credentialResult,
+          credentialStatus: "checked",
+          warnings: [
+            ...currentPreflight.warnings,
+            {
+              code: "invalid-credential",
+              severity: "blocking",
+              message
+            }
+          ]
+        };
+      });
+    }
   }
 
   useEffect(() => {
