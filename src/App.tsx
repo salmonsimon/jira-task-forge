@@ -3,6 +3,7 @@ import { downloadDir, join } from "@tauri-apps/api/path";
 import { save } from "@tauri-apps/plugin-dialog";
 import { AppHeader } from "./components/shell";
 import { CategoriesPanel } from "./features/categories";
+import { JiraPreflightDialog, type JiraCreatePreflight } from "./features/jira-preflight";
 import { JqlView } from "./features/jql";
 import { SettingsPanel } from "./features/settings";
 import { TaskFocusWindow } from "./features/task-detail";
@@ -30,6 +31,7 @@ import {
 import {
   canDeleteTask,
   canDuplicateTask,
+  classifyTrayPreflightWarnings,
   countCsvExportableTasks,
   deriveIssueTypeFromArea,
   deriveTrayStateFromTasks,
@@ -70,6 +72,8 @@ export default function App() {
   const [jiraCredentialMessage, setJiraCredentialMessage] = useState<string | null>(null);
   const [jiraConnectionResult, setJiraConnectionResult] = useState<JiraConnectionTestResult | null>(null);
   const [isTestingJiraConnection, setIsTestingJiraConnection] = useState(false);
+  const [isRunningJiraPreflight, setIsRunningJiraPreflight] = useState(false);
+  const [jiraCreatePreflight, setJiraCreatePreflight] = useState<JiraCreatePreflight | null>(null);
   const lastSelectedTrayId = useRef<string | null>(null);
 
   const selectedTray = useMemo(
@@ -486,6 +490,51 @@ export default function App() {
     setCsvExportMessage(`${exportableCount} ${exportableCount === 1 ? "task" : "tasks"} exported to CSV.`);
   }
 
+  async function createInJiraPreflight(tray: Tray) {
+    setIsRunningJiraPreflight(true);
+
+    const warnings = classifyTrayPreflightWarnings(tray.tasks);
+    const createableTaskCount = tray.tasks.filter((task) => task.syncStatus !== "Created").length;
+    let credentialResult: JiraConnectionTestResult | null = null;
+
+    const hasRequiredSettings = Boolean(appSettings.jiraSiteUrl.trim() && appSettings.jiraAccountEmail.trim() && hasJiraApiToken);
+    if (!hasRequiredSettings) {
+      warnings.push({
+        code: "missing-credential",
+        severity: "blocking",
+        message: "Jira site URL, account email, and saved API token are required before creating issues."
+      });
+    } else if (usesTauriPersistence) {
+      try {
+        credentialResult = await testPersistedJiraConnection();
+        setJiraConnectionResult(credentialResult);
+        if (!credentialResult.ok) {
+          warnings.push({
+            code: "invalid-credential",
+            severity: "blocking",
+            message: credentialResult.message
+          });
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Could not test Jira credentials.";
+        credentialResult = { ok: false, message };
+        warnings.push({
+          code: "invalid-credential",
+          severity: "blocking",
+          message
+        });
+      }
+    }
+
+    setJiraCreatePreflight({
+      tray,
+      credentialResult,
+      warnings,
+      createableTaskCount
+    });
+    setIsRunningJiraPreflight(false);
+  }
+
   useEffect(() => {
     function handleSecondaryMouseNavigation(event: MouseEvent) {
       if (event.button === 3) {
@@ -525,7 +574,9 @@ export default function App() {
               onRestoreTray={restoreTray}
               onDeleteTray={deleteTray}
               onExportCsv={exportTrayCsv}
+              onCreateInJira={createInJiraPreflight}
               csvExportMessage={csvExportMessage}
+              isRunningJiraPreflight={isRunningJiraPreflight}
               showArchived={showArchivedTrays}
               onToggleArchived={() => setShowArchivedTrays((current) => !current)}
               onBackToSelector={() => {
@@ -590,6 +641,7 @@ export default function App() {
             onConfirm={confirmDeleteTray}
           />
         ) : null}
+        {jiraCreatePreflight ? <JiraPreflightDialog preflight={jiraCreatePreflight} onClose={() => setJiraCreatePreflight(null)} /> : null}
       </div>
     </div>
   );
