@@ -138,6 +138,43 @@ impl<'connection> TaskRepository<'connection> {
         Ok(changed > 0)
     }
 
+    pub fn mark_csv_exported(&self, task_ids: &[String]) -> DbResult<Vec<LocalTask>> {
+        if task_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let now = utc_now_string()?;
+        for task_id in task_ids {
+            self.connection.execute(
+                "
+                UPDATE tasks
+                SET sync_status = 'Exported', updated_at = ?1
+                WHERE id = ?2 AND sync_status IN ('Pending', 'Failed')
+                ",
+                (now.as_str(), task_id.as_str()),
+            )?;
+        }
+
+        let tasks = self.list_all()?;
+        let exported_tasks = task_ids
+            .iter()
+            .filter_map(|task_id| tasks.iter().find(|task| task.id == *task_id).cloned())
+            .collect::<Vec<_>>();
+
+        let mut touched_tray_ids = Vec::<String>::new();
+        for task in &exported_tasks {
+            if !touched_tray_ids.contains(&task.tray_id) {
+                touched_tray_ids.push(task.tray_id.clone());
+            }
+        }
+
+        for tray_id in touched_tray_ids {
+            self.touch_tray(&tray_id, &now)?;
+        }
+
+        Ok(exported_tasks)
+    }
+
     fn touch_tray(&self, tray_id: &str, updated_at: &str) -> DbResult<()> {
         self.connection.execute(
             "UPDATE trays SET updated_at = ?1 WHERE id = ?2",
@@ -405,6 +442,81 @@ mod tests {
             task_repository.list_for_tray(&tray.id).expect("tasks list"),
             vec![second]
         );
+    }
+
+    #[test]
+    fn marks_pending_and_failed_tasks_as_csv_exported() {
+        let connection = open_in_memory_database().expect("database opens");
+        let tray_repository = TrayRepository::new(&connection);
+        let task_repository = TaskRepository::new(&connection);
+        let tray = tray_repository
+            .create(NewTray {
+                name: "CSV tray".to_string(),
+            })
+            .expect("tray creates");
+
+        let pending = task_repository
+            .create(NewTask {
+                tray_id: tray.id.clone(),
+                project: "STT".to_string(),
+                area: "Bug".to_string(),
+                title: "Pending export".to_string(),
+                priority: "High".to_string(),
+                issue_type: "Bug".to_string(),
+                content_language: "Spanish".to_string(),
+            })
+            .expect("pending task creates");
+        let failed = task_repository
+            .create(NewTask {
+                tray_id: tray.id.clone(),
+                project: "STT".to_string(),
+                area: "Polish".to_string(),
+                title: "Failed export".to_string(),
+                priority: "Medium".to_string(),
+                issue_type: "Story".to_string(),
+                content_language: "Spanish".to_string(),
+            })
+            .expect("failed task creates");
+        let created = task_repository
+            .create(NewTask {
+                tray_id: tray.id.clone(),
+                project: "STT".to_string(),
+                area: "3D".to_string(),
+                title: "Created task".to_string(),
+                priority: "Low".to_string(),
+                issue_type: "Story".to_string(),
+                content_language: "Spanish".to_string(),
+            })
+            .expect("created task creates");
+
+        connection
+            .execute(
+                "UPDATE tasks SET sync_status = 'Failed' WHERE id = ?1",
+                [failed.id.as_str()],
+            )
+            .expect("failed status updates");
+        connection
+            .execute(
+                "UPDATE tasks SET sync_status = 'Created' WHERE id = ?1",
+                [created.id.as_str()],
+            )
+            .expect("created status updates");
+
+        let marked = task_repository
+            .mark_csv_exported(&[pending.id.clone(), failed.id.clone(), created.id.clone()])
+            .expect("tasks mark exported");
+
+        assert_eq!(marked.len(), 3);
+        let statuses = task_repository
+            .list_for_tray(&tray.id)
+            .expect("tasks list")
+            .into_iter()
+            .map(|task| (task.id, task.sync_status))
+            .collect::<Vec<_>>();
+
+        assert!(statuses.contains(&(pending.id, "Exported".to_string())));
+        assert!(statuses.contains(&(failed.id, "Exported".to_string())));
+        assert!(statuses.contains(&(created.id, "Created".to_string())));
     }
 
     #[test]

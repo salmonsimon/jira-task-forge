@@ -61,4 +61,9 @@ impl AppServices {
         let connection = self.connection.lock().expect("database lock poisoned");
         TaskRepository::new(&connection).delete(task_id)
     }
+
+    pub fn mark_tasks_csv_exported(&self, task_ids: &[String]) -> DbResult<Vec<LocalTask>> {
+        let connection = self.connection.lock().expect("database lock poisoned");
+        TaskRepository::new(&connection).mark_csv_exported(task_ids)
+    }
 }

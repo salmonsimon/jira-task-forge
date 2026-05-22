@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { downloadDir, join } from "@tauri-apps/api/path";
+import { save } from "@tauri-apps/plugin-dialog";
 import { AppHeader } from "./components/shell";
 import { CategoriesPanel } from "./features/categories";
 import { JqlView } from "./features/jql";
@@ -13,10 +15,21 @@ import {
   deletePersistedTray,
   deletePersistedTask,
   listPersistedTrays,
+  markPersistedTasksCsvExported,
   renamePersistedTray,
-  restorePersistedTray
+  restorePersistedTray,
+  saveCsvFile
 } from "./lib/adapters/tauriPersistence";
-import { canDeleteTask, canDuplicateTask, deriveIssueTypeFromArea, deriveTrayStateFromTasks, duplicateLocalTask } from "./lib/domain";
+import {
+  canDeleteTask,
+  canDuplicateTask,
+  countCsvExportableTasks,
+  deriveIssueTypeFromArea,
+  deriveTrayStateFromTasks,
+  duplicateLocalTask,
+  exportLocalTasksToCsv,
+  isEligibleForCsvExport
+} from "./lib/domain";
 import type { LocalTask, MainTab, Panel, Priority, Tray } from "./lib/types";
 import { cn } from "./lib/utils";
 
@@ -36,6 +49,7 @@ export default function App() {
   const [usesTauriPersistence, setUsesTauriPersistence] = useState(false);
   const [showArchivedTrays, setShowArchivedTrays] = useState(false);
   const [trayPendingDelete, setTrayPendingDelete] = useState<Tray | null>(null);
+  const [csvExportMessage, setCsvExportMessage] = useState<string | null>(null);
   const lastSelectedTrayId = useRef<string | null>(null);
 
   const selectedTray = useMemo(
@@ -109,6 +123,10 @@ export default function App() {
       setOpenPanel(null);
     }
   }, [openPanel, selectedTask]);
+
+  useEffect(() => {
+    setCsvExportMessage(null);
+  }, [selectedTrayId]);
 
   function openTask(task: LocalTask) {
     setSelectedTaskId(task.id);
@@ -281,6 +299,69 @@ export default function App() {
     );
   }
 
+  async function exportTrayCsv(tray: Tray) {
+    const csvExportOptions = { includeExported: true };
+    const exportableTasks = tray.tasks.filter((task) => isEligibleForCsvExport(task, csvExportOptions));
+    const exportableCount = countCsvExportableTasks(tray.tasks, csvExportOptions);
+    if (exportableCount === 0) {
+      setCsvExportMessage("No pending, failed, or exported tasks to export.");
+      return;
+    }
+
+    const csv = exportLocalTasksToCsv(tray.tasks, { includeExported: true });
+    const defaultFilename = `${toFileSlug(tray.name)}-${new Date().toISOString().slice(0, 10)}.csv`;
+    const defaultPath = await getDefaultCsvExportPath(defaultFilename);
+    const path = await save({
+      defaultPath,
+      filters: [
+        {
+          name: "CSV",
+          extensions: ["csv"]
+        }
+      ]
+    });
+
+    if (!path) {
+      setCsvExportMessage("CSV export cancelled.");
+      return;
+    }
+
+    try {
+      await saveCsvFile(path, `\uFEFF${csv}`);
+    } catch {
+      setCsvExportMessage("CSV could not be saved.");
+      return;
+    }
+
+    try {
+      const exportedTasks = usesTauriPersistence
+        ? await markPersistedTasksCsvExported(exportableTasks.map((task) => task.id))
+        : exportableTasks.map((task) =>
+            task.syncStatus === "Pending" || task.syncStatus === "Failed"
+              ? {
+                  ...task,
+                  syncStatus: "Exported" as const
+                }
+              : task
+          );
+      const exportedTasksById = new Map(exportedTasks.map((task) => [task.id, task]));
+
+      setTrays((currentTrays) =>
+        currentTrays.map((currentTray) => {
+          if (currentTray.id !== tray.id) return currentTray;
+
+          const nextTasks = currentTray.tasks.map((task) => exportedTasksById.get(task.id) ?? task);
+          return updateTrayTasks(currentTray, nextTasks);
+        })
+      );
+    } catch {
+      setCsvExportMessage("CSV downloaded, but task status could not be updated.");
+      return;
+    }
+
+    setCsvExportMessage(`${exportableCount} ${exportableCount === 1 ? "task" : "tasks"} exported to CSV.`);
+  }
+
   useEffect(() => {
     function handleSecondaryMouseNavigation(event: MouseEvent) {
       if (event.button === 3) {
@@ -319,6 +400,8 @@ export default function App() {
               onArchiveTray={archiveTray}
               onRestoreTray={restoreTray}
               onDeleteTray={deleteTray}
+              onExportCsv={exportTrayCsv}
+              csvExportMessage={csvExportMessage}
               showArchived={showArchivedTrays}
               onToggleArchived={() => setShowArchivedTrays((current) => !current)}
               onBackToSelector={() => {
@@ -469,4 +552,22 @@ function summarizeTrayTasks(tasks: LocalTask[]): string {
   ]
     .filter(Boolean)
     .join(" · ");
+}
+
+function toFileSlug(value: string): string {
+  const slug = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+  return slug || "tray";
+}
+
+async function getDefaultCsvExportPath(filename: string): Promise<string> {
+  try {
+    return await join(await downloadDir(), filename);
+  } catch {
+    return filename;
+  }
 }

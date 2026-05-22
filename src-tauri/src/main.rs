@@ -15,6 +15,7 @@ fn app_version() -> &'static str {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let app_data_dir = app
                 .path()
@@ -36,7 +37,9 @@ pub fn run() {
             commands::delete_tray,
             commands::create_task,
             commands::list_tasks,
-            commands::delete_task
+            commands::delete_task,
+            commands::mark_tasks_csv_exported,
+            commands::save_csv_file
         ])
         .run(tauri::generate_context!())
         .expect("error while running Jira Task Forge");

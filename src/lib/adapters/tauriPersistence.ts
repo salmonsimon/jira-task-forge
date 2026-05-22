@@ -94,6 +94,15 @@ export async function deletePersistedTask(taskId: string): Promise<boolean> {
   return invoke<boolean>("delete_task", { taskId });
 }
 
+export async function markPersistedTasksCsvExported(taskIds: string[]): Promise<LocalTask[]> {
+  const tasks = await invoke<BackendTask[]>("mark_tasks_csv_exported", { taskIds });
+  return tasks.map(mapTask);
+}
+
+export async function saveCsvFile(path: string, contents: string): Promise<void> {
+  await invoke("save_csv_file", { path, contents });
+}
+
 function mapTask(task: BackendTask): LocalTask {
   return {
     id: task.id,

@@ -6,7 +6,7 @@ export type LocalTaskCsvExportOptions = {
 
 const CSV_HEADERS = ["Project", "Summary", "Issue Type", "Priority", "Labels", "Description"] as const;
 
-function isEligibleForCsvExport(
+export function isEligibleForCsvExport(
   task: Pick<LocalTask, "syncStatus">,
   options: LocalTaskCsvExportOptions = {}
 ): boolean {
@@ -44,4 +44,11 @@ export function exportLocalTasksToCsv(
   return [CSV_HEADERS, ...rows]
     .map((row) => row.map((cell) => escapeCsvCell(cell)).join(","))
     .join("\n");
+}
+
+export function countCsvExportableTasks(
+  tasks: Pick<LocalTask, "syncStatus">[],
+  options: LocalTaskCsvExportOptions = {}
+): number {
+  return tasks.filter((task) => isEligibleForCsvExport(task, options)).length;
 }

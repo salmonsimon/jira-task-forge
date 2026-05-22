@@ -88,3 +88,22 @@ pub fn delete_task(services: State<'_, AppServices>, task_id: String) -> Result<
         .delete_task(&task_id)
         .map_err(|error| error.to_string())
 }
+
+#[tauri::command]
+pub fn mark_tasks_csv_exported(
+    services: State<'_, AppServices>,
+    task_ids: Vec<String>,
+) -> Result<Vec<LocalTask>, String> {
+    services
+        .mark_tasks_csv_exported(&task_ids)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn save_csv_file(path: String, contents: String) -> Result<(), String> {
+    if path.trim().is_empty() {
+        return Err("CSV path cannot be empty".to_string());
+    }
+
+    std::fs::write(path, contents).map_err(|error| error.to_string())
+}
