@@ -2,7 +2,9 @@ use rusqlite::{params, Connection};
 use uuid::Uuid;
 
 use crate::db::{utc_now_string, DbError, DbResult};
-use crate::models::{LocalTask, NewTask, NewTray, Tray, TrayState};
+use crate::models::{AppSettings, LocalTask, NewTask, NewTray, Tray, TrayState};
+
+const APP_SETTINGS_KEY: &str = "app_settings";
 
 pub struct TrayRepository<'connection> {
     connection: &'connection Connection,
@@ -10,6 +12,49 @@ pub struct TrayRepository<'connection> {
 
 pub struct TaskRepository<'connection> {
     connection: &'connection Connection,
+}
+
+pub struct SettingsRepository<'connection> {
+    connection: &'connection Connection,
+}
+
+impl<'connection> SettingsRepository<'connection> {
+    pub fn new(connection: &'connection Connection) -> Self {
+        Self { connection }
+    }
+
+    pub fn get_app_settings(&self) -> DbResult<AppSettings> {
+        let result = self.connection.query_row(
+            "SELECT value_json FROM settings WHERE key = ?1",
+            [APP_SETTINGS_KEY],
+            |row| row.get::<_, String>(0),
+        );
+
+        let value_json = match result {
+            Ok(value_json) => value_json,
+            Err(rusqlite::Error::QueryReturnedNoRows) => return Ok(AppSettings::default()),
+            Err(error) => return Err(error.into()),
+        };
+
+        serde_json::from_str(&value_json).map_err(|error| DbError::InvalidData(error.to_string()))
+    }
+
+    pub fn update_app_settings(&self, settings: AppSettings) -> DbResult<AppSettings> {
+        let updated_at = utc_now_string()?;
+        let value_json = serde_json::to_string(&settings)
+            .map_err(|error| DbError::InvalidData(error.to_string()))?;
+
+        self.connection.execute(
+            "
+            INSERT INTO settings (key, value_json, updated_at)
+            VALUES (?1, ?2, ?3)
+            ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json, updated_at = excluded.updated_at
+            ",
+            (APP_SETTINGS_KEY, value_json, updated_at),
+        )?;
+
+        Ok(settings)
+    }
 }
 
 impl<'connection> TaskRepository<'connection> {
@@ -607,6 +652,37 @@ mod tests {
             .expect("created task update is ignored");
 
         assert_eq!(blocked, None);
+    }
+
+    #[test]
+    fn reads_and_updates_app_settings() {
+        let connection = open_in_memory_database().expect("database opens");
+        let repository = SettingsRepository::new(&connection);
+
+        let defaults = repository
+            .get_app_settings()
+            .expect("default settings load");
+
+        assert_eq!(defaults.theme_mode, "dark");
+        assert_eq!(defaults.jira_site_url, "https://dts.atlassian.net");
+
+        let updated = repository
+            .update_app_settings(AppSettings {
+                theme_mode: "system".to_string(),
+                jira_site_url: "https://example.atlassian.net".to_string(),
+                jira_account_email: "saimon@example.com".to_string(),
+                jira_auth_method: "api-token".to_string(),
+                ai_provider: "OpenAI".to_string(),
+                ai_model: "gpt-4.1-mini".to_string(),
+                default_content_language: "Spanish".to_string(),
+            })
+            .expect("settings update");
+
+        assert_eq!(updated.theme_mode, "system");
+        assert_eq!(
+            repository.get_app_settings().expect("settings reload"),
+            updated
+        );
     }
 
     #[test]

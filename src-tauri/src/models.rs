@@ -75,3 +75,29 @@ pub struct NewTask {
     pub issue_type: String,
     pub content_language: String,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppSettings {
+    pub theme_mode: String,
+    pub jira_site_url: String,
+    pub jira_account_email: String,
+    pub jira_auth_method: String,
+    pub ai_provider: String,
+    pub ai_model: String,
+    pub default_content_language: String,
+}
+
+impl Default for AppSettings {
+    fn default() -> Self {
+        Self {
+            theme_mode: "dark".to_string(),
+            jira_site_url: "https://dts.atlassian.net".to_string(),
+            jira_account_email: String::new(),
+            jira_auth_method: "api-token".to_string(),
+            ai_provider: "OpenAI".to_string(),
+            ai_model: "gpt-4.1".to_string(),
+            default_content_language: "Spanish".to_string(),
+        }
+    }
+}
