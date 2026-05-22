@@ -48,6 +48,8 @@ const defaultAppSettings: AppSettings = {
   jiraSiteUrl: "https://dts.atlassian.net",
   jiraAccountEmail: "",
   jiraAuthMethod: "api-token",
+  jiraSandboxMode: true,
+  jiraSandboxProjectKey: "",
   aiProvider: "OpenAI",
   aiModel: "gpt-4.1",
   defaultContentLanguage: "Spanish"
@@ -496,6 +498,18 @@ export default function App() {
     const warnings = classifyTrayPreflightWarnings(tray.tasks);
     const createableTaskCount = tray.tasks.filter((task) => task.syncStatus !== "Created").length;
     let credentialResult: JiraConnectionTestResult | null = null;
+    const sandboxProjectKey = appSettings.jiraSandboxProjectKey.trim().toUpperCase();
+    const creationTarget = appSettings.jiraSandboxMode
+      ? `Sandbox project ${sandboxProjectKey || "not set"}`
+      : "Each task's selected project";
+
+    if (appSettings.jiraSandboxMode && !sandboxProjectKey) {
+      warnings.push({
+        code: "missing-sandbox-project",
+        severity: "blocking",
+        message: "Sandbox project key is required before creating issues in sandbox mode."
+      });
+    }
 
     const hasRequiredSettings = Boolean(appSettings.jiraSiteUrl.trim() && appSettings.jiraAccountEmail.trim() && hasJiraApiToken);
     if (!hasRequiredSettings) {
@@ -530,7 +544,8 @@ export default function App() {
       tray,
       credentialResult,
       warnings,
-      createableTaskCount
+      createableTaskCount,
+      creationTarget
     });
     setIsRunningJiraPreflight(false);
   }

@@ -74,11 +74,11 @@ export async function deletePersistedTray(trayId: string): Promise<boolean> {
 }
 
 export async function getPersistedAppSettings(): Promise<AppSettings> {
-  return invoke<AppSettings>("get_app_settings");
+  return normalizeAppSettings(await invoke<AppSettings>("get_app_settings"));
 }
 
 export async function updatePersistedAppSettings(settings: AppSettings): Promise<AppSettings> {
-  return invoke<AppSettings>("update_app_settings", { settings });
+  return normalizeAppSettings(await invoke<AppSettings>("update_app_settings", { settings }));
 }
 
 export async function hasPersistedJiraApiToken(): Promise<boolean> {
@@ -205,4 +205,12 @@ function summarizeTrayTasks(tasks: LocalTask[]): string {
   ]
     .filter(Boolean)
     .join(" · ");
+}
+
+function normalizeAppSettings(settings: AppSettings): AppSettings {
+  return {
+    ...settings,
+    jiraSandboxMode: settings.jiraSandboxMode ?? true,
+    jiraSandboxProjectKey: settings.jiraSandboxProjectKey ?? ""
+  };
 }

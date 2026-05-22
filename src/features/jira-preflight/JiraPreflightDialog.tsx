@@ -9,6 +9,7 @@ export type JiraCreatePreflight = {
   credentialResult: JiraConnectionTestResult | null;
   warnings: PreflightWarning[];
   createableTaskCount: number;
+  creationTarget: string;
 };
 
 export function JiraPreflightDialog({
@@ -60,6 +61,13 @@ export function JiraPreflightDialog({
                 ? preflight.credentialResult.message
                 : "Using saved Jira connection settings for this preflight."}
             </p>
+          </div>
+
+          <div className="rounded border border-[#3b4454] bg-[#292c31] px-3 py-3">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-sm font-semibold text-[#f4f5f7]">Creation target</span>
+              <span className="rounded bg-[#102d50] px-2 py-1 text-xs font-medium text-[#85b8ff]">{preflight.creationTarget}</span>
+            </div>
           </div>
 
           {blockingWarnings.length ? (
@@ -175,6 +183,7 @@ function getWarningTitle(code: PreflightWarningCode): string {
     "empty-tray": "No createable tasks",
     "missing-credential": "Missing Jira credentials",
     "invalid-credential": "Invalid Jira credentials",
+    "missing-sandbox-project": "Missing sandbox project",
     "missing-project": "Missing project",
     "missing-area": "Missing area",
     "missing-title": "Missing title",
@@ -192,6 +201,7 @@ function getWarningSummary(code: PreflightWarningCode, warning: PreflightWarning
     "empty-tray": warning.message,
     "missing-credential": warning.message,
     "invalid-credential": warning.message,
+    "missing-sandbox-project": warning.message,
     "missing-project": "These tasks need a Jira project before they can be created.",
     "missing-area": "These tasks need an area before Jira issue type and labels can be derived.",
     "missing-title": "These tasks need a title before they can be created.",
