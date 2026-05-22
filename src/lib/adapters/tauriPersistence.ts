@@ -208,9 +208,12 @@ function summarizeTrayTasks(tasks: LocalTask[]): string {
 }
 
 function normalizeAppSettings(settings: AppSettings): AppSettings {
+  const legacySettings = settings as AppSettings & {
+    jiraSandboxProjectKey?: string;
+  };
+
   return {
     ...settings,
-    jiraSandboxMode: settings.jiraSandboxMode ?? true,
-    jiraSandboxProjectKey: settings.jiraSandboxProjectKey ?? ""
+    jiraCreationProjectKey: settings.jiraCreationProjectKey ?? legacySettings.jiraSandboxProjectKey ?? ""
   };
 }

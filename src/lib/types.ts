@@ -11,7 +11,7 @@ export type PreflightWarningCode =
   | "empty-tray"
   | "missing-credential"
   | "invalid-credential"
-  | "missing-sandbox-project"
+  | "missing-creation-project"
   | "missing-project"
   | "missing-area"
   | "missing-title"
@@ -97,8 +97,7 @@ export type AppSettings = {
   jiraSiteUrl: string;
   jiraAccountEmail: string;
   jiraAuthMethod: "api-token" | "oauth-ready";
-  jiraSandboxMode: boolean;
-  jiraSandboxProjectKey: string;
+  jiraCreationProjectKey: string;
   aiProvider: "OpenAI" | "None";
   aiModel: string;
   defaultContentLanguage: "Spanish" | "English";

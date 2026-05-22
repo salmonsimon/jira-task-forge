@@ -91,21 +91,15 @@ export function SettingsPanel({
             Tokens are never stored in SQLite or backups. The backend stores the token in the OS credential store.
           </p>
           <div className="mt-3 rounded border border-[#dfe1e6] bg-[#f7f8fa] p-3">
-            <label className="flex items-center gap-2 text-sm font-medium text-[#172b4d]">
-              <input
-                checked={settings.jiraSandboxMode}
-                className="h-4 w-4 accent-[#0052cc]"
-                type="checkbox"
-                onChange={(event) => onChange({ jiraSandboxMode: event.target.checked })}
-              />
-              Use sandbox project for Jira creation
-            </label>
             <SettingsInput
-              label="Sandbox project key"
+              label="Jira project key for creation"
               placeholder="JTFTEST"
-              value={settings.jiraSandboxProjectKey}
-              onChange={(jiraSandboxProjectKey) => onChange({ jiraSandboxProjectKey: jiraSandboxProjectKey.toUpperCase() })}
+              value={settings.jiraCreationProjectKey}
+              onChange={(jiraCreationProjectKey) => onChange({ jiraCreationProjectKey: jiraCreationProjectKey.toUpperCase() })}
             />
+            <p className="text-xs leading-relaxed text-[#6b778c]">
+              Every Jira upload uses this single project key for the whole tray. Internal app projects remain preparation categories.
+            </p>
           </div>
           <div className="mt-3 rounded border border-[#dfe1e6] bg-[#f7f8fa] p-3">
             <div className="mb-2 flex items-center justify-between gap-2">
