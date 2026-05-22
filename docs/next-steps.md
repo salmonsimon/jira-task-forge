@@ -66,19 +66,14 @@ Human QA to run before choosing the next implementation slice:
 Expected limitations right now:
 
 - `Create in Jira` is not wired.
-- `Export CSV` is not wired to the UI yet, although a pure CSV helper exists.
-- SQLite persistence does not exist yet.
+- `Export CSV` is wired and opens a native save dialog.
+- SQLite persistence exists for trays and local tasks, but not yet for settings, credentials, attachments, audit logs, backups, or Jira sync artifacts.
 - Jira, AI, credentials, attachments, backup/import, and audit log storage are not implemented.
-- In-memory changes are intentionally lost on refresh.
-- Task detail `Details` fields are still display-only. A later task editing slice should make project, area, and priority editable for non-archived editable tasks; keep auto-generated epic and labels visible but muted/read-only; remove the language row because Jira task content defaults to Spanish.
+- Task detail `Details` supports editable project, area, and priority for editable non-archived tasks. Auto-generated epic and labels remain visible but muted/read-only.
 
 Near-term decided follow-ups after tray lifecycle:
 
-- Wire `Export CSV` to the existing CSV helper for pending/failed/exported tasks.
-- Add task detail editing for project, area, and priority on editable non-archived tasks.
-- Keep epic and labels visible but muted/read-only because they are generated.
-- Remove the language row from task detail because Jira task content defaults to Spanish.
-- Expand destructive tray delete confirmation later based on task/Jira-link risk level.
+- Start the next v1 implementation slice for Jira connection/settings only after confirming the credential UX and secret-storage flow.
 
 Recommended next decision:
 
