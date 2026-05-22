@@ -489,9 +489,7 @@ export default function App() {
         ) : null}
         {trayPendingDelete ? (
           <ConfirmDialog
-            title="Delete local tray?"
-            message={`Delete "${trayPendingDelete.name}" from local app data? Jira issues will not be deleted.`}
-            confirmLabel="Delete tray"
+            {...getTrayDeleteConfirmation(trayPendingDelete)}
             onCancel={() => setTrayPendingDelete(null)}
             onConfirm={confirmDeleteTray}
           />
@@ -504,16 +502,23 @@ export default function App() {
 function ConfirmDialog({
   title,
   message,
+  details = [],
   confirmLabel,
+  requiredConfirmationText,
   onCancel,
   onConfirm
 }: {
   title: string;
   message: string;
+  details?: string[];
   confirmLabel: string;
+  requiredConfirmationText?: string;
   onCancel: () => void;
   onConfirm: () => void;
 }) {
+  const [confirmationText, setConfirmationText] = useState("");
+  const canConfirm = !requiredConfirmationText || confirmationText === requiredConfirmationText;
+
   useEffect(() => {
     function handleEscape(event: KeyboardEvent) {
       if (event.key === "Escape") onCancel();
@@ -534,6 +539,27 @@ function ConfirmDialog({
         </div>
         <div className="px-5 py-4">
           <p className="text-sm leading-relaxed text-[#b7bbc4]">{message}</p>
+          {details.length ? (
+            <ul className="mt-3 space-y-1 text-sm text-[#b7bbc4]">
+              {details.map((detail) => (
+                <li className="flex gap-2" key={detail}>
+                  <span className="text-[#ff9c8f]">-</span>
+                  <span>{detail}</span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {requiredConfirmationText ? (
+            <label className="mt-4 block text-sm text-[#b7bbc4]">
+              Type <span className="font-semibold text-[#f4f5f7]">{requiredConfirmationText}</span> to confirm.
+              <input
+                autoFocus
+                className="mt-2 h-9 w-full rounded border border-[#5c606a] bg-[#22252a] px-3 text-sm text-[#f4f5f7] outline-none focus:border-[#85b8ff] focus:ring-2 focus:ring-[#1d355c]"
+                value={confirmationText}
+                onChange={(event) => setConfirmationText(event.target.value)}
+              />
+            </label>
+          ) : null}
         </div>
         <div className="flex justify-end gap-2 border-t border-[#454852] px-5 py-4">
           <button
@@ -544,7 +570,8 @@ function ConfirmDialog({
             Cancel
           </button>
           <button
-            className="inline-flex h-8 items-center justify-center rounded bg-[#de350b] px-3 text-sm font-medium text-white hover:bg-[#bf2600]"
+            className="inline-flex h-8 items-center justify-center rounded bg-[#de350b] px-3 text-sm font-medium text-white hover:bg-[#bf2600] disabled:cursor-not-allowed disabled:opacity-45"
+            disabled={!canConfirm}
             onClick={onConfirm}
             type="button"
           >
@@ -554,6 +581,51 @@ function ConfirmDialog({
       </section>
     </div>
   );
+}
+
+function getTrayDeleteConfirmation(tray: Tray): {
+  title: string;
+  message: string;
+  details: string[];
+  confirmLabel: string;
+  requiredConfirmationText?: string;
+} {
+  const counts = countTasksBySyncStatus(tray.tasks);
+  const createdCount = counts.Created;
+  const localOnlyCount = counts.Pending + counts.Failed + counts.Exported;
+  const taskLabel = tray.tasks.length === 1 ? "task" : "tasks";
+  const details = [
+    `${tray.tasks.length} local ${taskLabel} will be removed from this app.`,
+    createdCount ? `${createdCount} created Jira ${createdCount === 1 ? "issue link" : "issue links"} will be removed locally.` : null,
+    localOnlyCount ? `${localOnlyCount} pending, failed, or exported local ${localOnlyCount === 1 ? "task" : "tasks"} will be removed.` : null,
+    "Jira issues themselves will not be deleted."
+  ].filter(Boolean) as string[];
+
+  if (createdCount > 0) {
+    return {
+      title: "Delete tray with Jira history?",
+      message: `Deleting "${tray.name}" removes local history and Jira links from this app.`,
+      details,
+      confirmLabel: "Delete tray",
+      requiredConfirmationText: "DELETE"
+    };
+  }
+
+  if (tray.tasks.length > 0) {
+    return {
+      title: "Delete local tray?",
+      message: `Delete "${tray.name}" and its local tasks?`,
+      details,
+      confirmLabel: "Delete tray"
+    };
+  }
+
+  return {
+    title: "Delete empty tray?",
+    message: `Delete "${tray.name}" from local app data?`,
+    details: [],
+    confirmLabel: "Delete tray"
+  };
 }
 
 function cloneTrays(trays: Tray[]): Tray[] {
@@ -581,13 +653,7 @@ function updateTrayTasks(tray: Tray, tasks: LocalTask[]): Tray {
 function summarizeTrayTasks(tasks: LocalTask[]): string {
   if (tasks.length === 0) return "No tasks";
 
-  const counts = tasks.reduce(
-    (summary, task) => {
-      summary[task.syncStatus] += 1;
-      return summary;
-    },
-    { Pending: 0, Failed: 0, Exported: 0, Created: 0 } satisfies Record<LocalTask["syncStatus"], number>
-  );
+  const counts = countTasksBySyncStatus(tasks);
 
   return [
     `${tasks.length} ${tasks.length === 1 ? "task" : "tasks"}`,
@@ -598,6 +664,16 @@ function summarizeTrayTasks(tasks: LocalTask[]): string {
   ]
     .filter(Boolean)
     .join(" · ");
+}
+
+function countTasksBySyncStatus(tasks: LocalTask[]): Record<LocalTask["syncStatus"], number> {
+  return tasks.reduce(
+    (summary, task) => {
+      summary[task.syncStatus] += 1;
+      return summary;
+    },
+    { Pending: 0, Failed: 0, Exported: 0, Created: 0 } satisfies Record<LocalTask["syncStatus"], number>
+  );
 }
 
 function toFileSlug(value: string): string {
