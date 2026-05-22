@@ -16,6 +16,8 @@ export function TraysView({
   onArchiveTray,
   onRestoreTray,
   onDeleteTray,
+  onExportCsv,
+  csvExportMessage,
   showArchived,
   onToggleArchived,
   onBackToSelector,
@@ -35,6 +37,8 @@ export function TraysView({
   onArchiveTray: (trayId: string) => void;
   onRestoreTray: (trayId: string) => void;
   onDeleteTray: (trayId: string) => void;
+  onExportCsv: (tray: Tray) => void | Promise<void>;
+  csvExportMessage: string | null;
   showArchived: boolean;
   onToggleArchived: () => void;
   onBackToSelector: () => void;
@@ -80,7 +84,12 @@ export function TraysView({
           ) : null}
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="secondary" icon={<Download size={14} />}>
+          {csvExportMessage ? (
+            <span className="text-xs text-[#6b778c]" role="status">
+              {csvExportMessage}
+            </span>
+          ) : null}
+          <Button variant="secondary" icon={<Download size={14} />} onClick={() => onExportCsv(selectedTray)}>
             Export CSV
           </Button>
           {isArchived ? (
