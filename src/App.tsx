@@ -18,7 +18,8 @@ import {
   markPersistedTasksCsvExported,
   renamePersistedTray,
   restorePersistedTray,
-  saveCsvFile
+  saveCsvFile,
+  updatePersistedTaskDetails
 } from "./lib/adapters/tauriPersistence";
 import {
   canDeleteTask,
@@ -59,6 +60,11 @@ export default function App() {
 
   const selectedTask = useMemo(() => {
     return trays.flatMap((tray) => tray.tasks).find((task) => task.id === selectedTaskId) ?? null;
+  }, [selectedTaskId, trays]);
+
+  const selectedTaskTray = useMemo(() => {
+    if (!selectedTaskId) return null;
+    return trays.find((tray) => tray.tasks.some((task) => task.id === selectedTaskId)) ?? null;
   }, [selectedTaskId, trays]);
 
   const visibleTrays = useMemo(
@@ -299,6 +305,39 @@ export default function App() {
     );
   }
 
+  async function updateTaskDetails(
+    taskId: string,
+    taskInput: { project: string; area: string; priority: Priority }
+  ) {
+    const tray = trays.find((candidate) => candidate.tasks.some((task) => task.id === taskId));
+    const task = tray?.tasks.find((candidate) => candidate.id === taskId);
+    if (!tray || !task || tray.state === "Archived" || task.syncStatus === "Created") return;
+
+    const nextTask: LocalTask = {
+      ...task,
+      project: taskInput.project,
+      area: taskInput.area,
+      priority: taskInput.priority,
+      issueType: deriveIssueTypeFromArea(taskInput.area)
+    };
+    const persistedTask = usesTauriPersistence
+      ? await updatePersistedTaskDetails(taskId, nextTask)
+      : nextTask;
+
+    if (!persistedTask) return;
+
+    setTrays((currentTrays) =>
+      currentTrays.map((candidate) =>
+        candidate.id === tray.id
+          ? updateTrayTasks(
+              candidate,
+              candidate.tasks.map((candidateTask) => (candidateTask.id === taskId ? persistedTask : candidateTask))
+            )
+          : candidate
+      )
+    );
+  }
+
   async function exportTrayCsv(tray: Tray) {
     const csvExportOptions = { includeExported: true };
     const exportableTasks = tray.tasks.filter((task) => isEligibleForCsvExport(task, csvExportOptions));
@@ -429,7 +468,14 @@ export default function App() {
         </main>
 
         {openPanel === "detail" && selectedTask ? (
-          <TaskFocusWindow task={selectedTask} onClose={() => setOpenPanel(null)} />
+          <TaskFocusWindow
+            task={selectedTask}
+            projects={projectOptions}
+            areas={areaOptions}
+            readOnly={selectedTaskTray?.state === "Archived"}
+            onUpdateDetails={updateTaskDetails}
+            onClose={() => setOpenPanel(null)}
+          />
         ) : null}
         {openPanel === "categories" ? (
           <CategoriesPanel

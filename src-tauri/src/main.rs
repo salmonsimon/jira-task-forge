@@ -38,6 +38,7 @@ pub fn run() {
             commands::create_task,
             commands::list_tasks,
             commands::delete_task,
+            commands::update_task_details,
             commands::mark_tasks_csv_exported,
             commands::save_csv_file
         ])

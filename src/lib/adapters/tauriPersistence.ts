@@ -94,6 +94,20 @@ export async function deletePersistedTask(taskId: string): Promise<boolean> {
   return invoke<boolean>("delete_task", { taskId });
 }
 
+export async function updatePersistedTaskDetails(
+  taskId: string,
+  task: Pick<LocalTask, "project" | "area" | "priority">
+): Promise<LocalTask | null> {
+  const updated = await invoke<BackendTask | null>("update_task_details", {
+    taskId,
+    project: task.project,
+    area: task.area,
+    priority: task.priority
+  });
+
+  return updated ? mapTask(updated) : null;
+}
+
 export async function markPersistedTasksCsvExported(taskIds: string[]): Promise<LocalTask[]> {
   const tasks = await invoke<BackendTask[]>("mark_tasks_csv_exported", { taskIds });
   return tasks.map(mapTask);

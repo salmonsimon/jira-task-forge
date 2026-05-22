@@ -90,6 +90,21 @@ pub fn delete_task(services: State<'_, AppServices>, task_id: String) -> Result<
 }
 
 #[tauri::command]
+pub fn update_task_details(
+    services: State<'_, AppServices>,
+    task_id: String,
+    project: String,
+    area: String,
+    priority: String,
+) -> Result<Option<LocalTask>, String> {
+    let issue_type = derive_issue_type_from_area(&area);
+
+    services
+        .update_task_details(&task_id, &project, &area, &priority, issue_type)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 pub fn mark_tasks_csv_exported(
     services: State<'_, AppServices>,
     task_ids: Vec<String>,
@@ -106,4 +121,12 @@ pub fn save_csv_file(path: String, contents: String) -> Result<(), String> {
     }
 
     std::fs::write(path, contents).map_err(|error| error.to_string())
+}
+
+fn derive_issue_type_from_area(area: &str) -> &'static str {
+    if area.trim().eq_ignore_ascii_case("bug") {
+        "Bug"
+    } else {
+        "Story"
+    }
 }
