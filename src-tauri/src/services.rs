@@ -3,8 +3,8 @@ use std::sync::Mutex;
 use rusqlite::Connection;
 
 use crate::db::DbResult;
-use crate::models::{LocalTask, NewTask, NewTray, Tray};
-use crate::repositories::{TaskRepository, TrayRepository};
+use crate::models::{AppSettings, LocalTask, NewTask, NewTray, Tray};
+use crate::repositories::{SettingsRepository, TaskRepository, TrayRepository};
 
 pub struct AppServices {
     connection: Mutex<Connection>,
@@ -45,6 +45,16 @@ impl AppServices {
     pub fn delete_tray(&self, tray_id: &str) -> DbResult<bool> {
         let connection = self.connection.lock().expect("database lock poisoned");
         TrayRepository::new(&connection).delete(tray_id)
+    }
+
+    pub fn get_app_settings(&self) -> DbResult<AppSettings> {
+        let connection = self.connection.lock().expect("database lock poisoned");
+        SettingsRepository::new(&connection).get_app_settings()
+    }
+
+    pub fn update_app_settings(&self, settings: AppSettings) -> DbResult<AppSettings> {
+        let connection = self.connection.lock().expect("database lock poisoned");
+        SettingsRepository::new(&connection).update_app_settings(settings)
     }
 
     pub fn create_task(&self, new_task: NewTask) -> DbResult<LocalTask> {

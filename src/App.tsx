@@ -14,11 +14,13 @@ import {
   createPersistedTray,
   deletePersistedTray,
   deletePersistedTask,
+  getPersistedAppSettings,
   listPersistedTrays,
   markPersistedTasksCsvExported,
   renamePersistedTray,
   restorePersistedTray,
   saveCsvFile,
+  updatePersistedAppSettings,
   updatePersistedTaskDetails
 } from "./lib/adapters/tauriPersistence";
 import {
@@ -31,10 +33,19 @@ import {
   exportLocalTasksToCsv,
   isEligibleForCsvExport
 } from "./lib/domain";
-import type { LocalTask, MainTab, Panel, Priority, Tray } from "./lib/types";
+import type { AppSettings, LocalTask, MainTab, Panel, Priority, Tray } from "./lib/types";
 import { cn } from "./lib/utils";
 
 const appData = mockAppDataAdapter;
+const defaultAppSettings: AppSettings = {
+  themeMode: "dark",
+  jiraSiteUrl: "https://dts.atlassian.net",
+  jiraAccountEmail: "",
+  jiraAuthMethod: "api-token",
+  aiProvider: "OpenAI",
+  aiModel: "gpt-4.1",
+  defaultContentLanguage: "Spanish"
+};
 
 export default function App() {
   const taskIdCounter = useRef(0);
@@ -45,7 +56,7 @@ export default function App() {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>("ltask-timer");
   const [selectedFavoriteId, setSelectedFavoriteId] = useState(appData.listJqlFavorites()[0]?.id);
   const [jqlMode, setJqlMode] = useState<"direct" | "ai">("ai");
-  const [themeMode, setThemeMode] = useState<"light" | "dark" | "system">("dark");
+  const [appSettings, setAppSettings] = useState<AppSettings>(defaultAppSettings);
   const [systemPrefersDark, setSystemPrefersDark] = useState(false);
   const [usesTauriPersistence, setUsesTauriPersistence] = useState(false);
   const [showArchivedTrays, setShowArchivedTrays] = useState(false);
@@ -77,11 +88,12 @@ export default function App() {
   useEffect(() => {
     let isCurrent = true;
 
-    listPersistedTrays()
-      .then((persistedTrays) => {
+    Promise.all([listPersistedTrays(), getPersistedAppSettings()])
+      .then(([persistedTrays, persistedSettings]) => {
         if (!isCurrent) return;
         setUsesTauriPersistence(true);
         setTrays(persistedTrays);
+        setAppSettings(persistedSettings);
         setSelectedTrayId((currentTrayId) =>
           currentTrayId && persistedTrays.some((tray) => tray.id === currentTrayId) ? currentTrayId : null
         );
@@ -122,7 +134,7 @@ export default function App() {
     return () => mediaQuery.removeEventListener("change", updatePreference);
   }, []);
 
-  const resolvedTheme = themeMode === "system" ? (systemPrefersDark ? "dark" : "light") : themeMode;
+  const resolvedTheme = appSettings.themeMode === "system" ? (systemPrefersDark ? "dark" : "light") : appSettings.themeMode;
 
   useEffect(() => {
     if (openPanel === "detail" && !selectedTask) {
@@ -338,6 +350,24 @@ export default function App() {
     );
   }
 
+  async function updateAppSettings(settingsPatch: Partial<AppSettings>) {
+    const previousSettings = appSettings;
+    const nextSettings = {
+      ...appSettings,
+      ...settingsPatch
+    };
+
+    setAppSettings(nextSettings);
+    if (!usesTauriPersistence) return;
+
+    try {
+      const persistedSettings = await updatePersistedAppSettings(nextSettings);
+      setAppSettings(persistedSettings);
+    } catch {
+      setAppSettings(previousSettings);
+    }
+  }
+
   async function exportTrayCsv(tray: Tray) {
     const csvExportOptions = { includeExported: true };
     const exportableTasks = tray.tasks.filter((task) => isEligibleForCsvExport(task, csvExportOptions));
@@ -485,7 +515,7 @@ export default function App() {
           />
         ) : null}
         {openPanel === "settings" ? (
-          <SettingsPanel themeMode={themeMode} setThemeMode={setThemeMode} onClose={() => setOpenPanel(null)} />
+          <SettingsPanel settings={appSettings} onChange={updateAppSettings} onClose={() => setOpenPanel(null)} />
         ) : null}
         {trayPendingDelete ? (
           <ConfirmDialog

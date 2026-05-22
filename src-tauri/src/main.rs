@@ -35,6 +35,8 @@ pub fn run() {
             commands::archive_tray,
             commands::restore_tray,
             commands::delete_tray,
+            commands::get_app_settings,
+            commands::update_app_settings,
             commands::create_task,
             commands::list_tasks,
             commands::delete_task,

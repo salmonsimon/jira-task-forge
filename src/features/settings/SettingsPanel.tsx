@@ -1,13 +1,14 @@
 import { Bot, Download, KeyRound, Settings, UploadCloud } from "lucide-react";
-import { Button, DetailBlock, Field, PanelHeader, SegmentedControl } from "../../components/ui";
+import { Button, DetailBlock, PanelHeader, SegmentedControl } from "../../components/ui";
+import type { AppSettings, ThemeMode } from "../../lib/types";
 
 export function SettingsPanel({
-  themeMode,
-  setThemeMode,
+  settings,
+  onChange,
   onClose
 }: {
-  themeMode: "light" | "dark" | "system";
-  setThemeMode: (theme: "light" | "dark" | "system") => void;
+  settings: AppSettings;
+  onChange: (settings: Partial<AppSettings>) => void;
   onClose: () => void;
 }) {
   return (
@@ -17,28 +18,70 @@ export function SettingsPanel({
         <DetailBlock icon={<Settings size={15} />} title="Appearance">
           <div className="mb-2 text-xs font-medium text-[#6b778c]">Theme</div>
           <SegmentedControl
-            value={themeMode}
+            value={settings.themeMode}
             options={[
               { label: "Dark", value: "dark" },
               { label: "Light", value: "light" },
               { label: "System", value: "system" }
             ]}
-            onChange={(value) => setThemeMode(value as "light" | "dark" | "system")}
+            onChange={(value) => onChange({ themeMode: value as ThemeMode })}
           />
         </DetailBlock>
 
         <DetailBlock icon={<KeyRound size={15} />} title="Jira connection">
-          <Field label="Site URL" value="https://dts.atlassian.net" />
-          <Field label="Auth method" value="OAuth 2.0 preferred · API token fallback" />
+          <SettingsInput
+            label="Site URL"
+            value={settings.jiraSiteUrl}
+            onChange={(jiraSiteUrl) => onChange({ jiraSiteUrl })}
+          />
+          <SettingsInput
+            label="Account email"
+            placeholder="name@example.com"
+            value={settings.jiraAccountEmail}
+            onChange={(jiraAccountEmail) => onChange({ jiraAccountEmail })}
+          />
+          <SettingsSelect
+            label="Auth method"
+            value={settings.jiraAuthMethod}
+            options={[
+              { label: "API token fallback", value: "api-token" },
+              { label: "OAuth-ready later", value: "oauth-ready" }
+            ]}
+            onChange={(jiraAuthMethod) => onChange({ jiraAuthMethod: jiraAuthMethod as AppSettings["jiraAuthMethod"] })}
+          />
+          <p className="mt-2 text-xs leading-relaxed text-[#6b778c]">
+            Tokens are not stored here. V1 will store Jira secrets through Windows Credential Manager.
+          </p>
           <div className="mt-3">
-            <Button variant="secondary">Test connection</Button>
+            <Button disabled variant="secondary">Test connection</Button>
           </div>
         </DetailBlock>
 
         <DetailBlock icon={<Bot size={15} />} title="AI provider">
-          <Field label="Provider" value="OpenAI" />
-          <Field label="Model" value="Selected in app settings" />
-          <Field label="Default content language" value="Spanish" />
+          <SettingsSelect
+            label="Provider"
+            value={settings.aiProvider}
+            options={[
+              { label: "OpenAI", value: "OpenAI" },
+              { label: "None", value: "None" }
+            ]}
+            onChange={(aiProvider) => onChange({ aiProvider: aiProvider as AppSettings["aiProvider"] })}
+          />
+          <SettingsInput label="Model" value={settings.aiModel} onChange={(aiModel) => onChange({ aiModel })} />
+          <SettingsSelect
+            label="Default content language"
+            value={settings.defaultContentLanguage}
+            options={[
+              { label: "Spanish", value: "Spanish" },
+              { label: "English", value: "English" }
+            ]}
+            onChange={(defaultContentLanguage) =>
+              onChange({ defaultContentLanguage: defaultContentLanguage as AppSettings["defaultContentLanguage"] })
+            }
+          />
+          <p className="mt-2 text-xs leading-relaxed text-[#6b778c]">
+            AI keys follow the same secret boundary as Jira credentials and are never included in backups.
+          </p>
         </DetailBlock>
 
         <DetailBlock icon={<Download size={15} />} title="Backup and restore">
@@ -56,5 +99,58 @@ export function SettingsPanel({
         </DetailBlock>
       </div>
     </aside>
+  );
+}
+
+function SettingsInput({
+  label,
+  value,
+  placeholder,
+  onChange
+}: {
+  label: string;
+  value: string;
+  placeholder?: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="mb-3 block">
+      <span className="mb-1 block text-xs font-medium text-[#6b778c]">{label}</span>
+      <input
+        className="h-9 w-full rounded border border-[#c1c7d0] bg-white px-2 text-sm outline-none focus:border-[#4c9aff] focus:ring-2 focus:ring-[#deebff]"
+        placeholder={placeholder}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      />
+    </label>
+  );
+}
+
+function SettingsSelect({
+  label,
+  value,
+  options,
+  onChange
+}: {
+  label: string;
+  value: string;
+  options: Array<{ label: string; value: string }>;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="mb-3 block">
+      <span className="mb-1 block text-xs font-medium text-[#6b778c]">{label}</span>
+      <select
+        className="h-9 w-full rounded border border-[#c1c7d0] bg-white px-2 text-sm outline-none focus:border-[#4c9aff] focus:ring-2 focus:ring-[#deebff]"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      >
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }

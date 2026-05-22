@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { IssueType, LocalTask, Priority, SyncStatus, Tray, TrayState } from "../types";
+import type { AppSettings, IssueType, LocalTask, Priority, SyncStatus, Tray, TrayState } from "../types";
 
 type BackendTray = {
   id: string;
@@ -71,6 +71,14 @@ export async function restorePersistedTray(trayId: string): Promise<Tray | null>
 
 export async function deletePersistedTray(trayId: string): Promise<boolean> {
   return invoke<boolean>("delete_tray", { trayId });
+}
+
+export async function getPersistedAppSettings(): Promise<AppSettings> {
+  return invoke<AppSettings>("get_app_settings");
+}
+
+export async function updatePersistedAppSettings(settings: AppSettings): Promise<AppSettings> {
+  return invoke<AppSettings>("update_app_settings", { settings });
 }
 
 export async function createPersistedTask(

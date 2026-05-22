@@ -1,5 +1,6 @@
 export type MainTab = "trays" | "jql";
 export type Panel = "categories" | "settings" | "detail" | null;
+export type ThemeMode = "light" | "dark" | "system";
 export type Priority = "Lowest" | "Low" | "Medium" | "High" | "Highest";
 export type SyncStatus = "Pending" | "Failed" | "Exported" | "Created";
 export type TrayState = "Active" | "Needs attention" | "Completed" | "Archived";
@@ -84,4 +85,14 @@ export type PreflightWarning = {
   severity: PreflightWarningSeverity;
   taskId?: string;
   message: string;
+};
+
+export type AppSettings = {
+  themeMode: ThemeMode;
+  jiraSiteUrl: string;
+  jiraAccountEmail: string;
+  jiraAuthMethod: "api-token" | "oauth-ready";
+  aiProvider: "OpenAI" | "None";
+  aiModel: string;
+  defaultContentLanguage: "Spanish" | "English";
 };
