@@ -11,6 +11,12 @@ Use the WSL2 Ubuntu checkout:
 /home/saimon/Development/jira-task-forge
 ```
 
+For agent-internal tooling, Saimon has given standing permission to install
+missing development tools and validation dependencies when needed to do the
+work, without pausing for product approval. If the environment requires an
+interactive sudo/password prompt that Codex cannot satisfy, report the exact
+command Saimon should run.
+
 ## Project Context
 
 Before product, architecture, or implementation work, read:
