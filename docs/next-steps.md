@@ -9,7 +9,7 @@ Date: 2026-05-22
 Main is up to date at:
 
 ```text
-19848c8 Add Jira creation project target
+af8847a Add read-only Jira JQL query foundation
 ```
 
 Merged since the first in-memory tray interactions:
@@ -27,6 +27,8 @@ Merged since the first in-memory tray interactions:
 - PR #17: added Jira connection testing from Settings.
 - PR #18: added Jira create preflight review.
 - PR #19: added the Jira creation project target setting.
+- PR #20: updated the roadmap and handoff to the PR #19 checkpoint.
+- PR #21: added a reusable backend Jira client and read-only JQL query command wired to the JQL panel.
 
 Open for HITL review:
 
@@ -36,7 +38,9 @@ Current validation:
 
 - `npm install` may be needed after pulling because `@tauri-apps/plugin-dialog` was added.
 - `npm run build` passes on `main` after dependencies are installed.
-- Rust/Cargo tests were not run in the current WSL environment because `cargo` is not installed there.
+- `cargo fmt -- --check` passes after installing Rust/Cargo with rustup.
+- `cargo test` is blocked in the current WSL environment by missing Linux system packages for Tauri/keyring (`pkg-config` / `libdbus-1-dev`); sudo requires interactive authentication here.
+- Playwright screenshots are blocked in the current WSL environment by missing Chromium runtime library `libnspr4.so`.
 - The prototype runs with `npm run dev` at:
 
 ```text
@@ -84,6 +88,7 @@ Human QA to run before choosing the next implementation slice:
 - Save non-secret Jira settings and confirm they persist across app restart.
 - Save, delete, and re-save a Jira API token through the OS credential store.
 - Test Jira connection from Settings after entering a real Jira site, email, and token.
+- Run a direct JQL query from the JQL tab and confirm Jira results populate the table.
 - Open `Create in Jira` preflight and confirm missing credentials, missing creation project, and missing task fields produce blocking warnings.
 - After the API create path works, test that uploading tasks from the exported CSV still works as a fallback. This is intentionally lower priority than API creation.
 
@@ -94,7 +99,8 @@ Expected limitations right now:
 - SQLite persistence exists for trays, local tasks, and non-secret app settings.
 - Jira API token storage exists through the OS credential store.
 - Jira connection testing exists through `/rest/api/3/myself`.
-- Categories, JQL favorites, attachments, audit logs, backup/import, AI, and real Jira sync artifacts are not fully implemented.
+- Read-only JQL queries are wired through Jira Cloud REST API v3.
+- Categories, JQL favorites persistence, attachments, audit logs, backup/import, AI, and real Jira write sync artifacts are not fully implemented.
 - Task detail `Details` supports editable project, area, and priority for editable non-archived tasks. Auto-generated epic and labels remain visible but muted/read-only.
 
 Near-term decided follow-ups:
@@ -106,7 +112,7 @@ Recommended next decision:
 
 - If the QA flow feels right, review ADRs 0003-0008 and decide which should become accepted or need changes.
 - Do not start Jira writes, attachment filesystem work, backup/import, or audit log persistence until the relevant ADRs are reviewed.
-- After HITL architecture review, the next implementation slice should be Jira read-only foundation or a small Jira client extraction that supports both JQL and create flow.
+- After HITL architecture review, the next implementation slice should be Jira issue creation behind preflight, idempotency checks, and audit logs.
 - If QA reveals product/UI friction, do a small frontend-only fix branch before integration writes.
 
 ## Working Model
@@ -254,8 +260,8 @@ Owns:
 Goal:
 
 - Implement Jira REST API integration on top of the current settings and token storage.
-- Extract a reusable backend Jira client from the current connection test.
-- Start with read-only operations and JQL, then write operations behind preflight checks.
+- Reuse the backend Jira client added in PR #21.
+- Continue from read-only JQL into write operations behind preflight checks.
 - Keep API issue creation ahead of CSV upload fallback validation.
 
 HITL:
@@ -308,8 +314,8 @@ HITL:
 1. Keep the repo roadmap/docs synced with the current merged checkpoint.
 2. Run native Tauri QA for tray lifecycle, CSV export, settings, credential storage, Jira connection test, and create preflight.
 3. Review ADRs 0003-0008 against the current implementation and accept or revise them before risky persistence/sync expansion.
-4. Extract a backend Jira client and add read-only Jira/JQL operations.
-5. Add Jira create flow behind preflight, idempotency checks, and audit logs.
+4. Add Jira create flow behind preflight, idempotency checks, and audit logs.
+5. Add native QA coverage for settings, credential storage, connection test, JQL query, preflight, and Jira creation.
 6. After API creation works, test that Jira CSV upload still works from exported files.
 7. Add backup/import and attachment filesystem behavior after the relevant ADRs are accepted.
 8. Add categories/JQL favorites persistence if needed to support Jira read-only workflows.
@@ -352,34 +358,34 @@ These can usually run without interruption when acceptance criteria are clear:
 
 Recommended next implementation slice:
 
-Branch: `codex/update-current-roadmap`
+Branch: `codex/review-adr-sync-before-writes`
 
 Deliverables:
 
-- Update README, handoff, and next-steps docs to match the PR #19 checkpoint.
-- Add the CSV upload fallback QA note after API creation.
-- Keep this as docs-only work with no product decision changes.
+- Review ADRs 0003-0008 against the current code now that SQLite, secret storage, Jira connection testing, preflight, and read-only JQL exist.
+- Decide which ADRs can become accepted and which need changes before Jira writes.
+- Confirm Jira create payload/idempotency/audit-log expectations.
 
 Reason:
 
-- The previous roadmap still pointed at PR #6 and would send future agents down completed paths.
+- The next technical implementation would create remote Jira issues, which is intentionally HITL-gated.
 
 ## Following Slice
 
 Recommended following implementation slice:
 
-Branch: `codex/jira-readonly-foundation`
+Branch: `codex/jira-create-flow`
 
 Deliverables:
 
-- Extract a backend Jira client around site URL normalization, token lookup, and authenticated requests.
-- Keep Jira operations read-only except for the existing token save/delete commands.
-- Add a read-only JQL command or metadata probe that reuses the same credential boundary.
-- Add focused Rust tests around URL normalization and Jira client request construction where practical.
+- Create Jira issues from eligible local tasks behind the existing preflight.
+- Add idempotency/retry protection before marking local tasks as `Created`.
+- Record structured sync audit events.
+- Keep attachment upload, AI-generated descriptions, and CSV upload fallback validation out of this first write slice unless separately approved.
 
 Reason:
 
-- The app already has credential storage and connection testing; the next low-risk step is reusable read-only integration before Jira writes.
+- The read-only foundation is merged; the next product value is API creation, but duplicate Jira issues and auditability need explicit decisions first.
 
 ## Security And Reliability Tests To Add
 

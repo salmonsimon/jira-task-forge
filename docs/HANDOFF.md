@@ -90,7 +90,7 @@ High-level shape:
 
 ## Current Engineering Checkpoint
 
-As of PR #19, `main` includes:
+As of PR #21, `main` includes:
 
 - Tauri + React shell with Jira-like styling.
 - SQLite-backed local trays and local tasks.
@@ -100,14 +100,14 @@ As of PR #19, `main` includes:
 - Jira API token storage through the OS credential store.
 - Jira connection test using the configured site, account email, and saved token.
 - `Create in Jira` preflight, including credential/project/task validation and a configurable Jira creation project key.
+- A reusable backend Jira client and read-only JQL query command wired to the JQL panel.
 
 Still pending:
 
 - Real Jira issue creation through the API.
-- Real JQL execution against Jira.
 - Categories/JQL favorites persistence in the UI.
 - Attachments, backup/import, audit log behavior, and AI integrations.
-- Native QA in an environment with Rust/Cargo installed.
+- Full native QA in an environment with the Linux system dependencies needed by Tauri/keyring.
 - CSV upload-to-Jira fallback validation after the API create flow works.
 
 ## Open Grill Area
@@ -124,8 +124,7 @@ Recommended stack to discuss next:
 
 - Review and accept/revise ADRs 0003-0008.
 - Run native QA for tray lifecycle, CSV export, settings, token storage, Jira connection test, and create preflight.
-- Extract a backend Jira client around the existing connection test.
-- Add read-only Jira/JQL operations before Jira writes.
+- Run native QA for direct JQL queries from the JQL tab.
 - Add Jira issue creation behind preflight, idempotency checks, and audit logs.
 - After API creation works, verify that Jira CSV upload still works from exported files.
 
