@@ -4,9 +4,14 @@ Local-first Windows desktop app for preparing Jira work before creating issues t
 
 ## Current State
 
-This repo currently contains the product/architecture decisions and the first clickable frontend shell prototype.
+This repo contains the product/architecture decisions and the first Tauri/React desktop app skeleton.
 
-The prototype uses fake in-memory data and does not yet call Jira, AI providers, or SQLite.
+The app now has SQLite-backed local trays/tasks, persisted non-secret settings,
+CSV export, Jira API token storage through the OS credential store, Jira
+connection testing, and a `Create in Jira` preflight dialog.
+
+It does not yet create Jira issues through the API, run real JQL searches,
+call AI providers, manage real attachments, or support backup/import.
 
 ## Stack
 
@@ -14,9 +19,9 @@ The prototype uses fake in-memory data and does not yet call Jira, AI providers,
 - React
 - TypeScript
 - shadcn-style UI with Tailwind
-- SQLite planned for local persistence
+- SQLite via `rusqlite` for local persistence
 
-## Run Frontend Prototype
+## Run Frontend Dev Server
 
 ```bash
 npm install
@@ -27,6 +32,15 @@ Open:
 
 ```text
 http://127.0.0.1:1420
+```
+
+## Run Native Tauri App
+
+Running the native app requires Rust/Cargo in the WSL development environment.
+
+```bash
+npm install
+npm run tauri dev
 ```
 
 ## Build Frontend
@@ -50,4 +64,5 @@ GitHub branch protection is still preferred when available for the repository ow
 
 ## Tauri Notes
 
-The Tauri skeleton is present under `src-tauri/`, but running the native app requires Rust/Cargo to be installed in the development environment.
+The Tauri app stores local data under the app data directory. Jira API tokens
+are intentionally stored outside SQLite through the OS credential store.

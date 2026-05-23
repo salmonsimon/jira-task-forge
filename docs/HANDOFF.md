@@ -85,37 +85,52 @@ High-level shape:
 - Local SQLite persistence, backup/export without secrets, and sync audit logs are part of v1 scope.
 - Technical stack is Tauri + React + TypeScript + shadcn/ui + Tailwind + SQLite.
 - Jira and AI calls should run through the Rust/Tauri backend, not directly from React.
-- First prototype should be built inside the real app skeleton with fake/in-memory data.
-- First prototype should include the complete shell: `Trays`, `JQL`, `Categories`, `Settings`, and task detail panel.
-- Prototype styling should be Jira-like from the start and use real-ish fake data.
+- The first prototype has moved into the real app skeleton.
+- The shell includes `Trays`, `JQL`, `Categories`, `Settings`, task detail, CSV export, Jira settings, token storage, connection testing, and create preflight.
+
+## Current Engineering Checkpoint
+
+As of PR #19, `main` includes:
+
+- Tauri + React shell with Jira-like styling.
+- SQLite-backed local trays and local tasks.
+- Tray lifecycle actions: create, rename, archive, restore, delete, duplicate task, delete editable task, and edit task details.
+- CSV export through a native save dialog, including marking eligible tasks as `Exported`.
+- Persisted non-secret settings.
+- Jira API token storage through the OS credential store.
+- Jira connection test using the configured site, account email, and saved token.
+- `Create in Jira` preflight, including credential/project/task validation and a configurable Jira creation project key.
+
+Still pending:
+
+- Real Jira issue creation through the API.
+- Real JQL execution against Jira.
+- Categories/JQL favorites persistence in the UI.
+- Attachments, backup/import, audit log behavior, and AI integrations.
+- Native QA in an environment with Rust/Cargo installed.
+- CSV upload-to-Jira fallback validation after the API create flow works.
 
 ## Open Grill Area
 
 Most product scope is now settled. Remaining useful grill areas:
 
-- exact tech stack for Windows desktop packaging
-- SQLite schema and migration strategy
-- Jira API payload details and auth tradeoffs
-- first prototype/wireframe fidelity
-- v1 issue breakdown
+- ADRs 0003-0008 should be accepted or revised against the current implementation before expanding into Jira writes, backup/import, attachments, or audit retention.
+- Jira API payload details, idempotency, and retry behavior need HITL before creating real Jira issues.
+- CSV upload fallback should remain available, but it is now lower priority than API issue creation.
 
 ## Likely Implementation Path
 
 Recommended stack to discuss next:
 
-- Local-first app with SQLite persistence.
-- JSON import/export for tray drafts.
-- CSV export using the existing script logic as seed.
-- Jira REST API client for:
-  - create issue
-  - bulk create issues
-  - search issues with JQL
-  - query priority Highest/High
-- Keep the first version small: local tray + CSV export + settings + API credentials test.
+- Review and accept/revise ADRs 0003-0008.
+- Run native QA for tray lifecycle, CSV export, settings, token storage, Jira connection test, and create preflight.
+- Extract a backend Jira client around the existing connection test.
+- Add read-only Jira/JQL operations before Jira writes.
+- Add Jira issue creation behind preflight, idempotency checks, and audit logs.
+- After API creation works, verify that Jira CSV upload still works from exported files.
 
 ## Suggested Skills For Next Session
 
-- `grill-with-docs`: continue resolving product/domain decisions and update `CONTEXT.md`/ADRs as decisions settle.
-- `prototype`: when ready to try UI flows before committing to a tech stack.
-- `tdd`: useful once core parsing, tray persistence, CSV export, and Jira payload generation begin.
+- `grill-with-docs`: review ADRs 0003-0008 against the implementation and update docs as decisions settle.
+- `tdd`: useful for Jira client extraction, payload generation, idempotency helpers, and audit-log behavior.
 - `diagnose`: if Jira API authentication or sync errors become tricky.
