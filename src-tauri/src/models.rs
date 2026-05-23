@@ -99,6 +99,34 @@ pub struct JiraConnectionTestResult {
     pub account_email: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JiraMyself {
+    pub display_name: Option<String>,
+    pub email_address: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JqlSearchResponse {
+    pub results: Vec<JqlResult>,
+    pub is_last: bool,
+    pub next_page_token: Option<String>,
+    pub warning_messages: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JqlResult {
+    pub key: String,
+    pub project: String,
+    pub issue_type: String,
+    pub priority: String,
+    pub status: String,
+    pub summary: String,
+    pub assignee: String,
+}
+
 impl Default for AppSettings {
     fn default() -> Self {
         Self {

@@ -22,6 +22,7 @@ import {
   markPersistedTasksCsvExported,
   renamePersistedTray,
   restorePersistedTray,
+  runPersistedJqlQuery,
   saveCsvFile,
   savePersistedJiraApiToken,
   testPersistedJiraConnection,
@@ -53,6 +54,9 @@ const defaultAppSettings: AppSettings = {
   aiModel: "gpt-4.1",
   defaultContentLanguage: "Spanish"
 };
+const generatedJqlPreview =
+  'project = DTS AND labels = "Bug" AND priority in (High, Highest) AND statusCategory != Done ORDER BY priority DESC';
+const defaultJqlPrompt = "Show me high and highest open bugs for STT, sorted by priority";
 
 export default function App() {
   const taskIdCounter = useRef(0);
@@ -63,6 +67,11 @@ export default function App() {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>("ltask-timer");
   const [selectedFavoriteId, setSelectedFavoriteId] = useState(appData.listJqlFavorites()[0]?.id);
   const [jqlMode, setJqlMode] = useState<"direct" | "ai">("ai");
+  const [jqlQuery, setJqlQuery] = useState(appData.listJqlFavorites()[0]?.jql ?? "");
+  const [jqlPrompt, setJqlPrompt] = useState(defaultJqlPrompt);
+  const [jqlResults, setJqlResults] = useState(() => appData.listJqlResults());
+  const [jqlQueryMessage, setJqlQueryMessage] = useState<string | null>(null);
+  const [isRunningJqlQuery, setIsRunningJqlQuery] = useState(false);
   const [appSettings, setAppSettings] = useState<AppSettings>(defaultAppSettings);
   const [systemPrefersDark, setSystemPrefersDark] = useState(false);
   const [usesTauriPersistence, setUsesTauriPersistence] = useState(false);
@@ -429,6 +438,44 @@ export default function App() {
     }
   }
 
+  function selectJqlFavorite(favoriteId: string) {
+    const favorite = appData.listJqlFavorites().find((candidate) => candidate.id === favoriteId);
+    setSelectedFavoriteId(favoriteId);
+    if (favorite) {
+      setJqlQuery(favorite.jql);
+      setJqlMode("direct");
+      setJqlQueryMessage(null);
+    }
+  }
+
+  async function runJqlQuery() {
+    const query = jqlMode === "ai" ? generatedJqlPreview : jqlQuery.trim();
+    if (!query) {
+      setJqlQueryMessage("JQL query is required.");
+      return;
+    }
+
+    setIsRunningJqlQuery(true);
+    setJqlQueryMessage(null);
+
+    try {
+      const queryResult = usesTauriPersistence
+        ? await runPersistedJqlQuery(query)
+        : {
+            results: appData.listJqlResults(),
+            isLast: true,
+            nextPageToken: null,
+            warningMessages: []
+          };
+      setJqlResults(queryResult.results);
+      setJqlQueryMessage(formatJqlQueryMessage(queryResult.results.length, queryResult.isLast, queryResult.warningMessages));
+    } catch (error) {
+      setJqlQueryMessage(typeof error === "string" ? error : error instanceof Error ? error.message : "Could not run JQL query.");
+    } finally {
+      setIsRunningJqlQuery(false);
+    }
+  }
+
   async function exportTrayCsv(tray: Tray) {
     const csvExportOptions = { includeExported: true };
     const exportableTasks = tray.tasks.filter((task) => isEligibleForCsvExport(task, csvExportOptions));
@@ -639,9 +686,17 @@ export default function App() {
               jqlMode={jqlMode}
               setJqlMode={setJqlMode}
               selectedFavoriteId={selectedFavoriteId}
-              setSelectedFavoriteId={setSelectedFavoriteId}
+              setSelectedFavoriteId={selectJqlFavorite}
               favorites={appData.listJqlFavorites()}
-              results={appData.listJqlResults()}
+              results={jqlResults}
+              jqlQuery={jqlQuery}
+              setJqlQuery={setJqlQuery}
+              jqlPrompt={jqlPrompt}
+              setJqlPrompt={setJqlPrompt}
+              generatedJqlPreview={generatedJqlPreview}
+              onRunQuery={runJqlQuery}
+              isRunningQuery={isRunningJqlQuery}
+              queryMessage={jqlQueryMessage}
             />
           )}
         </main>
@@ -855,6 +910,14 @@ function summarizeTrayTasks(tasks: LocalTask[]): string {
   ]
     .filter(Boolean)
     .join(" · ");
+}
+
+function formatJqlQueryMessage(resultCount: number, isLast: boolean, warningMessages: string[]): string {
+  const resultText = `${resultCount} ${resultCount === 1 ? "issue" : "issues"} returned.`;
+  const pageText = isLast ? null : "More results are available in Jira.";
+  const warningText = warningMessages.length ? warningMessages.join(" ") : null;
+
+  return [resultText, pageText, warningText].filter(Boolean).join(" ");
 }
 
 function countTasksBySyncStatus(tasks: LocalTask[]): Record<LocalTask["syncStatus"], number> {
