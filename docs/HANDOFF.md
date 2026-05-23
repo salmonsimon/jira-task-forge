@@ -101,6 +101,9 @@ As of PR #21, `main` includes:
 - Jira connection test using the configured site, account email, and saved token.
 - `Create in Jira` preflight, including credential/project/task validation and a configurable Jira creation project key.
 - A reusable backend Jira client and read-only JQL query command wired to the JQL panel.
+- Jira QA boundary: `JTFTEST` is the writable test project. Agents may freely
+  mutate `JTFTEST` for implementation and QA. `DTS` is read-only reference data
+  and must not be mutated by agents.
 
 Still pending:
 
@@ -112,24 +115,28 @@ Still pending:
 
 ## Open Grill Area
 
-Most product scope is now settled. Remaining useful grill areas:
+Most product scope is now settled. ADRs 0003-0008 are accepted. Remaining useful
+grill areas:
 
-- ADRs 0003-0008 should be accepted or revised against the current implementation before expanding into Jira writes, backup/import, attachments, or audit retention.
-- Jira API payload details, idempotency, and retry behavior need HITL before creating real Jira issues.
+- Any change to the accepted persistence, secret-storage, sync, backup/import,
+  attachment, or audit-log contracts should go through HITL review.
 - CSV upload fallback should remain available, but it is now lower priority than API issue creation.
 
 ## Likely Implementation Path
 
 Recommended stack to discuss next:
 
-- Review and accept/revise ADRs 0003-0008.
 - Run native QA for tray lifecycle, CSV export, settings, token storage, Jira connection test, and create preflight.
 - Run native QA for direct JQL queries from the JQL tab.
 - Add Jira issue creation behind preflight, idempotency checks, and audit logs.
+  First write slice scope: metadata preflight, epic search/create, parent
+  Story/Bug creation, local Jira link persistence, remote correlation markers,
+  audit events, and partial recovery. Keep sub-tasks and attachments for later
+  slices.
 - After API creation works, verify that Jira CSV upload still works from exported files.
 
 ## Suggested Skills For Next Session
 
-- `grill-with-docs`: review ADRs 0003-0008 against the implementation and update docs as decisions settle.
-- `tdd`: useful for Jira client extraction, payload generation, idempotency helpers, and audit-log behavior.
+- `tdd`: useful for Jira client extraction, metadata preflight, payload
+  generation, idempotency helpers, and audit-log behavior.
 - `diagnose`: if Jira API authentication or sync errors become tricky.

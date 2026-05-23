@@ -32,7 +32,9 @@ Merged since the first in-memory tray interactions:
 
 Open for HITL review:
 
-- ADRs 0003-0008 are still `Proposed`, but parts of SQLite persistence, secret storage, and Jira preflight are already implemented. Review them against the current code before expanding into Jira writes, backup/import, attachments, or audit log retention behavior.
+- ADRs 0003-0008 are `Accepted`. Changes to those persistence, secrets, sync,
+  backup/import, attachment, or audit-log contracts should go through HITL
+  review.
 
 Current validation:
 
@@ -107,12 +109,16 @@ Near-term decided follow-ups:
 
 - Keep Jira API creation ahead of CSV upload fallback validation.
 - Preserve CSV export as a fallback, then verify Jira CSV upload after the API path is working.
+- Use `JTFTEST` as the real Jira write sandbox. Agents may mutate `JTFTEST`
+  without asking; `DTS` is read-only reference data only.
 
-Recommended next decision:
+Recommended next implementation:
 
-- If the QA flow feels right, review ADRs 0003-0008 and decide which should become accepted or need changes.
-- Do not start Jira writes, attachment filesystem work, backup/import, or audit log persistence until the relevant ADRs are reviewed.
-- After HITL architecture review, the next implementation slice should be Jira issue creation behind preflight, idempotency checks, and audit logs.
+- After HITL architecture review, the next implementation slice should be Jira
+  issue creation behind preflight, idempotency checks, and audit logs. Its scope
+  is metadata preflight, epic search/create, parent Story/Bug creation, local
+  Jira link persistence, remote correlation markers, audit events, and partial
+  recovery. Sub-tasks and attachments stay out of this first write slice.
 - If QA reveals product/UI friction, do a small frontend-only fix branch before integration writes.
 
 ## Working Model
@@ -121,6 +127,7 @@ Recommended next decision:
 - Prefer one branch per vertical slice with a narrow file ownership boundary.
 - Start with conflict-reduction branches before spawning many implementation branches.
 - Let independent implementation branches run AFK when the task has clear acceptance criteria and no credential, destructive data, or architecture decision risk.
+- Jira write QA is AFK-safe only against `JTFTEST`; never mutate `DTS`.
 - Pause for HITL review before merging branches that introduce persistence contracts, secret handling, Jira writes, AI provider calls, filesystem import/export behavior, or destructive local data operations.
 - Keep frontend prototype work unblocked by using fake data adapters while backend contracts are being designed.
 
@@ -140,8 +147,9 @@ Owns:
 Goal:
 
 - Convert the current product direction into implementation slices.
-- Add ADRs for SQLite schema, secret storage, sync safety, and backup/import behavior before those areas become code.
-- Review proposed ADRs 0003-0008 before implementation branches finalize migrations, secret handling, Jira writes, backup/import behavior, attachment filesystem rules, or audit-log retention/redaction.
+- Use accepted ADRs 0003-0008 as the implementation contracts for SQLite schema,
+  secret storage, Jira sync safety, backup/import behavior, attachment
+  filesystem rules, and audit-log retention/redaction.
 
 HITL:
 
@@ -313,13 +321,12 @@ HITL:
 
 1. Keep the repo roadmap/docs synced with the current merged checkpoint.
 2. Run native Tauri QA for tray lifecycle, CSV export, settings, credential storage, Jira connection test, and create preflight.
-3. Review ADRs 0003-0008 against the current implementation and accept or revise them before risky persistence/sync expansion.
-4. Add Jira create flow behind preflight, idempotency checks, and audit logs.
-5. Add native QA coverage for settings, credential storage, connection test, JQL query, preflight, and Jira creation.
-6. After API creation works, test that Jira CSV upload still works from exported files.
-7. Add backup/import and attachment filesystem behavior after the relevant ADRs are accepted.
-8. Add categories/JQL favorites persistence if needed to support Jira read-only workflows.
-9. Add AI-assisted descriptions and JQL generation after settings/secrets are settled.
+3. Add Jira create flow behind preflight, idempotency checks, and audit logs.
+4. Add native QA coverage for settings, credential storage, connection test, JQL query, preflight, and Jira creation.
+5. After API creation works, test that Jira CSV upload still works from exported files.
+6. Add backup/import and attachment filesystem behavior as later slices under the accepted ADR contracts.
+7. Add categories/JQL favorites persistence if needed to support Jira read-only workflows.
+8. Add AI-assisted descriptions and JQL generation after settings/secrets are settled.
 
 ## HITL Gates
 
@@ -327,8 +334,8 @@ Pause and ask before implementing or merging changes that:
 
 - introduce or modify SQLite migrations after data exists
 - choose Jira authentication strategy or store credentials
-- test auth against real Jira credentials
-- write to Jira through the API
+- mutate Jira projects outside the `JTFTEST` sandbox
+- write to `DTS` through the API
 - upload attachments to Jira
 - call an AI provider or transmit task attachments/images to AI
 - import backups into an existing database
@@ -353,22 +360,26 @@ These can usually run without interruption when acceptance criteria are clear:
 - docs cleanup that does not change decisions
 - tests for already accepted rules
 - read-only Jira payload shape exploration without credentials
+- real Jira write QA against `JTFTEST` for already accepted Jira sync flows
 
 ## Next Slice
 
 Recommended next implementation slice:
 
-Branch: `codex/review-adr-sync-before-writes`
+Branch: `codex/jira-create-parent-issues`
 
 Deliverables:
 
-- Review ADRs 0003-0008 against the current code now that SQLite, secret storage, Jira connection testing, preflight, and read-only JQL exist.
-- Decide which ADRs can become accepted and which need changes before Jira writes.
-- Confirm Jira create payload/idempotency/audit-log expectations.
+- Implement the first Jira write slice under ADR 0005: metadata preflight,
+  epic search/create, parent Story/Bug creation, local Jira link persistence,
+  remote correlation markers, audit events, and partial recovery.
+- Keep sub-tasks and attachments out of this slice.
+- Use `JTFTEST` for real write QA and treat `DTS` as read-only reference data.
 
 Reason:
 
-- The next technical implementation would create remote Jira issues, which is intentionally HITL-gated.
+- The read-only foundation is merged and ADRs 0003-0008 are accepted. The next
+  product value is safe API creation in the writable Jira sandbox.
 
 ## Following Slice
 

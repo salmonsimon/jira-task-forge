@@ -71,6 +71,9 @@ This document captures the product scope decisions from the grill session. UI co
 - The active project is selected first, then multiple tasks can be added under it.
 - The user can switch active project and continue adding tasks in the same tray.
 - The tray view groups tasks by project.
+- Internal app projects are preparation categories, not Jira project keys.
+- Jira issue creation uses the single Jira creation project key configured in
+  Settings.
 - Within each project, tasks keep manual/capture order for review.
 - Jira creation does not need to preserve visual order; robustness matters more.
 
@@ -144,6 +147,7 @@ This document captures the product scope decisions from the grill session. UI co
 - CSV export is a minimal fallback.
 - `Create in Jira` should:
   - validate credentials
+  - validate Jira project creation metadata
   - validate required task fields
   - sync existing epics
   - resolve or create missing epics
@@ -151,36 +155,91 @@ This document captures the product scope decisions from the grill session. UI co
   - create accepted sub-tasks after parent issues
   - upload selected attachments
   - record audit events
+- First Jira write slice should include only metadata preflight, epic
+  search/create, parent Story/Bug creation, local Jira link persistence, remote
+  correlation markers, audit events, and partial recovery.
+- Sub-task creation and attachment upload are part of later slices, even though
+  they remain in the full `Create in Jira` product scope.
 - If there are no warnings, sync starts directly.
 - If warnings exist, show a preflight panel.
 - Blocking warnings:
   - invalid or expired Jira credentials
+  - missing or unreadable Jira creation project metadata
+  - unavailable required Jira field or issue type mapping
   - missing project
   - missing area
   - missing title
   - unavailable Jira API when no progress can be made
+  - failed epic lookup or creation for the affected project/area group
 - Non-blocking/resolvable warnings:
   - missing description
-  - missing epic
   - unresolved attachments
   - failed tasks being retried
+- Missing descriptions require explicit confirmation in the preflight panel
+  before Jira sync may create those tasks.
+- The confirmation should be intentionally frictional enough to prevent
+  accidental upload without descriptions, such as a checkbox per run or per
+  affected group.
+- If Jira metadata says description is required for the selected issue type,
+  missing description becomes blocking for that task.
 - Sync progress should be visible and non-blocking.
 - The user should not need to press buttons to advance normal sync.
 - If a decision is required during sync, pause only that part and show an actionable warning.
+- Jira sync should continue with healthy `Project + Area` groups when another
+  group is paused by epic lookup/creation failure.
+- Partial sync results should clearly show which groups and tasks were created,
+  paused, or failed.
+- When partial sync leaves failed or paused tasks, the app should offer to create
+  a follow-up tray containing only those problem tasks and a short origin note
+  explaining why they were separated.
+- Recovery trays move the problem tasks out of the original tray instead of
+  duplicating them, preserving each task's local id, retry history, and
+  duplicate-protection context.
+- The original tray should keep successful created tasks and show a short note or
+  link to the recovery tray created from its partial sync.
 - Sync audit logs should be structured and retained for debugging.
+- Jira sync must not hardcode create payload fields beyond stable domain
+  intent. Before writing, it should read Jira metadata for the configured
+  **Jira Creation Project Key** and confirm the available issue types, required
+  fields, priority field, labels field, and epic-linking field.
+- If metadata cannot resolve `Epic`, `Story`, `Bug`, priority, labels, or the
+  field needed to link a child issue to its epic, sync blocks before creating
+  partial Jira issues.
+- Duplicate prevention should use a mostly invisible remote marker. The
+  preferred marker is a Jira entity property containing local task and sync
+  attempt identity.
+- Local task ids or sync attempt ids should not be written into visible Jira
+  summaries, descriptions, or labels.
+- A generic human-visible label such as `jira-task-forge` is acceptable only for
+  traceability, not as the source of retry identity.
+- If the app cannot write or later confirm the remote marker, it should use the
+  manual recovery flow instead of auto-creating a possible duplicate.
+
+## Jira Cloud Test Boundary
+
+- `JTFTEST` is the real Jira write sandbox for implementation and QA.
+- Agents may create, update, delete, transition, comment on, and otherwise
+  mutate Jira issues in `JTFTEST` without asking Saimon first.
+- `DTS` is read-only for agents. Agents may query `DTS` to understand field
+  behavior and real work patterns, but must not mutate `DTS` issues.
+- Real Jira smoke tests for the first write slice should use `JTFTEST`, never
+  `DTS`.
 
 ## Epics
 
 - Epic naming rule is `[{Project}] {Area}`.
-- Existing Jira epics are synced before creating new ones.
+- Existing Jira epics are searched online before creating new ones.
 - The app derives projects, areas, and mappings from epics matching the naming rule.
 - The app maintains a mapping of `Project + Area -> Epic`.
-- When no epic exists for a task's project and area, the app offers:
-  - create the suggested epic
-  - choose an existing epic
-  - create the story without an epic
-  - cancel
-- The recommended default action is to create the missing epic.
+- During Jira sync, each task's `Project + Area` must resolve to an epic before
+  creating the story, bug, or sub-task that belongs to it.
+- If no matching epic is found online through Jira search, the app creates the
+  missing epic with the naming rule before creating the rest of that group.
+- Normal sync should not create stories, bugs, or sub-tasks without their
+  resolved epic link.
+- If epic search or creation fails, pause the affected group and show an
+  actionable warning instead of creating unlinked child issues. Healthy groups
+  should continue syncing.
 
 ## Categories
 
@@ -206,7 +265,9 @@ This document captures the product scope decisions from the grill session. UI co
 - Each task can have its own assisted description.
 - Description creation is optional.
 - The tray shows description progress/status per task.
-- Before creating in Jira, the app warns about tasks missing descriptions but does not always block.
+- Before creating in Jira, the app warns about tasks missing descriptions and
+  requires explicit confirmation to proceed without them.
+- The app should not generate placeholder descriptions just to satisfy a sync.
 - The assisted description panel supports notes and pasted images.
 - The AI asks questions until the required points are resolved, unless the user explicitly chooses to proceed with missing information.
 - Story descriptions use:
