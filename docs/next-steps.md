@@ -4,29 +4,39 @@ This document is the default execution path for the repo. It is meant to support
 
 ## Current Checkpoint
 
-Date: 2026-05-17
+Date: 2026-05-22
 
 Main is up to date at:
 
 ```text
-e90dcf0 Merge pull request #6 from salmonsimon/feature/frontend-tray-interactions
+19848c8 Add Jira creation project target
 ```
 
-Merged since the initial prototype:
+Merged since the first in-memory tray interactions:
 
-- PR #2: added `AGENTS.md` and this AFK/HITL implementation plan.
-- PR #3: extracted the single-file frontend prototype into shell, shared UI, and feature modules.
-- PR #4: added frontend domain contracts, mock data adapter, and pure task/tray/preflight helpers.
-- PR #5: added a pure CSV fallback export helper.
-- PR #6: added in-memory tray interactions for quick capture, duplicate, and delete.
+- PR #7: proposed v1 architecture ADRs for SQLite, secrets, Jira sync/idempotency, backup/import, attachment path policy, and audit log redaction/retention.
+- PR #8: added a continuation checkpoint.
+- PR #9: added the SQLite persistence foundation.
+- PR #10: wired trays to Tauri persistence.
+- PR #11: added tray lifecycle actions.
+- PR #12: wired tray CSV export.
+- PR #13: added task detail editing from the focus window.
+- PR #14: added risk-aware tray delete confirmation.
+- PR #15: persisted non-secret app settings.
+- PR #16: stored Jira API tokens in the OS credential store.
+- PR #17: added Jira connection testing from Settings.
+- PR #18: added Jira create preflight review.
+- PR #19: added the Jira creation project target setting.
 
 Open for HITL review:
 
-- Draft PR #7: proposed v1 architecture ADRs for SQLite, secrets, Jira sync/idempotency, backup/import, attachment path policy, and audit log redaction/retention.
+- ADRs 0003-0008 are still `Proposed`, but parts of SQLite persistence, secret storage, and Jira preflight are already implemented. Review them against the current code before expanding into Jira writes, backup/import, attachments, or audit log retention behavior.
 
 Current validation:
 
-- `npm run build` passes on `main`.
+- `npm install` may be needed after pulling because `@tauri-apps/plugin-dialog` was added.
+- `npm run build` passes on `main` after dependencies are installed.
+- Rust/Cargo tests were not run in the current WSL environment because `cargo` is not installed there.
 - The prototype runs with `npm run dev` at:
 
 ```text
@@ -41,6 +51,7 @@ When starting a new chat/session, first do:
 git fetch origin
 git checkout main
 git pull origin
+npm install
 npm run build
 npm run dev
 ```
@@ -51,36 +62,52 @@ Then review the prototype at:
 http://localhost:1420/
 ```
 
+If Rust/Cargo is available in the WSL environment, also run:
+
+```bash
+npm run tauri dev
+```
+
 Human QA to run before choosing the next implementation slice:
 
 - Open `Trays`.
-- Open an existing tray.
+- Create and rename a tray.
 - Add a task with Quick Capture and confirm it appears as a `Pending` local task.
 - Duplicate an editable task and confirm the copy appears after the original with `(copy)`.
 - Delete `Pending`, `Failed`, or `Exported` tasks.
 - Confirm `Created` tasks do not expose duplicate/delete actions.
 - Open task detail and confirm it still feels like a Jira-style focused task window.
+- Edit project, area, and priority from task detail for editable tasks.
+- Archive, restore, and delete trays, including risk-aware delete confirmation copy.
+- Export CSV from a tray and confirm exported local tasks move to `Exported` status.
 - Visit `JQL`, `Categories`, and `Settings` and confirm navigation still works.
-- Refresh the page and confirm changes disappear; this is expected because persistence is still in-memory.
+- Save non-secret Jira settings and confirm they persist across app restart.
+- Save, delete, and re-save a Jira API token through the OS credential store.
+- Test Jira connection from Settings after entering a real Jira site, email, and token.
+- Open `Create in Jira` preflight and confirm missing credentials, missing creation project, and missing task fields produce blocking warnings.
+- After the API create path works, test that uploading tasks from the exported CSV still works as a fallback. This is intentionally lower priority than API creation.
 
 Expected limitations right now:
 
-- `Create in Jira` is not wired.
+- `Create in Jira` is preflight-only; it does not yet create Jira issues through the API.
 - `Export CSV` is wired and opens a native save dialog.
-- SQLite persistence exists for trays and local tasks, but not yet for settings, credentials, attachments, audit logs, backups, or Jira sync artifacts.
-- Jira, AI, credentials, attachments, backup/import, and audit log storage are not implemented.
+- SQLite persistence exists for trays, local tasks, and non-secret app settings.
+- Jira API token storage exists through the OS credential store.
+- Jira connection testing exists through `/rest/api/3/myself`.
+- Categories, JQL favorites, attachments, audit logs, backup/import, AI, and real Jira sync artifacts are not fully implemented.
 - Task detail `Details` supports editable project, area, and priority for editable non-archived tasks. Auto-generated epic and labels remain visible but muted/read-only.
 
-Near-term decided follow-ups after tray lifecycle:
+Near-term decided follow-ups:
 
-- Start the next v1 implementation slice for Jira connection/settings only after confirming the credential UX and secret-storage flow.
+- Keep Jira API creation ahead of CSV upload fallback validation.
+- Preserve CSV export as a fallback, then verify Jira CSV upload after the API path is working.
 
 Recommended next decision:
 
-- If the QA flow feels right, review Draft PR #7 and decide which proposed ADRs should become accepted or need changes.
-- Do not start SQLite, secret storage, Jira writes, attachment filesystem work, backup/import, or audit log persistence until the relevant ADRs are reviewed.
-- After HITL architecture review, the next implementation slice should be `feature/local-persistence`.
-- If QA reveals product/UI friction, do a small frontend-only fix branch before persistence.
+- If the QA flow feels right, review ADRs 0003-0008 and decide which should become accepted or need changes.
+- Do not start Jira writes, attachment filesystem work, backup/import, or audit log persistence until the relevant ADRs are reviewed.
+- After HITL architecture review, the next implementation slice should be Jira read-only foundation or a small Jira client extraction that supports both JQL and create flow.
+- If QA reveals product/UI friction, do a small frontend-only fix branch before integration writes.
 
 ## Working Model
 
@@ -170,7 +197,7 @@ HITL:
 
 ### 4. Local Persistence Track
 
-Branch: `feature/local-persistence`
+Branch: `feature/local-persistence`, then focused follow-ups
 
 Owns:
 
@@ -182,8 +209,8 @@ Owns:
 
 Goal:
 
-- Add SQLite-backed local storage for preparation trays before real Jira sync.
-- Support stable local task ids, tray state, categories, attachments metadata, sync status, and audit logs.
+- Extend the current SQLite-backed trays/tasks/settings foundation before real Jira sync.
+- Support categories, JQL favorites, attachments metadata, sync audit logs, and future migration safety.
 
 HITL:
 
@@ -205,7 +232,8 @@ Goal:
 
 - Add JSON/zip backup without secrets.
 - Add import that merges without wiping current data.
-- Add minimal Jira-importable CSV export for pending/failed tasks.
+- Keep minimal Jira-importable CSV export working for pending/failed/exported tasks.
+- Test Jira CSV upload after API creation is proven, since API creation has priority.
 
 HITL:
 
@@ -225,8 +253,10 @@ Owns:
 
 Goal:
 
-- Implement Jira REST API integration after local persistence exists.
-- Start with read/test operations, then write operations behind preflight checks.
+- Implement Jira REST API integration on top of the current settings and token storage.
+- Extract a reusable backend Jira client from the current connection test.
+- Start with read-only operations and JQL, then write operations behind preflight checks.
+- Keep API issue creation ahead of CSV upload fallback validation.
 
 HITL:
 
@@ -275,14 +305,14 @@ HITL:
 
 ## Recommended Sequence
 
-1. Extract the frontend shell from `src/App.tsx` into feature modules to reduce merge conflicts.
-2. Freeze the v1 data model with a SQLite/schema ADR and shared DTO contracts.
-3. Add frontend domain adapters so UI work and backend work can proceed in parallel.
-4. Implement local SQLite persistence for trays/tasks/categories.
-5. Wire frontend to Tauri persistence commands.
-6. Add backup/import and CSV export.
-7. Add Jira auth test and JQL read-only query.
-8. Add Jira create flow behind preflight, idempotency checks, and audit logs.
+1. Keep the repo roadmap/docs synced with the current merged checkpoint.
+2. Run native Tauri QA for tray lifecycle, CSV export, settings, credential storage, Jira connection test, and create preflight.
+3. Review ADRs 0003-0008 against the current implementation and accept or revise them before risky persistence/sync expansion.
+4. Extract a backend Jira client and add read-only Jira/JQL operations.
+5. Add Jira create flow behind preflight, idempotency checks, and audit logs.
+6. After API creation works, test that Jira CSV upload still works from exported files.
+7. Add backup/import and attachment filesystem behavior after the relevant ADRs are accepted.
+8. Add categories/JQL favorites persistence if needed to support Jira read-only workflows.
 9. Add AI-assisted descriptions and JQL generation after settings/secrets are settled.
 
 ## HITL Gates
@@ -318,39 +348,38 @@ These can usually run without interruption when acceptance criteria are clear:
 - tests for already accepted rules
 - read-only Jira payload shape exploration without credentials
 
-## First Slice
+## Next Slice
 
-Recommended first implementation slice:
+Recommended next implementation slice:
 
-Branch: `feature/frontend-extract-shell`
-
-Deliverables:
-
-- Extract `src/App.tsx` into shell, tray, JQL, categories, settings, task detail, and shared UI modules.
-- Keep the current UI behavior intact.
-- Keep fake data unchanged.
-
-Reason:
-
-- This reduces merge conflict risk before multiple AFK agents work on frontend, adapters, and integration surfaces.
-
-## Second Slice
-
-Recommended second implementation slice:
-
-Branch: `feature/domain-contracts`
+Branch: `codex/update-current-roadmap`
 
 Deliverables:
 
-- Move fake data access behind typed frontend interfaces.
-- Keep the current UI behavior intact.
-- Add pure domain helpers for issue type derivation, editable/read-only task rules, tray completion, and task duplication.
-- Add focused tests for those pure helpers before SQLite work starts.
+- Update README, handoff, and next-steps docs to match the PR #19 checkpoint.
+- Add the CSV upload fallback QA note after API creation.
+- Keep this as docs-only work with no product decision changes.
 
 Reason:
 
-- This creates a clean boundary between UI and persistence.
-- It lets frontend and Tauri persistence work proceed in parallel with less merge conflict risk.
+- The previous roadmap still pointed at PR #6 and would send future agents down completed paths.
+
+## Following Slice
+
+Recommended following implementation slice:
+
+Branch: `codex/jira-readonly-foundation`
+
+Deliverables:
+
+- Extract a backend Jira client around site URL normalization, token lookup, and authenticated requests.
+- Keep Jira operations read-only except for the existing token save/delete commands.
+- Add a read-only JQL command or metadata probe that reuses the same credential boundary.
+- Add focused Rust tests around URL normalization and Jira client request construction where practical.
+
+Reason:
+
+- The app already has credential storage and connection testing; the next low-risk step is reusable read-only integration before Jira writes.
 
 ## Security And Reliability Tests To Add
 
