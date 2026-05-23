@@ -15,7 +15,7 @@ export function Button({
     <button
       {...buttonProps}
       className={cn(
-        "inline-flex h-8 items-center justify-center gap-1.5 rounded px-3 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-45",
+        "inline-flex h-8 items-center justify-center gap-1.5 rounded px-3 text-sm font-medium transition disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-45",
         variant === "primary" && "bg-[#0052cc] text-white hover:bg-[#0747a6]",
         variant === "secondary" && "border border-[#c1c7d0] bg-white text-[#172b4d] hover:bg-[#f4f5f7]",
         variant === "ghost" && "text-[#42526e] hover:bg-[#f4f5f7]",

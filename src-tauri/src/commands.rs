@@ -1,9 +1,13 @@
+use std::process::Command;
 use tauri::State;
 
 use crate::models::{
     AppSettings, JiraConnectionTestResult, JqlSearchResponse, LocalTask, NewTask, NewTray, Tray,
 };
 use crate::services::AppServices;
+
+const ATLASSIAN_API_TOKENS_URL: &str =
+    "https://id.atlassian.com/manage-profile/security/api-tokens";
 
 #[tauri::command]
 pub fn create_tray(services: State<'_, AppServices>, name: String) -> Result<Tray, String> {
@@ -155,12 +159,25 @@ pub fn update_task_details(
     task_id: String,
     project: String,
     area: String,
+    title: String,
     priority: String,
+    issue_type: String,
 ) -> Result<Option<LocalTask>, String> {
-    let issue_type = derive_issue_type_from_area(&area);
+    let normalized_issue_type = if issue_type.trim().is_empty() {
+        derive_issue_type_from_area(&area).to_string()
+    } else {
+        issue_type.trim().to_string()
+    };
 
     services
-        .update_task_details(&task_id, &project, &area, &priority, issue_type)
+        .update_task_details(
+            &task_id,
+            &project,
+            &area,
+            &title,
+            &priority,
+            &normalized_issue_type,
+        )
         .map_err(|error| error.to_string())
 }
 
@@ -181,6 +198,41 @@ pub fn save_csv_file(path: String, contents: String) -> Result<(), String> {
     }
 
     std::fs::write(path, contents).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn open_atlassian_api_tokens_page() -> Result<(), String> {
+    open_external_url(ATLASSIAN_API_TOKENS_URL)
+}
+
+fn open_external_url(url: &str) -> Result<(), String> {
+    let mut command = platform_open_command(url)?;
+    command
+        .spawn()
+        .map(|_| ())
+        .map_err(|error| format!("Could not open browser: {error}"))
+}
+
+fn platform_open_command(url: &str) -> Result<Command, String> {
+    if cfg!(target_os = "windows") {
+        let mut command = Command::new("cmd");
+        command.args(["/C", "start", "", url]);
+        return Ok(command);
+    }
+
+    if cfg!(target_os = "macos") {
+        let mut command = Command::new("open");
+        command.arg(url);
+        return Ok(command);
+    }
+
+    if cfg!(target_os = "linux") {
+        let mut command = Command::new("xdg-open");
+        command.arg(url);
+        return Ok(command);
+    }
+
+    Err("Opening external links is not supported on this platform.".to_string())
 }
 
 fn derive_issue_type_from_area(area: &str) -> &'static str {

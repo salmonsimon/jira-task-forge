@@ -136,6 +136,14 @@ button {
   background-color: #2b2f36 !important;
 }
 
+.task-row-selected {
+  background-color: #f4f8ff;
+}
+
+.theme-dark .task-row-selected {
+  background-color: #2b2f36 !important;
+}
+
 .theme-dark ::selection {
   background: #1d3b66;
 }

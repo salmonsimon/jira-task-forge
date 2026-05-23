@@ -48,7 +48,8 @@ pub fn run() {
             commands::delete_task,
             commands::update_task_details,
             commands::mark_tasks_csv_exported,
-            commands::save_csv_file
+            commands::save_csv_file,
+            commands::open_atlassian_api_tokens_page
         ])
         .run(tauri::generate_context!())
         .expect("error while running Jira Task Forge");

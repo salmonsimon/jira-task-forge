@@ -1,4 +1,4 @@
-import { Bot, Download, KeyRound, Settings, UploadCloud } from "lucide-react";
+import { Bot, Download, ExternalLink, KeyRound, Settings, UploadCloud } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button, DetailBlock, PanelHeader, SegmentedControl } from "../../components/ui";
 import type { AppSettings, JiraConnectionTestResult, ThemeMode } from "../../lib/types";
@@ -13,6 +13,7 @@ export function SettingsPanel({
   onSaveJiraApiToken,
   onDeleteJiraApiToken,
   onTestJiraConnection,
+  onOpenJiraApiTokens,
   onClose
 }: {
   settings: AppSettings;
@@ -24,6 +25,7 @@ export function SettingsPanel({
   onSaveJiraApiToken: (token: string) => Promise<boolean>;
   onDeleteJiraApiToken: () => void;
   onTestJiraConnection: () => void;
+  onOpenJiraApiTokens: () => void;
   onClose: () => void;
 }) {
   const panelRef = useRef<HTMLElement | null>(null);
@@ -108,6 +110,14 @@ export function SettingsPanel({
                 <div className="text-sm font-medium text-[#172b4d]">
                   {hasJiraApiToken ? "Credential saved" : "No credential saved"}
                 </div>
+                <button
+                  className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-[#0052cc] hover:underline"
+                  onClick={onOpenJiraApiTokens}
+                  type="button"
+                >
+                  Create or manage token
+                  <ExternalLink size={11} />
+                </button>
               </div>
               <span className={`rounded px-2 py-1 text-xs font-medium ${hasJiraApiToken ? "bg-[#e3fcef] text-[#006644]" : "bg-[#f4f5f7] text-[#6b778c]"}`}>
                 {hasJiraApiToken ? "Saved" : "Missing"}

@@ -132,12 +132,13 @@ impl AppServices {
         task_id: &str,
         project: &str,
         area: &str,
+        title: &str,
         priority: &str,
         issue_type: &str,
     ) -> DbResult<Option<LocalTask>> {
         let connection = self.connection.lock().expect("database lock poisoned");
         TaskRepository::new(&connection)
-            .update_details(task_id, project, area, priority, issue_type)
+            .update_details(task_id, project, area, title, priority, issue_type)
     }
 
     pub fn mark_tasks_csv_exported(&self, task_ids: &[String]) -> DbResult<Vec<LocalTask>> {

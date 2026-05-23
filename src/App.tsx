@@ -20,6 +20,7 @@ import {
   hasPersistedJiraApiToken,
   listPersistedTrays,
   markPersistedTasksCsvExported,
+  openPersistedAtlassianApiTokensPage,
   renamePersistedTray,
   restorePersistedTray,
   runPersistedJqlQuery,
@@ -57,6 +58,7 @@ const defaultAppSettings: AppSettings = {
 const generatedJqlPreview =
   'project = DTS AND labels = "Bug" AND priority in (High, Highest) AND statusCategory != Done ORDER BY priority DESC';
 const defaultJqlPrompt = "Show me high and highest open bugs for STT, sorted by priority";
+const atlassianApiTokensUrl = "https://id.atlassian.com/manage-profile/security/api-tokens";
 
 export default function App() {
   const taskIdCounter = useRef(0);
@@ -343,18 +345,24 @@ export default function App() {
 
   async function updateTaskDetails(
     taskId: string,
-    taskInput: { project: string; area: string; priority: Priority }
+    taskInput: Partial<Pick<LocalTask, "area" | "issueType" | "priority" | "project" | "title">>
   ) {
     const tray = trays.find((candidate) => candidate.tasks.some((task) => task.id === taskId));
     const task = tray?.tasks.find((candidate) => candidate.id === taskId);
     if (!tray || !task || tray.state === "Archived" || task.syncStatus === "Created") return;
 
+    const nextTitle = taskInput.title !== undefined ? taskInput.title.trim() : task.title;
+    if (!nextTitle) return;
+
+    const nextArea = taskInput.area ?? task.area;
+    const shouldDeriveIssueType = taskInput.area !== undefined && taskInput.issueType === undefined;
     const nextTask: LocalTask = {
       ...task,
-      project: taskInput.project,
-      area: taskInput.area,
-      priority: taskInput.priority,
-      issueType: deriveIssueTypeFromArea(taskInput.area)
+      project: taskInput.project ?? task.project,
+      area: nextArea,
+      title: nextTitle,
+      priority: taskInput.priority ?? task.priority,
+      issueType: shouldDeriveIssueType ? deriveIssueTypeFromArea(nextArea) : (taskInput.issueType ?? task.issueType)
     };
     const persistedTask = usesTauriPersistence
       ? await updatePersistedTaskDetails(taskId, nextTask)
@@ -390,6 +398,21 @@ export default function App() {
     } catch {
       setAppSettings(previousSettings);
     }
+  }
+
+  async function openJiraApiTokensPage() {
+    if (usesTauriPersistence) {
+      try {
+        await openPersistedAtlassianApiTokensPage();
+        return;
+      } catch {
+        setJiraCredentialMessage(
+          `Could not open Atlassian automatically. Open ${atlassianApiTokensUrl} in your browser.`
+        );
+      }
+    }
+
+    window.open(atlassianApiTokensUrl, "_blank", "noopener,noreferrer");
   }
 
   async function saveJiraApiToken(token: string) {
@@ -451,12 +474,17 @@ export default function App() {
   async function runJqlQuery() {
     const query = jqlMode === "ai" ? generatedJqlPreview : jqlQuery.trim();
     if (!query) {
+      setJqlResults([]);
       setJqlQueryMessage("JQL query is required.");
       return;
     }
 
     setIsRunningJqlQuery(true);
-    setJqlQueryMessage(null);
+    const loadingStartedAt = performance.now();
+    await waitForNextPaint();
+    setJqlResults([]);
+    setJqlQueryMessage("Running JQL query...");
+    await waitForNextPaint();
 
     try {
       const queryResult = usesTauriPersistence
@@ -466,12 +494,14 @@ export default function App() {
             isLast: true,
             nextPageToken: null,
             warningMessages: []
-          };
+      };
       setJqlResults(queryResult.results);
       setJqlQueryMessage(formatJqlQueryMessage(queryResult.results.length, queryResult.isLast, queryResult.warningMessages));
     } catch (error) {
-      setJqlQueryMessage(typeof error === "string" ? error : error instanceof Error ? error.message : "Could not run JQL query.");
+      setJqlResults([]);
+      setJqlQueryMessage(formatJqlQueryError(error));
     } finally {
+      await waitForMinimumElapsed(loadingStartedAt, 1000);
       setIsRunningJqlQuery(false);
     }
   }
@@ -675,6 +705,7 @@ export default function App() {
               }}
               onOpenTask={openTask}
               onAddTask={addTaskToSelectedTray}
+              onUpdateTask={updateTaskDetails}
               onDuplicateTask={duplicateTask}
               onDeleteTask={deleteTask}
               selectedTaskId={selectedTaskId}
@@ -729,6 +760,7 @@ export default function App() {
             onSaveJiraApiToken={saveJiraApiToken}
             onDeleteJiraApiToken={deleteJiraApiToken}
             onTestJiraConnection={testJiraConnection}
+            onOpenJiraApiTokens={openJiraApiTokensPage}
             onClose={() => setOpenPanel(null)}
           />
         ) : null}
@@ -913,11 +945,36 @@ function summarizeTrayTasks(tasks: LocalTask[]): string {
 }
 
 function formatJqlQueryMessage(resultCount: number, isLast: boolean, warningMessages: string[]): string {
+  if (resultCount === 0) {
+    const warningText = warningMessages.length ? ` ${warningMessages.join(" ")}` : "";
+    return `No issues matched this JQL query.${warningText}`;
+  }
+
   const resultText = `${resultCount} ${resultCount === 1 ? "issue" : "issues"} returned.`;
   const pageText = isLast ? null : "More results are available in Jira.";
   const warningText = warningMessages.length ? warningMessages.join(" ") : null;
 
   return [resultText, pageText, warningText].filter(Boolean).join(" ");
+}
+
+function formatJqlQueryError(error: unknown): string {
+  const message = typeof error === "string" ? error : error instanceof Error ? error.message : "Could not run JQL query.";
+  return `JQL query failed. ${message}`;
+}
+
+async function waitForNextPaint(): Promise<void> {
+  await new Promise<void>((resolve) => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => resolve());
+    });
+  });
+}
+
+async function waitForMinimumElapsed(startedAt: number, minimumMs: number): Promise<void> {
+  const remainingMs = minimumMs - (performance.now() - startedAt);
+  if (remainingMs <= 0) return;
+
+  await new Promise((resolve) => setTimeout(resolve, remainingMs));
 }
 
 function countTasksBySyncStatus(tasks: LocalTask[]): Record<LocalTask["syncStatus"], number> {
