@@ -21,7 +21,7 @@ export function IssueTypeBadge({ type, dark = false }: { type: string; dark?: bo
   );
 }
 
-export function PriorityBadge({ priority, dark = false }: { priority: Priority; dark?: boolean }) {
+export function PriorityBadge({ priority, dark = false }: { priority: string; dark?: boolean }) {
   const classes: Record<Priority, string> = {
     Lowest: "bg-[#f4f5f7] text-[#6b778c]",
     Low: "bg-[#e3fcef] text-[#006644]",
@@ -36,7 +36,11 @@ export function PriorityBadge({ priority, dark = false }: { priority: Priority; 
     High: "bg-[#533f04] text-[#f5cd47]",
     Highest: "bg-[#5d1f1a] text-[#ff9c8f]"
   };
-  return <span className={cn("rounded px-2 py-1 text-xs font-medium", dark ? darkClasses[priority] : classes[priority])}>{priority}</span>;
+  const className = dark
+    ? (darkClasses[priority as Priority] ?? "bg-[#454852] text-[#aeb3bd]")
+    : (classes[priority as Priority] ?? "bg-[#f4f5f7] text-[#6b778c]");
+
+  return <span className={cn("rounded px-2 py-1 text-xs font-medium", className)}>{priority}</span>;
 }
 
 export function SyncBadge({ status, dark = false }: { status: SyncStatus; dark?: boolean }) {

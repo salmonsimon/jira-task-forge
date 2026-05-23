@@ -1,6 +1,8 @@
 use tauri::State;
 
-use crate::models::{AppSettings, JiraConnectionTestResult, LocalTask, NewTask, NewTray, Tray};
+use crate::models::{
+    AppSettings, JiraConnectionTestResult, JqlSearchResponse, LocalTask, NewTask, NewTray, Tray,
+};
 use crate::services::AppServices;
 
 #[tauri::command]
@@ -100,6 +102,15 @@ pub fn test_jira_connection(
     services: State<'_, AppServices>,
 ) -> Result<JiraConnectionTestResult, String> {
     Ok(services.test_jira_connection())
+}
+
+#[tauri::command]
+pub fn run_jql_query(
+    services: State<'_, AppServices>,
+    jql: String,
+    max_results: Option<usize>,
+) -> Result<JqlSearchResponse, String> {
+    services.run_jql_query(&jql, max_results.unwrap_or(50))
 }
 
 #[tauri::command]

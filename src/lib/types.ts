@@ -78,11 +78,18 @@ export type JqlFavorite = {
 export type JqlResult = {
   key: string;
   project: string;
-  issueType: IssueType | "Epic";
-  priority: Priority;
+  issueType: string;
+  priority: string;
   status: string;
   summary: string;
   assignee: string;
+};
+
+export type JqlQueryResult = {
+  results: JqlResult[];
+  isLast: boolean;
+  nextPageToken?: string | null;
+  warningMessages: string[];
 };
 
 export type PreflightWarning = {

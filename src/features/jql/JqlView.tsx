@@ -1,4 +1,4 @@
-import { Bot, History, Search, Sparkles, Star } from "lucide-react";
+import { Bot, History, Loader2, Search, Sparkles, Star } from "lucide-react";
 import { Button, IssueTypeBadge, PriorityBadge, SegmentedControl } from "../../components/ui";
 import type { JqlFavorite, JqlResult } from "../../lib/types";
 import { cn } from "../../lib/utils";
@@ -9,7 +9,15 @@ export function JqlView({
   selectedFavoriteId,
   setSelectedFavoriteId,
   favorites,
-  results
+  results,
+  jqlQuery,
+  setJqlQuery,
+  jqlPrompt,
+  setJqlPrompt,
+  generatedJqlPreview,
+  onRunQuery,
+  isRunningQuery,
+  queryMessage
 }: {
   jqlMode: "direct" | "ai";
   setJqlMode: (mode: "direct" | "ai") => void;
@@ -17,6 +25,14 @@ export function JqlView({
   setSelectedFavoriteId: (id: string) => void;
   favorites: JqlFavorite[];
   results: JqlResult[];
+  jqlQuery: string;
+  setJqlQuery: (query: string) => void;
+  jqlPrompt: string;
+  setJqlPrompt: (prompt: string) => void;
+  generatedJqlPreview: string;
+  onRunQuery: () => void;
+  isRunningQuery: boolean;
+  queryMessage: string | null;
 }) {
   const selectedFavorite = favorites.find((favorite) => favorite.id === selectedFavoriteId) ?? favorites[0];
 
@@ -78,11 +94,8 @@ export function JqlView({
           />
           <textarea
             className="mt-3 h-24 w-full resize-none rounded border border-[#c1c7d0] p-3 text-sm outline-none focus:border-[#4c9aff] focus:ring-2 focus:ring-[#deebff]"
-            defaultValue={
-              jqlMode === "ai"
-                ? "Show me high and highest open bugs for STT, sorted by priority"
-                : selectedFavorite?.jql
-            }
+            value={jqlMode === "ai" ? jqlPrompt : jqlQuery}
+            onChange={(event) => (jqlMode === "ai" ? setJqlPrompt(event.target.value) : setJqlQuery(event.target.value))}
           />
           {jqlMode === "ai" ? (
             <div className="mt-3 rounded border border-[#dfe1e6] bg-[#f7f8fa] p-3">
@@ -90,19 +103,25 @@ export function JqlView({
                 <Bot size={14} />
                 Generated JQL preview
               </div>
-              <code className="text-sm text-[#172b4d]">
-                project = DTS AND labels = "Bug" AND priority in (High, Highest) AND statusCategory != Done ORDER BY
-                priority DESC
-              </code>
+              <code className="text-sm text-[#172b4d]">{generatedJqlPreview}</code>
             </div>
           ) : null}
-          <div className="mt-3 flex justify-end gap-2">
-            {jqlMode === "ai" ? (
-              <Button variant="secondary" icon={<Sparkles size={14} />}>
-                Generate JQL
+          <div className="mt-3 flex items-center justify-between gap-3">
+            <div className="text-xs text-[#6b778c]">{queryMessage}</div>
+            <div className="flex justify-end gap-2">
+              {jqlMode === "ai" ? (
+                <Button variant="secondary" icon={<Sparkles size={14} />}>
+                  Generate JQL
+                </Button>
+              ) : null}
+              <Button
+                disabled={isRunningQuery}
+                icon={isRunningQuery ? <Loader2 className="animate-spin" size={14} /> : <Search size={14} />}
+                onClick={onRunQuery}
+              >
+                {isRunningQuery ? "Running" : "Run query"}
               </Button>
-            ) : null}
-            <Button icon={<Search size={14} />}>Run query</Button>
+            </div>
           </div>
         </div>
 

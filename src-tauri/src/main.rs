@@ -1,5 +1,6 @@
 mod commands;
 mod db;
+mod integrations;
 mod models;
 mod repositories;
 mod services;
@@ -41,6 +42,7 @@ pub fn run() {
             commands::save_jira_api_token,
             commands::delete_jira_api_token,
             commands::test_jira_connection,
+            commands::run_jql_query,
             commands::create_task,
             commands::list_tasks,
             commands::delete_task,
