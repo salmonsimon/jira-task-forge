@@ -188,6 +188,7 @@ impl<'connection> TaskRepository<'connection> {
         task_id: &str,
         project: &str,
         area: &str,
+        title: &str,
         priority: &str,
         issue_type: &str,
     ) -> DbResult<Option<LocalTask>> {
@@ -205,10 +206,18 @@ impl<'connection> TaskRepository<'connection> {
         self.connection.execute(
             "
             UPDATE tasks
-            SET project = ?1, area = ?2, priority = ?3, issue_type = ?4, updated_at = ?5
-            WHERE id = ?6 AND sync_status != 'Created'
+            SET project = ?1, area = ?2, title = ?3, priority = ?4, issue_type = ?5, updated_at = ?6
+            WHERE id = ?7 AND sync_status != 'Created'
             ",
-            (project, area, priority, issue_type, now.as_str(), task_id),
+            (
+                project,
+                area,
+                title,
+                priority,
+                issue_type,
+                now.as_str(),
+                task_id,
+            ),
         )?;
         self.touch_tray(&tray_id, &now)?;
 
@@ -638,17 +647,32 @@ mod tests {
             .expect("created status updates");
 
         let updated = task_repository
-            .update_details(&editable.id, "PilotLab", "Polish", "High", "Story")
+            .update_details(
+                &editable.id,
+                "PilotLab",
+                "Polish",
+                "Polished task",
+                "High",
+                "Story",
+            )
             .expect("task updates")
             .expect("task remains editable");
 
         assert_eq!(updated.project, "PilotLab");
         assert_eq!(updated.area, "Polish");
+        assert_eq!(updated.title, "Polished task");
         assert_eq!(updated.priority, "High");
         assert_eq!(updated.issue_type, "Story");
 
         let blocked = task_repository
-            .update_details(&created.id, "PilotLab", "Bug", "Highest", "Bug")
+            .update_details(
+                &created.id,
+                "PilotLab",
+                "Bug",
+                "Should not update",
+                "Highest",
+                "Bug",
+            )
             .expect("created task update is ignored");
 
         assert_eq!(blocked, None);

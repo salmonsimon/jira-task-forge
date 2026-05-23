@@ -111,6 +111,10 @@ export async function runPersistedJqlQuery(jql: string, maxResults = 50): Promis
   return invoke<JqlQueryResult>("run_jql_query", { jql, maxResults });
 }
 
+export async function openPersistedAtlassianApiTokensPage(): Promise<void> {
+  await invoke("open_atlassian_api_tokens_page");
+}
+
 export async function createPersistedTask(
   task: Pick<LocalTask, "project" | "area" | "title" | "priority" | "issueType" | "language">,
   trayId: string
@@ -134,13 +138,15 @@ export async function deletePersistedTask(taskId: string): Promise<boolean> {
 
 export async function updatePersistedTaskDetails(
   taskId: string,
-  task: Pick<LocalTask, "project" | "area" | "priority">
+  task: Pick<LocalTask, "area" | "issueType" | "priority" | "project" | "title">
 ): Promise<LocalTask | null> {
   const updated = await invoke<BackendTask | null>("update_task_details", {
     taskId,
     project: task.project,
     area: task.area,
-    priority: task.priority
+    title: task.title,
+    priority: task.priority,
+    issueType: task.issueType
   });
 
   return updated ? mapTask(updated) : null;

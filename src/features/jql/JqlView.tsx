@@ -38,6 +38,7 @@ export function JqlView({
 
   return (
     <section className="grid flex-1 grid-cols-[280px_1fr] gap-4 px-5 py-4">
+      {isRunningQuery ? <JqlLoadingOverlay /> : null}
       <aside className="rounded border border-[#dfe1e6] bg-white">
         <div className="border-b border-[#dfe1e6] px-4 py-3">
           <div className="flex items-center gap-2 text-sm font-semibold">
@@ -106,15 +107,16 @@ export function JqlView({
               <code className="text-sm text-[#172b4d]">{generatedJqlPreview}</code>
             </div>
           ) : null}
-          <div className="mt-3 flex items-center justify-between gap-3">
-            <div className="text-xs text-[#6b778c]">{queryMessage}</div>
-            <div className="flex justify-end gap-2">
+          <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0 text-xs leading-relaxed text-[#6b778c]">{queryMessage}</div>
+            <div className="flex shrink-0 flex-wrap justify-end gap-2">
               {jqlMode === "ai" ? (
                 <Button variant="secondary" icon={<Sparkles size={14} />}>
                   Generate JQL
                 </Button>
               ) : null}
               <Button
+                className="min-w-[112px] shrink-0 whitespace-nowrap"
                 disabled={isRunningQuery}
                 icon={isRunningQuery ? <Loader2 className="animate-spin" size={14} /> : <Search size={14} />}
                 onClick={onRunQuery}
@@ -127,40 +129,58 @@ export function JqlView({
 
         <div className="p-4">
           <div className="mb-2 text-sm font-semibold">Results</div>
-          <div className="overflow-hidden rounded border border-[#dfe1e6]">
-            <table className="w-full border-collapse text-sm">
-              <thead>
-                <tr className="bg-[#f4f5f7] text-left text-xs font-semibold text-[#6b778c]">
-                  <th className="px-3 py-2">Key</th>
-                  <th className="px-3 py-2">Project</th>
-                  <th className="px-3 py-2">Type</th>
-                  <th className="px-3 py-2">Priority</th>
-                  <th className="px-3 py-2">Status</th>
-                  <th className="px-3 py-2">Summary</th>
-                  <th className="px-3 py-2">Assignee</th>
-                </tr>
-              </thead>
-              <tbody>
-                {results.map((result) => (
-                  <tr className="border-t border-[#ebecf0] hover:bg-[#f4f8ff]" key={result.key}>
-                    <td className="px-3 py-2 font-medium text-[#0052cc]">{result.key}</td>
-                    <td className="px-3 py-2">{result.project}</td>
-                    <td className="px-3 py-2">
-                      <IssueTypeBadge type={result.issueType} />
-                    </td>
-                    <td className="px-3 py-2">
-                      <PriorityBadge priority={result.priority} />
-                    </td>
-                    <td className="px-3 py-2">{result.status}</td>
-                    <td className="px-3 py-2">{result.summary}</td>
-                    <td className="px-3 py-2 text-[#6b778c]">{result.assignee}</td>
+          {results.length > 0 ? (
+            <div className="overflow-hidden rounded border border-[#dfe1e6]">
+              <table className="w-full border-collapse text-sm">
+                <thead>
+                  <tr className="bg-[#f4f5f7] text-left text-xs font-semibold text-[#6b778c]">
+                    <th className="px-3 py-2">Key</th>
+                    <th className="px-3 py-2">Project</th>
+                    <th className="px-3 py-2">Type</th>
+                    <th className="px-3 py-2">Priority</th>
+                    <th className="px-3 py-2">Status</th>
+                    <th className="px-3 py-2">Summary</th>
+                    <th className="px-3 py-2">Assignee</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {results.map((result) => (
+                    <tr className="border-t border-[#ebecf0] hover:bg-[#f4f8ff]" key={result.key}>
+                      <td className="px-3 py-2 font-medium text-[#0052cc]">{result.key}</td>
+                      <td className="px-3 py-2">{result.project}</td>
+                      <td className="px-3 py-2">
+                        <IssueTypeBadge type={result.issueType} />
+                      </td>
+                      <td className="px-3 py-2">
+                        <PriorityBadge priority={result.priority} />
+                      </td>
+                      <td className="px-3 py-2">{result.status}</td>
+                      <td className="px-3 py-2">{result.summary}</td>
+                      <td className="px-3 py-2 text-[#6b778c]">{result.assignee}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="rounded border border-dashed border-[#c1c7d0] bg-[#f7f8fa] px-4 py-6 text-sm text-[#6b778c]">
+              {queryMessage ?? "Run a JQL query to populate this table."}
+            </div>
+          )}
         </div>
       </div>
     </section>
+  );
+}
+
+function JqlLoadingOverlay() {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#091e42]/45 px-4 backdrop-blur-[2px]" role="status" aria-live="polite">
+      <div className="flex min-h-[132px] w-full max-w-[360px] flex-col items-center justify-center rounded border border-[#3b4454] bg-[#202328] px-6 py-5 text-center text-[#dfe1e6] shadow-2xl">
+        <Loader2 className="mb-3 animate-spin text-[#85b8ff]" size={30} />
+        <div className="text-sm font-semibold text-[#f4f5f7]">Running JQL query</div>
+        <p className="mt-1 text-xs leading-relaxed text-[#aeb3bd]">Fetching Jira issues and refreshing the results table.</p>
+      </div>
+    </div>
   );
 }

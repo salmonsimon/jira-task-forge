@@ -292,6 +292,7 @@ The AI should avoid inventing missing details and should ask follow-up questions
 - JQL history is not included in backups by default.
 - JQL favorites are included in backups.
 - JQL results do not create local tasks in v1.
+- Direct and AI-generated JQL must include a search restriction; Jira Cloud may reject unlimited queries such as `ORDER BY created DESC` with a 400 error. For broad smoke tests, prefer bounded forms such as `created IS NOT EMPTY ORDER BY created DESC`.
 - Recommended default result columns:
   - `Key`
   - `Project`

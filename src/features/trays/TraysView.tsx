@@ -25,6 +25,7 @@ export function TraysView({
   onBackToSelector,
   onOpenTask,
   onAddTask,
+  onUpdateTask,
   onDuplicateTask,
   onDeleteTask,
   selectedTaskId,
@@ -48,6 +49,7 @@ export function TraysView({
   onBackToSelector: () => void;
   onOpenTask: (task: LocalTask) => void;
   onAddTask: (task: { project: string; area: string; title: string; priority: Priority }) => void;
+  onUpdateTask: (taskId: string, task: Partial<Pick<LocalTask, "area" | "issueType" | "priority" | "title">>) => void | Promise<void>;
   onDuplicateTask: (taskId: string) => void;
   onDeleteTask: (taskId: string) => void;
   selectedTaskId: string | null;
@@ -141,8 +143,10 @@ export function TraysView({
               key={project}
               project={project}
               tasks={tasks}
+              areas={areas}
               selectedTaskId={selectedTaskId}
               onOpenTask={onOpenTask}
+              onUpdateTask={onUpdateTask}
               onDuplicateTask={onDuplicateTask}
               onDeleteTask={onDeleteTask}
               readOnly={isArchived}
