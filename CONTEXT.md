@@ -18,6 +18,10 @@ _Avoid_: CSV export
 El estado local de un **Tray Draft**, como Active, Needs attention, Completed o Archived.
 _Avoid_: Jira workflow status
 
+**Recovery Tray**:
+Una **Preparation Tray** creada despues de una sync parcial para continuar solo con las **Local Tasks** fallidas o pausadas.
+_Avoid_: duplicate tray
+
 **Local Task**:
 Una tarea capturada en la app antes de exportarse o sincronizarse con Jira.
 _Avoid_: Draft issue, raw line
@@ -32,7 +36,11 @@ _Avoid_: Local task
 
 **Project**:
 El destino de trabajo al que pertenecen las tareas, como STT, PilotLab, MR Studio o Transversal.
-_Avoid_: Board
+_Avoid_: Board, Jira project key
+
+**Jira Creation Project Key**:
+La key del proyecto Jira real donde se crean los issues, como DTS o JTFTEST. Es una configuracion de sync independiente de **Project**.
+_Avoid_: Project
 
 **Area**:
 La categoria funcional o disciplinaria que agrupa tareas dentro de un proyecto, como Bug, 3D, Polish o Programacion.
@@ -43,7 +51,7 @@ Una opcion guardada de **Project** o **Area** que aparece en los controles de ca
 _Avoid_: Label
 
 **Epic Mapping**:
-La asociacion local entre **Project** + **Area** y una epic existente o nueva de Jira con nombre `[{Project}] {Area}`.
+La asociacion local entre **Project** + **Area** y una epic existente o nueva de Jira con nombre `[{Project}] {Area}`. **Jira Sync** debe resolver esta asociacion antes de crear las tareas hijas.
 _Avoid_: hardcoded Jira key
 
 **Priority**:
@@ -74,6 +82,14 @@ _Avoid_: Source of truth
 El envio o consulta de informacion entre la app local y Jira mediante la REST API.
 _Avoid_: CSV import
 
+**Jira Creation Metadata**:
+La metadata leida desde Jira para saber que issue types, campos requeridos, prioridades, labels y relacion con epic acepta el **Jira Creation Project Key**.
+_Avoid_: hardcoded Jira payload
+
+**Remote Correlation Marker**:
+Metadata casi invisible escrita en un **Jira Issue** para conectar ese issue con una **Local Task** y un intento de sync.
+_Avoid_: visible local id in summary, description, or labels
+
 **Sync Audit Log**:
 Un registro tecnico estructurado de intentos de exportacion o sincronizacion de trays y tasks.
 _Avoid_: content version history
@@ -82,20 +98,34 @@ _Avoid_: content version history
 
 - A **Preparation Tray** contains one or more **Local Tasks**
 - A **Preparation Tray** may be saved as one **Tray Draft**
+- A **Recovery Tray** moves problem **Local Tasks** out of the original
+  **Preparation Tray** without duplicating their local identity
 - A **Tray Draft** has one **Tray State**
 - A **Tray Draft** may be exported to or imported from JSON
 - A **Local Task** belongs to exactly one **Project**
+- **Jira Sync** creates **Jira Issues** under one configured **Jira Creation
+  Project Key**
+- **Jira Sync** validates **Jira Creation Metadata** before creating any
+  **Jira Issues**
 - A **Local Task** has exactly one **Area**
 - A **Local Task** has exactly one **Priority**
 - A **Local Task** has exactly one **Sync Status**
 - A **Local Task** may become one **Jira Issue**
+- A **Jira Issue** created by the app should receive one **Remote Correlation
+  Marker** when Jira permissions allow it
 - A **Local Task** may have one **Assisted Description**
 - A **Local Task** may have zero or more attachments with **Attachment Purpose**
 - A **Local Task** may have zero or more sub-tasks
 - A **Project** and **Area** may resolve to one **Epic Mapping**
+- A **Local Task** must have a resolved **Epic Mapping** before **Jira Sync**
+  creates its linked **Jira Issue**
 - A **CSV Export** contains one or more **Local Tasks**
 - **Jira Sync** reads and writes **Jira Issues**
 - **Jira Sync** writes one or more **Sync Audit Log** entries
+- **Jira Sync** pauses a **Local Task** for manual recovery when it cannot prove
+  whether that task already became a **Jira Issue**
+- **Jira Sync** uses **Remote Correlation Markers** to recover ambiguous writes
+  without exposing local ids in normal Jira fields
 - A **JQL Favorite** stores one reusable **JQL Query**
 
 ## Example Dialogue
@@ -113,3 +143,8 @@ _Avoid_: content version history
 - "bandeja" means **Preparation Tray**, not a Jira board.
 - "label" can mean UI categories or Jira labels. Resolved: use **Category** for saved Projects/Areas and generated Jira labels for Area-derived issue labels.
 - "status" can mean local sync status or Jira workflow status. Resolved: use **Sync Status** for upload/export state; Jira workflow status is out of scope for v1.
+- "project" can mean internal work destination or Jira project key. Resolved:
+  use **Project** for local grouping and **Jira Creation Project Key** for the
+  Jira target configured in Settings.
+- "new tray with failed tasks" means **Recovery Tray** only when tasks are moved
+  with their same local identity, not copied.

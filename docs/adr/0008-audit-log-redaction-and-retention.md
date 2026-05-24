@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed
+Accepted
 
 ## Context
 
@@ -59,7 +59,7 @@ response bodies are out of scope for v1.
   details.
 - Debugging some Jira/API issues may require reproducing with temporary verbose
   logging that is not persisted by default.
-- Retention and backup behavior remain visible HITL decisions.
+- Retention and backup behavior are explicit implementation constraints for v1.
 
 ## HITL Decisions Still Needed
 

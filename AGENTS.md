@@ -30,6 +30,17 @@ Before product, architecture, or implementation work, read:
 User-facing UI copy is English. Jira task content, descriptions, areas, epics,
 and user-authored text may remain Spanish.
 
+## Jira Cloud Safety Boundary
+
+Agents may read Jira data from the DTS project to understand real work patterns
+and field behavior, but must not create, update, delete, transition, comment on,
+or otherwise mutate DTS issues.
+
+Agents may freely create, update, delete, transition, comment on, and otherwise
+mutate issues in the JTFTEST project for implementation and QA without asking
+Saimon first. Prefer JTFTEST for real Jira write smoke tests whenever it helps
+AFK progress.
+
 ## Delivery Workflow
 
 Use an AFK-first implementation flow:
