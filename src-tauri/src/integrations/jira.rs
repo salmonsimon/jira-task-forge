@@ -13,7 +13,9 @@ use crate::models::{
     JqlSearchResponse,
 };
 
-const REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
+const READ_REQUEST_TIMEOUT: Duration = Duration::from_secs(45);
+const WRITE_REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
+const READ_REQUEST_ATTEMPTS: usize = 2;
 const JQL_SEARCH_MAX_RESULTS_CAP: usize = 100;
 
 #[derive(Clone, PartialEq, Eq)]
@@ -78,15 +80,15 @@ impl JiraClient {
         }
 
         let max_results = max_results.clamp(1, JQL_SEARCH_MAX_RESULTS_CAP);
-        let response: JiraSearchApiResponse = parse_response(
-            self.post("/rest/api/3/search/jql").send_json(json!({
+        let response: JiraSearchApiResponse = self.post_json_with_retry(
+            "/rest/api/3/search/jql",
+            json!({
                 "fields": ["summary", "project", "issuetype", "priority", "status", "assignee"],
                 "fieldsByKeys": true,
                 "jql": jql,
                 "maxResults": max_results
-            })),
+            }),
             "Jira JQL search",
-            None,
         )?;
 
         Ok(JqlSearchResponse {
@@ -106,27 +108,23 @@ impl JiraClient {
             return Err("Jira creation project key is required.".to_string());
         }
 
-        let issue_types_response: JiraCreateIssueTypesApiResponse = parse_response(
-            self.get(&format!(
+        let issue_types_response: JiraCreateIssueTypesApiResponse = self.get_json_with_retry(
+            &format!(
                 "/rest/api/3/issue/createmeta/{}/issuetypes?maxResults=100",
                 encode_path_segment(project_key)
-            ))
-            .call(),
+            ),
             "Jira create metadata",
-            None,
         )?;
 
         let mut issue_types = Vec::new();
         for issue_type in issue_types_response.issue_types {
-            let fields_response: JiraCreateFieldsApiResponse = parse_response(
-                self.get(&format!(
+            let fields_response: JiraCreateFieldsApiResponse = self.get_json_with_retry(
+                &format!(
                     "/rest/api/3/issue/createmeta/{}/issuetypes/{}?maxResults=200",
                     encode_path_segment(project_key),
                     encode_path_segment(&issue_type.id)
-                ))
-                .call(),
+                ),
                 "Jira create field metadata",
-                None,
             )?;
 
             issue_types.push(JiraCreateIssueTypeMetadata {
@@ -176,7 +174,7 @@ impl JiraClient {
         ureq::get(&self.url(path))
             .set("Accept", "application/json")
             .set("Authorization", &self.authorization_header)
-            .timeout(REQUEST_TIMEOUT)
+            .timeout(READ_REQUEST_TIMEOUT)
     }
 
     fn post(&self, path: &str) -> ureq::Request {
@@ -184,7 +182,15 @@ impl JiraClient {
             .set("Accept", "application/json")
             .set("Content-Type", "application/json")
             .set("Authorization", &self.authorization_header)
-            .timeout(REQUEST_TIMEOUT)
+            .timeout(WRITE_REQUEST_TIMEOUT)
+    }
+
+    fn post_read(&self, path: &str) -> ureq::Request {
+        ureq::post(&self.url(path))
+            .set("Accept", "application/json")
+            .set("Content-Type", "application/json")
+            .set("Authorization", &self.authorization_header)
+            .timeout(READ_REQUEST_TIMEOUT)
     }
 
     fn put(&self, path: &str) -> ureq::Request {
@@ -192,11 +198,58 @@ impl JiraClient {
             .set("Accept", "application/json")
             .set("Content-Type", "application/json")
             .set("Authorization", &self.authorization_header)
-            .timeout(REQUEST_TIMEOUT)
+            .timeout(WRITE_REQUEST_TIMEOUT)
     }
 
     fn url(&self, path: &str) -> String {
         format!("{}{}", self.site_url, path)
+    }
+
+    fn get_json_with_retry<T: DeserializeOwned>(
+        &self,
+        path: &str,
+        action: &str,
+    ) -> Result<T, String> {
+        let mut last_error = None;
+        for attempt in 1..=READ_REQUEST_ATTEMPTS {
+            match parse_response::<T>(self.get(path).call(), action, None) {
+                Ok(value) => return Ok(value),
+                Err(error)
+                    if attempt < READ_REQUEST_ATTEMPTS && is_retryable_jira_read_error(&error) =>
+                {
+                    last_error = Some(error);
+                }
+                Err(error) => return Err(error),
+            }
+        }
+
+        Err(last_error.unwrap_or_else(|| format!("{action} could not reach Jira.")))
+    }
+
+    fn post_json_with_retry<T: DeserializeOwned>(
+        &self,
+        path: &str,
+        payload: Value,
+        action: &str,
+    ) -> Result<T, String> {
+        let mut last_error = None;
+        for attempt in 1..=READ_REQUEST_ATTEMPTS {
+            match parse_response::<T>(
+                self.post_read(path).send_json(payload.clone()),
+                action,
+                None,
+            ) {
+                Ok(value) => return Ok(value),
+                Err(error)
+                    if attempt < READ_REQUEST_ATTEMPTS && is_retryable_jira_read_error(&error) =>
+                {
+                    last_error = Some(error);
+                }
+                Err(error) => return Err(error),
+            }
+        }
+
+        Err(last_error.unwrap_or_else(|| format!("{action} could not reach Jira.")))
     }
 }
 
@@ -288,9 +341,21 @@ fn encode_path_segment(value: &str) -> String {
         .collect()
 }
 
+fn is_retryable_jira_read_error(message: &str) -> bool {
+    message.contains("could not reach Jira")
+        && (message.contains("timed out")
+            || message.contains("timeout")
+            || message.contains("Connection Failed")
+            || message.contains("connection reset")
+            || message.contains("connection closed"))
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{encode_path_segment, normalize_jira_site_url, JiraClient, JiraCredentials};
+    use super::{
+        encode_path_segment, is_retryable_jira_read_error, normalize_jira_site_url, JiraClient,
+        JiraCredentials,
+    };
 
     #[test]
     fn normalizes_jira_cloud_urls_to_site_root() {
@@ -388,5 +453,15 @@ mod tests {
             client.issue_browse_url("JTFTEST/1"),
             "https://example.atlassian.net/browse/JTFTEST%2F1"
         );
+    }
+
+    #[test]
+    fn classifies_retryable_jira_read_errors() {
+        assert!(is_retryable_jira_read_error(
+            "Jira create field metadata could not reach Jira: Connection Failed: Connect error: connection timed out"
+        ));
+        assert!(!is_retryable_jira_read_error(
+            "Jira create metadata failed with HTTP 400: project is invalid"
+        ));
     }
 }

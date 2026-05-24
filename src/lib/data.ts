@@ -1,26 +1,26 @@
 import type { Category, JqlFavorite, JqlResult, Tray } from "./types";
 
 export const projects: Category[] = [
-  { id: "project-stt", name: "STT", source: "jira" },
-  { id: "project-pilotlab", name: "PilotLab", source: "jira" },
-  { id: "project-mr-studio", name: "MR Studio", source: "jira" },
-  { id: "project-transversal", name: "Transversal", source: "jira" },
-  { id: "project-legacy", name: "Legacy Sandbox", source: "jira", hidden: true }
+  { categoryType: "project", id: "project-stt", name: "STT", source: "jira" },
+  { categoryType: "project", id: "project-pilotlab", name: "PilotLab", source: "jira" },
+  { categoryType: "project", id: "project-mr-studio", name: "MR Studio", source: "jira" },
+  { categoryType: "project", id: "project-transversal", name: "Transversal", source: "jira" },
+  { categoryType: "project", id: "project-legacy", name: "Legacy Sandbox", source: "jira", hidden: true }
 ];
 
 export const areas: Category[] = [
-  { id: "area-bug", name: "Bug", source: "jira" },
-  { id: "area-3d", name: "3D", source: "jira" },
-  { id: "area-polish", name: "Polish", source: "jira" },
-  { id: "area-programacion", name: "Programacion", source: "jira" },
-  { id: "area-iluminacion", name: "Iluminacion", source: "jira" },
-  { id: "area-texturas", name: "Texturas", source: "jira" },
-  { id: "area-localizacion", name: "Localizacion", source: "jira" },
-  { id: "area-refactorizacion", name: "Refactorizacion", source: "jira" },
-  { id: "area-tutorial", name: "Tutorial", source: "jira" },
-  { id: "area-feeling", name: "Feeling", source: "jira" },
-  { id: "area-diseno", name: "Diseno", source: "jira" },
-  { id: "area-deprecated", name: "Deprecated", source: "jira", hidden: true }
+  { categoryType: "area", id: "area-bug", name: "Bug", source: "jira" },
+  { categoryType: "area", id: "area-3d", name: "3D", source: "jira" },
+  { categoryType: "area", id: "area-polish", name: "Polish", source: "jira" },
+  { categoryType: "area", id: "area-programacion", name: "Programacion", source: "jira" },
+  { categoryType: "area", id: "area-iluminacion", name: "Iluminacion", source: "jira" },
+  { categoryType: "area", id: "area-texturas", name: "Texturas", source: "jira" },
+  { categoryType: "area", id: "area-localizacion", name: "Localizacion", source: "jira" },
+  { categoryType: "area", id: "area-refactorizacion", name: "Refactorizacion", source: "jira" },
+  { categoryType: "area", id: "area-tutorial", name: "Tutorial", source: "jira" },
+  { categoryType: "area", id: "area-feeling", name: "Feeling", source: "jira" },
+  { categoryType: "area", id: "area-diseno", name: "Diseno", source: "jira" },
+  { categoryType: "area", id: "area-deprecated", name: "Deprecated", source: "jira", hidden: true }
 ];
 
 export const trays: Tray[] = [

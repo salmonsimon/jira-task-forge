@@ -3,9 +3,42 @@ use serde_json::Value;
 use uuid::Uuid;
 
 use crate::db::{utc_now_string, DbError, DbResult};
-use crate::models::{AppSettings, LocalTask, NewTask, NewTray, Tray, TrayState};
+use crate::models::{
+    AppSettings, Category, JqlFavorite, LocalTask, NewTask, NewTray, Tray, TrayState,
+};
 
 const APP_SETTINGS_KEY: &str = "app_settings";
+const DEFAULT_PROJECT_CATEGORIES: &[(&str, bool)] = &[
+    ("STT", false),
+    ("PilotLab", false),
+    ("MR Studio", false),
+    ("Transversal", false),
+    ("Legacy Sandbox", true),
+];
+const DEFAULT_AREA_CATEGORIES: &[(&str, bool)] = &[
+    ("Bug", false),
+    ("3D", false),
+    ("Polish", false),
+    ("Programacion", false),
+    ("Iluminacion", false),
+    ("Texturas", false),
+    ("Localizacion", false),
+    ("Refactorizacion", false),
+    ("Tutorial", false),
+    ("Feeling", false),
+    ("Diseno", false),
+    ("Deprecated", true),
+];
+const DEFAULT_JQL_FAVORITES: &[(&str, &str)] = &[
+    (
+        "Urgent open bugs",
+        "project = DTS AND labels = \"Bug\" AND priority in (High, Highest) AND statusCategory != Done ORDER BY priority DESC",
+    ),
+    (
+        "3D pending by project",
+        "project = DTS AND labels = \"3D\" AND statusCategory != Done ORDER BY updated DESC",
+    ),
+];
 
 pub struct TrayRepository<'connection> {
     connection: &'connection Connection,
@@ -16,6 +49,14 @@ pub struct TaskRepository<'connection> {
 }
 
 pub struct SettingsRepository<'connection> {
+    connection: &'connection Connection,
+}
+
+pub struct CategoryRepository<'connection> {
+    connection: &'connection Connection,
+}
+
+pub struct JqlFavoriteRepository<'connection> {
     connection: &'connection Connection,
 }
 
@@ -59,6 +100,285 @@ impl<'connection> SettingsRepository<'connection> {
         )?;
 
         Ok(settings)
+    }
+}
+
+impl<'connection> CategoryRepository<'connection> {
+    pub fn new(connection: &'connection Connection) -> Self {
+        Self { connection }
+    }
+
+    pub fn list(&self, category_type: Option<&str>) -> DbResult<Vec<Category>> {
+        self.ensure_defaults_seeded()?;
+
+        if let Some(category_type) = category_type {
+            validate_category_type(category_type)?;
+            let mut statement = self.connection.prepare(
+                "
+                SELECT id, category_type, name, source, hidden, ignored, created_at, updated_at
+                FROM categories
+                WHERE category_type = ?1 AND ignored = 0
+                ORDER BY hidden ASC, name COLLATE NOCASE ASC
+                ",
+            )?;
+
+            let categories = statement
+                .query_map([category_type], map_category_row)?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(DbError::from)?;
+            return Ok(categories);
+        }
+
+        let mut statement = self.connection.prepare(
+            "
+            SELECT id, category_type, name, source, hidden, ignored, created_at, updated_at
+            FROM categories
+            WHERE ignored = 0
+            ORDER BY category_type ASC, hidden ASC, name COLLATE NOCASE ASC
+            ",
+        )?;
+
+        let categories = statement
+            .query_map([], map_category_row)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(DbError::from)?;
+        Ok(categories)
+    }
+
+    pub fn create(&self, category_type: &str, name: &str) -> DbResult<Category> {
+        validate_category_type(category_type)?;
+        let name = normalize_display_name(name)?;
+        let normalized_name = normalize_name(&name);
+        let now = utc_now_string()?;
+        let id = Uuid::new_v4().to_string();
+
+        self.connection.execute(
+            "
+            INSERT INTO categories (
+                id, category_type, name, normalized_name, source, hidden, ignored, created_at, updated_at
+            )
+            VALUES (?1, ?2, ?3, ?4, 'local', 0, 0, ?5, ?5)
+            ",
+            (
+                id.as_str(),
+                category_type,
+                name.as_str(),
+                normalized_name.as_str(),
+                now.as_str(),
+            ),
+        )?;
+
+        self.find_by_id(&id)?
+            .ok_or_else(|| DbError::InvalidData("category was not created".to_string()))
+    }
+
+    pub fn update(
+        &self,
+        id: &str,
+        name: Option<&str>,
+        hidden: Option<bool>,
+    ) -> DbResult<Option<Category>> {
+        let Some(current) = self.find_by_id(id)? else {
+            return Ok(None);
+        };
+        let next_name = match name {
+            Some(name) => normalize_display_name(name)?,
+            None => current.name,
+        };
+        let normalized_name = normalize_name(&next_name);
+        let next_hidden = hidden.unwrap_or(current.hidden);
+        let now = utc_now_string()?;
+
+        self.connection.execute(
+            "
+            UPDATE categories
+            SET name = ?1, normalized_name = ?2, hidden = ?3, updated_at = ?4
+            WHERE id = ?5
+            ",
+            (
+                next_name.as_str(),
+                normalized_name.as_str(),
+                bool_to_db(next_hidden),
+                now.as_str(),
+                id,
+            ),
+        )?;
+
+        self.find_by_id(id)
+    }
+
+    fn find_by_id(&self, id: &str) -> DbResult<Option<Category>> {
+        let mut statement = self.connection.prepare(
+            "
+            SELECT id, category_type, name, source, hidden, ignored, created_at, updated_at
+            FROM categories
+            WHERE id = ?1
+            ",
+        )?;
+
+        let result = statement.query_row([id], map_category_row);
+        match result {
+            Ok(category) => Ok(Some(category)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(error) => Err(error.into()),
+        }
+    }
+
+    fn ensure_defaults_seeded(&self) -> DbResult<()> {
+        self.seed_category_type_if_empty("project", DEFAULT_PROJECT_CATEGORIES)?;
+        self.seed_category_type_if_empty("area", DEFAULT_AREA_CATEGORIES)?;
+        Ok(())
+    }
+
+    fn seed_category_type_if_empty(
+        &self,
+        category_type: &str,
+        defaults: &[(&str, bool)],
+    ) -> DbResult<()> {
+        let count: i64 = self.connection.query_row(
+            "SELECT COUNT(*) FROM categories WHERE category_type = ?1",
+            [category_type],
+            |row| row.get(0),
+        )?;
+        if count > 0 {
+            return Ok(());
+        }
+
+        let now = utc_now_string()?;
+        for (name, hidden) in defaults {
+            let id = Uuid::new_v4().to_string();
+            let normalized_name = normalize_name(name);
+            self.connection.execute(
+                "
+                INSERT OR IGNORE INTO categories (
+                    id, category_type, name, normalized_name, source, hidden, ignored, created_at, updated_at
+                )
+                VALUES (?1, ?2, ?3, ?4, 'jira', ?5, 0, ?6, ?6)
+                ",
+                (
+                    id.as_str(),
+                    category_type,
+                    *name,
+                    normalized_name.as_str(),
+                    bool_to_db(*hidden),
+                    now.as_str(),
+                ),
+            )?;
+        }
+
+        Ok(())
+    }
+}
+
+impl<'connection> JqlFavoriteRepository<'connection> {
+    pub fn new(connection: &'connection Connection) -> Self {
+        Self { connection }
+    }
+
+    pub fn list(&self) -> DbResult<Vec<JqlFavorite>> {
+        self.ensure_defaults_seeded()?;
+        let mut statement = self.connection.prepare(
+            "
+            SELECT id, name, jql, created_at, updated_at
+            FROM jql_favorites
+            ORDER BY updated_at DESC, created_at DESC
+            ",
+        )?;
+
+        let favorites = statement
+            .query_map([], map_jql_favorite_row)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(DbError::from)?;
+        Ok(favorites)
+    }
+
+    pub fn create(&self, name: &str, jql: &str) -> DbResult<JqlFavorite> {
+        let name = normalize_display_name(name)?;
+        let jql = normalize_jql(jql)?;
+        let now = utc_now_string()?;
+        let id = Uuid::new_v4().to_string();
+
+        self.connection.execute(
+            "
+            INSERT INTO jql_favorites (id, name, jql, created_at, updated_at)
+            VALUES (?1, ?2, ?3, ?4, ?4)
+            ",
+            (id.as_str(), name.as_str(), jql.as_str(), now.as_str()),
+        )?;
+
+        self.find_by_id(&id)?
+            .ok_or_else(|| DbError::InvalidData("JQL favorite was not created".to_string()))
+    }
+
+    pub fn update(
+        &self,
+        id: &str,
+        name: Option<&str>,
+        jql: Option<&str>,
+    ) -> DbResult<Option<JqlFavorite>> {
+        let Some(current) = self.find_by_id(id)? else {
+            return Ok(None);
+        };
+        let next_name = match name {
+            Some(name) => normalize_display_name(name)?,
+            None => current.name,
+        };
+        let next_jql = match jql {
+            Some(jql) => normalize_jql(jql)?,
+            None => current.jql,
+        };
+        let now = utc_now_string()?;
+
+        self.connection.execute(
+            "
+            UPDATE jql_favorites
+            SET name = ?1, jql = ?2, updated_at = ?3
+            WHERE id = ?4
+            ",
+            (next_name.as_str(), next_jql.as_str(), now.as_str(), id),
+        )?;
+
+        self.find_by_id(id)
+    }
+
+    fn find_by_id(&self, id: &str) -> DbResult<Option<JqlFavorite>> {
+        let mut statement = self.connection.prepare(
+            "
+            SELECT id, name, jql, created_at, updated_at
+            FROM jql_favorites
+            WHERE id = ?1
+            ",
+        )?;
+
+        let result = statement.query_row([id], map_jql_favorite_row);
+        match result {
+            Ok(favorite) => Ok(Some(favorite)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(error) => Err(error.into()),
+        }
+    }
+
+    fn ensure_defaults_seeded(&self) -> DbResult<()> {
+        let count: i64 =
+            self.connection
+                .query_row("SELECT COUNT(*) FROM jql_favorites", [], |row| row.get(0))?;
+        if count > 0 {
+            return Ok(());
+        }
+
+        let now = utc_now_string()?;
+        for (name, jql) in DEFAULT_JQL_FAVORITES {
+            let id = Uuid::new_v4().to_string();
+            self.connection.execute(
+                "
+                INSERT INTO jql_favorites (id, name, jql, created_at, updated_at)
+                VALUES (?1, ?2, ?3, ?4, ?4)
+                ",
+                (id.as_str(), *name, *jql, now.as_str()),
+            )?;
+        }
+
+        Ok(())
     }
 }
 
@@ -502,6 +822,69 @@ fn map_task_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<LocalTask> {
     })
 }
 
+fn map_category_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Category> {
+    Ok(Category {
+        id: row.get("id")?,
+        category_type: row.get("category_type")?,
+        name: row.get("name")?,
+        source: row.get("source")?,
+        hidden: row.get::<_, i64>("hidden")? != 0,
+        ignored: row.get::<_, i64>("ignored")? != 0,
+        created_at: row.get("created_at")?,
+        updated_at: row.get("updated_at")?,
+    })
+}
+
+fn map_jql_favorite_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<JqlFavorite> {
+    Ok(JqlFavorite {
+        id: row.get("id")?,
+        name: row.get("name")?,
+        jql: row.get("jql")?,
+        created_at: row.get("created_at")?,
+        updated_at: row.get("updated_at")?,
+    })
+}
+
+fn validate_category_type(category_type: &str) -> DbResult<()> {
+    match category_type {
+        "project" | "area" => Ok(()),
+        _ => Err(DbError::InvalidData(format!(
+            "unknown category type: {category_type}"
+        ))),
+    }
+}
+
+fn normalize_display_name(name: &str) -> DbResult<String> {
+    let normalized = name.split_whitespace().collect::<Vec<_>>().join(" ");
+    if normalized.is_empty() {
+        return Err(DbError::InvalidData("name is required".to_string()));
+    }
+    Ok(normalized)
+}
+
+fn normalize_jql(jql: &str) -> DbResult<String> {
+    let normalized = jql.trim().to_string();
+    if normalized.is_empty() {
+        return Err(DbError::InvalidData("JQL is required".to_string()));
+    }
+    Ok(normalized)
+}
+
+fn normalize_name(name: &str) -> String {
+    name.split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_ascii_lowercase()
+}
+
+fn bool_to_db(value: bool) -> i64 {
+    if value {
+        1
+    } else {
+        0
+    }
+}
+
 impl<'connection> TrayRepository<'connection> {
     pub fn new(connection: &'connection Connection) -> Self {
         Self { connection }
@@ -660,6 +1043,62 @@ impl<'connection> TrayRepository<'connection> {
 mod tests {
     use super::*;
     use crate::db::open_in_memory_database;
+
+    #[test]
+    fn seeds_and_updates_categories() {
+        let connection = open_in_memory_database().expect("database opens");
+        let repository = CategoryRepository::new(&connection);
+
+        let projects = repository
+            .list(Some("project"))
+            .expect("project categories list");
+        assert!(projects.iter().any(|category| category.name == "STT"));
+        assert!(projects
+            .iter()
+            .any(|category| category.name == "Legacy Sandbox" && category.hidden));
+
+        let created = repository
+            .create("area", "  Gameplay   UX  ")
+            .expect("category creates");
+        assert_eq!(created.name, "Gameplay UX");
+        assert_eq!(created.category_type, "area");
+        assert_eq!(created.source, "local");
+        assert!(!created.hidden);
+
+        let updated = repository
+            .update(&created.id, Some("UX Polish"), Some(true))
+            .expect("category updates")
+            .expect("category exists");
+        assert_eq!(updated.name, "UX Polish");
+        assert!(updated.hidden);
+    }
+
+    #[test]
+    fn creates_and_updates_jql_favorites() {
+        let connection = open_in_memory_database().expect("database opens");
+        let repository = JqlFavoriteRepository::new(&connection);
+
+        let defaults = repository.list().expect("favorites list");
+        assert!(defaults
+            .iter()
+            .any(|favorite| favorite.name == "Urgent open bugs"));
+
+        let favorite = repository
+            .create(
+                "  JTFTEST smoke  ",
+                " project = JTFTEST ORDER BY created DESC ",
+            )
+            .expect("favorite creates");
+        assert_eq!(favorite.name, "JTFTEST smoke");
+        assert_eq!(favorite.jql, "project = JTFTEST ORDER BY created DESC");
+
+        let updated = repository
+            .update(&favorite.id, Some("JTFTEST recent"), None)
+            .expect("favorite updates")
+            .expect("favorite exists");
+        assert_eq!(updated.name, "JTFTEST recent");
+        assert_eq!(updated.jql, "project = JTFTEST ORDER BY created DESC");
+    }
 
     #[test]
     fn creates_and_lists_trays_with_uuid_and_utc_timestamps() {

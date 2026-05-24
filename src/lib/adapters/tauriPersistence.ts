@@ -1,9 +1,11 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
   AppSettings,
+  Category,
   IssueType,
   JiraCreateIssuesResult,
   JiraConnectionTestResult,
+  JqlFavorite,
   JqlQueryResult,
   LocalTask,
   Priority,
@@ -36,6 +38,25 @@ type BackendTask = {
   jira_url: string | null;
   epic_key: string | null;
   task_order: number;
+  created_at: string;
+  updated_at: string;
+};
+
+type BackendCategory = {
+  id: string;
+  category_type: "project" | "area";
+  name: string;
+  source: "local" | "jira";
+  hidden: boolean;
+  ignored: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+type BackendJqlFavorite = {
+  id: string;
+  name: string;
+  jql: string;
   created_at: string;
   updated_at: string;
 };
@@ -93,6 +114,47 @@ export async function updatePersistedAppSettings(settings: AppSettings): Promise
   return normalizeAppSettings(await invoke<AppSettings>("update_app_settings", { settings }));
 }
 
+export async function listPersistedCategories(categoryType?: "project" | "area"): Promise<Category[]> {
+  const categories = await invoke<BackendCategory[]>("list_categories", { categoryType });
+  return categories.map(mapCategory);
+}
+
+export async function createPersistedCategory(categoryType: "project" | "area", name: string): Promise<Category> {
+  return mapCategory(await invoke<BackendCategory>("create_category", { categoryType, name }));
+}
+
+export async function updatePersistedCategory(
+  id: string,
+  patch: Partial<Pick<Category, "hidden" | "name">>
+): Promise<Category | null> {
+  const category = await invoke<BackendCategory | null>("update_category", {
+    id,
+    name: patch.name,
+    hidden: patch.hidden
+  });
+  return category ? mapCategory(category) : null;
+}
+
+export async function listPersistedJqlFavorites(): Promise<JqlFavorite[]> {
+  return (await invoke<BackendJqlFavorite[]>("list_jql_favorites")).map(mapJqlFavorite);
+}
+
+export async function createPersistedJqlFavorite(name: string, jql: string): Promise<JqlFavorite> {
+  return mapJqlFavorite(await invoke<BackendJqlFavorite>("create_jql_favorite", { name, jql }));
+}
+
+export async function updatePersistedJqlFavorite(
+  id: string,
+  patch: Partial<Pick<JqlFavorite, "jql" | "name">>
+): Promise<JqlFavorite | null> {
+  const favorite = await invoke<BackendJqlFavorite | null>("update_jql_favorite", {
+    id,
+    name: patch.name,
+    jql: patch.jql
+  });
+  return favorite ? mapJqlFavorite(favorite) : null;
+}
+
 export async function hasPersistedJiraApiToken(): Promise<boolean> {
   return invoke<boolean>("has_jira_api_token");
 }
@@ -125,6 +187,10 @@ export async function createPersistedJiraParentIssues(
 
 export async function openPersistedAtlassianApiTokensPage(): Promise<void> {
   await invoke("open_atlassian_api_tokens_page");
+}
+
+export async function openPersistedJiraIssueUrl(url: string): Promise<void> {
+  await invoke("open_jira_issue_url", { url });
 }
 
 export async function createPersistedTask(
@@ -190,7 +256,26 @@ function mapTask(task: BackendTask): LocalTask {
     descriptionStatus: task.description_status,
     language: task.content_language,
     jiraKey: task.jira_key ?? undefined,
+    jiraUrl: task.jira_url ?? undefined,
     epic: task.epic_key ?? undefined
+  };
+}
+
+function mapCategory(category: BackendCategory): Category {
+  return {
+    id: category.id,
+    categoryType: category.category_type,
+    name: category.name,
+    source: category.source,
+    hidden: category.hidden
+  };
+}
+
+function mapJqlFavorite(favorite: BackendJqlFavorite): JqlFavorite {
+  return {
+    id: favorite.id,
+    name: favorite.name,
+    jql: favorite.jql
   };
 }
 

@@ -45,6 +45,7 @@ export type LocalTask = {
   descriptionStatus: "Ready" | "Missing" | "Draft";
   language: "Spanish" | "English";
   jiraKey?: string;
+  jiraUrl?: string;
   epic?: string;
   description?: string;
   notes?: string;
@@ -64,6 +65,7 @@ export type Tray = {
 
 export type Category = {
   id: string;
+  categoryType: "project" | "area";
   name: string;
   hidden?: boolean;
   source: "local" | "jira";

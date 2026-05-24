@@ -12,7 +12,9 @@ import { TraysView } from "./features/trays";
 import { mockAppDataAdapter } from "./lib/adapters";
 import {
   archivePersistedTray,
+  createPersistedCategory,
   createPersistedJiraParentIssues,
+  createPersistedJqlFavorite,
   createPersistedRecoveryTrayFromTasks,
   createPersistedTask,
   createPersistedTray,
@@ -21,9 +23,12 @@ import {
   deletePersistedTask,
   getPersistedAppSettings,
   hasPersistedJiraApiToken,
+  listPersistedCategories,
+  listPersistedJqlFavorites,
   listPersistedTrays,
   markPersistedTasksCsvExported,
   openPersistedAtlassianApiTokensPage,
+  openPersistedJiraIssueUrl,
   renamePersistedTray,
   restorePersistedTray,
   runPersistedJqlQuery,
@@ -31,6 +36,8 @@ import {
   savePersistedJiraApiToken,
   testPersistedJiraConnection,
   updatePersistedAppSettings,
+  updatePersistedCategory,
+  updatePersistedJqlFavorite,
   updatePersistedTaskDetails
 } from "./lib/adapters/tauriPersistence";
 import {
@@ -46,6 +53,8 @@ import {
 } from "./lib/domain";
 import type {
   AppSettings,
+  Category,
+  JqlFavorite,
   JiraConnectionTestResult,
   JiraCreateIssuesResult,
   LocalTask,
@@ -79,6 +88,8 @@ export default function App() {
   const [openPanel, setOpenPanel] = useState<Panel>(null);
   const [selectedTrayId, setSelectedTrayId] = useState<string | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>("ltask-timer");
+  const [categories, setCategories] = useState<Category[]>(() => [...appData.listProjects(), ...appData.listAreas()]);
+  const [jqlFavorites, setJqlFavorites] = useState<JqlFavorite[]>(() => appData.listJqlFavorites());
   const [selectedFavoriteId, setSelectedFavoriteId] = useState(appData.listJqlFavorites()[0]?.id);
   const [jqlMode, setJqlMode] = useState<"direct" | "ai">("ai");
   const [jqlQuery, setJqlQuery] = useState(appData.listJqlFavorites()[0]?.jql ?? "");
@@ -122,19 +133,37 @@ export default function App() {
     () => trays.filter((tray) => (showArchivedTrays ? tray.state === "Archived" : tray.state !== "Archived")),
     [showArchivedTrays, trays]
   );
-  const projectOptions = useMemo(() => appData.listProjects().filter((project) => !project.hidden).map((project) => project.name), []);
-  const areaOptions = useMemo(() => appData.listAreas().filter((area) => !area.hidden).map((area) => area.name), []);
+  const projectCategories = useMemo(() => categories.filter((category) => category.categoryType === "project"), [categories]);
+  const areaCategories = useMemo(() => categories.filter((category) => category.categoryType === "area"), [categories]);
+  const projectOptions = useMemo(() => projectCategories.filter((project) => !project.hidden).map((project) => project.name), [projectCategories]);
+  const areaOptions = useMemo(() => areaCategories.filter((area) => !area.hidden).map((area) => area.name), [areaCategories]);
 
   useEffect(() => {
     let isCurrent = true;
 
-    Promise.all([listPersistedTrays(), getPersistedAppSettings(), hasPersistedJiraApiToken()])
-      .then(([persistedTrays, persistedSettings, hasPersistedToken]) => {
+    Promise.all([
+      listPersistedTrays(),
+      getPersistedAppSettings(),
+      hasPersistedJiraApiToken(),
+      listPersistedCategories(),
+      listPersistedJqlFavorites()
+    ])
+      .then(([persistedTrays, persistedSettings, hasPersistedToken, persistedCategories, persistedJqlFavorites]) => {
         if (!isCurrent) return;
+        const nextCategories = persistedCategories.length ? persistedCategories : [...appData.listProjects(), ...appData.listAreas()];
+        const nextJqlFavorites = persistedJqlFavorites.length ? persistedJqlFavorites : appData.listJqlFavorites();
+
         setUsesTauriPersistence(true);
         setTrays(persistedTrays);
         setAppSettings(persistedSettings);
         setHasJiraApiToken(hasPersistedToken);
+        setCategories(nextCategories);
+        setJqlFavorites(nextJqlFavorites);
+        setSelectedFavoriteId((currentFavoriteId) =>
+          currentFavoriteId && nextJqlFavorites.some((favorite) => favorite.id === currentFavoriteId)
+            ? currentFavoriteId
+            : nextJqlFavorites[0]?.id
+        );
         setSelectedTrayId((currentTrayId) =>
           currentTrayId && persistedTrays.some((tray) => tray.id === currentTrayId) ? currentTrayId : null
         );
@@ -416,6 +445,57 @@ export default function App() {
     }
   }
 
+  async function createCategory(categoryType: "project" | "area", name: string) {
+    const nextName = name.trim();
+    if (!nextName) return;
+
+    const category = usesTauriPersistence
+      ? await createPersistedCategory(categoryType, nextName)
+      : {
+          id: `category-local-${Date.now().toString(36)}`,
+          categoryType,
+          name: nextName,
+          source: "local" as const
+        };
+    setCategories((currentCategories) => [...currentCategories, category]);
+  }
+
+  async function updateCategory(categoryId: string, patch: Partial<Pick<Category, "hidden" | "name">>) {
+    const nextPatch: Partial<Pick<Category, "hidden" | "name">> = {};
+    if (patch.name !== undefined) {
+      const nextName = patch.name.trim();
+      if (!nextName) return;
+      nextPatch.name = nextName;
+    }
+    if (patch.hidden !== undefined) {
+      nextPatch.hidden = patch.hidden;
+    }
+
+    const updatedCategory = usesTauriPersistence
+      ? await updatePersistedCategory(categoryId, nextPatch)
+      : (categories.find((category) => category.id === categoryId)
+          ? { ...categories.find((category) => category.id === categoryId)!, ...nextPatch }
+          : null);
+    if (!updatedCategory) return;
+
+    setCategories((currentCategories) =>
+      currentCategories.map((category) => (category.id === categoryId ? updatedCategory : category))
+    );
+  }
+
+  async function openJiraIssue(url: string) {
+    if (usesTauriPersistence) {
+      try {
+        await openPersistedJiraIssueUrl(url);
+      } catch {
+        console.warn("Could not open Jira issue URL.");
+      }
+      return;
+    }
+
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
+
   async function openJiraApiTokensPage() {
     if (usesTauriPersistence) {
       try {
@@ -484,13 +564,54 @@ export default function App() {
   }
 
   function selectJqlFavorite(favoriteId: string) {
-    const favorite = appData.listJqlFavorites().find((candidate) => candidate.id === favoriteId);
+    const favorite = jqlFavorites.find((candidate) => candidate.id === favoriteId);
     setSelectedFavoriteId(favoriteId);
     if (favorite) {
       setJqlQuery(favorite.jql);
       setJqlMode("direct");
       setJqlQueryMessage(null);
     }
+  }
+
+  async function saveJqlFavorite() {
+    const query = (jqlMode === "ai" ? generatedJqlPreview : jqlQuery).trim();
+    if (!query) {
+      setJqlQueryMessage("JQL query is required before saving a favorite.");
+      return;
+    }
+
+    const existing = jqlFavorites.find((favorite) => favorite.jql.trim() === query);
+    if (existing) {
+      setSelectedFavoriteId(existing.id);
+      setJqlQueryMessage("Favorite already saved.");
+      return;
+    }
+
+    const favoriteName = `Favorite ${jqlFavorites.length + 1}`;
+    const favorite = usesTauriPersistence
+      ? await createPersistedJqlFavorite(favoriteName, query)
+      : { id: `fav-local-${Date.now().toString(36)}`, name: favoriteName, jql: query };
+    setJqlFavorites((currentFavorites) => [favorite, ...currentFavorites]);
+    setSelectedFavoriteId(favorite.id);
+    setJqlMode("direct");
+    setJqlQuery(query);
+    setJqlQueryMessage("Favorite saved.");
+  }
+
+  async function renameJqlFavorite(favoriteId: string, name: string) {
+    const nextName = name.trim();
+    if (!nextName) return;
+
+    const updatedFavorite = usesTauriPersistence
+      ? await updatePersistedJqlFavorite(favoriteId, { name: nextName })
+      : (jqlFavorites.find((favorite) => favorite.id === favoriteId)
+          ? { ...jqlFavorites.find((favorite) => favorite.id === favoriteId)!, name: nextName }
+          : null);
+    if (!updatedFavorite) return;
+
+    setJqlFavorites((currentFavorites) =>
+      currentFavorites.map((favorite) => (favorite.id === favoriteId ? updatedFavorite : favorite))
+    );
   }
 
   async function runJqlQuery() {
@@ -808,6 +929,7 @@ export default function App() {
               onUpdateTask={updateTaskDetails}
               onDuplicateTask={duplicateTask}
               onDeleteTask={deleteTask}
+              onOpenJiraIssue={openJiraIssue}
               selectedTaskId={selectedTaskId}
               projects={projectOptions}
               areas={areaOptions}
@@ -818,7 +940,9 @@ export default function App() {
               setJqlMode={setJqlMode}
               selectedFavoriteId={selectedFavoriteId}
               setSelectedFavoriteId={selectJqlFavorite}
-              favorites={appData.listJqlFavorites()}
+              favorites={jqlFavorites}
+              onSaveFavorite={saveJqlFavorite}
+              onRenameFavorite={renameJqlFavorite}
               results={jqlResults}
               jqlQuery={jqlQuery}
               setJqlQuery={setJqlQuery}
@@ -839,13 +963,16 @@ export default function App() {
             areas={areaOptions}
             readOnly={selectedTaskTray?.state === "Archived"}
             onUpdateDetails={updateTaskDetails}
+            onOpenJiraIssue={openJiraIssue}
             onClose={() => setOpenPanel(null)}
           />
         ) : null}
         {openPanel === "categories" ? (
           <CategoriesPanel
-            projects={appData.listProjects()}
-            areas={appData.listAreas()}
+            projects={projectCategories}
+            areas={areaCategories}
+            onCreateCategory={createCategory}
+            onUpdateCategory={updateCategory}
             onClose={() => setOpenPanel(null)}
           />
         ) : null}

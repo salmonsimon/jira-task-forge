@@ -40,6 +40,12 @@ pub fn run() {
             commands::delete_tray,
             commands::get_app_settings,
             commands::update_app_settings,
+            commands::list_categories,
+            commands::create_category,
+            commands::update_category,
+            commands::list_jql_favorites,
+            commands::create_jql_favorite,
+            commands::update_jql_favorite,
             commands::has_jira_api_token,
             commands::save_jira_api_token,
             commands::delete_jira_api_token,
@@ -53,7 +59,8 @@ pub fn run() {
             commands::mark_tasks_csv_exported,
             commands::create_recovery_tray_from_tasks,
             commands::save_csv_file,
-            commands::open_atlassian_api_tokens_page
+            commands::open_atlassian_api_tokens_page,
+            commands::open_jira_issue_url
         ])
         .run(tauri::generate_context!())
         .expect("error while running Jira Task Forge");
