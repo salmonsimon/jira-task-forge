@@ -47,12 +47,13 @@ Current validation:
 - `npm run build` passes on `main` after dependencies are installed.
 - `cargo fmt -- --check` passes after installing Rust/Cargo with rustup.
 - `cargo test` passes in the current WSL checkout. As of the first coverage
-  pass, the Rust suite has 45 tests covering SQLite schema/repositories,
+  pass, the Rust suite has 50 tests covering SQLite schema/repositories,
   settings defaults, Jira URL/error helpers, guarded Jira parent issue sync,
   Jira credential debug redaction, sync audit error redaction/capping, backend
-  delete protection for created tasks, and command/model/db helper behavior.
+  delete protection for created tasks, command/model/db helper behavior, and
+  service-layer local-first workflows.
 - Rust coverage is measured with `cargo llvm-cov --summary-only`. The current
-  Rust line coverage is 76.22%; see `docs/coverage-report.md`.
+  Rust line coverage is 80.67%; see `docs/coverage-report.md`.
 - There is no automated frontend test runner yet. Frontend validation is
   currently TypeScript/Vite build plus manual/live QA.
 - Playwright screenshots are blocked in the current WSL environment by missing Chromium runtime library `libnspr4.so`.
