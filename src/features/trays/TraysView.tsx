@@ -28,6 +28,7 @@ export function TraysView({
   onUpdateTask,
   onDuplicateTask,
   onDeleteTask,
+  onOpenJiraIssue,
   selectedTaskId,
   projects,
   areas
@@ -52,6 +53,7 @@ export function TraysView({
   onUpdateTask: (taskId: string, task: Partial<Pick<LocalTask, "area" | "issueType" | "priority" | "title">>) => void | Promise<void>;
   onDuplicateTask: (taskId: string) => void;
   onDeleteTask: (taskId: string) => void;
+  onOpenJiraIssue: (url: string) => void | Promise<void>;
   selectedTaskId: string | null;
   projects: string[];
   areas: string[];
@@ -155,6 +157,7 @@ export function TraysView({
               onUpdateTask={onUpdateTask}
               onDuplicateTask={onDuplicateTask}
               onDeleteTask={onDeleteTask}
+              onOpenJiraIssue={onOpenJiraIssue}
               readOnly={isArchived}
             />
           ))}

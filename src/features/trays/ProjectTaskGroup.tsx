@@ -17,6 +17,7 @@ export function ProjectTaskGroup({
   onUpdateTask,
   onDuplicateTask,
   onDeleteTask,
+  onOpenJiraIssue,
   readOnly = false
 }: {
   project: string;
@@ -27,6 +28,7 @@ export function ProjectTaskGroup({
   onUpdateTask: (taskId: string, task: Partial<Pick<LocalTask, "area" | "issueType" | "priority" | "title">>) => void | Promise<void>;
   onDuplicateTask: (taskId: string) => void;
   onDeleteTask: (taskId: string) => void;
+  onOpenJiraIssue: (url: string) => void | Promise<void>;
   readOnly?: boolean;
 }) {
   return (
@@ -92,7 +94,12 @@ export function ProjectTaskGroup({
                       )}
                     </td>
                     <td className="px-3 py-2">
-                      <EditableTaskTitle editable={isEditable} task={task} onUpdateTitle={(title) => onUpdateTask(task.id, { title })} />
+                      <EditableTaskTitle
+                        editable={isEditable}
+                        task={task}
+                        onOpenJiraIssue={onOpenJiraIssue}
+                        onUpdateTitle={(title) => onUpdateTask(task.id, { title })}
+                      />
                     </td>
                     <td className="px-3 py-2">
                       {isEditable ? (
@@ -162,10 +169,12 @@ export function ProjectTaskGroup({
 function EditableTaskTitle({
   editable,
   task,
+  onOpenJiraIssue,
   onUpdateTitle
 }: {
   editable: boolean;
   task: LocalTask;
+  onOpenJiraIssue: (url: string) => void | Promise<void>;
   onUpdateTitle: (title: string) => void | Promise<void>;
 }) {
   const [isEditing, setIsEditing] = useState(false);
@@ -229,7 +238,21 @@ function EditableTaskTitle({
       {task.jiraKey ? (
         <div className="mt-0.5 flex items-center gap-1 text-xs text-[#0052cc]">
           <Link2 size={12} />
-          {task.jiraKey}
+          {task.jiraUrl ? (
+            <a
+              className="font-medium hover:underline"
+              href={task.jiraUrl}
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                void onOpenJiraIssue(task.jiraUrl!);
+              }}
+            >
+              {task.jiraKey}
+            </a>
+          ) : (
+            task.jiraKey
+          )}
         </div>
       ) : null}
     </div>

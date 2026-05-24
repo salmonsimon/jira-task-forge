@@ -78,6 +78,27 @@ pub struct NewTask {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Category {
+    pub id: String,
+    pub category_type: String,
+    pub name: String,
+    pub source: String,
+    pub hidden: bool,
+    pub ignored: bool,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct JqlFavorite {
+    pub id: String,
+    pub name: String,
+    pub jql: String,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppSettings {
     pub theme_mode: String,

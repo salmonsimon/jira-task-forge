@@ -12,6 +12,7 @@ export function TaskFocusWindow({
   areas,
   readOnly: forceReadOnly = false,
   onUpdateDetails,
+  onOpenJiraIssue,
   onClose
 }: {
   task: LocalTask;
@@ -19,6 +20,7 @@ export function TaskFocusWindow({
   areas: string[];
   readOnly?: boolean;
   onUpdateDetails: (taskId: string, task: { project: string; area: string; priority: Priority }) => void | Promise<void>;
+  onOpenJiraIssue: (url: string) => void | Promise<void>;
   onClose: () => void;
 }) {
   const readOnly = forceReadOnly || isTaskReadOnly(task);
@@ -46,12 +48,34 @@ export function TaskFocusWindow({
               <Sparkles size={15} className="text-[#9f8fef]" />
               <span>{task.epic ?? `[${task.project}] ${task.area}`}</span>
               <span>/</span>
-              <span>{task.jiraKey ?? task.id}</span>
+              {task.jiraKey && task.jiraUrl ? (
+                <a
+                  className="font-medium text-[#85b8ff] hover:underline"
+                  href={task.jiraUrl}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    void onOpenJiraIssue(task.jiraUrl!);
+                  }}
+                >
+                  {task.jiraKey}
+                </a>
+              ) : (
+                <span>{task.jiraKey ?? task.id}</span>
+              )}
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="darkGhost" icon={<Link2 size={14} />}>
-                Copy link
-              </Button>
+              {task.jiraUrl ? (
+                <Button
+                  variant="darkGhost"
+                  icon={<Link2 size={14} />}
+                  onClick={() => {
+                    void onOpenJiraIssue(task.jiraUrl!);
+                  }}
+                >
+                  Open in Jira
+                </Button>
+              ) : null}
               <IconButton title="Close" onClick={onClose}>
                 <X size={18} />
               </IconButton>
@@ -157,6 +181,7 @@ export function TaskFocusWindow({
             projects={projects}
             areas={areas}
             readOnly={readOnly}
+            onOpenJiraIssue={onOpenJiraIssue}
             onUpdateDetails={onUpdateDetails}
           />
         </aside>
@@ -185,12 +210,14 @@ function FocusDetails({
   projects,
   areas,
   readOnly,
+  onOpenJiraIssue,
   onUpdateDetails
 }: {
   task: LocalTask;
   projects: string[];
   areas: string[];
   readOnly: boolean;
+  onOpenJiraIssue: (url: string) => void | Promise<void>;
   onUpdateDetails: (taskId: string, task: { project: string; area: string; priority: Priority }) => void | Promise<void>;
 }) {
   function updateDetails(nextDetails: Partial<Pick<LocalTask, "project" | "area" | "priority">>) {
@@ -261,6 +288,27 @@ function FocusDetails({
           }
         />
         <FocusDetailRow label="Epic" muted value={task.epic ?? "Generated from project and area"} />
+        {task.jiraKey ? (
+          <FocusDetailRow
+            label="Jira issue"
+            value={
+              task.jiraUrl ? (
+                <a
+                  className="font-medium text-[#85b8ff] hover:underline"
+                  href={task.jiraUrl}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    void onOpenJiraIssue(task.jiraUrl!);
+                  }}
+                >
+                  {task.jiraKey}
+                </a>
+              ) : (
+                task.jiraKey
+              )
+            }
+          />
+        ) : null}
         <FocusDetailRow label="Labels" muted value={task.area} />
         <FocusDetailRow label="Description" value={<DescriptionBadge status={task.descriptionStatus} dark />} />
         <FocusDetailRow label="Sync" value={<SyncBadge status={task.syncStatus} dark />} />

@@ -158,15 +158,15 @@ export function JiraPreflightDialog({
           ) : null}
 
           {hasMissingDescriptions ? (
-            <label className="flex items-start gap-3 rounded border border-[#7f5f01] bg-[#2f2606] px-3 py-3 text-sm text-[#dfe1e6]">
+            <label className="flex w-full min-w-0 items-center gap-3 rounded border border-[#7f5f01] bg-[#2f2606] px-3 py-3 text-sm text-[#dfe1e6]">
               <input
-                className="mt-0.5 h-4 w-4 accent-[#0c66e4]"
+                className="h-4 w-4 shrink-0 accent-[#0c66e4]"
                 checked={missingDescriptionsConfirmed}
                 disabled={isBusy}
                 onChange={(event) => setMissingDescriptionsConfirmed(event.target.checked)}
                 type="checkbox"
               />
-              <span>
+              <span className="min-w-0 flex-1 leading-relaxed">
                 I reviewed the missing descriptions and want to create these issues without placeholder descriptions.
               </span>
             </label>

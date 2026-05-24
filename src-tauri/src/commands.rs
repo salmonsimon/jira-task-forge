@@ -2,8 +2,8 @@ use std::process::Command;
 use tauri::State;
 
 use crate::models::{
-    AppSettings, JiraConnectionTestResult, JiraCreateIssuesResult, JqlSearchResponse, LocalTask,
-    NewTask, NewTray, Tray,
+    AppSettings, Category, JiraConnectionTestResult, JiraCreateIssuesResult, JqlFavorite,
+    JqlSearchResponse, LocalTask, NewTask, NewTray, Tray,
 };
 use crate::services::AppServices;
 
@@ -84,6 +84,69 @@ pub fn update_app_settings(
 ) -> Result<AppSettings, String> {
     services
         .update_app_settings(settings)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn list_categories(
+    services: State<'_, AppServices>,
+    category_type: Option<String>,
+) -> Result<Vec<Category>, String> {
+    services
+        .list_categories(category_type.as_deref())
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn create_category(
+    services: State<'_, AppServices>,
+    category_type: String,
+    name: String,
+) -> Result<Category, String> {
+    services
+        .create_category(&category_type, &name)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn update_category(
+    services: State<'_, AppServices>,
+    id: String,
+    name: Option<String>,
+    hidden: Option<bool>,
+) -> Result<Option<Category>, String> {
+    services
+        .update_category(&id, name.as_deref(), hidden)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn list_jql_favorites(services: State<'_, AppServices>) -> Result<Vec<JqlFavorite>, String> {
+    services
+        .list_jql_favorites()
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn create_jql_favorite(
+    services: State<'_, AppServices>,
+    name: String,
+    jql: String,
+) -> Result<JqlFavorite, String> {
+    services
+        .create_jql_favorite(&name, &jql)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn update_jql_favorite(
+    services: State<'_, AppServices>,
+    id: String,
+    name: Option<String>,
+    jql: Option<String>,
+) -> Result<Option<JqlFavorite>, String> {
+    services
+        .update_jql_favorite(&id, name.as_deref(), jql.as_deref())
         .map_err(|error| error.to_string())
 }
 
@@ -261,6 +324,12 @@ pub fn open_atlassian_api_tokens_page() -> Result<(), String> {
     open_external_url(ATLASSIAN_API_TOKENS_URL)
 }
 
+#[tauri::command]
+pub fn open_jira_issue_url(url: String) -> Result<(), String> {
+    let url = validate_jira_issue_url(&url)?;
+    open_external_url(&url)
+}
+
 fn open_external_url(url: &str) -> Result<(), String> {
     let mut command = platform_open_command(url)?;
     command
@@ -291,6 +360,44 @@ fn platform_open_command(url: &str) -> Result<Command, String> {
     Err("Opening external links is not supported on this platform.".to_string())
 }
 
+fn validate_jira_issue_url(url: &str) -> Result<String, String> {
+    let trimmed = url.trim();
+    if !trimmed.starts_with("https://") {
+        return Err("Jira issue URL must start with https://.".to_string());
+    }
+    if trimmed.chars().any(char::is_whitespace) {
+        return Err("Jira issue URL must not include spaces.".to_string());
+    }
+
+    let rest = &trimmed["https://".len()..];
+    let path_start = rest
+        .find('/')
+        .ok_or_else(|| "Jira issue URL must include a browse path.".to_string())?;
+    let host = &rest[..path_start];
+    let path = &rest[path_start..];
+
+    if !host.ends_with(".atlassian.net") {
+        return Err("Jira issue URL must use an Atlassian Cloud host.".to_string());
+    }
+    if !path.starts_with("/browse/") {
+        return Err("Jira issue URL must point to a Jira issue browse path.".to_string());
+    }
+    let issue_key = &path["/browse/".len()..];
+    if issue_key.is_empty()
+        || issue_key.contains('/')
+        || issue_key.contains('?')
+        || issue_key.contains('#')
+        || !issue_key.chars().all(|character| {
+            character.is_ascii_alphanumeric() || character == '-' || character == '_'
+        })
+        || !issue_key.contains('-')
+    {
+        return Err("Jira issue URL must end with a Jira issue key.".to_string());
+    }
+
+    Ok(trimmed.to_string())
+}
+
 fn derive_issue_type_from_area(area: &str) -> &'static str {
     if area.trim().eq_ignore_ascii_case("bug") {
         "Bug"
@@ -301,7 +408,9 @@ fn derive_issue_type_from_area(area: &str) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use super::{derive_issue_type_from_area, platform_open_command, save_csv_file};
+    use super::{
+        derive_issue_type_from_area, platform_open_command, save_csv_file, validate_jira_issue_url,
+    };
 
     #[test]
     fn derives_bug_issue_type_only_from_bug_area() {
@@ -353,5 +462,29 @@ mod tests {
             assert_eq!(command.get_program(), "xdg-open");
             assert!(command.get_args().any(|arg| arg == "https://example.test"));
         }
+    }
+
+    #[test]
+    fn validates_jira_issue_urls_before_opening() {
+        assert_eq!(
+            validate_jira_issue_url(" https://salmonsimondts.atlassian.net/browse/JTFTEST-1 ")
+                .expect("url validates"),
+            "https://salmonsimondts.atlassian.net/browse/JTFTEST-1"
+        );
+        assert_eq!(
+            validate_jira_issue_url("https://example.com/browse/JTFTEST-1")
+                .expect_err("non-atlassian host should fail"),
+            "Jira issue URL must use an Atlassian Cloud host."
+        );
+        assert_eq!(
+            validate_jira_issue_url("https://salmonsimondts.atlassian.net/jira/software")
+                .expect_err("non-issue path should fail"),
+            "Jira issue URL must point to a Jira issue browse path."
+        );
+        assert_eq!(
+            validate_jira_issue_url("https://salmonsimondts.atlassian.net/browse/JTFTEST-1?x=1")
+                .expect_err("query string should fail"),
+            "Jira issue URL must end with a Jira issue key."
+        );
     }
 }

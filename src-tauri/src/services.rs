@@ -6,10 +6,12 @@ use crate::db::DbResult;
 use crate::integrations::jira::{normalize_jira_site_url, JiraClient, JiraCredentials};
 use crate::jira_sync::JiraSyncRunner;
 use crate::models::{
-    AppSettings, JiraConnectionTestResult, JiraCreateIssuesResult, JqlSearchResponse, LocalTask,
-    NewTask, NewTray, Tray,
+    AppSettings, Category, JiraConnectionTestResult, JiraCreateIssuesResult, JqlFavorite,
+    JqlSearchResponse, LocalTask, NewTask, NewTray, Tray,
 };
-use crate::repositories::{SettingsRepository, TaskRepository, TrayRepository};
+use crate::repositories::{
+    CategoryRepository, JqlFavoriteRepository, SettingsRepository, TaskRepository, TrayRepository,
+};
 
 #[derive(Clone)]
 pub struct AppServices {
@@ -64,6 +66,46 @@ impl AppServices {
     pub fn update_app_settings(&self, settings: AppSettings) -> DbResult<AppSettings> {
         let connection = self.connection.lock().expect("database lock poisoned");
         SettingsRepository::new(&connection).update_app_settings(settings)
+    }
+
+    pub fn list_categories(&self, category_type: Option<&str>) -> DbResult<Vec<Category>> {
+        let connection = self.connection.lock().expect("database lock poisoned");
+        CategoryRepository::new(&connection).list(category_type)
+    }
+
+    pub fn create_category(&self, category_type: &str, name: &str) -> DbResult<Category> {
+        let connection = self.connection.lock().expect("database lock poisoned");
+        CategoryRepository::new(&connection).create(category_type, name)
+    }
+
+    pub fn update_category(
+        &self,
+        id: &str,
+        name: Option<&str>,
+        hidden: Option<bool>,
+    ) -> DbResult<Option<Category>> {
+        let connection = self.connection.lock().expect("database lock poisoned");
+        CategoryRepository::new(&connection).update(id, name, hidden)
+    }
+
+    pub fn list_jql_favorites(&self) -> DbResult<Vec<JqlFavorite>> {
+        let connection = self.connection.lock().expect("database lock poisoned");
+        JqlFavoriteRepository::new(&connection).list()
+    }
+
+    pub fn create_jql_favorite(&self, name: &str, jql: &str) -> DbResult<JqlFavorite> {
+        let connection = self.connection.lock().expect("database lock poisoned");
+        JqlFavoriteRepository::new(&connection).create(name, jql)
+    }
+
+    pub fn update_jql_favorite(
+        &self,
+        id: &str,
+        name: Option<&str>,
+        jql: Option<&str>,
+    ) -> DbResult<Option<JqlFavorite>> {
+        let connection = self.connection.lock().expect("database lock poisoned");
+        JqlFavoriteRepository::new(&connection).update(id, name, jql)
     }
 
     pub fn has_jira_api_token(&self) -> Result<bool, keyring::Error> {
