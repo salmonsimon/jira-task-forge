@@ -103,10 +103,13 @@ pub fn delete_jira_api_token(services: State<'_, AppServices>) -> Result<(), Str
 }
 
 #[tauri::command]
-pub fn test_jira_connection(
+pub async fn test_jira_connection(
     services: State<'_, AppServices>,
 ) -> Result<JiraConnectionTestResult, String> {
-    Ok(services.test_jira_connection())
+    let services = services.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || services.test_jira_connection())
+        .await
+        .map_err(|error| format!("Jira connection worker failed: {error}"))
 }
 
 #[tauri::command]

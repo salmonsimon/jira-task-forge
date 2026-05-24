@@ -144,23 +144,23 @@ button {
   background-color: #2b2f36 !important;
 }
 
-.jira-loading-orb,
-.jira-loading-ring,
-.jira-loading-icon,
+.app-loading-orb,
+.app-loading-ring,
+.app-loading-icon,
 .jira-loading-bar {
   transform: translateZ(0);
   will-change: transform, opacity;
 }
 
-.jira-loading-ring-fast {
+.app-loading-ring-fast {
   animation: jira-loading-spin 820ms linear infinite;
 }
 
-.jira-loading-ring-slow {
+.app-loading-ring-slow {
   animation: jira-loading-spin 1280ms linear infinite reverse;
 }
 
-.jira-loading-icon {
+.app-loading-icon {
   animation: jira-loading-spin 960ms linear infinite;
 }
 

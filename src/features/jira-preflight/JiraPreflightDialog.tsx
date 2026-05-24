@@ -1,6 +1,6 @@
 import { AlertTriangle, CheckCircle2, Info, Loader2, ShieldCheck, XCircle } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
-import { Button } from "../../components/ui";
+import { Button, LoadingOrb } from "../../components/ui";
 import type {
   JiraConnectionTestResult,
   JiraCreateIssuesResult,
@@ -108,7 +108,7 @@ export function JiraPreflightDialog({
           <div className="rounded border border-[#3b4454] bg-[#292c31] px-3 py-3">
             {preflight.credentialStatus === "checking" ? (
               <div className="flex min-h-[88px] flex-col items-center justify-center gap-3 text-center">
-                <Loader2 className="animate-spin text-[#85b8ff]" size={28} />
+                <LoadingOrb size="sm" />
                 <div>
                   <div className="text-sm font-semibold text-[#f4f5f7]">Credential check</div>
                   <p className="mt-1 text-sm text-[#b7bbc4]">{credentialMessage}</p>
@@ -206,11 +206,7 @@ function JiraCreateLoading({ taskCount }: { taskCount: number }) {
   return (
     <div className="w-full max-w-[420px] rounded border border-[#315a8a] bg-[#102d50] px-4 py-4 text-[#dfe1e6] shadow-2xl">
       <div className="flex items-center gap-4">
-        <div className="jira-loading-orb relative flex h-14 w-14 shrink-0 items-center justify-center rounded-full border border-[#579dff]/30">
-          <div className="jira-loading-ring jira-loading-ring-fast absolute h-12 w-12 rounded-full border-2 border-[#315a8a] border-t-[#85b8ff]" />
-          <div className="jira-loading-ring jira-loading-ring-slow absolute h-9 w-9 rounded-full border border-[#579dff]/20 border-b-[#b7d5ff]" />
-          <Loader2 className="jira-loading-icon text-[#85b8ff]" size={20} />
-        </div>
+        <LoadingOrb size="md" />
         <div className="min-w-0">
           <div className="text-sm font-semibold text-[#f4f5f7]">Creating in Jira</div>
           <p className="mt-1 text-sm text-[#b7d5ff]">

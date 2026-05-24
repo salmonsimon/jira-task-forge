@@ -430,5 +430,14 @@ Goals:
   attachment upload, or AI provider calls.
 - Add a real frontend test approach if the architecture pass finds UI behavior
   that should stop relying on manual QA only.
+- Include a focused security review of the surfaces that now matter most:
+  credential storage, Jira token reads, audit-log redaction, Tauri command
+  exposure, external URL opening, local file writes, and the `JTFTEST`/`DTS`
+  mutation boundary.
+- Before creating new UI controls from scratch, check existing repo UI modules
+  and installed libraries first. Current ready-to-use UI building blocks are the
+  local `src/components/ui/` primitives, Tailwind classes, and `lucide-react`
+  icons; add or build new controls only when the current options cannot cover a
+  critical interaction safely.
 - Consider coverage tooling only after the seams are clear; avoid chasing a
   percentage before the tests represent the product risks.
