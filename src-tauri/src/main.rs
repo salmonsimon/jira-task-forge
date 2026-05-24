@@ -5,6 +5,7 @@ mod jira_sync;
 mod models;
 mod repositories;
 mod services;
+mod sync_audit;
 
 use services::AppServices;
 use tauri::Manager;
