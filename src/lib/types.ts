@@ -116,3 +116,31 @@ export type JiraConnectionTestResult = {
   accountDisplayName?: string | null;
   accountEmail?: string | null;
 };
+
+export type JiraCreatedIssueResult = {
+  taskId?: string | null;
+  key: string;
+  url: string;
+  issueType: string;
+  summary: string;
+  epicKey?: string | null;
+};
+
+export type JiraFailedTaskResult = {
+  taskId: string;
+  title: string;
+  project: string;
+  area: string;
+  message: string;
+};
+
+export type JiraCreateIssuesResult = {
+  syncAttemptId: string;
+  status: "blocked" | "succeeded" | "partial" | "failed" | "running";
+  createdIssueCount: number;
+  skippedIssueCount: number;
+  failedIssueCount: number;
+  createdIssues: JiraCreatedIssueResult[];
+  failedTasks: JiraFailedTaskResult[];
+  messages: string[];
+};

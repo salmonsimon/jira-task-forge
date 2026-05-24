@@ -1,7 +1,13 @@
 import { AlertTriangle, CheckCircle2, Info, Loader2, ShieldCheck, XCircle } from "lucide-react";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Button } from "../../components/ui";
-import type { JiraConnectionTestResult, PreflightWarning, PreflightWarningCode, Tray } from "../../lib/types";
+import type {
+  JiraConnectionTestResult,
+  JiraCreateIssuesResult,
+  PreflightWarning,
+  PreflightWarningCode,
+  Tray
+} from "../../lib/types";
 import { cn } from "../../lib/utils";
 
 export type JiraCreatePreflight = {
@@ -15,14 +21,35 @@ export type JiraCreatePreflight = {
 
 export function JiraPreflightDialog({
   preflight,
-  onClose
+  isCreating,
+  isCreatingRecoveryTray,
+  createError,
+  createResult,
+  onClose,
+  onCreate,
+  onCreateRecoveryTray
 }: {
   preflight: JiraCreatePreflight;
+  isCreating: boolean;
+  isCreatingRecoveryTray: boolean;
+  createError: string | null;
+  createResult: JiraCreateIssuesResult | null;
   onClose: () => void;
+  onCreate: (options: { allowMissingDescriptions: boolean }) => void;
+  onCreateRecoveryTray: () => void;
 }) {
+  const [missingDescriptionsConfirmed, setMissingDescriptionsConfirmed] = useState(false);
   const blockingWarnings = preflight.warnings.filter((warning) => warning.severity === "blocking");
   const reviewWarnings = preflight.warnings.filter((warning) => warning.severity !== "blocking");
-  const canProceedLater = blockingWarnings.length === 0 && preflight.createableTaskCount > 0;
+  const hasMissingDescriptions = reviewWarnings.some((warning) => warning.code === "missing-description");
+  const needsMissingDescriptionConfirmation = hasMissingDescriptions && !missingDescriptionsConfirmed;
+  const isBusy = isCreating || isCreatingRecoveryTray;
+  const canCreate =
+    blockingWarnings.length === 0 &&
+    preflight.createableTaskCount > 0 &&
+    preflight.credentialStatus !== "checking" &&
+    !needsMissingDescriptionConfirmation &&
+    !isBusy;
   const credentialMessage =
     preflight.credentialStatus === "checking"
       ? "Checking Jira credentials..."
@@ -31,16 +58,25 @@ export function JiraPreflightDialog({
         : "Using saved Jira connection settings for this preflight.";
 
   useEffect(() => {
+    setMissingDescriptionsConfirmed(false);
+  }, [preflight.tray.id]);
+
+  useEffect(() => {
     function handleEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape" && !isBusy) onClose();
     }
 
     window.addEventListener("keydown", handleEscape);
     return () => window.removeEventListener("keydown", handleEscape);
-  }, [onClose]);
+  }, [isBusy, onClose]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#091e42]/60 px-4 backdrop-blur-[1px]" onMouseDown={onClose}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[#091e42]/60 px-4 backdrop-blur-[1px]"
+      onMouseDown={() => {
+        if (!isBusy) onClose();
+      }}
+    >
       <section
         className="flex max-h-[calc(100vh-72px)] w-full max-w-[620px] flex-col overflow-hidden rounded border border-[#3b4454] bg-[#202328] text-[#dfe1e6] shadow-2xl"
         onMouseDown={(event) => event.stopPropagation()}
@@ -52,7 +88,12 @@ export function JiraPreflightDialog({
               {preflight.tray.name} · {preflight.createableTaskCount} createable tasks
             </p>
           </div>
-          <button className="rounded p-1 text-[#aeb3bd] hover:bg-[#3a3d43] hover:text-[#f4f5f7]" onClick={onClose} type="button">
+          <button
+            className="rounded p-1 text-[#aeb3bd] hover:bg-[#3a3d43] hover:text-[#f4f5f7] disabled:pointer-events-none disabled:opacity-45"
+            disabled={isBusy}
+            onClick={onClose}
+            type="button"
+          >
             <XCircle size={18} />
           </button>
         </div>
@@ -110,21 +151,108 @@ export function JiraPreflightDialog({
             />
           ) : null}
 
-          <div className="rounded border border-[#315a8a] bg-[#102d50] px-3 py-3 text-sm text-[#85b8ff]">
-            Jira writes are still disabled in this slice. The next PR will use this preflight result before creating epics,
-            parent issues, sub-tasks, and attachments.
-          </div>
+          {hasMissingDescriptions ? (
+            <label className="flex items-start gap-3 rounded border border-[#7f5f01] bg-[#2f2606] px-3 py-3 text-sm text-[#dfe1e6]">
+              <input
+                className="mt-0.5 h-4 w-4 accent-[#0c66e4]"
+                checked={missingDescriptionsConfirmed}
+                disabled={isBusy}
+                onChange={(event) => setMissingDescriptionsConfirmed(event.target.checked)}
+                type="checkbox"
+              />
+              <span>
+                I reviewed the missing descriptions and want to create these issues without placeholder descriptions.
+              </span>
+            </label>
+          ) : null}
+
+          {isCreating ? (
+            <div className="flex items-center gap-3 rounded border border-[#315a8a] bg-[#102d50] px-3 py-3 text-sm text-[#85b8ff]">
+              <Loader2 className="animate-spin" size={18} />
+              Creating epics and parent issues in Jira...
+            </div>
+          ) : null}
+
+          {createResult ? (
+            <CreateResultSummary
+              result={createResult}
+              isCreatingRecoveryTray={isCreatingRecoveryTray}
+              onCreateRecoveryTray={onCreateRecoveryTray}
+            />
+          ) : null}
+          {createError ? (
+            <div className="rounded border border-[#ae2e24] bg-[#4f1d1a] px-3 py-3 text-sm text-[#ffb8ad]">{createError}</div>
+          ) : null}
         </div>
 
         <div className="shrink-0 flex justify-end gap-2 border-t border-[#454852] px-5 py-4">
-          <Button variant="darkSecondary" onClick={onClose}>
+          <Button disabled={isBusy} variant="darkSecondary" onClick={onClose}>
             Close
           </Button>
-          <Button disabled variant={canProceedLater ? "darkPrimary" : "darkSecondary"}>
-            Create in Jira later
+          <Button
+            disabled={!canCreate}
+            icon={isCreating ? <Loader2 className="animate-spin" size={16} /> : undefined}
+            variant={canCreate ? "darkPrimary" : "darkSecondary"}
+            onClick={() => onCreate({ allowMissingDescriptions: missingDescriptionsConfirmed })}
+          >
+            Create in Jira
           </Button>
         </div>
       </section>
+    </div>
+  );
+}
+
+function CreateResultSummary({
+  result,
+  isCreatingRecoveryTray,
+  onCreateRecoveryTray
+}: {
+  result: JiraCreateIssuesResult;
+  isCreatingRecoveryTray: boolean;
+  onCreateRecoveryTray: () => void;
+}) {
+  const tone =
+    result.status === "succeeded"
+      ? "success"
+      : result.status === "partial"
+        ? "warning"
+        : "danger";
+
+  return (
+    <div
+      className={cn(
+        "rounded border px-3 py-3 text-sm",
+        tone === "success" && "border-[#216e4e] bg-[#143c2b] text-[#7ee2a8]",
+        tone === "warning" && "border-[#7f5f01] bg-[#3f3102] text-[#f5cd47]",
+        tone === "danger" && "border-[#ae2e24] bg-[#4f1d1a] text-[#ffb8ad]"
+      )}
+    >
+      <div className="font-semibold">
+        {result.status === "succeeded" ? "Jira creation completed" : result.status === "partial" ? "Jira creation partially completed" : "Jira creation stopped"}
+      </div>
+      <div className="mt-1 text-[#dfe1e6]">
+        {result.createdIssueCount} created · {result.failedIssueCount} failed · {result.skippedIssueCount} skipped
+      </div>
+      {result.messages.length ? (
+        <ul className="mt-2 space-y-1 text-[#dfe1e6]">
+          {result.messages.map((message) => (
+            <li key={message}>{message}</li>
+          ))}
+        </ul>
+      ) : null}
+      {result.failedTasks.length ? (
+        <div className="mt-3">
+          <Button
+            disabled={isCreatingRecoveryTray}
+            icon={isCreatingRecoveryTray ? <Loader2 className="animate-spin" size={16} /> : undefined}
+            variant="darkSecondary"
+            onClick={onCreateRecoveryTray}
+          >
+            Move failed tasks to recovery tray
+          </Button>
+        </div>
+      ) : null}
     </div>
   );
 }

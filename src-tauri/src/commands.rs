@@ -2,7 +2,8 @@ use std::process::Command;
 use tauri::State;
 
 use crate::models::{
-    AppSettings, JiraConnectionTestResult, JqlSearchResponse, LocalTask, NewTask, NewTray, Tray,
+    AppSettings, JiraConnectionTestResult, JiraCreateIssuesResult, JqlSearchResponse, LocalTask,
+    NewTask, NewTray, Tray,
 };
 use crate::services::AppServices;
 
@@ -118,6 +119,15 @@ pub fn run_jql_query(
 }
 
 #[tauri::command]
+pub fn create_jira_parent_issues(
+    services: State<'_, AppServices>,
+    tray_id: String,
+    allow_missing_descriptions: bool,
+) -> Result<JiraCreateIssuesResult, String> {
+    services.create_jira_parent_issues(&tray_id, allow_missing_descriptions)
+}
+
+#[tauri::command]
 pub fn create_task(
     services: State<'_, AppServices>,
     tray_id: String,
@@ -189,6 +199,15 @@ pub fn mark_tasks_csv_exported(
     services
         .mark_tasks_csv_exported(&task_ids)
         .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn create_recovery_tray_from_tasks(
+    services: State<'_, AppServices>,
+    source_tray_id: String,
+    task_ids: Vec<String>,
+) -> Result<Tray, String> {
+    services.create_recovery_tray_from_tasks(&source_tray_id, &task_ids)
 }
 
 #[tauri::command]

@@ -11,6 +11,8 @@ import { TraysView } from "./features/trays";
 import { mockAppDataAdapter } from "./lib/adapters";
 import {
   archivePersistedTray,
+  createPersistedJiraParentIssues,
+  createPersistedRecoveryTrayFromTasks,
   createPersistedTask,
   createPersistedTray,
   deletePersistedJiraApiToken,
@@ -41,7 +43,16 @@ import {
   exportLocalTasksToCsv,
   isEligibleForCsvExport
 } from "./lib/domain";
-import type { AppSettings, JiraConnectionTestResult, LocalTask, MainTab, Panel, Priority, Tray } from "./lib/types";
+import type {
+  AppSettings,
+  JiraConnectionTestResult,
+  JiraCreateIssuesResult,
+  LocalTask,
+  MainTab,
+  Panel,
+  Priority,
+  Tray
+} from "./lib/types";
 import { cn } from "./lib/utils";
 
 const appData = mockAppDataAdapter;
@@ -86,6 +97,10 @@ export default function App() {
   const [isTestingJiraConnection, setIsTestingJiraConnection] = useState(false);
   const [isRunningJiraPreflight, setIsRunningJiraPreflight] = useState(false);
   const [jiraCreatePreflight, setJiraCreatePreflight] = useState<JiraCreatePreflight | null>(null);
+  const [isCreatingJiraIssues, setIsCreatingJiraIssues] = useState(false);
+  const [isCreatingRecoveryTray, setIsCreatingRecoveryTray] = useState(false);
+  const [jiraCreateResult, setJiraCreateResult] = useState<JiraCreateIssuesResult | null>(null);
+  const [jiraCreateError, setJiraCreateError] = useState<string | null>(null);
   const lastSelectedTrayId = useRef<string | null>(null);
 
   const selectedTray = useMemo(
@@ -571,9 +586,11 @@ export default function App() {
 
   async function createInJiraPreflight(tray: Tray) {
     setIsRunningJiraPreflight(true);
+    setJiraCreateResult(null);
+    setJiraCreateError(null);
 
     const warnings = classifyTrayPreflightWarnings(tray.tasks);
-    const createableTaskCount = tray.tasks.filter((task) => task.syncStatus !== "Created").length;
+    const createableTaskCount = tray.tasks.filter((task) => task.syncStatus !== "Created" && task.issueType !== "Sub-task").length;
     const creationProjectKey = appSettings.jiraCreationProjectKey.trim().toUpperCase();
     const creationTarget = `Jira project ${creationProjectKey || "not set"}`;
 
@@ -652,6 +669,61 @@ export default function App() {
           ]
         };
       });
+    }
+  }
+
+  async function createJiraParentIssues(options: { allowMissingDescriptions: boolean }) {
+    if (!jiraCreatePreflight || !usesTauriPersistence) return;
+
+    setIsCreatingJiraIssues(true);
+    setJiraCreateResult(null);
+    setJiraCreateError(null);
+
+    try {
+      const result = await createPersistedJiraParentIssues(
+        jiraCreatePreflight.tray.id,
+        options.allowMissingDescriptions
+      );
+      setJiraCreateResult(result);
+      const persistedTrays = await listPersistedTrays();
+      setTrays(persistedTrays);
+      setSelectedTrayId((currentTrayId) =>
+        currentTrayId && persistedTrays.some((tray) => tray.id === currentTrayId)
+          ? currentTrayId
+          : jiraCreatePreflight.tray.id
+      );
+      setSelectedTaskId((currentTaskId) =>
+        currentTaskId && persistedTrays.some((tray) => tray.tasks.some((task) => task.id === currentTaskId))
+          ? currentTaskId
+          : null
+      );
+    } catch (error) {
+      setJiraCreateError(error instanceof Error ? error.message : String(error || "Could not create Jira issues."));
+    } finally {
+      setIsCreatingJiraIssues(false);
+    }
+  }
+
+  async function createRecoveryTrayFromJiraResult() {
+    if (!jiraCreatePreflight || !jiraCreateResult || jiraCreateResult.failedTasks.length === 0) return;
+
+    setIsCreatingRecoveryTray(true);
+    setJiraCreateError(null);
+
+    try {
+      const recoveryTray = await createPersistedRecoveryTrayFromTasks(
+        jiraCreatePreflight.tray.id,
+        jiraCreateResult.failedTasks.map((task) => task.taskId)
+      );
+      const persistedTrays = await listPersistedTrays();
+      setTrays(persistedTrays);
+      setSelectedTrayId(recoveryTray.id);
+      setSelectedTaskId(persistedTrays.find((tray) => tray.id === recoveryTray.id)?.tasks[0]?.id ?? null);
+      setJiraCreatePreflight(null);
+    } catch (error) {
+      setJiraCreateError(error instanceof Error ? error.message : String(error || "Could not create recovery tray."));
+    } finally {
+      setIsCreatingRecoveryTray(false);
     }
   }
 
@@ -771,7 +843,18 @@ export default function App() {
             onConfirm={confirmDeleteTray}
           />
         ) : null}
-        {jiraCreatePreflight ? <JiraPreflightDialog preflight={jiraCreatePreflight} onClose={() => setJiraCreatePreflight(null)} /> : null}
+        {jiraCreatePreflight ? (
+          <JiraPreflightDialog
+            preflight={jiraCreatePreflight}
+            isCreating={isCreatingJiraIssues}
+            createError={jiraCreateError}
+            createResult={jiraCreateResult}
+            isCreatingRecoveryTray={isCreatingRecoveryTray}
+            onCreate={createJiraParentIssues}
+            onCreateRecoveryTray={createRecoveryTrayFromJiraResult}
+            onClose={() => setJiraCreatePreflight(null)}
+          />
+        ) : null}
       </div>
     </div>
   );

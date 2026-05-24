@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   AppSettings,
   IssueType,
+  JiraCreateIssuesResult,
   JiraConnectionTestResult,
   JqlQueryResult,
   LocalTask,
@@ -32,6 +33,7 @@ type BackendTask = {
   description_status: "Ready" | "Missing" | "Draft";
   content_language: "Spanish" | "English";
   jira_key: string | null;
+  jira_url: string | null;
   epic_key: string | null;
   task_order: number;
   created_at: string;
@@ -111,6 +113,16 @@ export async function runPersistedJqlQuery(jql: string, maxResults = 50): Promis
   return invoke<JqlQueryResult>("run_jql_query", { jql, maxResults });
 }
 
+export async function createPersistedJiraParentIssues(
+  trayId: string,
+  allowMissingDescriptions: boolean
+): Promise<JiraCreateIssuesResult> {
+  return invoke<JiraCreateIssuesResult>("create_jira_parent_issues", {
+    trayId,
+    allowMissingDescriptions
+  });
+}
+
 export async function openPersistedAtlassianApiTokensPage(): Promise<void> {
   await invoke("open_atlassian_api_tokens_page");
 }
@@ -155,6 +167,11 @@ export async function updatePersistedTaskDetails(
 export async function markPersistedTasksCsvExported(taskIds: string[]): Promise<LocalTask[]> {
   const tasks = await invoke<BackendTask[]>("mark_tasks_csv_exported", { taskIds });
   return tasks.map(mapTask);
+}
+
+export async function createPersistedRecoveryTrayFromTasks(sourceTrayId: string, taskIds: string[]): Promise<Tray> {
+  const tray = await invoke<BackendTray>("create_recovery_tray_from_tasks", { sourceTrayId, taskIds });
+  return mapTray(tray, []);
 }
 
 export async function saveCsvFile(path: string, contents: string): Promise<void> {

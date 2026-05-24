@@ -4,12 +4,12 @@ This document is the default execution path for the repo. It is meant to support
 
 ## Current Checkpoint
 
-Date: 2026-05-22
+Date: 2026-05-23
 
 Main is up to date at:
 
 ```text
-af8847a Add read-only Jira JQL query foundation
+fdf710e Accept Jira sync ADRs for first write slice
 ```
 
 Merged since the first in-memory tray interactions:
@@ -29,6 +29,7 @@ Merged since the first in-memory tray interactions:
 - PR #19: added the Jira creation project target setting.
 - PR #20: updated the roadmap and handoff to the PR #19 checkpoint.
 - PR #21: added a reusable backend Jira client and read-only JQL query command wired to the JQL panel.
+- PR #25: accepted ADRs 0003-0008 for the first real Jira write slice.
 
 Open for HITL review:
 
@@ -41,7 +42,7 @@ Current validation:
 - `npm install` may be needed after pulling because `@tauri-apps/plugin-dialog` was added.
 - `npm run build` passes on `main` after dependencies are installed.
 - `cargo fmt -- --check` passes after installing Rust/Cargo with rustup.
-- `cargo test` is blocked in the current WSL environment by missing Linux system packages for Tauri/keyring (`pkg-config` / `libdbus-1-dev`); sudo requires interactive authentication here.
+- `cargo test` passes in the current WSL checkout.
 - Playwright screenshots are blocked in the current WSL environment by missing Chromium runtime library `libnspr4.so`.
 - The prototype runs with `npm run dev` at:
 
@@ -92,17 +93,18 @@ Human QA to run before choosing the next implementation slice:
 - Test Jira connection from Settings after entering a real Jira site, email, and token.
 - Run a direct JQL query from the JQL tab and confirm Jira results populate the table.
 - Open `Create in Jira` preflight and confirm missing credentials, missing creation project, and missing task fields produce blocking warnings.
-- After the API create path works, test that uploading tasks from the exported CSV still works as a fallback. This is intentionally lower priority than API creation.
+- Against `JTFTEST`, confirm preflight can create missing epics, create parent Story/Bug issues, persist Jira keys locally, and move failed tasks to a recovery tray without duplicating them.
+- After the API create path has live QA, test that uploading tasks from the exported CSV still works as a fallback. This is intentionally lower priority than API creation.
 
 Expected limitations right now:
 
-- `Create in Jira` is preflight-only; it does not yet create Jira issues through the API.
+- `Create in Jira` creates required epics and parent Story/Bug issues only. Sub-tasks and attachments are intentionally still out of scope.
 - `Export CSV` is wired and opens a native save dialog.
 - SQLite persistence exists for trays, local tasks, and non-secret app settings.
 - Jira API token storage exists through the OS credential store.
 - Jira connection testing exists through `/rest/api/3/myself`.
 - Read-only JQL queries are wired through Jira Cloud REST API v3.
-- Categories, JQL favorites persistence, attachments, audit logs, backup/import, AI, and real Jira write sync artifacts are not fully implemented.
+- Categories, JQL favorites persistence, attachments, audit log UI, backup/import, AI, sub-task creation, and attachment upload are not fully implemented.
 - Task detail `Details` supports editable project, area, and priority for editable non-archived tasks. Auto-generated epic and labels remain visible but muted/read-only.
 
 Near-term decided follow-ups:
@@ -114,12 +116,9 @@ Near-term decided follow-ups:
 
 Recommended next implementation:
 
-- After HITL architecture review, the next implementation slice should be Jira
-  issue creation behind preflight, idempotency checks, and audit logs. Its scope
-  is metadata preflight, epic search/create, parent Story/Bug creation, local
-  Jira link persistence, remote correlation markers, audit events, and partial
-  recovery. Sub-tasks and attachments stay out of this first write slice.
-- If QA reveals product/UI friction, do a small frontend-only fix branch before integration writes.
+- Live QA the Jira write slice in `JTFTEST`; fix any metadata or payload mismatch before adding more write surfaces.
+- Next write slices should stay narrow: sub-task creation first, attachment upload later.
+- If QA reveals product/UI friction, do a small frontend-only fix branch before expanding integration writes.
 
 ## Working Model
 

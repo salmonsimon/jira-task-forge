@@ -4,8 +4,10 @@ use rusqlite::Connection;
 
 use crate::db::DbResult;
 use crate::integrations::jira::{normalize_jira_site_url, JiraClient, JiraCredentials};
+use crate::jira_sync::JiraSyncRunner;
 use crate::models::{
-    AppSettings, JiraConnectionTestResult, JqlSearchResponse, LocalTask, NewTask, NewTray, Tray,
+    AppSettings, JiraConnectionTestResult, JiraCreateIssuesResult, JqlSearchResponse, LocalTask,
+    NewTask, NewTray, Tray,
 };
 use crate::repositories::{SettingsRepository, TaskRepository, TrayRepository};
 
@@ -112,6 +114,28 @@ impl AppServices {
         self.jira_client()?.search_jql(jql, max_results)
     }
 
+    pub fn create_jira_parent_issues(
+        &self,
+        tray_id: &str,
+        allow_missing_descriptions: bool,
+    ) -> Result<JiraCreateIssuesResult, String> {
+        let settings = self
+            .get_app_settings()
+            .map_err(|error| format!("Could not load Jira settings: {error}"))?;
+        let creation_project_key = settings
+            .jira_creation_project_key
+            .trim()
+            .to_ascii_uppercase();
+        if creation_project_key.is_empty() {
+            return Err("Jira creation project key is required.".to_string());
+        }
+
+        let mut client = self.jira_client()?;
+        let connection = self.connection.lock().expect("database lock poisoned");
+        JiraSyncRunner::new(&connection, &mut client, creation_project_key)
+            .create_parent_issues_from_tray(tray_id, allow_missing_descriptions)
+    }
+
     pub fn create_task(&self, new_task: NewTask) -> DbResult<LocalTask> {
         let connection = self.connection.lock().expect("database lock poisoned");
         TaskRepository::new(&connection).create(new_task)
@@ -144,6 +168,33 @@ impl AppServices {
     pub fn mark_tasks_csv_exported(&self, task_ids: &[String]) -> DbResult<Vec<LocalTask>> {
         let connection = self.connection.lock().expect("database lock poisoned");
         TaskRepository::new(&connection).mark_csv_exported(task_ids)
+    }
+
+    pub fn create_recovery_tray_from_tasks(
+        &self,
+        source_tray_id: &str,
+        task_ids: &[String],
+    ) -> Result<Tray, String> {
+        if task_ids.is_empty() {
+            return Err("No failed tasks were selected for recovery.".to_string());
+        }
+
+        let connection = self.connection.lock().expect("database lock poisoned");
+        let tray_repository = TrayRepository::new(&connection);
+        let source_tray = tray_repository
+            .find_by_id(source_tray_id)
+            .map_err(|error| error.to_string())?
+            .ok_or_else(|| "Source tray not found.".to_string())?;
+        let recovery_tray = tray_repository
+            .create(NewTray {
+                name: format!("Recovery - {}", source_tray.name),
+            })
+            .map_err(|error| error.to_string())?;
+        TaskRepository::new(&connection)
+            .move_tasks_to_tray(task_ids, &recovery_tray.id)
+            .map_err(|error| error.to_string())?;
+
+        Ok(recovery_tray)
     }
 
     fn jira_client(&self) -> Result<JiraClient, String> {
