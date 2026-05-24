@@ -14,17 +14,38 @@ use crate::models::{
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
 const JQL_SEARCH_MAX_RESULTS_CAP: usize = 100;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct JiraCredentials {
     pub site_url: String,
     pub account_email: String,
     pub api_token: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+impl std::fmt::Debug for JiraCredentials {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("JiraCredentials")
+            .field("site_url", &self.site_url)
+            .field("account_email", &self.account_email)
+            .field("api_token", &"<redacted>")
+            .finish()
+    }
+}
+
+#[derive(Clone, PartialEq, Eq)]
 pub struct JiraClient {
     site_url: String,
     authorization_header: String,
+}
+
+impl std::fmt::Debug for JiraClient {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("JiraClient")
+            .field("site_url", &self.site_url)
+            .field("authorization_header", &"<redacted>")
+            .finish()
+    }
 }
 
 impl JiraClient {
@@ -441,7 +462,10 @@ struct JiraErrorResponse {
 
 #[cfg(test)]
 mod tests {
-    use super::{encode_path_segment, jira_error_message, normalize_jira_site_url};
+    use super::{
+        encode_path_segment, jira_error_message, normalize_jira_site_url, JiraClient,
+        JiraCredentials,
+    };
 
     #[test]
     fn normalizes_jira_cloud_urls_to_site_root() {
@@ -483,5 +507,39 @@ mod tests {
         assert_eq!(encode_path_segment("JTFTEST"), "JTFTEST");
         assert_eq!(encode_path_segment("issue type"), "issue%20type");
         assert_eq!(encode_path_segment("A/B"), "A%2FB");
+    }
+
+    #[test]
+    fn redacts_jira_credentials_debug_output() {
+        let credentials = JiraCredentials {
+            site_url: "https://example.atlassian.net".to_string(),
+            account_email: "saimon@example.com".to_string(),
+            api_token: "secret-api-token".to_string(),
+        };
+
+        let debug_output = format!("{credentials:?}");
+
+        assert!(debug_output.contains("JiraCredentials"));
+        assert!(debug_output.contains("https://example.atlassian.net"));
+        assert!(debug_output.contains("saimon@example.com"));
+        assert!(debug_output.contains("<redacted>"));
+        assert!(!debug_output.contains("secret-api-token"));
+    }
+
+    #[test]
+    fn redacts_jira_client_debug_output() {
+        let client = JiraClient::new(JiraCredentials {
+            site_url: "https://example.atlassian.net".to_string(),
+            account_email: "saimon@example.com".to_string(),
+            api_token: "secret-api-token".to_string(),
+        });
+
+        let debug_output = format!("{client:?}");
+
+        assert!(debug_output.contains("JiraClient"));
+        assert!(debug_output.contains("https://example.atlassian.net"));
+        assert!(debug_output.contains("<redacted>"));
+        assert!(!debug_output.contains("secret-api-token"));
+        assert!(!debug_output.contains("Basic "));
     }
 }
