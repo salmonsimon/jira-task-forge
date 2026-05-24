@@ -78,9 +78,15 @@ export function JiraPreflightDialog({
       }}
     >
       <section
-        className="flex max-h-[calc(100vh-72px)] w-full max-w-[620px] flex-col overflow-hidden rounded border border-[#3b4454] bg-[#202328] text-[#dfe1e6] shadow-2xl"
+        className="relative flex max-h-[calc(100vh-72px)] w-full max-w-[620px] flex-col overflow-hidden rounded border border-[#3b4454] bg-[#202328] text-[#dfe1e6] shadow-2xl"
         onMouseDown={(event) => event.stopPropagation()}
       >
+        {isCreating ? (
+          <div className="absolute inset-0 z-20 flex items-center justify-center bg-[#202328]/95 px-5 backdrop-blur-[2px]">
+            <JiraCreateLoading taskCount={preflight.createableTaskCount} />
+          </div>
+        ) : null}
+
         <div className="shrink-0 flex items-start justify-between border-b border-[#454852] px-5 py-4">
           <div>
             <h2 className="text-base font-semibold text-[#f4f5f7]">Jira create preflight</h2>
@@ -166,8 +172,6 @@ export function JiraPreflightDialog({
             </label>
           ) : null}
 
-          {isCreating ? <JiraCreateLoading taskCount={preflight.createableTaskCount} /> : null}
-
           {createResult ? (
             <CreateResultSummary
               result={createResult}
@@ -200,7 +204,7 @@ export function JiraPreflightDialog({
 
 function JiraCreateLoading({ taskCount }: { taskCount: number }) {
   return (
-    <div className="rounded border border-[#315a8a] bg-[#102d50] px-4 py-4 text-[#dfe1e6]">
+    <div className="w-full max-w-[420px] rounded border border-[#315a8a] bg-[#102d50] px-4 py-4 text-[#dfe1e6] shadow-2xl">
       <div className="flex items-center gap-4">
         <div className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-full border border-[#579dff]/30">
           <div className="absolute h-12 w-12 animate-spin rounded-full border-2 border-[#315a8a] border-t-[#85b8ff]" />

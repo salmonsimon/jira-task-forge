@@ -686,6 +686,7 @@ export default function App() {
     let nextCreateResult: JiraCreateIssuesResult | null = null;
     let nextCreateError: string | null = null;
     await waitForNextPaint();
+    await waitForMinimumElapsed(loadingStartedAt, 1000);
 
     try {
       const result = await createPersistedJiraParentIssues(
