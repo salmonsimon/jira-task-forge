@@ -42,7 +42,13 @@ Current validation:
 - `npm install` may be needed after pulling because `@tauri-apps/plugin-dialog` was added.
 - `npm run build` passes on `main` after dependencies are installed.
 - `cargo fmt -- --check` passes after installing Rust/Cargo with rustup.
-- `cargo test` passes in the current WSL checkout.
+- `cargo test` passes in the current WSL checkout. As of the PR #26 follow-up
+  work, the Rust suite has 24 tests covering SQLite schema/repositories,
+  settings defaults, Jira URL/error helpers, and the guarded Jira parent issue
+  sync path.
+- There is no measured coverage report yet.
+- There is no automated frontend test runner yet. Frontend validation is
+  currently TypeScript/Vite build plus manual/live QA.
 - Playwright screenshots are blocked in the current WSL environment by missing Chromium runtime library `libnspr4.so`.
 - The prototype runs with `npm run dev` at:
 
@@ -117,6 +123,10 @@ Near-term decided follow-ups:
 Recommended next implementation:
 
 - Live QA the Jira write slice in `JTFTEST`; fix any metadata or payload mismatch before adding more write surfaces.
+- After PR #26 closes, run an `improve-codebase-architecture` pass before
+  adding the next Jira write slice. The goal is to refactor the now-proven Jira
+  creation flow into deeper, more testable modules and identify the next test
+  seams while the integration behavior is still fresh.
 - Next write slices should stay narrow: sub-task creation first, attachment upload later.
 - If QA reveals product/UI friction, do a small frontend-only fix branch before expanding integration writes.
 
@@ -402,3 +412,23 @@ Reason:
 - Frontend/domain: created tasks are read-only, delete states are allowed only for pending/failed/exported tasks, tray completion derives from created tasks, duplicated tasks exclude sync status/Jira links/audit logs, and preflight warnings are classified correctly.
 - Rust services/repositories: path canonicalization stays under app data, attachment copy/delete lifecycle is deterministic, backups exclude secrets, imports merge without wiping local data, CSV strips attachments, sync status transitions are valid, Jira payload generation is stable, and retries do not create duplicate Jira issues.
 - Release: migration review checklist, installer/update data-preservation check, branch protection expectations, and Tauri security config review before real integrations ship.
+
+## Post-PR Architecture And Test Deepening
+
+After the guarded Jira parent issue creation slice is merged, pause feature
+expansion for one stabilization branch using the `improve-codebase-architecture`
+skill.
+
+Goals:
+
+- Review the Jira sync runner, Jira client, Tauri command layer, persistence
+  repositories, and preflight UI for shallow modules or overloaded interfaces.
+- Preserve the accepted ADR 0005 safety model while improving locality around
+  Jira payload generation, post-create updates, audit events, and recovery
+  outcomes.
+- Decide where the next useful test seams live before adding sub-task creation,
+  attachment upload, or AI provider calls.
+- Add a real frontend test approach if the architecture pass finds UI behavior
+  that should stop relying on manual QA only.
+- Consider coverage tooling only after the seams are clear; avoid chasing a
+  percentage before the tests represent the product risks.

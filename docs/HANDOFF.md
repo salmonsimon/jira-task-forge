@@ -113,6 +113,11 @@ Still pending:
 - Attachments, backup/import, audit log UI, and AI integrations.
 - Full native QA in an environment with the Linux system dependencies needed by Tauri/keyring.
 - CSV upload-to-Jira fallback validation after the API create flow works.
+- After the guarded parent issue creation slice closes, run an
+  `improve-codebase-architecture` stabilization pass before expanding into
+  sub-task creation, attachment upload, or AI writes. Current automated test
+  coverage is strongest in Rust persistence/Jira sync behavior and weakest in
+  frontend interaction behavior.
 
 ## Open Grill Area
 
@@ -130,6 +135,9 @@ Recommended stack to discuss next:
 - Run native QA for tray lifecycle, CSV export, settings, token storage, Jira connection test, and create preflight.
 - Run native QA for direct JQL queries from the JQL tab.
 - Run live QA for Jira issue creation against `JTFTEST`: missing description confirmation, metadata preflight, epic reuse/create, parent Story/Bug creation, partial failure, and recovery tray movement.
+- Run an `improve-codebase-architecture` pass after PR #26 merges to make the
+  proven Jira creation flow more testable and AI-navigable before adding more
+  integration surface.
 - Keep sub-tasks and attachments for later slices.
 - After API creation works, verify that Jira CSV upload still works from exported files.
 
