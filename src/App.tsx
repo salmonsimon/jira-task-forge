@@ -461,8 +461,13 @@ export default function App() {
   }
 
   async function testJiraConnection() {
-    setIsTestingJiraConnection(true);
-    setJiraConnectionResult(null);
+    flushSync(() => {
+      setIsTestingJiraConnection(true);
+      setJiraConnectionResult(null);
+    });
+    const loadingStartedAt = performance.now();
+    await waitForNextPaint();
+    await delay(500);
 
     try {
       const result = await testPersistedJiraConnection();
@@ -473,6 +478,7 @@ export default function App() {
         message: error instanceof Error ? error.message : "Could not test Jira connection."
       });
     } finally {
+      await waitForMinimumElapsed(loadingStartedAt, 800);
       setIsTestingJiraConnection(false);
     }
   }

@@ -6,22 +6,28 @@ export function LoadingOrb({
   size = "md"
 }: {
   className?: string;
-  size?: "sm" | "md";
+  size?: "xs" | "sm" | "md";
 }) {
-  const dimensions =
-    size === "sm"
-      ? {
-          container: "h-10 w-10",
-          outer: "h-9 w-9",
-          inner: "h-6 w-6",
-          icon: 16
-        }
-      : {
-          container: "h-14 w-14",
-          outer: "h-12 w-12",
-          inner: "h-9 w-9",
-          icon: 20
-        };
+  const dimensions = {
+    xs: {
+      container: "h-5 w-5",
+      outer: "h-4 w-4",
+      inner: "h-3 w-3",
+      icon: 9
+    },
+    sm: {
+      container: "h-10 w-10",
+      outer: "h-9 w-9",
+      inner: "h-6 w-6",
+      icon: 16
+    },
+    md: {
+      container: "h-14 w-14",
+      outer: "h-12 w-12",
+      inner: "h-9 w-9",
+      icon: 20
+    }
+  }[size];
 
   return (
     <div
