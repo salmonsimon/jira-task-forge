@@ -166,12 +166,7 @@ export function JiraPreflightDialog({
             </label>
           ) : null}
 
-          {isCreating ? (
-            <div className="flex items-center gap-3 rounded border border-[#315a8a] bg-[#102d50] px-3 py-3 text-sm text-[#85b8ff]">
-              <Loader2 className="animate-spin" size={18} />
-              Creating epics and parent issues in Jira...
-            </div>
-          ) : null}
+          {isCreating ? <JiraCreateLoading taskCount={preflight.createableTaskCount} /> : null}
 
           {createResult ? (
             <CreateResultSummary
@@ -192,13 +187,35 @@ export function JiraPreflightDialog({
           <Button
             disabled={!canCreate}
             icon={isCreating ? <Loader2 className="animate-spin" size={16} /> : undefined}
-            variant={canCreate ? "darkPrimary" : "darkSecondary"}
+            variant={canCreate || isCreating ? "darkPrimary" : "darkSecondary"}
             onClick={() => onCreate({ allowMissingDescriptions: missingDescriptionsConfirmed })}
           >
-            Create in Jira
+            {isCreating ? "Creating..." : "Create in Jira"}
           </Button>
         </div>
       </section>
+    </div>
+  );
+}
+
+function JiraCreateLoading({ taskCount }: { taskCount: number }) {
+  return (
+    <div className="rounded border border-[#315a8a] bg-[#102d50] px-4 py-4 text-[#dfe1e6]">
+      <div className="flex items-center gap-4">
+        <div className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-full border border-[#579dff]/30">
+          <div className="absolute h-12 w-12 animate-spin rounded-full border-2 border-[#315a8a] border-t-[#85b8ff]" />
+          <Loader2 className="animate-spin text-[#85b8ff]" size={20} />
+        </div>
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-[#f4f5f7]">Creating in Jira</div>
+          <p className="mt-1 text-sm text-[#b7d5ff]">
+            Preparing epics and {taskCount} {taskCount === 1 ? "parent issue" : "parent issues"}.
+          </p>
+        </div>
+      </div>
+      <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-[#0b2442]">
+        <div className="h-full w-1/2 animate-pulse rounded-full bg-[#579dff]" />
+      </div>
     </div>
   );
 }

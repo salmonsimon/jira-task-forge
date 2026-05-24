@@ -588,6 +588,8 @@ export default function App() {
     setIsRunningJiraPreflight(true);
     setJiraCreateResult(null);
     setJiraCreateError(null);
+    const loadingStartedAt = performance.now();
+    await waitForNextPaint();
 
     const warnings = classifyTrayPreflightWarnings(tray.tasks);
     const createableTaskCount = tray.tasks.filter((task) => task.syncStatus !== "Created" && task.issueType !== "Sub-task").length;
@@ -621,6 +623,7 @@ export default function App() {
       createableTaskCount,
       creationTarget
     });
+    await waitForMinimumElapsed(loadingStartedAt, 500);
     setIsRunningJiraPreflight(false);
 
     if (!shouldCheckCredential) return;
@@ -679,6 +682,9 @@ export default function App() {
     setJiraCreateResult(null);
     setJiraCreateError(null);
     const loadingStartedAt = performance.now();
+    let shouldClosePreflight = false;
+    let nextCreateResult: JiraCreateIssuesResult | null = null;
+    let nextCreateError: string | null = null;
     await waitForNextPaint();
 
     try {
@@ -699,16 +705,22 @@ export default function App() {
           : null
       );
       if (result.status === "succeeded" && result.failedIssueCount === 0) {
-        setJiraCreatePreflight(null);
-        setJiraCreateResult(null);
+        shouldClosePreflight = true;
       } else {
-        setJiraCreateResult(result);
+        nextCreateResult = result;
       }
     } catch (error) {
-      setJiraCreateError(error instanceof Error ? error.message : String(error || "Could not create Jira issues."));
+      nextCreateError = error instanceof Error ? error.message : String(error || "Could not create Jira issues.");
     } finally {
       await waitForMinimumElapsed(loadingStartedAt, 1000);
       setIsCreatingJiraIssues(false);
+      if (shouldClosePreflight) {
+        setJiraCreatePreflight(null);
+        setJiraCreateResult(null);
+      } else {
+        if (nextCreateResult) setJiraCreateResult(nextCreateResult);
+        if (nextCreateError) setJiraCreateError(nextCreateError);
+      }
     }
   }
 
