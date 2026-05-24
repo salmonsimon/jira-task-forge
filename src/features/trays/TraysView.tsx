@@ -74,6 +74,8 @@ export function TraysView({
 
   const grouped = groupTasksByProject(selectedTray.tasks);
   const isArchived = selectedTray.state === "Archived";
+  const createableTaskCount = selectedTray.tasks.filter((task) => task.syncStatus !== "Created" && task.issueType !== "Sub-task").length;
+  const canCreateInJira = !isArchived && createableTaskCount > 0 && !isRunningJiraPreflight;
 
   return (
     <section className="flex-1 px-5 py-4">
@@ -108,11 +110,15 @@ export function TraysView({
                 Archive
               </Button>
               <Button
-                disabled={isRunningJiraPreflight}
+                disabled={!canCreateInJira}
                 icon={isRunningJiraPreflight ? <Loader2 className="animate-spin" size={14} /> : <UploadCloud size={14} />}
                 onClick={() => onCreateInJira(selectedTray)}
               >
-                {isRunningJiraPreflight ? "Preparing preflight" : "Create in Jira"}
+                {isRunningJiraPreflight
+                  ? "Preparing preflight"
+                  : selectedTray.tasks.length > 0 && createableTaskCount === 0
+                    ? "Created in Jira"
+                    : "Create in Jira"}
               </Button>
             </>
           )}

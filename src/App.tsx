@@ -678,13 +678,14 @@ export default function App() {
     setIsCreatingJiraIssues(true);
     setJiraCreateResult(null);
     setJiraCreateError(null);
+    const loadingStartedAt = performance.now();
+    await waitForNextPaint();
 
     try {
       const result = await createPersistedJiraParentIssues(
         jiraCreatePreflight.tray.id,
         options.allowMissingDescriptions
       );
-      setJiraCreateResult(result);
       const persistedTrays = await listPersistedTrays();
       setTrays(persistedTrays);
       setSelectedTrayId((currentTrayId) =>
@@ -697,9 +698,16 @@ export default function App() {
           ? currentTaskId
           : null
       );
+      if (result.status === "succeeded" && result.failedIssueCount === 0) {
+        setJiraCreatePreflight(null);
+        setJiraCreateResult(null);
+      } else {
+        setJiraCreateResult(result);
+      }
     } catch (error) {
       setJiraCreateError(error instanceof Error ? error.message : String(error || "Could not create Jira issues."));
     } finally {
+      await waitForMinimumElapsed(loadingStartedAt, 1000);
       setIsCreatingJiraIssues(false);
     }
   }

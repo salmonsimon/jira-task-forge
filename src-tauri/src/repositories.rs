@@ -382,7 +382,24 @@ impl<'connection> TaskRepository<'connection> {
 
     fn touch_tray(&self, tray_id: &str, updated_at: &str) -> DbResult<()> {
         self.connection.execute(
-            "UPDATE trays SET updated_at = ?1 WHERE id = ?2",
+            "
+            UPDATE trays
+            SET updated_at = ?1,
+                state = CASE
+                    WHEN state = 'Archived' THEN state
+                    WHEN NOT EXISTS (
+                        SELECT 1 FROM tasks WHERE tray_id = ?2
+                    ) THEN 'Active'
+                    WHEN EXISTS (
+                        SELECT 1 FROM tasks WHERE tray_id = ?2 AND sync_status = 'Failed'
+                    ) THEN 'Needs attention'
+                    WHEN NOT EXISTS (
+                        SELECT 1 FROM tasks WHERE tray_id = ?2 AND sync_status != 'Created'
+                    ) THEN 'Completed'
+                    ELSE 'Active'
+                END
+            WHERE id = ?2
+            ",
             (updated_at, tray_id),
         )?;
         Ok(())
@@ -936,6 +953,106 @@ mod tests {
         assert!(source_tasks.iter().any(|task| task.id == created.id));
         assert!(recovery_tasks.iter().any(|task| task.id == failed.id));
         assert!(!recovery_tasks.iter().any(|task| task.id == created.id));
+    }
+
+    #[test]
+    fn derives_tray_state_from_task_sync_status_after_task_changes() {
+        let connection = open_in_memory_database().expect("database opens");
+        let tray_repository = TrayRepository::new(&connection);
+        let task_repository = TaskRepository::new(&connection);
+        let tray = tray_repository
+            .create(NewTray {
+                name: "State tray".to_string(),
+            })
+            .expect("tray creates");
+        let first = task_repository
+            .create(NewTask {
+                tray_id: tray.id.clone(),
+                project: "STT".to_string(),
+                area: "Bug".to_string(),
+                title: "First task".to_string(),
+                priority: "Medium".to_string(),
+                issue_type: "Bug".to_string(),
+                content_language: "Spanish".to_string(),
+            })
+            .expect("first task creates");
+        let second = task_repository
+            .create(NewTask {
+                tray_id: tray.id.clone(),
+                project: "STT".to_string(),
+                area: "3D".to_string(),
+                title: "Second task".to_string(),
+                priority: "High".to_string(),
+                issue_type: "Story".to_string(),
+                content_language: "Spanish".to_string(),
+            })
+            .expect("second task creates");
+
+        task_repository
+            .mark_jira_created(
+                &first.id,
+                "JTFTEST-10",
+                "https://example.test/browse/JTFTEST-10",
+                "JTFTEST-9",
+            )
+            .expect("first task marks created");
+        assert_eq!(
+            tray_repository
+                .find_by_id(&tray.id)
+                .expect("tray query")
+                .expect("tray exists")
+                .state,
+            TrayState::Active
+        );
+
+        task_repository
+            .mark_jira_created(
+                &second.id,
+                "JTFTEST-11",
+                "https://example.test/browse/JTFTEST-11",
+                "JTFTEST-9",
+            )
+            .expect("second task marks created");
+        assert_eq!(
+            tray_repository
+                .find_by_id(&tray.id)
+                .expect("tray query")
+                .expect("tray exists")
+                .state,
+            TrayState::Completed
+        );
+
+        let third = task_repository
+            .create(NewTask {
+                tray_id: tray.id.clone(),
+                project: "STT".to_string(),
+                area: "Polish".to_string(),
+                title: "New work reopens tray".to_string(),
+                priority: "Low".to_string(),
+                issue_type: "Story".to_string(),
+                content_language: "Spanish".to_string(),
+            })
+            .expect("third task creates");
+        assert_eq!(
+            tray_repository
+                .find_by_id(&tray.id)
+                .expect("tray query")
+                .expect("tray exists")
+                .state,
+            TrayState::Active
+        );
+
+        task_repository
+            .mark_jira_failed(&third.id)
+            .expect("third task marks failed");
+        assert_eq!(
+            tray_repository
+                .find_by_id(&tray.id)
+                .expect("tray query")
+                .expect("tray exists")
+                .state,
+            TrayState::NeedsAttention
+        );
     }
 
     #[test]
