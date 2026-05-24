@@ -47,10 +47,11 @@ Current validation:
 - `npm run build` passes on `main` after dependencies are installed.
 - `cargo fmt -- --check` passes after installing Rust/Cargo with rustup.
 - `cargo test` passes in the current WSL checkout. As of the PR #26
-  stabilization follow-up, the Rust suite has 29 tests covering SQLite
+  stabilization follow-up, the Rust suite has 30 tests covering SQLite
   schema/repositories, settings defaults, Jira URL/error helpers, guarded Jira
   parent issue sync, Jira credential debug redaction, and sync audit error
-  redaction/capping.
+  redaction/capping. Created local tasks are also protected from backend delete
+  operations, not only hidden from the UI.
 - There is no measured coverage report yet.
 - There is no automated frontend test runner yet. Frontend validation is
   currently TypeScript/Vite build plus manual/live QA.
