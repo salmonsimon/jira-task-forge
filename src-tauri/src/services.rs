@@ -1,4 +1,4 @@
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use rusqlite::Connection;
 
@@ -11,8 +11,9 @@ use crate::models::{
 };
 use crate::repositories::{SettingsRepository, TaskRepository, TrayRepository};
 
+#[derive(Clone)]
 pub struct AppServices {
-    connection: Mutex<Connection>,
+    connection: Arc<Mutex<Connection>>,
 }
 
 const JIRA_CREDENTIAL_SERVICE: &str = "jira-task-forge:jira";
@@ -21,7 +22,7 @@ const JIRA_API_TOKEN_ACCOUNT: &str = "api-token";
 impl AppServices {
     pub fn new(connection: Connection) -> Self {
         Self {
-            connection: Mutex::new(connection),
+            connection: Arc::new(Mutex::new(connection)),
         }
     }
 

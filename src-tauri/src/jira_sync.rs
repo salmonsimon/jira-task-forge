@@ -21,6 +21,7 @@ pub trait JiraIssueGateway {
     fn current_user(&mut self) -> Result<JiraMyself, String>;
     fn search_jql(&mut self, jql: &str, max_results: usize) -> Result<JqlSearchResponse, String>;
     fn create_issue(&mut self, payload: Value) -> Result<JiraCreateIssueResponse, String>;
+    fn update_issue_fields(&mut self, key: &str, payload: Value) -> Result<(), String>;
     fn issue_browse_url(&self, key: &str) -> String;
 }
 
@@ -39,6 +40,10 @@ impl JiraIssueGateway for JiraClient {
 
     fn create_issue(&mut self, payload: Value) -> Result<JiraCreateIssueResponse, String> {
         JiraClient::create_issue(self, payload)
+    }
+
+    fn update_issue_fields(&mut self, key: &str, payload: Value) -> Result<(), String> {
+        JiraClient::update_issue_fields(self, key, payload)
     }
 
     fn issue_browse_url(&self, key: &str) -> String {
@@ -207,6 +212,7 @@ where
             None
         };
 
+        let mut had_non_blocking_warning = false;
         let groups = group_tasks_by_project_area(parent_tasks);
         for ((local_project, area), group_tasks) in groups {
             let epic_summary = format!("[{local_project}] {area}");
@@ -290,13 +296,32 @@ where
                                 }),
                             )
                             .map_err(db_error_message)?;
+                        if issue_type.field("priority").is_none() {
+                            match update_issue_priority_after_create(
+                                self.gateway,
+                                &sync_repository,
+                                &sync_attempt_id,
+                                tray_id,
+                                &task,
+                                &created_issue.key,
+                            ) {
+                                Ok(()) => {}
+                                Err(message) => {
+                                    had_non_blocking_warning = true;
+                                    result.messages.push(format!(
+                                        "{} was created, but priority could not be set to {}: {}",
+                                        created_issue.key, task.priority, message
+                                    ));
+                                }
+                            }
+                        }
                         result.created_issue_count += 1;
                         result.created_issues.push(JiraCreatedIssueResult {
-                            task_id: Some(task.id),
+                            task_id: Some(task.id.clone()),
                             key: created_issue.key,
                             url: issue_url,
-                            issue_type: task.issue_type,
-                            summary: task.title,
+                            issue_type: task.issue_type.clone(),
+                            summary: jira_parent_summary(&task),
                             epic_key: Some(epic_key.clone()),
                         });
                     }
@@ -316,7 +341,7 @@ where
             }
         }
 
-        let final_status = if result.failed_issue_count == 0 {
+        let final_status = if result.failed_issue_count == 0 && !had_non_blocking_warning {
             "succeeded"
         } else if result.created_issue_count == 0 {
             "failed"
@@ -807,7 +832,7 @@ fn build_parent_issue_payload(
     let mut fields = json!({
         "project": { "key": jira_project_key },
         "issuetype": { "id": issue_type.id },
-        "summary": task.title,
+        "summary": jira_parent_summary(task),
         "labels": labels_for(&task.project, &task.area),
     });
     if issue_type.field("priority").is_some() {
@@ -838,6 +863,82 @@ fn build_parent_issue_payload(
             }
         }]
     })
+}
+
+fn update_issue_priority_after_create<Gateway>(
+    gateway: &mut Gateway,
+    sync_repository: &SyncRepository<'_>,
+    sync_attempt_id: &str,
+    tray_id: &str,
+    task: &LocalTask,
+    jira_key: &str,
+) -> Result<(), String>
+where
+    Gateway: JiraIssueGateway,
+{
+    let payload = json!({
+        "fields": {
+            "priority": priority_value(None, &task.priority),
+        }
+    });
+
+    match gateway.update_issue_fields(jira_key, payload) {
+        Ok(()) => {
+            sync_repository
+                .record_event(
+                    sync_attempt_id,
+                    tray_id,
+                    Some(&task.id),
+                    "jira.issue.priority.updated",
+                    "succeeded",
+                    JIRA_PROVIDER_OPERATION,
+                    json!({
+                        "jiraKey": jira_key,
+                        "priority": task.priority,
+                        "source": "post-create",
+                    }),
+                )
+                .map_err(db_error_message)?;
+            Ok(())
+        }
+        Err(message) => {
+            sync_repository
+                .record_event(
+                    sync_attempt_id,
+                    tray_id,
+                    Some(&task.id),
+                    "jira.issue.priority.update_failed",
+                    "failed",
+                    JIRA_PROVIDER_OPERATION,
+                    json!({
+                        "jiraKey": jira_key,
+                        "priority": task.priority,
+                        "message": message.clone(),
+                    }),
+                )
+                .map_err(db_error_message)?;
+            Err(message)
+        }
+    }
+}
+
+fn jira_parent_summary(task: &LocalTask) -> String {
+    let title = task.title.trim();
+    let area_code = task.area.trim();
+    if area_code.is_empty() {
+        return title.to_string();
+    }
+
+    let prefix = format!("[{area_code}]");
+    let normalized_title = title.to_lowercase();
+    let normalized_prefix = prefix.to_lowercase();
+    if normalized_title == normalized_prefix
+        || normalized_title.starts_with(&format!("{normalized_prefix} "))
+    {
+        title.to_string()
+    } else {
+        format!("{prefix} {title}")
+    }
 }
 
 fn priority_value(priority_field: Option<&JiraCreateFieldMetadata>, local_priority: &str) -> Value {
@@ -1053,9 +1154,143 @@ mod tests {
             json!("JTFTEST-10")
         );
         assert_eq!(
+            gateway.created_payloads[1]["fields"]["priority"]["id"],
+            json!("4")
+        );
+        assert_eq!(
+            gateway.created_payloads[1]["fields"]["summary"],
+            json!("[Bug] Fix timer drift")
+        );
+        assert_eq!(
             gateway.created_payloads[1]["properties"][0]["value"]["localTaskId"],
             json!(task.id)
         );
+    }
+
+    #[test]
+    fn does_not_duplicate_area_prefix_when_title_already_has_it() {
+        let task = LocalTask {
+            id: "task-1".to_string(),
+            tray_id: "tray-1".to_string(),
+            project: "STT".to_string(),
+            area: "Bug".to_string(),
+            title: "[Bug] Fix timer drift".to_string(),
+            priority: "High".to_string(),
+            issue_type: "Bug".to_string(),
+            sync_status: "Pending".to_string(),
+            description_status: "Missing".to_string(),
+            content_language: "Spanish".to_string(),
+            jira_key: None,
+            jira_url: None,
+            epic_key: None,
+            parent_task_id: None,
+            task_order: 0,
+            created_at: "2026-05-24T00:00:00Z".to_string(),
+            updated_at: "2026-05-24T00:00:00Z".to_string(),
+        };
+
+        assert_eq!(jira_parent_summary(&task), "[Bug] Fix timer drift");
+    }
+
+    #[test]
+    fn updates_priority_after_create_when_create_metadata_omits_priority_field() {
+        let connection = open_in_memory_database().expect("database opens");
+        let tray_repository = TrayRepository::new(&connection);
+        let task_repository = TaskRepository::new(&connection);
+        let tray = tray_repository
+            .create(NewTray {
+                name: "JTFTEST priority".to_string(),
+            })
+            .expect("tray creates");
+        let task = task_repository
+            .create(NewTask {
+                tray_id: tray.id.clone(),
+                project: "JTF Live QA".to_string(),
+                area: "Programacion".to_string(),
+                title: "Verify priority fallback".to_string(),
+                priority: "High".to_string(),
+                issue_type: "Story".to_string(),
+                content_language: "Spanish".to_string(),
+            })
+            .expect("task creates");
+        let mut gateway = FakeJiraGateway::new();
+        gateway.metadata = jtf_test_metadata("JTFTEST");
+        gateway.created_keys = vec!["JTFTEST-2".to_string(), "JTFTEST-3".to_string()];
+
+        let mut runner = JiraSyncRunner::new(&connection, &mut gateway, "JTFTEST".to_string());
+        let result = runner
+            .create_parent_issues_from_tray(&tray.id, true)
+            .expect("sync succeeds");
+
+        assert_eq!(result.status, "succeeded");
+        assert_eq!(result.created_issues[0].key, "JTFTEST-3");
+        assert!(gateway.created_payloads[1]["fields"]["priority"].is_null());
+        assert_eq!(gateway.updated_payloads.len(), 1);
+        assert_eq!(gateway.updated_payloads[0].0, "JTFTEST-3");
+        assert_eq!(
+            gateway.updated_payloads[0].1["fields"]["priority"]["name"],
+            json!("High")
+        );
+
+        let persisted_task = TaskRepository::new(&connection)
+            .list_for_tray(&tray.id)
+            .expect("tasks list")
+            .into_iter()
+            .find(|candidate| candidate.id == task.id)
+            .expect("task remains");
+        assert_eq!(persisted_task.sync_status, "Created");
+        assert_eq!(persisted_task.jira_key.as_deref(), Some("JTFTEST-3"));
+    }
+
+    #[test]
+    fn preserves_created_issue_when_post_create_priority_update_fails() {
+        let connection = open_in_memory_database().expect("database opens");
+        let tray_repository = TrayRepository::new(&connection);
+        let task_repository = TaskRepository::new(&connection);
+        let tray = tray_repository
+            .create(NewTray {
+                name: "Priority warning".to_string(),
+            })
+            .expect("tray creates");
+        let task = task_repository
+            .create(NewTask {
+                tray_id: tray.id.clone(),
+                project: "JTF Live QA".to_string(),
+                area: "Programacion".to_string(),
+                title: "Priority warning stays safe".to_string(),
+                priority: "Highest".to_string(),
+                issue_type: "Story".to_string(),
+                content_language: "Spanish".to_string(),
+            })
+            .expect("task creates");
+        let mut gateway = FakeJiraGateway::new();
+        gateway.metadata = jtf_test_metadata("JTFTEST");
+        gateway.created_keys = vec!["JTFTEST-2".to_string(), "JTFTEST-3".to_string()];
+        gateway
+            .update_failures
+            .push("priority is not editable".to_string());
+
+        let mut runner = JiraSyncRunner::new(&connection, &mut gateway, "JTFTEST".to_string());
+        let result = runner
+            .create_parent_issues_from_tray(&tray.id, true)
+            .expect("sync returns warning result");
+
+        assert_eq!(result.status, "partial");
+        assert_eq!(result.created_issue_count, 1);
+        assert_eq!(result.failed_issue_count, 0);
+        assert!(result
+            .messages
+            .iter()
+            .any(|message| message.contains("priority could not be set")));
+
+        let persisted_task = TaskRepository::new(&connection)
+            .list_for_tray(&tray.id)
+            .expect("tasks list")
+            .into_iter()
+            .find(|candidate| candidate.id == task.id)
+            .expect("task remains");
+        assert_eq!(persisted_task.sync_status, "Created");
+        assert_eq!(persisted_task.jira_key.as_deref(), Some("JTFTEST-3"));
     }
 
     #[test]
@@ -1209,6 +1444,10 @@ mod tests {
             json!("account-1")
         );
         assert!(gateway.created_payloads[1]["fields"]["priority"].is_null());
+        assert_eq!(
+            gateway.updated_payloads[0].1["fields"]["priority"]["name"],
+            json!("Medium")
+        );
 
         let persisted_task = TaskRepository::new(&connection)
             .list_for_tray(&tray.id)
@@ -1222,8 +1461,10 @@ mod tests {
     struct FakeJiraGateway {
         metadata: JiraCreateMetadata,
         created_payloads: Vec<Value>,
+        updated_payloads: Vec<(String, Value)>,
         created_keys: Vec<String>,
         create_failures: Vec<String>,
+        update_failures: Vec<String>,
     }
 
     impl FakeJiraGateway {
@@ -1231,8 +1472,10 @@ mod tests {
             Self {
                 metadata: test_metadata("JTFTEST"),
                 created_payloads: Vec::new(),
+                updated_payloads: Vec::new(),
                 created_keys: Vec::new(),
                 create_failures: Vec::new(),
+                update_failures: Vec::new(),
             }
         }
     }
@@ -1277,6 +1520,15 @@ mod tests {
                 key: key.clone(),
                 self_url: format!("https://example.atlassian.net/rest/api/3/issue/{key}"),
             })
+        }
+
+        fn update_issue_fields(&mut self, key: &str, payload: Value) -> Result<(), String> {
+            self.updated_payloads.push((key.to_string(), payload));
+            if !self.update_failures.is_empty() {
+                return Err(self.update_failures.remove(0));
+            }
+
+            Ok(())
         }
 
         fn issue_browse_url(&self, key: &str) -> String {

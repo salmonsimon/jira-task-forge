@@ -132,6 +132,19 @@ impl JiraClient {
         )
     }
 
+    pub fn update_issue_fields(&self, key: &str, payload: Value) -> Result<(), String> {
+        let key = key.trim();
+        if key.is_empty() {
+            return Err("Jira issue key is required.".to_string());
+        }
+
+        parse_empty_response(
+            self.put(&format!("/rest/api/3/issue/{}", encode_path_segment(key)))
+                .send_json(payload),
+            "Jira issue update",
+        )
+    }
+
     pub fn issue_browse_url(&self, key: &str) -> String {
         format!("{}/browse/{}", self.site_url, encode_path_segment(key))
     }
@@ -145,6 +158,14 @@ impl JiraClient {
 
     fn post(&self, path: &str) -> ureq::Request {
         ureq::post(&self.url(path))
+            .set("Accept", "application/json")
+            .set("Content-Type", "application/json")
+            .set("Authorization", &self.authorization_header)
+            .timeout(REQUEST_TIMEOUT)
+    }
+
+    fn put(&self, path: &str) -> ureq::Request {
+        ureq::put(&self.url(path))
             .set("Accept", "application/json")
             .set("Content-Type", "application/json")
             .set("Authorization", &self.authorization_header)
@@ -197,6 +218,27 @@ fn parse_response<T: DeserializeOwned>(
                 }
             }
 
+            let body_text = response.into_string().unwrap_or_default();
+            let jira_message = jira_error_message(&body_text);
+            if jira_message.is_empty() {
+                Err(format!("{action} failed with HTTP {status}."))
+            } else {
+                Err(format!(
+                    "{action} failed with HTTP {status}: {jira_message}"
+                ))
+            }
+        }
+        Err(error) => Err(format!("{action} could not reach Jira: {error}")),
+    }
+}
+
+fn parse_empty_response(
+    response: Result<ureq::Response, ureq::Error>,
+    action: &str,
+) -> Result<(), String> {
+    match response {
+        Ok(_) => Ok(()),
+        Err(ureq::Error::Status(status, response)) => {
             let body_text = response.into_string().unwrap_or_default();
             let jira_message = jira_error_message(&body_text);
             if jira_message.is_empty() {

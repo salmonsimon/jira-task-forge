@@ -206,9 +206,10 @@ function JiraCreateLoading({ taskCount }: { taskCount: number }) {
   return (
     <div className="w-full max-w-[420px] rounded border border-[#315a8a] bg-[#102d50] px-4 py-4 text-[#dfe1e6] shadow-2xl">
       <div className="flex items-center gap-4">
-        <div className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-full border border-[#579dff]/30">
-          <div className="absolute h-12 w-12 animate-spin rounded-full border-2 border-[#315a8a] border-t-[#85b8ff]" />
-          <Loader2 className="animate-spin text-[#85b8ff]" size={20} />
+        <div className="jira-loading-orb relative flex h-14 w-14 shrink-0 items-center justify-center rounded-full border border-[#579dff]/30">
+          <div className="jira-loading-ring jira-loading-ring-fast absolute h-12 w-12 rounded-full border-2 border-[#315a8a] border-t-[#85b8ff]" />
+          <div className="jira-loading-ring jira-loading-ring-slow absolute h-9 w-9 rounded-full border border-[#579dff]/20 border-b-[#b7d5ff]" />
+          <Loader2 className="jira-loading-icon text-[#85b8ff]" size={20} />
         </div>
         <div className="min-w-0">
           <div className="text-sm font-semibold text-[#f4f5f7]">Creating in Jira</div>
@@ -217,8 +218,8 @@ function JiraCreateLoading({ taskCount }: { taskCount: number }) {
           </p>
         </div>
       </div>
-      <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-[#0b2442]">
-        <div className="h-full w-1/2 animate-pulse rounded-full bg-[#579dff]" />
+      <div className="relative mt-4 h-1.5 overflow-hidden rounded-full bg-[#0b2442]">
+        <div className="jira-loading-bar absolute inset-y-0 w-1/2 rounded-full bg-[#579dff]" />
       </div>
     </div>
   );

@@ -119,12 +119,17 @@ pub fn run_jql_query(
 }
 
 #[tauri::command]
-pub fn create_jira_parent_issues(
+pub async fn create_jira_parent_issues(
     services: State<'_, AppServices>,
     tray_id: String,
     allow_missing_descriptions: bool,
 ) -> Result<JiraCreateIssuesResult, String> {
-    services.create_jira_parent_issues(&tray_id, allow_missing_descriptions)
+    let services = services.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        services.create_jira_parent_issues(&tray_id, allow_missing_descriptions)
+    })
+    .await
+    .map_err(|error| format!("Jira creation worker failed: {error}"))?
 }
 
 #[tauri::command]
