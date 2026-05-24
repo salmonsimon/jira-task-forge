@@ -8,11 +8,11 @@ This repo contains the product/architecture decisions and the first Tauri/React 
 
 The app now has SQLite-backed local trays/tasks, persisted non-secret settings,
 CSV export, Jira API token storage through the OS credential store, Jira
-connection testing, read-only JQL search, and a `Create in Jira` preflight
-dialog.
+connection testing, read-only JQL search, and a guarded `Create in Jira` flow
+that creates required epics plus parent Story/Bug issues.
 
-It does not yet create Jira issues through the API, call AI providers, manage
-real attachments, or support backup/import.
+It does not yet create sub-tasks, call AI providers, manage real attachments, or
+support backup/import.
 
 ## Stack
 

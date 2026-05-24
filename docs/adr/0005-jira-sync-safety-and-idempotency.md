@@ -32,10 +32,16 @@ descriptions to satisfy sync.
 
 The sync backend must resolve Jira create metadata for the configured Jira
 creation project before building payloads. It should confirm supported issue
-types, required fields, priority support, labels support, and the field or API
-shape used to link stories, bugs, and sub-tasks to their resolved epic. If this
-metadata cannot be read or mapped, sync must block before any Jira issue is
-created.
+types, required fields, labels support, and the field or API shape used to link
+stories, bugs, and sub-tasks to their resolved epic. It should set priority
+during create when Jira create metadata exposes the field. If Jira create
+metadata omits priority for parent Story/Bug issues, the backend may use an
+immediate post-create Jira issue update for priority because some Jira projects
+hide priority from the create screen while still allowing issue priority edits.
+If the required metadata cannot be read or mapped, sync must block before any
+Jira issue is created. If a post-create priority update fails after the issue
+already exists, the app must preserve the local Jira key/link and surface a
+warning instead of retrying creation and risking a duplicate.
 
 Retries should use local state to avoid repeat creation:
 
@@ -160,3 +166,12 @@ a new Jira issue.
   Story/Bug issues only. Sub-tasks and attachments remain later slices.
 - 2026-05-23: Jira write QA may mutate `JTFTEST` without asking, but agents
   must treat `DTS` as read-only reference data.
+- 2026-05-24: Parent Story/Bug summaries created in Jira should start with a
+  bracketed area code, `[{Area}] {Title}`. Until categories have an explicit
+  code field, the trimmed `Area` value is the code. This is user-visible Jira
+  naming, not a duplicate-prevention marker, so it does not conflict with the
+  rule that local ids and sync attempt ids stay out of summaries.
+- 2026-05-24: When Jira create metadata omits parent issue priority, sync may
+  create the issue and then immediately set priority through a Jira issue update
+  before continuing. This resolves the `JTFTEST` behavior where creates default
+  to Medium even when the local task priority is High/Highest.

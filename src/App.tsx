@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { downloadDir, join } from "@tauri-apps/api/path";
 import { save } from "@tauri-apps/plugin-dialog";
 import { AppHeader } from "./components/shell";
@@ -11,6 +12,8 @@ import { TraysView } from "./features/trays";
 import { mockAppDataAdapter } from "./lib/adapters";
 import {
   archivePersistedTray,
+  createPersistedJiraParentIssues,
+  createPersistedRecoveryTrayFromTasks,
   createPersistedTask,
   createPersistedTray,
   deletePersistedJiraApiToken,
@@ -41,7 +44,16 @@ import {
   exportLocalTasksToCsv,
   isEligibleForCsvExport
 } from "./lib/domain";
-import type { AppSettings, JiraConnectionTestResult, LocalTask, MainTab, Panel, Priority, Tray } from "./lib/types";
+import type {
+  AppSettings,
+  JiraConnectionTestResult,
+  JiraCreateIssuesResult,
+  LocalTask,
+  MainTab,
+  Panel,
+  Priority,
+  Tray
+} from "./lib/types";
 import { cn } from "./lib/utils";
 
 const appData = mockAppDataAdapter;
@@ -86,6 +98,10 @@ export default function App() {
   const [isTestingJiraConnection, setIsTestingJiraConnection] = useState(false);
   const [isRunningJiraPreflight, setIsRunningJiraPreflight] = useState(false);
   const [jiraCreatePreflight, setJiraCreatePreflight] = useState<JiraCreatePreflight | null>(null);
+  const [isCreatingJiraIssues, setIsCreatingJiraIssues] = useState(false);
+  const [isCreatingRecoveryTray, setIsCreatingRecoveryTray] = useState(false);
+  const [jiraCreateResult, setJiraCreateResult] = useState<JiraCreateIssuesResult | null>(null);
+  const [jiraCreateError, setJiraCreateError] = useState<string | null>(null);
   const lastSelectedTrayId = useRef<string | null>(null);
 
   const selectedTray = useMemo(
@@ -445,8 +461,13 @@ export default function App() {
   }
 
   async function testJiraConnection() {
-    setIsTestingJiraConnection(true);
-    setJiraConnectionResult(null);
+    flushSync(() => {
+      setIsTestingJiraConnection(true);
+      setJiraConnectionResult(null);
+    });
+    const loadingStartedAt = performance.now();
+    await waitForNextPaint();
+    await delay(500);
 
     try {
       const result = await testPersistedJiraConnection();
@@ -457,6 +478,7 @@ export default function App() {
         message: error instanceof Error ? error.message : "Could not test Jira connection."
       });
     } finally {
+      await waitForMinimumElapsed(loadingStartedAt, 800);
       setIsTestingJiraConnection(false);
     }
   }
@@ -571,9 +593,13 @@ export default function App() {
 
   async function createInJiraPreflight(tray: Tray) {
     setIsRunningJiraPreflight(true);
+    setJiraCreateResult(null);
+    setJiraCreateError(null);
+    const loadingStartedAt = performance.now();
+    await waitForNextPaint();
 
     const warnings = classifyTrayPreflightWarnings(tray.tasks);
-    const createableTaskCount = tray.tasks.filter((task) => task.syncStatus !== "Created").length;
+    const createableTaskCount = tray.tasks.filter((task) => task.syncStatus !== "Created" && task.issueType !== "Sub-task").length;
     const creationProjectKey = appSettings.jiraCreationProjectKey.trim().toUpperCase();
     const creationTarget = `Jira project ${creationProjectKey || "not set"}`;
 
@@ -604,6 +630,7 @@ export default function App() {
       createableTaskCount,
       creationTarget
     });
+    await waitForMinimumElapsed(loadingStartedAt, 500);
     setIsRunningJiraPreflight(false);
 
     if (!shouldCheckCredential) return;
@@ -652,6 +679,79 @@ export default function App() {
           ]
         };
       });
+    }
+  }
+
+  async function createJiraParentIssues(options: { allowMissingDescriptions: boolean }) {
+    if (!jiraCreatePreflight || !usesTauriPersistence) return;
+
+    flushSync(() => {
+      setIsCreatingJiraIssues(true);
+      setJiraCreateResult(null);
+      setJiraCreateError(null);
+    });
+    let shouldClosePreflight = false;
+    let nextCreateResult: JiraCreateIssuesResult | null = null;
+    let nextCreateError: string | null = null;
+    await waitForNextPaint();
+    await delay(1000);
+
+    try {
+      const result = await createPersistedJiraParentIssues(
+        jiraCreatePreflight.tray.id,
+        options.allowMissingDescriptions
+      );
+      const persistedTrays = await listPersistedTrays();
+      setTrays(persistedTrays);
+      setSelectedTrayId((currentTrayId) =>
+        currentTrayId && persistedTrays.some((tray) => tray.id === currentTrayId)
+          ? currentTrayId
+          : jiraCreatePreflight.tray.id
+      );
+      setSelectedTaskId((currentTaskId) =>
+        currentTaskId && persistedTrays.some((tray) => tray.tasks.some((task) => task.id === currentTaskId))
+          ? currentTaskId
+          : null
+      );
+      if (result.status === "succeeded" && result.failedIssueCount === 0) {
+        shouldClosePreflight = true;
+      } else {
+        nextCreateResult = result;
+      }
+    } catch (error) {
+      nextCreateError = error instanceof Error ? error.message : String(error || "Could not create Jira issues.");
+    } finally {
+      setIsCreatingJiraIssues(false);
+      if (shouldClosePreflight) {
+        setJiraCreatePreflight(null);
+        setJiraCreateResult(null);
+      } else {
+        if (nextCreateResult) setJiraCreateResult(nextCreateResult);
+        if (nextCreateError) setJiraCreateError(nextCreateError);
+      }
+    }
+  }
+
+  async function createRecoveryTrayFromJiraResult() {
+    if (!jiraCreatePreflight || !jiraCreateResult || jiraCreateResult.failedTasks.length === 0) return;
+
+    setIsCreatingRecoveryTray(true);
+    setJiraCreateError(null);
+
+    try {
+      const recoveryTray = await createPersistedRecoveryTrayFromTasks(
+        jiraCreatePreflight.tray.id,
+        jiraCreateResult.failedTasks.map((task) => task.taskId)
+      );
+      const persistedTrays = await listPersistedTrays();
+      setTrays(persistedTrays);
+      setSelectedTrayId(recoveryTray.id);
+      setSelectedTaskId(persistedTrays.find((tray) => tray.id === recoveryTray.id)?.tasks[0]?.id ?? null);
+      setJiraCreatePreflight(null);
+    } catch (error) {
+      setJiraCreateError(error instanceof Error ? error.message : String(error || "Could not create recovery tray."));
+    } finally {
+      setIsCreatingRecoveryTray(false);
     }
   }
 
@@ -771,7 +871,18 @@ export default function App() {
             onConfirm={confirmDeleteTray}
           />
         ) : null}
-        {jiraCreatePreflight ? <JiraPreflightDialog preflight={jiraCreatePreflight} onClose={() => setJiraCreatePreflight(null)} /> : null}
+        {jiraCreatePreflight ? (
+          <JiraPreflightDialog
+            preflight={jiraCreatePreflight}
+            isCreating={isCreatingJiraIssues}
+            createError={jiraCreateError}
+            createResult={jiraCreateResult}
+            isCreatingRecoveryTray={isCreatingRecoveryTray}
+            onCreate={createJiraParentIssues}
+            onCreateRecoveryTray={createRecoveryTrayFromJiraResult}
+            onClose={() => setJiraCreatePreflight(null)}
+          />
+        ) : null}
       </div>
     </div>
   );

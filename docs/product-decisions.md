@@ -92,6 +92,10 @@ This document captures the product scope decisions from the grill session. UI co
   - `High`
   - `Highest`
 - `Medium` is the recommended default priority.
+- Jira parent Story/Bug summaries should begin with the task's area code in
+  brackets, followed by the local title: `[{Area}] {Title}`. Until categories
+  have a separate code field, the trimmed `Area` value is the area code. Do not
+  duplicate the prefix when the title already starts with it.
 - Issue type is derived automatically:
   - `Area = Bug` creates Jira issue type `Bug`
   - all other areas create Jira issue type `Story`
@@ -202,9 +206,15 @@ This document captures the product scope decisions from the grill session. UI co
   intent. Before writing, it should read Jira metadata for the configured
   **Jira Creation Project Key** and confirm the available issue types, required
   fields, priority field, labels field, and epic-linking field.
-- If metadata cannot resolve `Epic`, `Story`, `Bug`, priority, labels, or the
-  field needed to link a child issue to its epic, sync blocks before creating
-  partial Jira issues.
+- If metadata cannot resolve `Epic`, `Story`, `Bug`, labels, or the field
+  needed to link a child issue to its epic, sync blocks before creating partial
+  Jira issues.
+- If Jira create metadata omits `priority` for parent Story/Bug issues, sync may
+  create the issue and immediately set priority through a Jira issue update.
+  This keeps `JTFTEST` and similar Jira projects usable when priority is not on
+  the create screen. If priority cannot be set either during create or by the
+  post-create update, the app must preserve the created Jira link locally and
+  surface a warning instead of retrying the create and risking a duplicate.
 - Duplicate prevention should use a mostly invisible remote marker. The
   preferred marker is a Jira entity property containing local task and sync
   attempt identity.

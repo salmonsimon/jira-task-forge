@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Tray {
@@ -102,6 +103,7 @@ pub struct JiraConnectionTestResult {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct JiraMyself {
+    pub account_id: Option<String>,
     pub display_name: Option<String>,
     pub email_address: Option<String>,
 }
@@ -125,6 +127,79 @@ pub struct JqlResult {
     pub status: String,
     pub summary: String,
     pub assignee: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct JiraCreateMetadata {
+    pub project_key: String,
+    pub issue_types: Vec<JiraCreateIssueTypeMetadata>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct JiraCreateIssueTypeMetadata {
+    pub id: String,
+    pub name: String,
+    pub subtask: bool,
+    pub fields: Vec<JiraCreateFieldMetadata>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct JiraCreateFieldMetadata {
+    pub key: String,
+    pub name: String,
+    pub required: bool,
+    pub allowed_values: Vec<JiraCreateAllowedValue>,
+    pub schema: Option<Value>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct JiraCreateAllowedValue {
+    pub id: Option<String>,
+    pub name: Option<String>,
+    pub value: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JiraCreateIssueResponse {
+    pub id: String,
+    pub key: String,
+    #[serde(rename = "self")]
+    pub self_url: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JiraCreateIssuesResult {
+    pub sync_attempt_id: String,
+    pub status: String,
+    pub created_issue_count: usize,
+    pub skipped_issue_count: usize,
+    pub failed_issue_count: usize,
+    pub created_issues: Vec<JiraCreatedIssueResult>,
+    pub failed_tasks: Vec<JiraFailedTaskResult>,
+    pub messages: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JiraCreatedIssueResult {
+    pub task_id: Option<String>,
+    pub key: String,
+    pub url: String,
+    pub issue_type: String,
+    pub summary: String,
+    pub epic_key: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JiraFailedTaskResult {
+    pub task_id: String,
+    pub title: String,
+    pub project: String,
+    pub area: String,
+    pub message: String,
 }
 
 impl Default for AppSettings {

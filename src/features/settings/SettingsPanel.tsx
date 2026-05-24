@@ -1,6 +1,6 @@
 import { Bot, Download, ExternalLink, KeyRound, Settings, UploadCloud } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { Button, DetailBlock, PanelHeader, SegmentedControl } from "../../components/ui";
+import { Button, DetailBlock, LoadingOrb, PanelHeader, SegmentedControl } from "../../components/ui";
 import type { AppSettings, JiraConnectionTestResult, ThemeMode } from "../../lib/types";
 
 export function SettingsPanel({
@@ -143,7 +143,12 @@ export function SettingsPanel({
             ) : null}
           </div>
           <div className="mt-3">
-            <Button disabled={!canTestJiraConnection} variant="secondary" onClick={onTestJiraConnection}>
+            <Button
+              disabled={!canTestJiraConnection}
+              icon={isTestingJiraConnection ? <LoadingOrb size="xs" /> : undefined}
+              variant="secondary"
+              onClick={onTestJiraConnection}
+            >
               {isTestingJiraConnection ? "Testing..." : "Test connection"}
             </Button>
           </div>

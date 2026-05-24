@@ -6,7 +6,10 @@ use serde::de::DeserializeOwned;
 use serde::Deserialize;
 use serde_json::{json, Value};
 
-use crate::models::{JiraMyself, JqlResult, JqlSearchResponse};
+use crate::models::{
+    JiraCreateAllowedValue, JiraCreateFieldMetadata, JiraCreateIssueResponse,
+    JiraCreateIssueTypeMetadata, JiraCreateMetadata, JiraMyself, JqlResult, JqlSearchResponse,
+};
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
 const JQL_SEARCH_MAX_RESULTS_CAP: usize = 100;
@@ -71,6 +74,81 @@ impl JiraClient {
         })
     }
 
+    pub fn get_create_issue_metadata(
+        &self,
+        project_key: &str,
+    ) -> Result<JiraCreateMetadata, String> {
+        let project_key = project_key.trim();
+        if project_key.is_empty() {
+            return Err("Jira creation project key is required.".to_string());
+        }
+
+        let issue_types_response: JiraCreateIssueTypesApiResponse = parse_response(
+            self.get(&format!(
+                "/rest/api/3/issue/createmeta/{}/issuetypes?maxResults=100",
+                encode_path_segment(project_key)
+            ))
+            .call(),
+            "Jira create metadata",
+            None,
+        )?;
+
+        let mut issue_types = Vec::new();
+        for issue_type in issue_types_response.issue_types {
+            let fields_response: JiraCreateFieldsApiResponse = parse_response(
+                self.get(&format!(
+                    "/rest/api/3/issue/createmeta/{}/issuetypes/{}?maxResults=200",
+                    encode_path_segment(project_key),
+                    encode_path_segment(&issue_type.id)
+                ))
+                .call(),
+                "Jira create field metadata",
+                None,
+            )?;
+
+            issue_types.push(JiraCreateIssueTypeMetadata {
+                id: issue_type.id,
+                name: issue_type.name,
+                subtask: issue_type.subtask,
+                fields: fields_response
+                    .fields
+                    .into_iter()
+                    .filter_map(map_create_field)
+                    .collect(),
+            });
+        }
+
+        Ok(JiraCreateMetadata {
+            project_key: project_key.to_ascii_uppercase(),
+            issue_types,
+        })
+    }
+
+    pub fn create_issue(&self, payload: Value) -> Result<JiraCreateIssueResponse, String> {
+        parse_response(
+            self.post("/rest/api/3/issue").send_json(payload),
+            "Jira issue create",
+            None,
+        )
+    }
+
+    pub fn update_issue_fields(&self, key: &str, payload: Value) -> Result<(), String> {
+        let key = key.trim();
+        if key.is_empty() {
+            return Err("Jira issue key is required.".to_string());
+        }
+
+        parse_empty_response(
+            self.put(&format!("/rest/api/3/issue/{}", encode_path_segment(key)))
+                .send_json(payload),
+            "Jira issue update",
+        )
+    }
+
+    pub fn issue_browse_url(&self, key: &str) -> String {
+        format!("{}/browse/{}", self.site_url, encode_path_segment(key))
+    }
+
     fn get(&self, path: &str) -> ureq::Request {
         ureq::get(&self.url(path))
             .set("Accept", "application/json")
@@ -80,6 +158,14 @@ impl JiraClient {
 
     fn post(&self, path: &str) -> ureq::Request {
         ureq::post(&self.url(path))
+            .set("Accept", "application/json")
+            .set("Content-Type", "application/json")
+            .set("Authorization", &self.authorization_header)
+            .timeout(REQUEST_TIMEOUT)
+    }
+
+    fn put(&self, path: &str) -> ureq::Request {
+        ureq::put(&self.url(path))
             .set("Accept", "application/json")
             .set("Content-Type", "application/json")
             .set("Authorization", &self.authorization_header)
@@ -146,6 +232,27 @@ fn parse_response<T: DeserializeOwned>(
     }
 }
 
+fn parse_empty_response(
+    response: Result<ureq::Response, ureq::Error>,
+    action: &str,
+) -> Result<(), String> {
+    match response {
+        Ok(_) => Ok(()),
+        Err(ureq::Error::Status(status, response)) => {
+            let body_text = response.into_string().unwrap_or_default();
+            let jira_message = jira_error_message(&body_text);
+            if jira_message.is_empty() {
+                Err(format!("{action} failed with HTTP {status}."))
+            } else {
+                Err(format!(
+                    "{action} failed with HTTP {status}: {jira_message}"
+                ))
+            }
+        }
+        Err(error) => Err(format!("{action} could not reach Jira: {error}")),
+    }
+}
+
 fn jira_error_message(body_text: &str) -> String {
     let Ok(error_body) = serde_json::from_str::<JiraErrorResponse>(body_text) else {
         return String::new();
@@ -198,6 +305,41 @@ fn map_issue(issue: JiraIssue) -> JqlResult {
     }
 }
 
+fn map_create_field(field: JiraCreateFieldApi) -> Option<JiraCreateFieldMetadata> {
+    let key = field.key.or(field.field_id)?.trim().to_string();
+    if key.is_empty() {
+        return None;
+    }
+
+    Some(JiraCreateFieldMetadata {
+        key,
+        name: field.name.unwrap_or_else(|| "Unknown field".to_string()),
+        required: field.required,
+        allowed_values: field
+            .allowed_values
+            .into_iter()
+            .map(|allowed_value| JiraCreateAllowedValue {
+                id: allowed_value.id,
+                name: allowed_value.name,
+                value: allowed_value.value,
+            })
+            .collect(),
+        schema: field.schema,
+    })
+}
+
+fn encode_path_segment(value: &str) -> String {
+    value
+        .bytes()
+        .flat_map(|byte| match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                vec![byte as char]
+            }
+            _ => format!("%{byte:02X}").chars().collect(),
+        })
+        .collect()
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct JiraSearchApiResponse {
@@ -208,6 +350,50 @@ struct JiraSearchApiResponse {
     next_page_token: Option<String>,
     #[serde(default)]
     warning_messages: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct JiraCreateIssueTypesApiResponse {
+    #[serde(default)]
+    issue_types: Vec<JiraCreateIssueTypeApi>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct JiraCreateIssueTypeApi {
+    id: String,
+    name: String,
+    #[serde(default)]
+    subtask: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct JiraCreateFieldsApiResponse {
+    #[serde(default)]
+    fields: Vec<JiraCreateFieldApi>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct JiraCreateFieldApi {
+    field_id: Option<String>,
+    key: Option<String>,
+    name: Option<String>,
+    #[serde(default)]
+    required: bool,
+    #[serde(default)]
+    allowed_values: Vec<JiraCreateAllowedValueApi>,
+    schema: Option<Value>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct JiraCreateAllowedValueApi {
+    id: Option<String>,
+    name: Option<String>,
+    value: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -255,7 +441,7 @@ struct JiraErrorResponse {
 
 #[cfg(test)]
 mod tests {
-    use super::{jira_error_message, normalize_jira_site_url};
+    use super::{encode_path_segment, jira_error_message, normalize_jira_site_url};
 
     #[test]
     fn normalizes_jira_cloud_urls_to_site_root() {
@@ -290,5 +476,12 @@ mod tests {
             ),
             "The JQL query is invalid. jql: Bad clause"
         );
+    }
+
+    #[test]
+    fn encodes_path_segments_for_jira_urls() {
+        assert_eq!(encode_path_segment("JTFTEST"), "JTFTEST");
+        assert_eq!(encode_path_segment("issue type"), "issue%20type");
+        assert_eq!(encode_path_segment("A/B"), "A%2FB");
     }
 }

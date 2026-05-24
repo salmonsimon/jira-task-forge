@@ -1,6 +1,7 @@
 mod commands;
 mod db;
 mod integrations;
+mod jira_sync;
 mod models;
 mod repositories;
 mod services;
@@ -43,11 +44,13 @@ pub fn run() {
             commands::delete_jira_api_token,
             commands::test_jira_connection,
             commands::run_jql_query,
+            commands::create_jira_parent_issues,
             commands::create_task,
             commands::list_tasks,
             commands::delete_task,
             commands::update_task_details,
             commands::mark_tasks_csv_exported,
+            commands::create_recovery_tray_from_tasks,
             commands::save_csv_file,
             commands::open_atlassian_api_tokens_page
         ])

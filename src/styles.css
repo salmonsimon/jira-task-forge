@@ -144,6 +144,56 @@ button {
   background-color: #2b2f36 !important;
 }
 
+.app-loading-orb,
+.app-loading-ring,
+.app-loading-icon,
+.jira-loading-bar {
+  transform: translateZ(0);
+  will-change: transform, opacity;
+}
+
+.app-loading-ring-fast {
+  animation: jira-loading-spin 820ms linear infinite;
+}
+
+.app-loading-ring-slow {
+  animation: jira-loading-spin 1280ms linear infinite reverse;
+}
+
+.app-loading-icon {
+  animation: jira-loading-spin 960ms linear infinite;
+}
+
+.jira-loading-bar {
+  animation: jira-loading-bar-slide 1200ms ease-in-out infinite;
+}
+
+@keyframes jira-loading-spin {
+  from {
+    transform: translateZ(0) rotate(0deg);
+  }
+
+  to {
+    transform: translateZ(0) rotate(360deg);
+  }
+}
+
+@keyframes jira-loading-bar-slide {
+  0% {
+    opacity: 0.45;
+    transform: translate3d(-115%, 0, 0);
+  }
+
+  45% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0.45;
+    transform: translate3d(230%, 0, 0);
+  }
+}
+
 .theme-dark ::selection {
   background: #1d3b66;
 }

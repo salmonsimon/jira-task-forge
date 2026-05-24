@@ -1,4 +1,5 @@
 use rusqlite::{params, Connection};
+use serde_json::Value;
 use uuid::Uuid;
 
 use crate::db::{utc_now_string, DbError, DbResult};
@@ -15,6 +16,10 @@ pub struct TaskRepository<'connection> {
 }
 
 pub struct SettingsRepository<'connection> {
+    connection: &'connection Connection,
+}
+
+pub struct SyncRepository<'connection> {
     connection: &'connection Connection,
 }
 
@@ -261,11 +266,215 @@ impl<'connection> TaskRepository<'connection> {
         Ok(exported_tasks)
     }
 
+    pub fn mark_jira_created(
+        &self,
+        task_id: &str,
+        jira_key: &str,
+        jira_url: &str,
+        epic_key: &str,
+    ) -> DbResult<Option<LocalTask>> {
+        let now = utc_now_string()?;
+        let tray_id = self.connection.query_row(
+            "SELECT tray_id FROM tasks WHERE id = ?1",
+            [task_id],
+            |row| row.get::<_, String>(0),
+        );
+
+        let Ok(tray_id) = tray_id else {
+            return Ok(None);
+        };
+
+        self.connection.execute(
+            "
+            UPDATE tasks
+            SET sync_status = 'Created',
+                jira_key = ?1,
+                jira_url = ?2,
+                epic_key = ?3,
+                updated_at = ?4
+            WHERE id = ?5
+            ",
+            (jira_key, jira_url, epic_key, now.as_str(), task_id),
+        )?;
+        self.touch_tray(&tray_id, &now)?;
+
+        Ok(self.list_all()?.into_iter().find(|task| task.id == task_id))
+    }
+
+    pub fn mark_jira_failed(&self, task_id: &str) -> DbResult<Option<LocalTask>> {
+        let now = utc_now_string()?;
+        let tray_id = self.connection.query_row(
+            "SELECT tray_id FROM tasks WHERE id = ?1",
+            [task_id],
+            |row| row.get::<_, String>(0),
+        );
+
+        let Ok(tray_id) = tray_id else {
+            return Ok(None);
+        };
+
+        self.connection.execute(
+            "
+            UPDATE tasks
+            SET sync_status = 'Failed', updated_at = ?1
+            WHERE id = ?2 AND sync_status != 'Created'
+            ",
+            (now.as_str(), task_id),
+        )?;
+        self.touch_tray(&tray_id, &now)?;
+
+        Ok(self.list_all()?.into_iter().find(|task| task.id == task_id))
+    }
+
+    pub fn move_tasks_to_tray(
+        &self,
+        task_ids: &[String],
+        target_tray_id: &str,
+    ) -> DbResult<Vec<LocalTask>> {
+        if task_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let now = utc_now_string()?;
+        let mut touched_tray_ids = vec![target_tray_id.to_string()];
+        let mut moved_task_ids = Vec::<String>::new();
+        let mut next_order: i64 = self.connection.query_row(
+            "SELECT COALESCE(MAX(task_order), -1) + 1 FROM tasks WHERE tray_id = ?1",
+            [target_tray_id],
+            |row| row.get(0),
+        )?;
+
+        for task_id in task_ids {
+            let source_tray_id = self.connection.query_row(
+                "SELECT tray_id FROM tasks WHERE id = ?1 AND sync_status != 'Created'",
+                [task_id.as_str()],
+                |row| row.get::<_, String>(0),
+            );
+            let Ok(source_tray_id) = source_tray_id else {
+                continue;
+            };
+
+            self.connection.execute(
+                "
+                UPDATE tasks
+                SET tray_id = ?1, task_order = ?2, updated_at = ?3
+                WHERE id = ?4 AND sync_status != 'Created'
+                ",
+                (target_tray_id, next_order, now.as_str(), task_id.as_str()),
+            )?;
+            next_order += 1;
+            moved_task_ids.push(task_id.clone());
+            if !touched_tray_ids.contains(&source_tray_id) {
+                touched_tray_ids.push(source_tray_id);
+            }
+        }
+
+        for tray_id in touched_tray_ids {
+            self.touch_tray(&tray_id, &now)?;
+        }
+
+        let tasks = self.list_all()?;
+        Ok(moved_task_ids
+            .iter()
+            .filter_map(|task_id| tasks.iter().find(|task| task.id == *task_id).cloned())
+            .collect())
+    }
+
     fn touch_tray(&self, tray_id: &str, updated_at: &str) -> DbResult<()> {
         self.connection.execute(
-            "UPDATE trays SET updated_at = ?1 WHERE id = ?2",
+            "
+            UPDATE trays
+            SET updated_at = ?1,
+                state = CASE
+                    WHEN state = 'Archived' THEN state
+                    WHEN NOT EXISTS (
+                        SELECT 1 FROM tasks WHERE tray_id = ?2
+                    ) THEN 'Active'
+                    WHEN EXISTS (
+                        SELECT 1 FROM tasks WHERE tray_id = ?2 AND sync_status = 'Failed'
+                    ) THEN 'Needs attention'
+                    WHEN NOT EXISTS (
+                        SELECT 1 FROM tasks WHERE tray_id = ?2 AND sync_status != 'Created'
+                    ) THEN 'Completed'
+                    ELSE 'Active'
+                END
+            WHERE id = ?2
+            ",
             (updated_at, tray_id),
         )?;
+        Ok(())
+    }
+}
+
+impl<'connection> SyncRepository<'connection> {
+    pub fn new(connection: &'connection Connection) -> Self {
+        Self { connection }
+    }
+
+    pub fn start_attempt(&self, tray_id: &str, trigger: &str) -> DbResult<String> {
+        let attempt_id = Uuid::new_v4().to_string();
+        let now = utc_now_string()?;
+
+        self.connection.execute(
+            "
+            INSERT INTO sync_attempts (id, tray_id, started_at, finished_at, status, trigger)
+            VALUES (?1, ?2, ?3, NULL, 'running', ?4)
+            ",
+            (attempt_id.as_str(), tray_id, now.as_str(), trigger),
+        )?;
+
+        Ok(attempt_id)
+    }
+
+    pub fn finish_attempt(&self, attempt_id: &str, status: &str) -> DbResult<()> {
+        let now = utc_now_string()?;
+        self.connection.execute(
+            "
+            UPDATE sync_attempts
+            SET finished_at = ?1, status = ?2
+            WHERE id = ?3
+            ",
+            (now.as_str(), status, attempt_id),
+        )?;
+        Ok(())
+    }
+
+    pub fn record_event(
+        &self,
+        sync_attempt_id: &str,
+        tray_id: &str,
+        task_id: Option<&str>,
+        event_type: &str,
+        outcome: &str,
+        operation: &str,
+        detail: Value,
+    ) -> DbResult<()> {
+        let event_id = Uuid::new_v4().to_string();
+        let occurred_at = utc_now_string()?;
+        let detail_json = serde_json::to_string(&detail)
+            .map_err(|error| DbError::InvalidData(error.to_string()))?;
+
+        self.connection.execute(
+            "
+            INSERT INTO sync_audit_events (
+                id, sync_attempt_id, tray_id, task_id, event_type, occurred_at,
+                outcome, provider, operation, detail_json
+            )
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 'jira', ?8, ?9)
+            ",
+            (
+                event_id.as_str(),
+                sync_attempt_id,
+                tray_id,
+                task_id,
+                event_type,
+                occurred_at.as_str(),
+                outcome,
+                operation,
+                detail_json.as_str(),
+            ),
+        )?;
+
         Ok(())
     }
 }
@@ -676,6 +885,174 @@ mod tests {
             .expect("created task update is ignored");
 
         assert_eq!(blocked, None);
+    }
+
+    #[test]
+    fn moves_retryable_tasks_to_another_tray_without_copying_created_tasks() {
+        let connection = open_in_memory_database().expect("database opens");
+        let tray_repository = TrayRepository::new(&connection);
+        let task_repository = TaskRepository::new(&connection);
+        let source_tray = tray_repository
+            .create(NewTray {
+                name: "Source".to_string(),
+            })
+            .expect("source tray creates");
+        let recovery_tray = tray_repository
+            .create(NewTray {
+                name: "Recovery".to_string(),
+            })
+            .expect("recovery tray creates");
+        let failed = task_repository
+            .create(NewTask {
+                tray_id: source_tray.id.clone(),
+                project: "STT".to_string(),
+                area: "Bug".to_string(),
+                title: "Failed task".to_string(),
+                priority: "High".to_string(),
+                issue_type: "Bug".to_string(),
+                content_language: "Spanish".to_string(),
+            })
+            .expect("failed task creates");
+        let created = task_repository
+            .create(NewTask {
+                tray_id: source_tray.id.clone(),
+                project: "STT".to_string(),
+                area: "3D".to_string(),
+                title: "Created task".to_string(),
+                priority: "Medium".to_string(),
+                issue_type: "Story".to_string(),
+                content_language: "Spanish".to_string(),
+            })
+            .expect("created task creates");
+
+        connection
+            .execute(
+                "UPDATE tasks SET sync_status = 'Failed' WHERE id = ?1",
+                [failed.id.as_str()],
+            )
+            .expect("failed status updates");
+        connection
+            .execute(
+                "UPDATE tasks SET sync_status = 'Created' WHERE id = ?1",
+                [created.id.as_str()],
+            )
+            .expect("created status updates");
+
+        let moved = task_repository
+            .move_tasks_to_tray(&[failed.id.clone(), created.id.clone()], &recovery_tray.id)
+            .expect("tasks move");
+
+        assert_eq!(moved.len(), 1);
+        let source_tasks = task_repository
+            .list_for_tray(&source_tray.id)
+            .expect("source tasks list");
+        let recovery_tasks = task_repository
+            .list_for_tray(&recovery_tray.id)
+            .expect("recovery tasks list");
+
+        assert!(source_tasks.iter().any(|task| task.id == created.id));
+        assert!(recovery_tasks.iter().any(|task| task.id == failed.id));
+        assert!(!recovery_tasks.iter().any(|task| task.id == created.id));
+    }
+
+    #[test]
+    fn derives_tray_state_from_task_sync_status_after_task_changes() {
+        let connection = open_in_memory_database().expect("database opens");
+        let tray_repository = TrayRepository::new(&connection);
+        let task_repository = TaskRepository::new(&connection);
+        let tray = tray_repository
+            .create(NewTray {
+                name: "State tray".to_string(),
+            })
+            .expect("tray creates");
+        let first = task_repository
+            .create(NewTask {
+                tray_id: tray.id.clone(),
+                project: "STT".to_string(),
+                area: "Bug".to_string(),
+                title: "First task".to_string(),
+                priority: "Medium".to_string(),
+                issue_type: "Bug".to_string(),
+                content_language: "Spanish".to_string(),
+            })
+            .expect("first task creates");
+        let second = task_repository
+            .create(NewTask {
+                tray_id: tray.id.clone(),
+                project: "STT".to_string(),
+                area: "3D".to_string(),
+                title: "Second task".to_string(),
+                priority: "High".to_string(),
+                issue_type: "Story".to_string(),
+                content_language: "Spanish".to_string(),
+            })
+            .expect("second task creates");
+
+        task_repository
+            .mark_jira_created(
+                &first.id,
+                "JTFTEST-10",
+                "https://example.test/browse/JTFTEST-10",
+                "JTFTEST-9",
+            )
+            .expect("first task marks created");
+        assert_eq!(
+            tray_repository
+                .find_by_id(&tray.id)
+                .expect("tray query")
+                .expect("tray exists")
+                .state,
+            TrayState::Active
+        );
+
+        task_repository
+            .mark_jira_created(
+                &second.id,
+                "JTFTEST-11",
+                "https://example.test/browse/JTFTEST-11",
+                "JTFTEST-9",
+            )
+            .expect("second task marks created");
+        assert_eq!(
+            tray_repository
+                .find_by_id(&tray.id)
+                .expect("tray query")
+                .expect("tray exists")
+                .state,
+            TrayState::Completed
+        );
+
+        let third = task_repository
+            .create(NewTask {
+                tray_id: tray.id.clone(),
+                project: "STT".to_string(),
+                area: "Polish".to_string(),
+                title: "New work reopens tray".to_string(),
+                priority: "Low".to_string(),
+                issue_type: "Story".to_string(),
+                content_language: "Spanish".to_string(),
+            })
+            .expect("third task creates");
+        assert_eq!(
+            tray_repository
+                .find_by_id(&tray.id)
+                .expect("tray query")
+                .expect("tray exists")
+                .state,
+            TrayState::Active
+        );
+
+        task_repository
+            .mark_jira_failed(&third.id)
+            .expect("third task marks failed");
+        assert_eq!(
+            tray_repository
+                .find_by_id(&tray.id)
+                .expect("tray query")
+                .expect("tray exists")
+                .state,
+            TrayState::NeedsAttention
+        );
     }
 
     #[test]

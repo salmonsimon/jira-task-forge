@@ -86,11 +86,11 @@ High-level shape:
 - Technical stack is Tauri + React + TypeScript + shadcn/ui + Tailwind + SQLite.
 - Jira and AI calls should run through the Rust/Tauri backend, not directly from React.
 - The first prototype has moved into the real app skeleton.
-- The shell includes `Trays`, `JQL`, `Categories`, `Settings`, task detail, CSV export, Jira settings, token storage, connection testing, and create preflight.
+- The shell includes `Trays`, `JQL`, `Categories`, `Settings`, task detail, CSV export, Jira settings, token storage, connection testing, create preflight, and the first guarded Jira write flow.
 
 ## Current Engineering Checkpoint
 
-As of PR #21, `main` includes:
+As of the `codex/jira-create-parent-issues` slice, the working branch includes:
 
 - Tauri + React shell with Jira-like styling.
 - SQLite-backed local trays and local tasks.
@@ -100,6 +100,7 @@ As of PR #21, `main` includes:
 - Jira API token storage through the OS credential store.
 - Jira connection test using the configured site, account email, and saved token.
 - `Create in Jira` preflight, including credential/project/task validation and a configurable Jira creation project key.
+- First Jira write slice behind preflight: creation metadata validation, epic search/create by `[{Project}] {Area}`, parent Story/Bug creation, local Jira key/link persistence, remote correlation markers through Jira issue properties, sync audit events, and partial recovery via moving failed tasks to a recovery tray.
 - A reusable backend Jira client and read-only JQL query command wired to the JQL panel.
 - Jira QA boundary: `JTFTEST` is the writable test project. Agents may freely
   mutate `JTFTEST` for implementation and QA. `DTS` is read-only reference data
@@ -107,11 +108,16 @@ As of PR #21, `main` includes:
 
 Still pending:
 
-- Real Jira issue creation through the API.
+- Live native QA of the new Jira write flow against `JTFTEST`.
 - Categories/JQL favorites persistence in the UI.
-- Attachments, backup/import, audit log behavior, and AI integrations.
+- Attachments, backup/import, audit log UI, and AI integrations.
 - Full native QA in an environment with the Linux system dependencies needed by Tauri/keyring.
 - CSV upload-to-Jira fallback validation after the API create flow works.
+- After the guarded parent issue creation slice closes, run an
+  `improve-codebase-architecture` stabilization pass before expanding into
+  sub-task creation, attachment upload, or AI writes. Current automated test
+  coverage is strongest in Rust persistence/Jira sync behavior and weakest in
+  frontend interaction behavior.
 
 ## Open Grill Area
 
@@ -128,11 +134,11 @@ Recommended stack to discuss next:
 
 - Run native QA for tray lifecycle, CSV export, settings, token storage, Jira connection test, and create preflight.
 - Run native QA for direct JQL queries from the JQL tab.
-- Add Jira issue creation behind preflight, idempotency checks, and audit logs.
-  First write slice scope: metadata preflight, epic search/create, parent
-  Story/Bug creation, local Jira link persistence, remote correlation markers,
-  audit events, and partial recovery. Keep sub-tasks and attachments for later
-  slices.
+- Run live QA for Jira issue creation against `JTFTEST`: missing description confirmation, metadata preflight, epic reuse/create, parent Story/Bug creation, partial failure, and recovery tray movement.
+- Run an `improve-codebase-architecture` pass after PR #26 merges to make the
+  proven Jira creation flow more testable and AI-navigable before adding more
+  integration surface.
+- Keep sub-tasks and attachments for later slices.
 - After API creation works, verify that Jira CSV upload still works from exported files.
 
 ## Suggested Skills For Next Session
