@@ -10,6 +10,16 @@ use crate::services::AppServices;
 const ATLASSIAN_API_TOKENS_URL: &str =
     "https://id.atlassian.com/manage-profile/security/api-tokens";
 
+async fn run_blocking_result<T, F>(worker_name: &str, work: F) -> Result<T, String>
+where
+    T: Send + 'static,
+    F: FnOnce() -> Result<T, String> + Send + 'static,
+{
+    tauri::async_runtime::spawn_blocking(work)
+        .await
+        .map_err(|error| format!("{worker_name} failed: {error}"))?
+}
+
 #[tauri::command]
 pub fn create_tray(services: State<'_, AppServices>, name: String) -> Result<Tray, String> {
     services
@@ -80,13 +90,12 @@ pub fn update_app_settings(
 #[tauri::command]
 pub async fn has_jira_api_token(services: State<'_, AppServices>) -> Result<bool, String> {
     let services = services.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || {
+    run_blocking_result("Credential worker", move || {
         services
             .has_jira_api_token()
             .map_err(|error| error.to_string())
     })
     .await
-    .map_err(|error| format!("Credential worker failed: {error}"))?
 }
 
 #[tauri::command]
@@ -99,25 +108,23 @@ pub async fn save_jira_api_token(
     }
 
     let services = services.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || {
+    run_blocking_result("Credential worker", move || {
         services
             .save_jira_api_token(&token)
             .map_err(|error| error.to_string())
     })
     .await
-    .map_err(|error| format!("Credential worker failed: {error}"))?
 }
 
 #[tauri::command]
 pub async fn delete_jira_api_token(services: State<'_, AppServices>) -> Result<(), String> {
     let services = services.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || {
+    run_blocking_result("Credential worker", move || {
         services
             .delete_jira_api_token()
             .map_err(|error| error.to_string())
     })
     .await
-    .map_err(|error| format!("Credential worker failed: {error}"))?
 }
 
 #[tauri::command]
@@ -125,9 +132,10 @@ pub async fn test_jira_connection(
     services: State<'_, AppServices>,
 ) -> Result<JiraConnectionTestResult, String> {
     let services = services.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || services.test_jira_connection())
-        .await
-        .map_err(|error| format!("Jira connection worker failed: {error}"))
+    run_blocking_result("Jira connection worker", move || {
+        Ok(services.test_jira_connection())
+    })
+    .await
 }
 
 #[tauri::command]
@@ -137,11 +145,10 @@ pub async fn run_jql_query(
     max_results: Option<usize>,
 ) -> Result<JqlSearchResponse, String> {
     let services = services.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || {
+    run_blocking_result("Jira JQL worker", move || {
         services.run_jql_query(&jql, max_results.unwrap_or(50))
     })
     .await
-    .map_err(|error| format!("Jira JQL worker failed: {error}"))?
 }
 
 #[tauri::command]
@@ -151,11 +158,10 @@ pub async fn create_jira_parent_issues(
     allow_missing_descriptions: bool,
 ) -> Result<JiraCreateIssuesResult, String> {
     let services = services.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || {
+    run_blocking_result("Jira creation worker", move || {
         services.create_jira_parent_issues(&tray_id, allow_missing_descriptions)
     })
     .await
-    .map_err(|error| format!("Jira creation worker failed: {error}"))?
 }
 
 #[tauri::command]
