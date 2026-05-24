@@ -103,6 +103,7 @@ pub struct JiraConnectionTestResult {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct JiraMyself {
+    pub account_id: Option<String>,
     pub display_name: Option<String>,
     pub email_address: Option<String>,
 }

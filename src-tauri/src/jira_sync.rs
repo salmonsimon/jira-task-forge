@@ -8,7 +8,7 @@ use crate::integrations::jira::JiraClient;
 use crate::models::{
     JiraCreateAllowedValue, JiraCreateFieldMetadata, JiraCreateIssueResponse,
     JiraCreateIssueTypeMetadata, JiraCreateIssuesResult, JiraCreateMetadata,
-    JiraCreatedIssueResult, JiraFailedTaskResult, JqlSearchResponse, LocalTask,
+    JiraCreatedIssueResult, JiraFailedTaskResult, JiraMyself, JqlSearchResponse, LocalTask,
 };
 use crate::repositories::{SyncRepository, TaskRepository, TrayRepository};
 
@@ -18,6 +18,7 @@ const JIRA_PROVIDER_OPERATION: &str = "create-parent-issues";
 
 pub trait JiraIssueGateway {
     fn create_metadata(&mut self, project_key: &str) -> Result<JiraCreateMetadata, String>;
+    fn current_user(&mut self) -> Result<JiraMyself, String>;
     fn search_jql(&mut self, jql: &str, max_results: usize) -> Result<JqlSearchResponse, String>;
     fn create_issue(&mut self, payload: Value) -> Result<JiraCreateIssueResponse, String>;
     fn issue_browse_url(&self, key: &str) -> String;
@@ -26,6 +27,10 @@ pub trait JiraIssueGateway {
 impl JiraIssueGateway for JiraClient {
     fn create_metadata(&mut self, project_key: &str) -> Result<JiraCreateMetadata, String> {
         self.get_create_issue_metadata(project_key)
+    }
+
+    fn current_user(&mut self) -> Result<JiraMyself, String> {
+        self.get_myself()
     }
 
     fn search_jql(&mut self, jql: &str, max_results: usize) -> Result<JqlSearchResponse, String> {
@@ -169,6 +174,39 @@ where
             )
             .map_err(db_error_message)?;
 
+        let reporter_account_id = if plan.requires_reporter() {
+            match self.gateway.current_user() {
+                Ok(user) => match user.account_id {
+                    Some(account_id) if !account_id.trim().is_empty() => Some(account_id),
+                    _ => {
+                        return self.finish_blocked(
+                            sync_repository,
+                            &sync_attempt_id,
+                            tray_id,
+                            vec![
+                                "Jira create metadata requires Reporter, but the current Jira account id could not be resolved."
+                                    .to_string(),
+                            ],
+                            result,
+                        )
+                    }
+                },
+                Err(message) => {
+                    return self.finish_blocked(
+                        sync_repository,
+                        &sync_attempt_id,
+                        tray_id,
+                        vec![format!(
+                            "Jira create metadata requires Reporter, but the current Jira user could not be read: {message}"
+                        )],
+                        result,
+                    )
+                }
+            }
+        } else {
+            None
+        };
+
         let groups = group_tasks_by_project_area(parent_tasks);
         for ((local_project, area), group_tasks) in groups {
             let epic_summary = format!("[{local_project}] {area}");
@@ -182,6 +220,7 @@ where
                 &local_project,
                 &area,
                 &epic_summary,
+                reporter_account_id.as_deref(),
             ) {
                 Ok(key) => key,
                 Err(message) => {
@@ -227,6 +266,7 @@ where
                     &task,
                     &epic_key,
                     &sync_attempt_id,
+                    reporter_account_id.as_deref(),
                 );
 
                 match self.gateway.create_issue(payload) {
@@ -456,6 +496,18 @@ impl ResolvedCreateMetadata {
         }
         names
     }
+
+    fn requires_reporter(&self) -> bool {
+        self.epic.requires_field("reporter")
+            || self
+                .story
+                .as_ref()
+                .is_some_and(|story| story.requires_field("reporter"))
+            || self
+                .bug
+                .as_ref()
+                .is_some_and(|bug| bug.requires_field("reporter"))
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -504,9 +556,13 @@ impl IssueTypePlan {
         self.fields.get(key)
     }
 
+    fn requires_field(&self, key: &str) -> bool {
+        self.fields.get(key).is_some_and(|field| field.required)
+    }
+
     fn validation_messages(&self) -> Vec<String> {
         let mut messages = Vec::new();
-        for key in ["summary", "issuetype", "project", "priority", "labels"] {
+        for key in ["summary", "issuetype", "project", "labels"] {
             if !self.fields.contains_key(key) {
                 messages.push(format!(
                     "Jira issue type {} is missing create field {key}.",
@@ -538,7 +594,7 @@ impl IssueTypePlan {
 
     fn can_populate_required_field(&self, field: &JiraCreateFieldMetadata) -> bool {
         match field.key.as_str() {
-            "summary" | "issuetype" | "project" | "priority" | "labels" => true,
+            "summary" | "issuetype" | "project" | "priority" | "labels" | "reporter" => true,
             "parent" => matches!(self.role, IssueTypeRole::Story | IssueTypeRole::Bug),
             "description" => false,
             _ if matches!(self.role, IssueTypeRole::Epic) && is_epic_name_field(field) => true,
@@ -598,7 +654,10 @@ fn issue_type_name_matches(name: &str, role: IssueTypeRole) -> bool {
     match role {
         IssueTypeRole::Epic => matches!(normalized.as_str(), "epic" | "epica"),
         IssueTypeRole::Story => matches!(normalized.as_str(), "story" | "historia" | "user story"),
-        IssueTypeRole::Bug => matches!(normalized.as_str(), "bug" | "defecto" | "incidencia"),
+        IssueTypeRole::Bug => matches!(
+            normalized.as_str(),
+            "bug" | "error" | "defecto" | "incidencia"
+        ),
     }
 }
 
@@ -637,6 +696,7 @@ fn resolve_or_create_epic<Gateway>(
     local_project: &str,
     area: &str,
     epic_summary: &str,
+    reporter_account_id: Option<&str>,
 ) -> Result<String, String>
 where
     Gateway: JiraIssueGateway,
@@ -676,6 +736,7 @@ where
         area,
         epic_summary,
         sync_attempt_id,
+        reporter_account_id,
     );
     let created_epic = gateway.create_issue(payload)?;
     sync_repository
@@ -702,6 +763,7 @@ fn build_epic_payload(
     area: &str,
     summary: &str,
     sync_attempt_id: &str,
+    reporter_account_id: Option<&str>,
 ) -> Value {
     let mut fields = json!({
         "project": { "key": jira_project_key },
@@ -709,7 +771,12 @@ fn build_epic_payload(
         "summary": summary,
         "labels": labels_for(local_project, area),
     });
-    fields["priority"] = priority_value(plan.epic.field("priority"), "Medium");
+    if plan.epic.field("priority").is_some() {
+        fields["priority"] = priority_value(plan.epic.field("priority"), "Medium");
+    }
+    if let Some(account_id) = reporter_account_id {
+        fields["reporter"] = json!({ "accountId": account_id });
+    }
     if let Some(epic_name_field) = &plan.epic.epic_name_field {
         fields[epic_name_field] = json!(summary);
     }
@@ -735,6 +802,7 @@ fn build_parent_issue_payload(
     task: &LocalTask,
     epic_key: &str,
     sync_attempt_id: &str,
+    reporter_account_id: Option<&str>,
 ) -> Value {
     let mut fields = json!({
         "project": { "key": jira_project_key },
@@ -742,7 +810,12 @@ fn build_parent_issue_payload(
         "summary": task.title,
         "labels": labels_for(&task.project, &task.area),
     });
-    fields["priority"] = priority_value(issue_type.field("priority"), &task.priority);
+    if issue_type.field("priority").is_some() {
+        fields["priority"] = priority_value(issue_type.field("priority"), &task.priority);
+    }
+    if let Some(account_id) = reporter_account_id {
+        fields["reporter"] = json!({ "accountId": account_id });
+    }
 
     if let Some(epic_link_field) = &issue_type.epic_link_field {
         fields[&epic_link_field.key] = match epic_link_field.style {
@@ -1094,7 +1167,60 @@ mod tests {
         );
     }
 
+    #[test]
+    fn creates_with_jira_localized_metadata_required_reporter_and_no_priority_field() {
+        let connection = open_in_memory_database().expect("database opens");
+        let tray_repository = TrayRepository::new(&connection);
+        let task_repository = TaskRepository::new(&connection);
+        let tray = tray_repository
+            .create(NewTray {
+                name: "JTFTEST metadata".to_string(),
+            })
+            .expect("tray creates");
+        let task = task_repository
+            .create(NewTask {
+                tray_id: tray.id.clone(),
+                project: "JTF Live QA".to_string(),
+                area: "Bug".to_string(),
+                title: "Uses localized Jira metadata".to_string(),
+                priority: "Medium".to_string(),
+                issue_type: "Bug".to_string(),
+                content_language: "Spanish".to_string(),
+            })
+            .expect("task creates");
+        let mut gateway = FakeJiraGateway::new();
+        gateway.metadata = jtf_test_metadata("JTFTEST");
+        gateway.created_keys = vec!["JTFTEST-2".to_string(), "JTFTEST-3".to_string()];
+
+        let mut runner = JiraSyncRunner::new(&connection, &mut gateway, "JTFTEST".to_string());
+        let result = runner
+            .create_parent_issues_from_tray(&tray.id, true)
+            .expect("sync succeeds");
+
+        assert_eq!(result.status, "succeeded");
+        assert_eq!(result.created_issues[0].key, "JTFTEST-3");
+        assert_eq!(result.created_issues[0].issue_type, "Bug");
+        assert_eq!(
+            gateway.created_payloads[1]["fields"]["issuetype"]["id"],
+            json!("10044")
+        );
+        assert_eq!(
+            gateway.created_payloads[1]["fields"]["reporter"]["accountId"],
+            json!("account-1")
+        );
+        assert!(gateway.created_payloads[1]["fields"]["priority"].is_null());
+
+        let persisted_task = TaskRepository::new(&connection)
+            .list_for_tray(&tray.id)
+            .expect("tasks list")
+            .into_iter()
+            .find(|candidate| candidate.id == task.id)
+            .expect("task remains");
+        assert_eq!(persisted_task.jira_key.as_deref(), Some("JTFTEST-3"));
+    }
+
     struct FakeJiraGateway {
+        metadata: JiraCreateMetadata,
         created_payloads: Vec<Value>,
         created_keys: Vec<String>,
         create_failures: Vec<String>,
@@ -1103,6 +1229,7 @@ mod tests {
     impl FakeJiraGateway {
         fn new() -> Self {
             Self {
+                metadata: test_metadata("JTFTEST"),
                 created_payloads: Vec::new(),
                 created_keys: Vec::new(),
                 create_failures: Vec::new(),
@@ -1112,7 +1239,17 @@ mod tests {
 
     impl JiraIssueGateway for FakeJiraGateway {
         fn create_metadata(&mut self, project_key: &str) -> Result<JiraCreateMetadata, String> {
-            Ok(test_metadata(project_key))
+            let mut metadata = self.metadata.clone();
+            metadata.project_key = project_key.to_string();
+            Ok(metadata)
+        }
+
+        fn current_user(&mut self) -> Result<JiraMyself, String> {
+            Ok(JiraMyself {
+                account_id: Some("account-1".to_string()),
+                display_name: Some("QA User".to_string()),
+                email_address: Some("qa@example.com".to_string()),
+            })
         }
 
         fn search_jql(
@@ -1158,6 +1295,17 @@ mod tests {
         }
     }
 
+    fn jtf_test_metadata(project_key: &str) -> JiraCreateMetadata {
+        JiraCreateMetadata {
+            project_key: project_key.to_string(),
+            issue_types: vec![
+                localized_issue_type("10039", "Epic", IssueTypeRole::Epic),
+                localized_issue_type("10042", "Historia", IssueTypeRole::Story),
+                localized_issue_type("10044", "Error", IssueTypeRole::Bug),
+            ],
+        }
+    }
+
     fn issue_type(id: &str, name: &str, role: IssueTypeRole) -> JiraCreateIssueTypeMetadata {
         let mut fields = vec![
             field("project", "Project", true),
@@ -1168,6 +1316,30 @@ mod tests {
         ];
         if matches!(role, IssueTypeRole::Story | IssueTypeRole::Bug) {
             fields.push(field("parent", "Parent", false));
+        }
+
+        JiraCreateIssueTypeMetadata {
+            id: id.to_string(),
+            name: name.to_string(),
+            subtask: false,
+            fields,
+        }
+    }
+
+    fn localized_issue_type(
+        id: &str,
+        name: &str,
+        role: IssueTypeRole,
+    ) -> JiraCreateIssueTypeMetadata {
+        let mut fields = vec![
+            field("project", "Proyecto", true),
+            field("issuetype", "Tipo de Incidencia", true),
+            field("summary", "Resumen", true),
+            field("labels", "Etiquetas", false),
+            field("reporter", "Informador", true),
+        ];
+        if matches!(role, IssueTypeRole::Story | IssueTypeRole::Bug) {
+            fields.push(field("parent", "Principal", false));
         }
 
         JiraCreateIssueTypeMetadata {
