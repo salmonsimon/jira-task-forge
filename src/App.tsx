@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { downloadDir, join } from "@tauri-apps/api/path";
 import { save } from "@tauri-apps/plugin-dialog";
 import { AppHeader } from "./components/shell";
@@ -678,15 +679,16 @@ export default function App() {
   async function createJiraParentIssues(options: { allowMissingDescriptions: boolean }) {
     if (!jiraCreatePreflight || !usesTauriPersistence) return;
 
-    setIsCreatingJiraIssues(true);
-    setJiraCreateResult(null);
-    setJiraCreateError(null);
-    const loadingStartedAt = performance.now();
+    flushSync(() => {
+      setIsCreatingJiraIssues(true);
+      setJiraCreateResult(null);
+      setJiraCreateError(null);
+    });
     let shouldClosePreflight = false;
     let nextCreateResult: JiraCreateIssuesResult | null = null;
     let nextCreateError: string | null = null;
     await waitForNextPaint();
-    await waitForMinimumElapsed(loadingStartedAt, 1000);
+    await delay(1000);
 
     try {
       const result = await createPersistedJiraParentIssues(
@@ -713,7 +715,6 @@ export default function App() {
     } catch (error) {
       nextCreateError = error instanceof Error ? error.message : String(error || "Could not create Jira issues.");
     } finally {
-      await waitForMinimumElapsed(loadingStartedAt, 1000);
       setIsCreatingJiraIssues(false);
       if (shouldClosePreflight) {
         setJiraCreatePreflight(null);
