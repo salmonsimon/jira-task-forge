@@ -167,4 +167,35 @@ mod tests {
             Path::new("/tmp/jira-task-forge/data/jira-task-forge.sqlite3")
         );
     }
+
+    #[test]
+    fn open_app_database_creates_parent_directory_and_runs_migrations_once() {
+        let app_data_dir =
+            std::env::temp_dir().join(format!("jira-task-forge-db-{}", uuid::Uuid::new_v4()));
+        let path = database_path(&app_data_dir);
+
+        {
+            let connection = open_app_database(&app_data_dir).expect("database opens");
+            let migration_count: i64 = connection
+                .query_row("SELECT COUNT(*) FROM schema_migrations", [], |row| {
+                    row.get(0)
+                })
+                .expect("migration count reads");
+            assert_eq!(migration_count, 1);
+        }
+
+        assert!(path.exists());
+
+        {
+            let connection = open_app_database(&app_data_dir).expect("database reopens");
+            let migration_count: i64 = connection
+                .query_row("SELECT COUNT(*) FROM schema_migrations", [], |row| {
+                    row.get(0)
+                })
+                .expect("migration count reads");
+            assert_eq!(migration_count, 1);
+        }
+
+        fs::remove_dir_all(app_data_dir).expect("database cleanup");
+    }
 }

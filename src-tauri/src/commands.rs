@@ -292,3 +292,60 @@ fn derive_issue_type_from_area(area: &str) -> &'static str {
         "Story"
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{derive_issue_type_from_area, platform_open_command, save_csv_file};
+
+    #[test]
+    fn derives_bug_issue_type_only_from_bug_area() {
+        assert_eq!(derive_issue_type_from_area("Bug"), "Bug");
+        assert_eq!(derive_issue_type_from_area("  bug  "), "Bug");
+        assert_eq!(derive_issue_type_from_area("Programacion"), "Story");
+        assert_eq!(derive_issue_type_from_area("3D"), "Story");
+        assert_eq!(derive_issue_type_from_area(""), "Story");
+    }
+
+    #[test]
+    fn rejects_empty_csv_save_paths() {
+        assert_eq!(
+            save_csv_file("   ".to_string(), "summary".to_string())
+                .expect_err("empty path should fail"),
+            "CSV path cannot be empty"
+        );
+    }
+
+    #[test]
+    fn writes_csv_contents_to_selected_path() {
+        let path =
+            std::env::temp_dir().join(format!("jira-task-forge-csv-{}.csv", uuid::Uuid::new_v4()));
+
+        save_csv_file(
+            path.to_string_lossy().to_string(),
+            "Summary,Issue Type\nTask,Story\n".to_string(),
+        )
+        .expect("csv saves");
+
+        assert_eq!(
+            std::fs::read_to_string(&path).expect("csv reads"),
+            "Summary,Issue Type\nTask,Story\n"
+        );
+        std::fs::remove_file(path).expect("csv cleanup");
+    }
+
+    #[test]
+    fn builds_platform_open_command_for_external_links() {
+        let command = platform_open_command("https://example.test").expect("command builds");
+
+        if cfg!(target_os = "windows") {
+            assert_eq!(command.get_program(), "cmd");
+            assert!(command.get_args().any(|arg| arg == "https://example.test"));
+        } else if cfg!(target_os = "macos") {
+            assert_eq!(command.get_program(), "open");
+            assert!(command.get_args().any(|arg| arg == "https://example.test"));
+        } else if cfg!(target_os = "linux") {
+            assert_eq!(command.get_program(), "xdg-open");
+            assert!(command.get_args().any(|arg| arg == "https://example.test"));
+        }
+    }
+}
