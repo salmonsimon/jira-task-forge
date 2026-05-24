@@ -216,3 +216,62 @@ impl Default for AppSettings {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{AppSettings, TrayState};
+
+    #[test]
+    fn tray_state_round_trips_database_values() {
+        for (state, db_value) in [
+            (TrayState::Active, "Active"),
+            (TrayState::NeedsAttention, "Needs attention"),
+            (TrayState::Completed, "Completed"),
+            (TrayState::Archived, "Archived"),
+        ] {
+            assert_eq!(state.as_db_value(), db_value);
+            assert_eq!(
+                TrayState::from_db_value(db_value).expect("state parses"),
+                state
+            );
+        }
+
+        assert_eq!(
+            TrayState::from_db_value("Done").expect_err("unknown state should fail"),
+            "unknown tray state: Done"
+        );
+    }
+
+    #[test]
+    fn app_settings_supports_legacy_sandbox_project_key_alias() {
+        let settings = serde_json::from_value::<AppSettings>(serde_json::json!({
+            "themeMode": "dark",
+            "jiraSiteUrl": "https://example.atlassian.net",
+            "jiraAccountEmail": "saimon@example.com",
+            "jiraAuthMethod": "api-token",
+            "jiraSandboxProjectKey": "JTFTEST",
+            "aiProvider": "OpenAI",
+            "aiModel": "gpt-4.1",
+            "defaultContentLanguage": "Spanish"
+        }))
+        .expect("settings deserialize");
+
+        assert_eq!(settings.jira_creation_project_key, "JTFTEST");
+    }
+
+    #[test]
+    fn app_settings_defaults_missing_creation_project_key() {
+        let settings = serde_json::from_value::<AppSettings>(serde_json::json!({
+            "themeMode": "dark",
+            "jiraSiteUrl": "https://example.atlassian.net",
+            "jiraAccountEmail": "saimon@example.com",
+            "jiraAuthMethod": "api-token",
+            "aiProvider": "OpenAI",
+            "aiModel": "gpt-4.1",
+            "defaultContentLanguage": "Spanish"
+        }))
+        .expect("settings deserialize");
+
+        assert_eq!(settings.jira_creation_project_key, "");
+    }
+}

@@ -1144,6 +1144,66 @@ mod tests {
     }
 
     #[test]
+    fn records_sync_attempts_and_audit_events() {
+        let connection = open_in_memory_database().expect("database opens");
+        let tray_repository = TrayRepository::new(&connection);
+        let tray = tray_repository
+            .create(NewTray {
+                name: "Audit tray".to_string(),
+            })
+            .expect("tray creates");
+        let repository = SyncRepository::new(&connection);
+
+        let attempt_id = repository
+            .start_attempt(&tray.id, "create-in-jira")
+            .expect("attempt starts");
+        repository
+            .record_event(
+                &attempt_id,
+                &tray.id,
+                None,
+                "jira.sync.started",
+                "succeeded",
+                "create-parent-issues",
+                serde_json::json!({
+                    "jiraProjectKey": "JTFTEST",
+                    "taskCount": 2
+                }),
+            )
+            .expect("event records");
+        repository
+            .finish_attempt(&attempt_id, "succeeded")
+            .expect("attempt finishes");
+
+        let attempt_status: String = connection
+            .query_row(
+                "SELECT status FROM sync_attempts WHERE id = ?1",
+                [attempt_id.as_str()],
+                |row| row.get(0),
+            )
+            .expect("attempt status reads");
+        let (provider, operation, detail_json): (String, String, String) = connection
+            .query_row(
+                "
+                SELECT provider, operation, detail_json
+                FROM sync_audit_events
+                WHERE sync_attempt_id = ?1
+                ",
+                [attempt_id.as_str()],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .expect("audit event reads");
+        let detail: serde_json::Value =
+            serde_json::from_str(&detail_json).expect("detail json parses");
+
+        assert_eq!(attempt_status, "succeeded");
+        assert_eq!(provider, "jira");
+        assert_eq!(operation, "create-parent-issues");
+        assert_eq!(detail["jiraProjectKey"], "JTFTEST");
+        assert_eq!(detail["taskCount"], 2);
+    }
+
+    #[test]
     fn updates_tray_name_and_timestamp() {
         let connection = open_in_memory_database().expect("database opens");
         let repository = TrayRepository::new(&connection);
