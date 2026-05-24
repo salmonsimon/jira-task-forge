@@ -439,5 +439,9 @@ Goals:
   local `src/components/ui/` primitives, Tailwind classes, and `lucide-react`
   icons; add or build new controls only when the current options cannot cover a
   critical interaction safely.
+- Treat the current compositor-friendly `LoadingOrb` as functionally accepted
+  but visually provisional. It solved the loading stutter for PR #26, but Saimon
+  wants to review better spinner/loading visual options later before promoting
+  it as a polished framework-style control.
 - Consider coverage tooling only after the seams are clear; avoid chasing a
   percentage before the tests represent the product risks.
