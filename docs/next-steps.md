@@ -4,12 +4,12 @@ This document is the default execution path for the repo. It is meant to support
 
 ## Current Checkpoint
 
-Date: 2026-05-23
+Date: 2026-05-24
 
 Main is up to date at:
 
 ```text
-fdf710e Accept Jira sync ADRs for first write slice
+65bf0cf Add guarded Jira parent issue creation
 ```
 
 Merged since the first in-memory tray interactions:
@@ -30,6 +30,10 @@ Merged since the first in-memory tray interactions:
 - PR #20: updated the roadmap and handoff to the PR #19 checkpoint.
 - PR #21: added a reusable backend Jira client and read-only JQL query command wired to the JQL panel.
 - PR #25: accepted ADRs 0003-0008 for the first real Jira write slice.
+- PR #26: added guarded Jira parent issue creation, including metadata
+  preflight, epic resolution/creation, parent Story/Bug creation, priority
+  fallback updates, local recovery, JTFTEST live QA, and compositor-friendly
+  loading treatments for the Jira write path.
 
 Open for HITL review:
 
@@ -42,10 +46,12 @@ Current validation:
 - `npm install` may be needed after pulling because `@tauri-apps/plugin-dialog` was added.
 - `npm run build` passes on `main` after dependencies are installed.
 - `cargo fmt -- --check` passes after installing Rust/Cargo with rustup.
-- `cargo test` passes in the current WSL checkout. As of the PR #26 follow-up
-  work, the Rust suite has 24 tests covering SQLite schema/repositories,
-  settings defaults, Jira URL/error helpers, and the guarded Jira parent issue
-  sync path.
+- `cargo test` passes in the current WSL checkout. As of the PR #26
+  stabilization follow-up, the Rust suite has 30 tests covering SQLite
+  schema/repositories, settings defaults, Jira URL/error helpers, guarded Jira
+  parent issue sync, Jira credential debug redaction, and sync audit error
+  redaction/capping. Created local tasks are also protected from backend delete
+  operations, not only hidden from the UI.
 - There is no measured coverage report yet.
 - There is no automated frontend test runner yet. Frontend validation is
   currently TypeScript/Vite build plus manual/live QA.
@@ -100,6 +106,9 @@ Human QA to run before choosing the next implementation slice:
 - Run a direct JQL query from the JQL tab and confirm Jira results populate the table.
 - Open `Create in Jira` preflight and confirm missing credentials, missing creation project, and missing task fields produce blocking warnings.
 - Against `JTFTEST`, confirm preflight can create missing epics, create parent Story/Bug issues, persist Jira keys locally, and move failed tasks to a recovery tray without duplicating them.
+- Re-check that Settings token actions, Settings connection test, direct JQL,
+  and Create in Jira show loading before blocking work and remain responsive
+  enough after the command worker split.
 - After the API create path has live QA, test that uploading tasks from the exported CSV still works as a fallback. This is intentionally lower priority than API creation.
 
 Expected limitations right now:
@@ -122,11 +131,9 @@ Near-term decided follow-ups:
 
 Recommended next implementation:
 
-- Live QA the Jira write slice in `JTFTEST`; fix any metadata or payload mismatch before adding more write surfaces.
-- After PR #26 closes, run an `improve-codebase-architecture` pass before
-  adding the next Jira write slice. The goal is to refactor the now-proven Jira
-  creation flow into deeper, more testable modules and identify the next test
-  seams while the integration behavior is still fresh.
+- Finish the `codex/post-jira-architecture-tests` stabilization branch before
+  adding more write surfaces. The goal is to make the now-proven Jira creation
+  flow safer, more testable, and easier for future AFK agents to navigate.
 - Next write slices should stay narrow: sub-task creation first, attachment upload later.
 - If QA reveals product/UI friction, do a small frontend-only fix branch before expanding integration writes.
 
@@ -329,10 +336,12 @@ HITL:
 ## Recommended Sequence
 
 1. Keep the repo roadmap/docs synced with the current merged checkpoint.
-2. Run native Tauri QA for tray lifecycle, CSV export, settings, credential storage, Jira connection test, and create preflight.
-3. Add Jira create flow behind preflight, idempotency checks, and audit logs.
-4. Add native QA coverage for settings, credential storage, connection test, JQL query, preflight, and Jira creation.
-5. After API creation works, test that Jira CSV upload still works from exported files.
+2. Finish the post-PR #26 stabilization branch: command workers, audit
+   redaction, credential debug safety, and architecture/test candidates.
+3. Re-check native QA for settings, credential storage, connection test, JQL
+   query, preflight, and Jira creation after the worker split.
+4. Test that Jira CSV upload still works from exported files.
+5. Add sub-task creation as the next narrow Jira write slice.
 6. Add backup/import and attachment filesystem behavior as later slices under the accepted ADR contracts.
 7. Add categories/JQL favorites persistence if needed to support Jira read-only workflows.
 8. Add AI-assisted descriptions and JQL generation after settings/secrets are settled.
@@ -375,37 +384,43 @@ These can usually run without interruption when acceptance criteria are clear:
 
 Recommended next implementation slice:
 
-Branch: `codex/jira-create-parent-issues`
+Branch: `codex/post-jira-architecture-tests`
 
 Deliverables:
 
-- Implement the first Jira write slice under ADR 0005: metadata preflight,
-  epic search/create, parent Story/Bug creation, local Jira link persistence,
-  remote correlation markers, audit events, and partial recovery.
-- Keep sub-tasks and attachments out of this slice.
-- Use `JTFTEST` for real write QA and treat `DTS` as read-only reference data.
+- Stabilize the merged Jira write path before adding sub-task creation,
+  attachment upload, or AI writes.
+- Keep already accepted PR #26 behavior intact while tightening security and
+  responsiveness around Jira credentials, JQL, keyring operations, audit logs,
+  and command worker usage.
+- Add focused tests for accepted rules rather than introducing broad coverage
+  tooling before the useful seams are clear.
+- Document deeper architecture candidates for HITL review instead of making
+  larger module splits silently.
 
 Reason:
 
-- The read-only foundation is merged and ADRs 0003-0008 are accepted. The next
-  product value is safe API creation in the writable Jira sandbox.
+- The first Jira write path is live-tested and merged. A short stabilization
+  slice gives future write surfaces a safer base and reduces the chance that
+  AFK agents duplicate Jira issues or leak sensitive diagnostics.
 
 ## Following Slice
 
 Recommended following implementation slice:
 
-Branch: `codex/jira-create-flow`
+Branch: `codex/jira-subtasks-first`
 
 Deliverables:
 
-- Create Jira issues from eligible local tasks behind the existing preflight.
-- Add idempotency/retry protection before marking local tasks as `Created`.
-- Record structured sync audit events.
-- Keep attachment upload, AI-generated descriptions, and CSV upload fallback validation out of this first write slice unless separately approved.
+- Add sub-task creation behind the existing preflight and metadata model.
+- Preserve the existing epic/parent issue safety model and recovery behavior.
+- Keep attachment upload, AI-generated descriptions, and CSV upload fallback
+  validation out of this slice unless separately approved.
 
 Reason:
 
-- The read-only foundation is merged; the next product value is API creation, but duplicate Jira issues and auditability need explicit decisions first.
+- Parent issue creation is proven. Sub-tasks are the narrowest next Jira write
+  surface before attachments or AI provider calls.
 
 ## Security And Reliability Tests To Add
 
@@ -445,3 +460,89 @@ Goals:
   it as a polished framework-style control.
 - Consider coverage tooling only after the seams are clear; avoid chasing a
   percentage before the tests represent the product risks.
+
+Initial deepening opportunities from the first pass:
+
+1. **Jira Sync planning Module**
+
+   Files: `src-tauri/src/jira_sync.rs`, `src-tauri/src/models.rs`
+
+   Problem: metadata resolution, epic planning, payload generation, post-create
+   priority repair, result shaping, and audit events all live inside one large
+   Implementation. The current Interface is still one useful `JiraSyncRunner`,
+   but maintainers need to scan too much unrelated behavior to change one sync
+   rule.
+
+   Solution: keep `JiraSyncRunner` as the public Interface, then deepen the
+   internal planning Module around accepted concepts: **Jira Creation Metadata**,
+   **Epic Mapping**, parent issue payloads, and post-create repair.
+
+   Benefits: better Locality for Jira payload and metadata bugs, more Leverage
+   from small tests around accepted sync rules, and less risk before adding
+   sub-task creation.
+
+2. **Sync Audit Log detail Module**
+
+   Files: `src-tauri/src/jira_sync.rs`, `src-tauri/src/repositories.rs`,
+   `docs/adr/0008-audit-log-redaction-and-retention.md`
+
+   Problem: audit redaction is now covered for the highest-risk Jira error
+   messages, but it still sits as private helper Implementation inside the sync
+   runner. As audit UI, backup/export, and future integrations arrive, that
+   shallow location will invite duplicated redaction rules.
+
+   Solution: create a small, deep audit detail Module with an allowlisted
+   Interface for structured details and redacted short messages.
+
+   Benefits: one Seam for ADR 0008 enforcement, stronger secret-handling tests,
+   and clearer Locality when future AI/Jira/file events need audit records.
+
+3. **Tauri command worker Adapter**
+
+   Files: `src-tauri/src/commands.rs`, `src-tauri/src/services.rs`
+
+   Problem: blocking work now uses `spawn_blocking` in several command
+   implementations, but the pattern is repeated manually. That Interface is
+   simple today, yet shallow enough that future network/keyring commands may
+   forget the responsiveness rule.
+
+   Solution: introduce a command worker Adapter only if repetition continues
+   after the next Jira write slice. For now, document the rule and keep tests
+   and builds proving behavior compiles.
+
+   Benefits: preserves UI responsiveness and improves Locality for future event
+   loop/loading fixes without introducing abstraction too early.
+
+4. **Frontend workflow state Module**
+
+   Files: `src/App.tsx`, `src/features/*`, `src/lib/adapters/*`,
+   `src/lib/domain/*`
+
+   Problem: `src/App.tsx` remains the largest frontend Module and still owns
+   many workflow transitions. The feature views are extracted, but the workflow
+   Interface is not yet a good frontend test surface.
+
+   Solution: after this stabilization branch, add a frontend test runner and
+   extract workflow state in thin slices only where tests prove value: preflight,
+   JQL result clearing/loading, tray completion, and created-task read-only
+   behavior.
+
+   Benefits: stronger Locality for UI regressions, less manual QA burden, and
+   better Leverage from tests around the behaviors Saimon has been live-testing.
+
+5. **CSV save Adapter**
+
+   Files: `src-tauri/src/commands.rs`, `src/lib/domain/csvExport.ts`,
+   `src/lib/adapters/tauriPersistence.ts`
+
+   Problem: the frontend currently obtains a save path and passes it to a
+   backend write command. This works, but the command Interface is broader than
+   the intended user flow because any frontend caller can provide an arbitrary
+   path.
+
+   Solution: consider a backend-owned save Adapter that combines save dialog
+   selection and CSV write, after HITL review because this touches filesystem
+   behavior.
+
+   Benefits: tighter security Locality around file writes and a clearer Adapter
+   seam for future backup/export behavior.

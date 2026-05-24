@@ -78,28 +78,46 @@ pub fn update_app_settings(
 }
 
 #[tauri::command]
-pub fn has_jira_api_token(services: State<'_, AppServices>) -> Result<bool, String> {
-    services
-        .has_jira_api_token()
-        .map_err(|error| error.to_string())
+pub async fn has_jira_api_token(services: State<'_, AppServices>) -> Result<bool, String> {
+    let services = services.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        services
+            .has_jira_api_token()
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| format!("Credential worker failed: {error}"))?
 }
 
 #[tauri::command]
-pub fn save_jira_api_token(services: State<'_, AppServices>, token: String) -> Result<(), String> {
+pub async fn save_jira_api_token(
+    services: State<'_, AppServices>,
+    token: String,
+) -> Result<(), String> {
     if token.trim().is_empty() {
         return Err("Jira API token cannot be empty".to_string());
     }
 
-    services
-        .save_jira_api_token(&token)
-        .map_err(|error| error.to_string())
+    let services = services.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        services
+            .save_jira_api_token(&token)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| format!("Credential worker failed: {error}"))?
 }
 
 #[tauri::command]
-pub fn delete_jira_api_token(services: State<'_, AppServices>) -> Result<(), String> {
-    services
-        .delete_jira_api_token()
-        .map_err(|error| error.to_string())
+pub async fn delete_jira_api_token(services: State<'_, AppServices>) -> Result<(), String> {
+    let services = services.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        services
+            .delete_jira_api_token()
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| format!("Credential worker failed: {error}"))?
 }
 
 #[tauri::command]
@@ -113,12 +131,17 @@ pub async fn test_jira_connection(
 }
 
 #[tauri::command]
-pub fn run_jql_query(
+pub async fn run_jql_query(
     services: State<'_, AppServices>,
     jql: String,
     max_results: Option<usize>,
 ) -> Result<JqlSearchResponse, String> {
-    services.run_jql_query(&jql, max_results.unwrap_or(50))
+    let services = services.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        services.run_jql_query(&jql, max_results.unwrap_or(50))
+    })
+    .await
+    .map_err(|error| format!("Jira JQL worker failed: {error}"))?
 }
 
 #[tauri::command]

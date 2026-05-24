@@ -169,7 +169,7 @@ impl<'connection> TaskRepository<'connection> {
 
     pub fn delete(&self, task_id: &str) -> DbResult<bool> {
         let tray_id = self.connection.query_row(
-            "SELECT tray_id FROM tasks WHERE id = ?1",
+            "SELECT tray_id FROM tasks WHERE id = ?1 AND sync_status != 'Created'",
             [task_id],
             |row| row.get::<_, String>(0),
         );
@@ -178,9 +178,10 @@ impl<'connection> TaskRepository<'connection> {
             return Ok(false);
         };
 
-        let changed = self
-            .connection
-            .execute("DELETE FROM tasks WHERE id = ?1", [task_id])?;
+        let changed = self.connection.execute(
+            "DELETE FROM tasks WHERE id = ?1 AND sync_status != 'Created'",
+            [task_id],
+        )?;
         if changed > 0 {
             self.touch_tray(&tray_id, &utc_now_string()?)?;
         }
@@ -885,6 +886,60 @@ mod tests {
             .expect("created task update is ignored");
 
         assert_eq!(blocked, None);
+    }
+
+    #[test]
+    fn deletes_only_tasks_that_are_not_created() {
+        let connection = open_in_memory_database().expect("database opens");
+        let tray_repository = TrayRepository::new(&connection);
+        let task_repository = TaskRepository::new(&connection);
+        let tray = tray_repository
+            .create(NewTray {
+                name: "Delete guard".to_string(),
+            })
+            .expect("tray creates");
+
+        let pending = task_repository
+            .create(NewTask {
+                tray_id: tray.id.clone(),
+                project: "STT".to_string(),
+                area: "Bug".to_string(),
+                title: "Pending task".to_string(),
+                priority: "Medium".to_string(),
+                issue_type: "Bug".to_string(),
+                content_language: "Spanish".to_string(),
+            })
+            .expect("pending task creates");
+        let created = task_repository
+            .create(NewTask {
+                tray_id: tray.id.clone(),
+                project: "STT".to_string(),
+                area: "3D".to_string(),
+                title: "Created task".to_string(),
+                priority: "Low".to_string(),
+                issue_type: "Story".to_string(),
+                content_language: "Spanish".to_string(),
+            })
+            .expect("created task creates");
+
+        connection
+            .execute(
+                "UPDATE tasks SET sync_status = 'Created' WHERE id = ?1",
+                [created.id.as_str()],
+            )
+            .expect("created status updates");
+
+        assert!(!task_repository
+            .delete(&created.id)
+            .expect("created task delete is ignored"));
+        assert!(task_repository
+            .delete(&pending.id)
+            .expect("pending task deletes"));
+
+        let remaining_tasks = task_repository.list_for_tray(&tray.id).expect("tasks list");
+        assert_eq!(remaining_tasks.len(), 1);
+        assert_eq!(remaining_tasks[0].id, created.id);
+        assert_eq!(remaining_tasks[0].sync_status, "Created");
     }
 
     #[test]
