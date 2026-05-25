@@ -1,5 +1,5 @@
 use std::process::Command;
-use tauri::State;
+use tauri::{AppHandle, Emitter, State};
 
 use crate::backup::{BackupExportResult, BackupImportResult};
 use crate::models::{
@@ -231,13 +231,20 @@ pub async fn run_jql_query(
 
 #[tauri::command]
 pub async fn create_jira_parent_issues(
+    app_handle: AppHandle,
     services: State<'_, AppServices>,
     tray_id: String,
     allow_missing_descriptions: bool,
 ) -> Result<JiraCreateIssuesResult, String> {
     let services = services.inner().clone();
     run_blocking_result("Jira creation worker", move || {
-        services.create_jira_parent_issues(&tray_id, allow_missing_descriptions)
+        services.create_jira_parent_issues_with_progress(
+            &tray_id,
+            allow_missing_descriptions,
+            |progress| {
+                let _ = app_handle.emit("jira-create-progress", progress);
+            },
+        )
     })
     .await
 }

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
+import { listen } from "@tauri-apps/api/event";
 import { downloadDir, join } from "@tauri-apps/api/path";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { AlertTriangle, CheckCircle2, X } from "lucide-react";
@@ -67,6 +68,7 @@ import type {
   JqlRunState,
   JiraConnectionTestResult,
   JiraCreateIssuesResult,
+  JiraCreateProgress,
   LocalTask,
   MainTab,
   Panel,
@@ -128,6 +130,7 @@ export default function App() {
   const [isCreatingRecoveryTray, setIsCreatingRecoveryTray] = useState(false);
   const [jiraCreateResult, setJiraCreateResult] = useState<JiraCreateIssuesResult | null>(null);
   const [jiraCreateError, setJiraCreateError] = useState<string | null>(null);
+  const [jiraCreateProgress, setJiraCreateProgress] = useState<JiraCreateProgress | null>(null);
   const lastSelectedTrayId = useRef<string | null>(null);
 
   const selectedTray = useMemo(
@@ -203,6 +206,24 @@ export default function App() {
 
     return () => {
       isCurrent = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+
+    listen<JiraCreateProgress>("jira-create-progress", (event) => {
+      setJiraCreateProgress(event.payload);
+    })
+      .then((nextUnlisten) => {
+        unlisten = nextUnlisten;
+      })
+      .catch(() => {
+        // Event listening is only available in the native Tauri shell.
+      });
+
+    return () => {
+      unlisten?.();
     };
   }, []);
 
@@ -921,6 +942,7 @@ export default function App() {
     setIsRunningJiraPreflight(true);
     setJiraCreateResult(null);
     setJiraCreateError(null);
+    setJiraCreateProgress(null);
     const loadingStartedAt = performance.now();
     await waitForNextPaint();
 
@@ -1015,6 +1037,17 @@ export default function App() {
       setIsCreatingJiraIssues(true);
       setJiraCreateResult(null);
       setJiraCreateError(null);
+      setJiraCreateProgress({
+        syncAttemptId: null,
+        step: "starting",
+        label: "Starting Jira creation",
+        detail: `${jiraCreatePreflight.createableTaskCount} createable ${
+          jiraCreatePreflight.createableTaskCount === 1 ? "parent issue" : "parent issues"
+        }`,
+        completedSteps: 0,
+        totalSteps: 1,
+        status: "running"
+      });
     });
     let shouldClosePreflight = false;
     let nextCreateResult: JiraCreateIssuesResult | null = null;
@@ -1051,6 +1084,7 @@ export default function App() {
       if (shouldClosePreflight) {
         setJiraCreatePreflight(null);
         setJiraCreateResult(null);
+        setJiraCreateProgress(null);
       } else {
         if (nextCreateResult) setJiraCreateResult(nextCreateResult);
         if (nextCreateError) setJiraCreateError(nextCreateError);
@@ -1216,10 +1250,14 @@ export default function App() {
             isCreating={isCreatingJiraIssues}
             createError={jiraCreateError}
             createResult={jiraCreateResult}
+            createProgress={jiraCreateProgress}
             isCreatingRecoveryTray={isCreatingRecoveryTray}
             onCreate={createJiraParentIssues}
             onCreateRecoveryTray={createRecoveryTrayFromJiraResult}
-            onClose={() => setJiraCreatePreflight(null)}
+            onClose={() => {
+              setJiraCreatePreflight(null);
+              setJiraCreateProgress(null);
+            }}
           />
         ) : null}
         {backupNotice ? <BackupNoticeDialog notice={backupNotice} onClose={() => setBackupNotice(null)} /> : null}

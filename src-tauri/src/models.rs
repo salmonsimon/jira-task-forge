@@ -219,6 +219,18 @@ pub struct JiraCreateIssuesResult {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct JiraCreateProgress {
+    pub sync_attempt_id: Option<String>,
+    pub step: String,
+    pub label: String,
+    pub detail: Option<String>,
+    pub completed_steps: usize,
+    pub total_steps: usize,
+    pub status: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct JiraCreatedIssueResult {
     pub task_id: Option<String>,
     pub key: String,
