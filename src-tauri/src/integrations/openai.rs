@@ -49,6 +49,7 @@ impl OpenAiClient {
         model: &str,
         prompt: &str,
         default_project_key: Option<&str>,
+        issue_type_names: &[String],
     ) -> Result<JqlAiDraft, String> {
         let prompt = prompt.trim();
         if prompt.is_empty() {
@@ -67,12 +68,20 @@ impl OpenAiClient {
                 format!("Default Jira project key configured in the app: {project_key}.")
             })
             .unwrap_or_else(|| "No default Jira project key is configured.".to_string());
+        let issue_type_context = if issue_type_names.is_empty() {
+            "Known Jira issue type names are not available. Avoid issue type filters unless the user explicitly asks for one.".to_string()
+        } else {
+            format!(
+                "Known Jira issue type names for this project: {}. If filtering by issue type, use these exact names only.",
+                issue_type_names.join(", ")
+            )
+        };
 
         let payload = json!({
             "model": model,
             "store": false,
             "instructions": jql_generation_instructions(),
-            "input": format!("{project_context}\nUser request: {prompt}"),
+            "input": format!("{project_context}\n{issue_type_context}\nUser request: {prompt}"),
             "text": {
                 "format": {
                     "type": "json_schema",
@@ -162,6 +171,8 @@ fn jql_generation_instructions() -> &'static str {
     "You generate Jira JQL for Jira Task Forge. Return only valid JSON matching the schema. \
 Use Jira Cloud JQL syntax. Prefer compact, readable queries. \
 Do not invent field names beyond common Jira fields unless the user asked for them. \
+Do not include issue type filters unless the user asks for stories, bugs, epics, subtasks, or another issue type. \
+When filtering by issue type, use issuetype = \"Exact Name\" or issuetype in (\"Exact Name\") with exact names from context. \
 Use statusCategory != Done for open work when the user asks for open, active, pending, or unfinished issues. \
 Use ORDER BY updated DESC when no ordering is requested. \
 If the user clearly mentions a project key, use that project key. \

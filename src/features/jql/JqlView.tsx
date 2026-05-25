@@ -59,8 +59,12 @@ export function JqlView({
 
   function handleRunShortcut(event: ReactKeyboardEvent<HTMLElement>) {
     if (event.defaultPrevented) return;
-    if (!isAskAiMode && (event.ctrlKey || event.metaKey) && event.key === "Enter") {
-      event.preventDefault();
+    if (!(event.ctrlKey || event.metaKey) || event.key !== "Enter") return;
+
+    event.preventDefault();
+    if (isAskAiMode) {
+      onDraftJqlWithAi();
+    } else {
       onRunQuery();
     }
   }
@@ -151,6 +155,7 @@ export function JqlView({
                   className="h-24 w-full resize-none rounded border border-[#c1c7d0] bg-white p-3 text-sm outline-none focus:border-[#4c9aff] focus:ring-2 focus:ring-[#deebff]"
                   value={jqlPrompt}
                   onChange={(event) => setJqlPrompt(event.target.value)}
+                  onKeyDown={handleRunShortcut}
                   placeholder="Show me high priority open bugs for STT updated this week"
                 />
               </label>
