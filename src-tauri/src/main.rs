@@ -61,6 +61,7 @@ pub fn run() {
             commands::update_task_details,
             commands::mark_tasks_csv_exported,
             commands::create_recovery_tray_from_tasks,
+            commands::list_task_sync_audit_events,
             commands::export_backup,
             commands::import_backup,
             commands::save_csv_file,

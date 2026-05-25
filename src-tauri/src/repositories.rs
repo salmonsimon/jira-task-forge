@@ -4,7 +4,8 @@ use uuid::Uuid;
 
 use crate::db::{utc_now_string, DbError, DbResult};
 use crate::models::{
-    AppSettings, Category, JqlFavorite, LocalTask, NewTask, NewTray, Tray, TrayState,
+    AppSettings, Category, JqlFavorite, LocalTask, NewTask, NewTray, SyncAuditEvent, Tray,
+    TrayState,
 };
 
 const APP_SETTINGS_KEY: &str = "app_settings";
@@ -812,6 +813,48 @@ impl<'connection> SyncRepository<'connection> {
 
         Ok(())
     }
+
+    pub fn list_for_task(&self, task_id: &str) -> DbResult<Vec<SyncAuditEvent>> {
+        let mut statement = self.connection.prepare(
+            "
+            SELECT id, sync_attempt_id, tray_id, task_id, event_type, occurred_at,
+                   outcome, provider, operation, detail_json
+            FROM sync_audit_events
+            WHERE task_id = ?1
+            ORDER BY occurred_at DESC, id DESC
+            ",
+        )?;
+
+        let events = statement
+            .query_map([task_id], map_sync_audit_event_row)?
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(events)
+    }
+}
+
+fn map_sync_audit_event_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<SyncAuditEvent> {
+    let detail_json: String = row.get("detail_json")?;
+    let detail = serde_json::from_str(&detail_json).map_err(|error| {
+        rusqlite::Error::FromSqlConversionFailure(
+            detail_json.len(),
+            rusqlite::types::Type::Text,
+            Box::new(DbError::InvalidData(error.to_string())),
+        )
+    })?;
+
+    Ok(SyncAuditEvent {
+        id: row.get("id")?,
+        sync_attempt_id: row.get("sync_attempt_id")?,
+        tray_id: row.get("tray_id")?,
+        task_id: row.get("task_id")?,
+        event_type: row.get("event_type")?,
+        occurred_at: row.get("occurred_at")?,
+        outcome: row.get("outcome")?,
+        provider: row.get("provider")?,
+        operation: row.get("operation")?,
+        detail,
+    })
 }
 
 fn map_task_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<LocalTask> {
@@ -1631,6 +1674,17 @@ mod tests {
                 name: "Audit tray".to_string(),
             })
             .expect("tray creates");
+        let task = TaskRepository::new(&connection)
+            .create(NewTask {
+                tray_id: tray.id.clone(),
+                project: "STT".to_string(),
+                area: "Bug".to_string(),
+                title: "Audit task".to_string(),
+                priority: "High".to_string(),
+                issue_type: "Bug".to_string(),
+                content_language: "Spanish".to_string(),
+            })
+            .expect("task creates");
         let repository = SyncRepository::new(&connection);
 
         let attempt_id = repository
@@ -1640,7 +1694,7 @@ mod tests {
             .record_event(
                 &attempt_id,
                 &tray.id,
-                None,
+                Some(&task.id),
                 "jira.sync.started",
                 "succeeded",
                 "create-parent-issues",
@@ -1680,6 +1734,14 @@ mod tests {
         assert_eq!(operation, "create-parent-issues");
         assert_eq!(detail["jiraProjectKey"], "JTFTEST");
         assert_eq!(detail["taskCount"], 2);
+
+        let task_events = repository
+            .list_for_task(&task.id)
+            .expect("task audit events list");
+        assert_eq!(task_events.len(), 1);
+        assert_eq!(task_events[0].event_type, "jira.sync.started");
+        assert_eq!(task_events[0].outcome, "succeeded");
+        assert_eq!(task_events[0].detail["jiraProjectKey"], "JTFTEST");
     }
 
     #[test]

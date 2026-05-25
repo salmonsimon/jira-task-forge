@@ -150,6 +150,21 @@ pub struct JqlResult {
     pub assignee: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncAuditEvent {
+    pub id: String,
+    pub sync_attempt_id: Option<String>,
+    pub tray_id: Option<String>,
+    pub task_id: Option<String>,
+    pub event_type: String,
+    pub occurred_at: String,
+    pub outcome: String,
+    pub provider: Option<String>,
+    pub operation: Option<String>,
+    pub detail: Value,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct JiraCreateMetadata {
     pub project_key: String,
