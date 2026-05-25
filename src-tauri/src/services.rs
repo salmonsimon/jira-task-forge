@@ -206,13 +206,11 @@ impl AppServices {
             return Err("OpenAI provider must be selected before using Ask AI.".to_string());
         }
 
-        let issue_type_names = self.jira_issue_type_names_for_ai(&settings);
         let client = self.openai_client()?;
         client.draft_jql(
             openai_model_or_default(&settings.ai_model),
             prompt,
             Some(&settings.jira_creation_project_key),
-            &issue_type_names,
         )
     }
 
@@ -415,26 +413,6 @@ impl AppServices {
             Err(keyring::Error::NoEntry) => Err("OpenAI API key is required.".to_string()),
             Err(error) => Err(format!("Could not read OpenAI API key: {error}")),
         }
-    }
-
-    fn jira_issue_type_names_for_ai(&self, settings: &AppSettings) -> Vec<String> {
-        let creation_project_key = settings.jira_creation_project_key.trim();
-        if creation_project_key.is_empty() {
-            return Vec::new();
-        }
-
-        let Ok(client) = self.jira_client() else {
-            return Vec::new();
-        };
-        let Ok(metadata) = client.get_create_issue_metadata(creation_project_key) else {
-            return Vec::new();
-        };
-
-        metadata
-            .issue_types
-            .into_iter()
-            .map(|issue_type| issue_type.name)
-            .collect()
     }
 }
 

@@ -8,6 +8,11 @@ const OPENAI_RESPONSES_URL: &str = "https://api.openai.com/v1/responses";
 const OPENAI_MODELS_URL: &str = "https://api.openai.com/v1/models";
 const OPENAI_REQUEST_TIMEOUT: Duration = Duration::from_secs(45);
 const OPENAI_REQUEST_ATTEMPTS: usize = 2;
+const JIRA_KNOWN_PROJECT_KEYS: &[&str] = &["DTS", "JTFTEST"];
+const JIRA_KNOWN_DTS_ISSUE_TYPES: &[&str] = &["Epic", "Subtask", "Tarea", "Historia", "Error"];
+const JIRA_KNOWN_JTFTEST_ISSUE_TYPES: &[&str] =
+    &["Epic", "Subtask", "Tarea", "Historia", "Función", "Error"];
+const JIRA_KNOWN_PRIORITIES: &[&str] = &["Highest", "High", "Medium", "Low", "Lowest"];
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct OpenAiCredentials {
@@ -49,7 +54,6 @@ impl OpenAiClient {
         model: &str,
         prompt: &str,
         default_project_key: Option<&str>,
-        issue_type_names: &[String],
     ) -> Result<JqlAiDraft, String> {
         let prompt = prompt.trim();
         if prompt.is_empty() {
@@ -68,20 +72,15 @@ impl OpenAiClient {
                 format!("Default Jira project key configured in the app: {project_key}.")
             })
             .unwrap_or_else(|| "No default Jira project key is configured.".to_string());
-        let issue_type_context = if issue_type_names.is_empty() {
-            "Known Jira issue type names are not available. Avoid issue type filters unless the user explicitly asks for one.".to_string()
-        } else {
-            format!(
-                "Known Jira issue type names for this project: {}. If filtering by issue type, use these exact names only.",
-                issue_type_names.join(", ")
-            )
-        };
 
         let payload = json!({
             "model": model,
             "store": false,
             "instructions": jql_generation_instructions(),
-            "input": format!("{project_context}\n{issue_type_context}\nUser request: {prompt}"),
+            "input": format!(
+                "{project_context}\n{}\nUser request: {prompt}",
+                jira_generation_context()
+            ),
             "text": {
                 "format": {
                     "type": "json_schema",
@@ -171,14 +170,32 @@ fn jql_generation_instructions() -> &'static str {
     "You generate Jira JQL for Jira Task Forge. Return only valid JSON matching the schema. \
 Use Jira Cloud JQL syntax. Prefer compact, readable queries. \
 Do not invent field names beyond common Jira fields unless the user asked for them. \
-Do not include issue type filters unless the user asks for stories, bugs, epics, subtasks, or another issue type. \
+Do not include issue type filters unless the user explicitly asks for a Jira issue type such as story, bug, epic, subtask, feature, or task type. \
+Spanish words like tarea, tareas, trabajo, pendiente, or issue can mean generic work items; do not translate those into issuetype = \"Tarea\" unless the user clearly asks for the Jira Task issue type. \
 When filtering by issue type, use issuetype = \"Exact Name\" or issuetype in (\"Exact Name\") with exact names from context. \
 Use statusCategory != Done for open work when the user asks for open, active, pending, or unfinished issues. \
+When the user asks for newest, latest, oldest, or recent issues, prefer ORDER BY created DESC or ASC as appropriate. \
 Use ORDER BY updated DESC when no ordering is requested. \
-If the user clearly mentions a project key, use that project key. \
-If no project is mentioned and a default Jira project key is provided, include that exact project key. \
+If the user clearly mentions a known Jira project key, use that exact project key. \
+Do not replace a known Jira project key with an app category, area, or internal project name. \
+If no Jira project key is mentioned and a default Jira project key is provided, include that exact project key. \
 If the request is ambiguous, still produce the safest useful JQL and include the assumption in warnings. \
 Never include markdown fences."
+}
+
+fn jira_generation_context() -> String {
+    format!(
+        "Known Jira project keys: {}.\n\
+Known issue types for DTS: {}.\n\
+Known issue types for JTFTEST: {}.\n\
+Known Jira priorities: {}.\n\
+Use priority names exactly as listed. Examples: lowest priority -> priority = Lowest; high priority -> priority = High.\n\
+Important mapping rule: DTS and JTFTEST are Jira project keys. Names like STT, PilotLab, MR Studio, Transversal, area, or category are local planning labels, not Jira project keys.",
+        JIRA_KNOWN_PROJECT_KEYS.join(", "),
+        JIRA_KNOWN_DTS_ISSUE_TYPES.join(", "),
+        JIRA_KNOWN_JTFTEST_ISSUE_TYPES.join(", "),
+        JIRA_KNOWN_PRIORITIES.join(", ")
+    )
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -282,7 +299,9 @@ fn validate_jql_draft(mut draft: JqlAiDraft) -> Result<JqlAiDraft, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{extract_output_text, openai_error_message, validate_jql_draft};
+    use super::{
+        extract_output_text, jira_generation_context, openai_error_message, validate_jql_draft,
+    };
     use crate::models::JqlAiDraft;
     use serde_json::json;
 
@@ -321,5 +340,17 @@ mod tests {
         assert_eq!(draft.jql, "project = DTS ORDER BY updated DESC");
         assert_eq!(draft.explanation, "Generated JQL loaded into the editor.");
         assert_eq!(draft.warnings, vec!["assumed DTS"]);
+    }
+
+    #[test]
+    fn jira_generation_context_contains_static_vocab() {
+        let context = jira_generation_context();
+
+        assert!(context.contains("Known Jira project keys: DTS, JTFTEST."));
+        assert!(
+            context.contains("Known issue types for DTS: Epic, Subtask, Tarea, Historia, Error.")
+        );
+        assert!(context.contains("Known Jira priorities: Highest, High, Medium, Low, Lowest."));
+        assert!(context.contains("STT"));
     }
 }
