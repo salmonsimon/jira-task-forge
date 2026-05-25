@@ -14,6 +14,8 @@ export function SettingsPanel({
   onDeleteJiraApiToken,
   onTestJiraConnection,
   onOpenJiraApiTokens,
+  onExportBackup,
+  onImportBackup,
   onClose
 }: {
   settings: AppSettings;
@@ -26,6 +28,8 @@ export function SettingsPanel({
   onDeleteJiraApiToken: () => void;
   onTestJiraConnection: () => void;
   onOpenJiraApiTokens: () => void;
+  onExportBackup: () => void;
+  onImportBackup: () => void;
   onClose: () => void;
 }) {
   const panelRef = useRef<HTMLElement | null>(null);
@@ -52,9 +56,9 @@ export function SettingsPanel({
   }, [onClose]);
 
   return (
-    <aside ref={panelRef} className="fixed right-0 top-0 z-30 flex h-screen w-[420px] flex-col border-l border-[#dfe1e6] bg-white shadow-xl">
+    <aside ref={panelRef} className="fixed right-0 top-0 z-30 flex h-screen w-[420px] flex-col overscroll-contain border-l border-[#dfe1e6] bg-white shadow-xl">
       <PanelHeader title="Settings" subtitle="Local configuration without secrets in backups" onClose={onClose} />
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className="flex-1 overflow-y-auto overscroll-contain p-4">
         <DetailBlock icon={<Settings size={15} />} title="Appearance">
           <div className="mb-2 text-xs font-medium text-[#6b778c]">Theme</div>
           <SegmentedControl
@@ -191,13 +195,13 @@ export function SettingsPanel({
 
         <DetailBlock icon={<Download size={15} />} title="Backup and restore">
           <p className="mb-3 text-sm text-[#6b778c]">
-            Backups include trays, descriptions, attachments, categories, epic mappings, favorites, and sync logs. Secrets are excluded.
+            JSON backups include trays, tasks, categories, epic mappings, JQL favorites, settings, and attachment metadata. Secrets are excluded.
           </p>
           <div className="flex gap-2">
-            <Button variant="secondary" icon={<Download size={14} />}>
+            <Button variant="secondary" icon={<Download size={14} />} onClick={onExportBackup}>
               Export backup
             </Button>
-            <Button variant="secondary" icon={<UploadCloud size={14} />}>
+            <Button variant="secondary" icon={<UploadCloud size={14} />} onClick={onImportBackup}>
               Import backup
             </Button>
           </div>

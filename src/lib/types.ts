@@ -87,6 +87,15 @@ export type JqlRecentQuery = {
 
 export type JqlRunState = "idle" | "running" | "success" | "error";
 
+export type BackupOperationNotice = {
+  kind: "success" | "error";
+  title: string;
+  summary: string;
+  primaryCounts?: Record<string, number>;
+  secondaryCounts?: Record<string, number>;
+  warnings?: string[];
+};
+
 export type JqlResult = {
   key: string;
   project: string;

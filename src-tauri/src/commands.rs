@@ -1,6 +1,7 @@
 use std::process::Command;
 use tauri::State;
 
+use crate::backup::{BackupExportResult, BackupImportResult};
 use crate::models::{
     AppSettings, Category, JiraConnectionTestResult, JiraCreateIssuesResult, JqlFavorite,
     JqlSearchResponse, LocalTask, NewTask, NewTray, Tray,
@@ -322,6 +323,22 @@ pub fn create_recovery_tray_from_tasks(
     task_ids: Vec<String>,
 ) -> Result<Tray, String> {
     services.create_recovery_tray_from_tasks(&source_tray_id, &task_ids)
+}
+
+#[tauri::command]
+pub fn export_backup(
+    services: State<'_, AppServices>,
+    path: String,
+) -> Result<BackupExportResult, String> {
+    services.export_backup_file(&path, Some(env!("CARGO_PKG_VERSION").to_string()))
+}
+
+#[tauri::command]
+pub fn import_backup(
+    services: State<'_, AppServices>,
+    path: String,
+) -> Result<BackupImportResult, String> {
+    services.import_backup_file(&path)
 }
 
 #[tauri::command]

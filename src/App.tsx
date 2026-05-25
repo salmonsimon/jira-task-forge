@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { downloadDir, join } from "@tauri-apps/api/path";
-import { save } from "@tauri-apps/plugin-dialog";
+import { open, save } from "@tauri-apps/plugin-dialog";
+import { AlertTriangle, CheckCircle2, X } from "lucide-react";
 import { AppHeader } from "./components/shell";
 import { CategoriesPanel } from "./features/categories";
 import { JiraPreflightDialog, type JiraCreatePreflight } from "./features/jira-preflight";
@@ -23,8 +24,10 @@ import {
   deletePersistedJiraApiToken,
   deletePersistedTray,
   deletePersistedTask,
+  exportPersistedBackup,
   getPersistedAppSettings,
   hasPersistedJiraApiToken,
+  importPersistedBackup,
   listPersistedCategories,
   listPersistedJqlFavorites,
   listPersistedTrays,
@@ -55,6 +58,7 @@ import {
 } from "./lib/domain";
 import type {
   AppSettings,
+  BackupOperationNotice,
   Category,
   JqlFavorite,
   JqlRecentQuery,
@@ -113,6 +117,7 @@ export default function App() {
   const [hasJiraApiToken, setHasJiraApiToken] = useState(false);
   const [jiraCredentialMessage, setJiraCredentialMessage] = useState<string | null>(null);
   const [jiraConnectionResult, setJiraConnectionResult] = useState<JiraConnectionTestResult | null>(null);
+  const [backupNotice, setBackupNotice] = useState<BackupOperationNotice | null>(null);
   const [isTestingJiraConnection, setIsTestingJiraConnection] = useState(false);
   const [isRunningJiraPreflight, setIsRunningJiraPreflight] = useState(false);
   const [jiraCreatePreflight, setJiraCreatePreflight] = useState<JiraCreatePreflight | null>(null);
@@ -191,7 +196,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (openPanel !== "detail") return;
+    if (!openPanel && !backupNotice) return;
 
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -199,7 +204,7 @@ export default function App() {
     return () => {
       document.body.style.overflow = previousOverflow;
     };
-  }, [openPanel]);
+  }, [backupNotice, openPanel]);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
@@ -212,6 +217,35 @@ export default function App() {
   }, []);
 
   const resolvedTheme = appSettings.themeMode === "system" ? (systemPrefersDark ? "dark" : "light") : appSettings.themeMode;
+
+  async function refreshPersistedWorkspaceData() {
+    const [persistedTrays, persistedSettings, persistedCategories, persistedJqlFavorites] = await Promise.all([
+      listPersistedTrays(),
+      getPersistedAppSettings(),
+      listPersistedCategories(),
+      listPersistedJqlFavorites()
+    ]);
+    const nextCategories = persistedCategories.length ? persistedCategories : [...appData.listProjects(), ...appData.listAreas()];
+    const nextJqlFavorites = persistedJqlFavorites.length ? persistedJqlFavorites : appData.listJqlFavorites();
+
+    setTrays(persistedTrays);
+    setAppSettings(persistedSettings);
+    setCategories(nextCategories);
+    setJqlFavorites(nextJqlFavorites);
+    setSelectedFavoriteId((currentFavoriteId) =>
+      currentFavoriteId && nextJqlFavorites.some((favorite) => favorite.id === currentFavoriteId)
+        ? currentFavoriteId
+        : nextJqlFavorites[0]?.id
+    );
+    setSelectedTrayId((currentTrayId) =>
+      currentTrayId && persistedTrays.some((tray) => tray.id === currentTrayId) ? currentTrayId : null
+    );
+    setSelectedTaskId((currentTaskId) =>
+      currentTaskId && persistedTrays.some((tray) => tray.tasks.some((task) => task.id === currentTaskId))
+        ? currentTaskId
+        : null
+    );
+  }
 
   useEffect(() => {
     if (openPanel === "detail" && !selectedTask) {
@@ -716,6 +750,80 @@ export default function App() {
     }
   }
 
+  async function exportBackup() {
+    if (!usesTauriPersistence) {
+      setBackupNotice({
+        kind: "error",
+        title: "Backup export unavailable",
+        summary: "Backup export is available in the native app."
+      });
+      return;
+    }
+
+    setBackupNotice(null);
+    const path = await save({
+      defaultPath: `jira-task-forge-backup-${formatBackupTimestamp(new Date())}.json`,
+      filters: [{ name: "Jira Task Forge backup", extensions: ["json"] }]
+    });
+    if (!path) return;
+
+    try {
+      const result = await exportPersistedBackup(path);
+      const totalRecords = Object.values(result.recordCounts).reduce((total, count) => total + count, 0);
+      setBackupNotice({
+        kind: "success",
+        title: "Backup exported",
+        summary: `${totalRecords} records exported. Secrets included: ${result.secretsIncluded ? "yes" : "no"}.`,
+        primaryCounts: result.recordCounts
+      });
+    } catch (error) {
+      setBackupNotice({
+        kind: "error",
+        title: "Backup export failed",
+        summary: error instanceof Error ? error.message : "Could not export backup."
+      });
+    }
+  }
+
+  async function importBackup() {
+    if (!usesTauriPersistence) {
+      setBackupNotice({
+        kind: "error",
+        title: "Backup import unavailable",
+        summary: "Backup import is available in the native app."
+      });
+      return;
+    }
+
+    setBackupNotice(null);
+    const selectedPath = await open({
+      multiple: false,
+      filters: [{ name: "Jira Task Forge backup", extensions: ["json"] }]
+    });
+    if (!selectedPath || Array.isArray(selectedPath)) return;
+
+    try {
+      const result = await importPersistedBackup(selectedPath);
+      await refreshPersistedWorkspaceData();
+      const importedRecords = Object.values(result.importedCounts).reduce((total, count) => total + count, 0);
+      const skippedRecords = Object.values(result.skippedCounts).reduce((total, count) => total + count, 0);
+      setBackupNotice({
+        kind: "success",
+        title: "Backup imported",
+        summary: `${importedRecords} new records imported. ${skippedRecords} existing records skipped. Settings were updated from the backup.`,
+        primaryCounts: result.importedCounts,
+        secondaryCounts: result.skippedCounts,
+        warnings: result.warnings
+      });
+    } catch (error) {
+      setBackupNotice({
+        kind: "error",
+        title: "Backup import failed",
+        summary: error instanceof Error ? error.message : "Could not import backup."
+      });
+    }
+  }
+
   async function exportTrayCsv(tray: Tray) {
     const csvExportOptions = { includeExported: true };
     const exportableTasks = tray.tasks.filter((task) => isEligibleForCsvExport(task, csvExportOptions));
@@ -1060,6 +1168,8 @@ export default function App() {
             onDeleteJiraApiToken={deleteJiraApiToken}
             onTestJiraConnection={testJiraConnection}
             onOpenJiraApiTokens={openJiraApiTokensPage}
+            onExportBackup={exportBackup}
+            onImportBackup={importBackup}
             onClose={() => setOpenPanel(null)}
           />
         ) : null}
@@ -1082,6 +1192,102 @@ export default function App() {
             onClose={() => setJiraCreatePreflight(null)}
           />
         ) : null}
+        {backupNotice ? <BackupNoticeDialog notice={backupNotice} onClose={() => setBackupNotice(null)} /> : null}
+      </div>
+    </div>
+  );
+}
+
+function BackupNoticeDialog({
+  notice,
+  onClose
+}: {
+  notice: BackupOperationNotice;
+  onClose: () => void;
+}) {
+  const isSuccess = notice.kind === "success";
+  const visiblePrimaryCounts = getVisibleBackupCounts(notice.primaryCounts);
+  const visibleSecondaryCounts = getVisibleBackupCounts(notice.secondaryCounts);
+
+  useEffect(() => {
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") onClose();
+    }
+
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#091e42]/60 px-4 backdrop-blur-[1px]" onMouseDown={onClose}>
+      <section
+        className="w-full max-w-[520px] rounded border border-[#3b4454] bg-[#2b2d31] text-[#dfe1e6] shadow-2xl"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-4 border-b border-[#454852] px-5 py-4">
+          <div className="flex items-start gap-3">
+            <div className={`mt-0.5 ${isSuccess ? "text-[#57d9a3]" : "text-[#ff8f73]"}`}>
+              {isSuccess ? <CheckCircle2 size={20} /> : <AlertTriangle size={20} />}
+            </div>
+            <div>
+              <h2 className="text-base font-semibold text-[#f4f5f7]">{notice.title}</h2>
+              <p className="mt-1 text-sm leading-relaxed text-[#b7bbc4]">{notice.summary}</p>
+            </div>
+          </div>
+          <button
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded text-[#dfe1e6] hover:bg-[#3a3d43]"
+            onClick={onClose}
+            title="Close"
+            type="button"
+          >
+            <X size={16} />
+          </button>
+        </div>
+        <div className="px-5 py-4">
+          {visiblePrimaryCounts.length ? (
+            <BackupCountGrid title={notice.title === "Backup imported" ? "Imported" : "Exported"} counts={visiblePrimaryCounts} />
+          ) : null}
+          {visibleSecondaryCounts.length ? <BackupCountGrid title="Skipped existing" counts={visibleSecondaryCounts} muted /> : null}
+          {notice.warnings?.length ? (
+            <div className="mt-4 rounded border border-[#665245] bg-[#3b302b] px-3 py-2 text-sm leading-relaxed text-[#ffd2bd]">
+              {notice.warnings.map((warning) => (
+                <div key={warning}>{warning}</div>
+              ))}
+            </div>
+          ) : null}
+        </div>
+        <div className="flex justify-end border-t border-[#454852] px-5 py-4">
+          <button
+            className="inline-flex h-8 items-center justify-center rounded bg-[#0052cc] px-3 text-sm font-medium text-white hover:bg-[#0747a6]"
+            onClick={onClose}
+            type="button"
+          >
+            Continue
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function BackupCountGrid({
+  title,
+  counts,
+  muted = false
+}: {
+  title: string;
+  counts: Array<{ label: string; count: number }>;
+  muted?: boolean;
+}) {
+  return (
+    <div className="mt-3 first:mt-0">
+      <div className={`mb-2 text-xs font-semibold uppercase ${muted ? "text-[#8993a4]" : "text-[#b3d4ff]"}`}>{title}</div>
+      <div className="grid grid-cols-2 gap-2">
+        {counts.map(({ label, count }) => (
+          <div className={`rounded border px-3 py-2 text-sm ${muted ? "border-[#454852] bg-[#22252a] text-[#b7bbc4]" : "border-[#3f5f8f] bg-[#1f2f4d] text-[#dbeafe]"}`} key={label}>
+            <span className="font-semibold text-[#f4f5f7]">{count}</span> {label}
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -1270,6 +1476,42 @@ function formatJqlQueryMessage(resultCount: number, isLast: boolean, warningMess
 function formatJqlQueryError(error: unknown): string {
   const message = typeof error === "string" ? error : error instanceof Error ? error.message : "Could not run JQL query.";
   return `JQL query failed. ${message}`;
+}
+
+function formatBackupTimestamp(date: Date): string {
+  const pad = (value: number) => value.toString().padStart(2, "0");
+  return [
+    date.getFullYear(),
+    pad(date.getMonth() + 1),
+    pad(date.getDate()),
+    "-",
+    pad(date.getHours()),
+    pad(date.getMinutes()),
+    pad(date.getSeconds())
+  ].join("");
+}
+
+function getVisibleBackupCounts(counts?: Record<string, number>) {
+  if (!counts) return [];
+  return Object.entries(counts)
+    .filter(([, count]) => count > 0)
+    .map(([key, count]) => ({ label: formatBackupCountLabel(key, count), count }));
+}
+
+function formatBackupCountLabel(key: string, count: number) {
+  const labels: Record<string, [string, string]> = {
+    trays: ["tray", "trays"],
+    tasks: ["task", "tasks"],
+    categories: ["category", "categories"],
+    epicMappings: ["epic mapping", "epic mappings"],
+    jqlFavorites: ["JQL favorite", "JQL favorites"],
+    settings: ["setting", "settings"],
+    attachmentMetadata: ["attachment metadata", "attachment metadata"],
+    attachmentVariants: ["attachment variant", "attachment variants"],
+    auditSummaries: ["audit summary", "audit summaries"]
+  };
+  const [singular, plural] = labels[key] ?? [key, key];
+  return count === 1 ? singular : plural;
 }
 
 async function waitForNextPaint(): Promise<void> {
