@@ -404,6 +404,26 @@ The AI should avoid inventing missing details and should ask follow-up questions
 - AI prompts/templates are internal in v1.
 - They should still be implemented as named templates so they can become configurable later.
 
+## Distribution Security Hardening
+
+- The app should be distributable beyond personal use, but any move toward
+  broader distribution should include an explicit security hardening pass.
+- Jira and AI keys should continue to be stored in the operating system
+  credential store, excluded from SQLite, excluded from backups, and redacted
+  from logs and debug output.
+- Settings should explain that Jira and OpenAI credentials are sent only to
+  their respective providers over HTTPS/TLS.
+- Settings should explain that AI providers receive the user's AI prompt and
+  relevant local/Jira context, but never the Jira API token.
+- Error surfaces should keep provider details useful while redacting request
+  headers, authorization values, token-shaped strings, and secret-shaped payloads.
+- Distribution documentation should call out realistic local-app risks:
+  compromised machines, trusted TLS-inspection proxies, and processes running
+  under the same OS user may still access or intercept secrets.
+- Before distribution, add a short privacy/security note in Settings or first-run
+  onboarding so users understand what leaves the machine during Jira and AI
+  actions.
+
 ## Backup and Restore
 
 - V1 includes backup/export without secrets.
