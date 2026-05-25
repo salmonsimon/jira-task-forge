@@ -121,6 +121,13 @@ pub fn update_category(
 }
 
 #[tauri::command]
+pub fn delete_category(services: State<'_, AppServices>, id: String) -> Result<bool, String> {
+    services
+        .delete_category(&id)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 pub fn list_jql_favorites(services: State<'_, AppServices>) -> Result<Vec<JqlFavorite>, String> {
     services
         .list_jql_favorites()

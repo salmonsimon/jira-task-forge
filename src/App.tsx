@@ -18,6 +18,7 @@ import {
   createPersistedRecoveryTrayFromTasks,
   createPersistedTask,
   createPersistedTray,
+  deletePersistedCategory,
   deletePersistedJiraApiToken,
   deletePersistedTray,
   deletePersistedTask,
@@ -481,6 +482,15 @@ export default function App() {
     setCategories((currentCategories) =>
       currentCategories.map((category) => (category.id === categoryId ? updatedCategory : category))
     );
+  }
+
+  async function deleteCategory(categoryId: string) {
+    if (usesTauriPersistence) {
+      const deleted = await deletePersistedCategory(categoryId);
+      if (!deleted) return;
+    }
+
+    setCategories((currentCategories) => currentCategories.filter((category) => category.id !== categoryId));
   }
 
   async function openJiraIssue(url: string) {
@@ -973,6 +983,7 @@ export default function App() {
             areas={areaCategories}
             onCreateCategory={createCategory}
             onUpdateCategory={updateCategory}
+            onDeleteCategory={deleteCategory}
             onClose={() => setOpenPanel(null)}
           />
         ) : null}

@@ -207,6 +207,13 @@ impl<'connection> CategoryRepository<'connection> {
         self.find_by_id(id)
     }
 
+    pub fn delete(&self, id: &str) -> DbResult<bool> {
+        let changed = self
+            .connection
+            .execute("DELETE FROM categories WHERE id = ?1", [id])?;
+        Ok(changed > 0)
+    }
+
     fn find_by_id(&self, id: &str) -> DbResult<Option<Category>> {
         let mut statement = self.connection.prepare(
             "
@@ -1071,6 +1078,22 @@ mod tests {
             .expect("category exists");
         assert_eq!(updated.name, "UX Polish");
         assert!(updated.hidden);
+
+        assert!(repository.delete(&updated.id).expect("category deletes"));
+        assert!(!repository
+            .delete(&updated.id)
+            .expect("missing delete is false"));
+        assert!(!repository
+            .list(Some("area"))
+            .expect("areas list")
+            .iter()
+            .any(|category| category.id == updated.id));
+
+        let recreated = repository
+            .create("area", "UX Polish")
+            .expect("category name can be reused after delete");
+        assert_eq!(recreated.name, "UX Polish");
+        assert_ne!(recreated.id, updated.id);
     }
 
     #[test]

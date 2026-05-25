@@ -43,6 +43,7 @@ pub fn run() {
             commands::list_categories,
             commands::create_category,
             commands::update_category,
+            commands::delete_category,
             commands::list_jql_favorites,
             commands::create_jql_favorite,
             commands::update_jql_favorite,

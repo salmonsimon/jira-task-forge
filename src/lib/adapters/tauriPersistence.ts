@@ -135,6 +135,10 @@ export async function updatePersistedCategory(
   return category ? mapCategory(category) : null;
 }
 
+export async function deletePersistedCategory(id: string): Promise<boolean> {
+  return invoke<boolean>("delete_category", { id });
+}
+
 export async function listPersistedJqlFavorites(): Promise<JqlFavorite[]> {
   return (await invoke<BackendJqlFavorite[]>("list_jql_favorites")).map(mapJqlFavorite);
 }

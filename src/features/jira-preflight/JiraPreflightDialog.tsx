@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle2, Info, Loader2, ShieldCheck, XCircle } from "lucide-react";
+import { AlertTriangle, Check, CheckCircle2, Info, Loader2, ShieldCheck, XCircle } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { Button, LoadingOrb } from "../../components/ui";
 import type {
@@ -158,18 +158,32 @@ export function JiraPreflightDialog({
           ) : null}
 
           {hasMissingDescriptions ? (
-            <label className="flex w-full min-w-0 items-center gap-3 rounded border border-[#7f5f01] bg-[#2f2606] px-3 py-3 text-sm text-[#dfe1e6]">
-              <input
-                className="h-4 w-4 shrink-0 accent-[#0c66e4]"
-                checked={missingDescriptionsConfirmed}
-                disabled={isBusy}
-                onChange={(event) => setMissingDescriptionsConfirmed(event.target.checked)}
-                type="checkbox"
-              />
+            <button
+              aria-checked={missingDescriptionsConfirmed}
+              className={cn(
+                "flex w-full min-w-0 items-center gap-3 rounded border border-[#7f5f01] bg-[#2f2606] px-3 py-3 text-left text-sm text-[#dfe1e6] transition hover:bg-[#3a3008] focus:outline-none focus:ring-2 focus:ring-[#579dff] focus:ring-offset-2 focus:ring-offset-[#202328]",
+                isBusy && "cursor-not-allowed opacity-60"
+              )}
+              disabled={isBusy}
+              onClick={() => setMissingDescriptionsConfirmed((currentValue) => !currentValue)}
+              role="checkbox"
+              type="button"
+            >
+              <span
+                aria-hidden="true"
+                className={cn(
+                  "flex h-5 w-5 shrink-0 items-center justify-center rounded border transition",
+                  missingDescriptionsConfirmed
+                    ? "border-[#579dff] bg-[#0c66e4] text-white"
+                    : "border-[#9f7f18] bg-[#1f1a06] text-transparent"
+                )}
+              >
+                <Check size={14} strokeWidth={3} />
+              </span>
               <span className="min-w-0 flex-1 leading-relaxed">
                 I reviewed the missing descriptions and want to create these issues without placeholder descriptions.
               </span>
-            </label>
+            </button>
           ) : null}
 
           {createResult ? (

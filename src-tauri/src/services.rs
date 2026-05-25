@@ -88,6 +88,11 @@ impl AppServices {
         CategoryRepository::new(&connection).update(id, name, hidden)
     }
 
+    pub fn delete_category(&self, id: &str) -> DbResult<bool> {
+        let connection = self.connection.lock().expect("database lock poisoned");
+        CategoryRepository::new(&connection).delete(id)
+    }
+
     pub fn list_jql_favorites(&self) -> DbResult<Vec<JqlFavorite>> {
         let connection = self.connection.lock().expect("database lock poisoned");
         JqlFavoriteRepository::new(&connection).list()
