@@ -9,9 +9,7 @@ const OPENAI_MODELS_URL: &str = "https://api.openai.com/v1/models";
 const OPENAI_REQUEST_TIMEOUT: Duration = Duration::from_secs(45);
 const OPENAI_REQUEST_ATTEMPTS: usize = 2;
 const JIRA_KNOWN_PROJECT_KEYS: &[&str] = &["DTS", "JTFTEST"];
-const JIRA_KNOWN_DTS_ISSUE_TYPES: &[&str] = &["Epic", "Subtask", "Tarea", "Historia", "Error"];
-const JIRA_KNOWN_JTFTEST_ISSUE_TYPES: &[&str] =
-    &["Epic", "Subtask", "Tarea", "Historia", "Función", "Error"];
+const JIRA_KNOWN_ISSUE_TYPES: &[&str] = &["Bug", "Story", "Epic", "subtask"];
 const JIRA_KNOWN_PRIORITIES: &[&str] = &["Highest", "High", "Medium", "Low", "Lowest"];
 
 #[derive(Clone, PartialEq, Eq)]
@@ -170,8 +168,8 @@ fn jql_generation_instructions() -> &'static str {
     "You generate Jira JQL for Jira Task Forge. Return only valid JSON matching the schema. \
 Use Jira Cloud JQL syntax. Prefer compact, readable queries. \
 Do not invent field names beyond common Jira fields unless the user asked for them. \
-Do not include issue type filters unless the user explicitly asks for a Jira issue type such as story, bug, epic, subtask, feature, or task type. \
-Spanish words like tarea, tareas, trabajo, pendiente, or issue can mean generic work items; do not translate those into issuetype = \"Tarea\" unless the user clearly asks for the Jira Task issue type. \
+Do not include issue type filters unless the user explicitly asks for a Jira issue type such as Story, Bug, Epic, or subtask. \
+Spanish words like tarea, tareas, trabajo, pendiente, or issue can mean generic work items; do not translate those into an issue type filter unless the user clearly asks for a specific Jira issue type. \
 When filtering by issue type, use issuetype = \"Exact Name\" or issuetype in (\"Exact Name\") with exact names from context. \
 Use statusCategory != Done for open work when the user asks for open, active, pending, or unfinished issues. \
 When the user asks for newest, latest, oldest, or recent issues, prefer ORDER BY created DESC or ASC as appropriate. \
@@ -186,14 +184,12 @@ Never include markdown fences."
 fn jira_generation_context() -> String {
     format!(
         "Known Jira project keys: {}.\n\
-Known issue types for DTS: {}.\n\
-Known issue types for JTFTEST: {}.\n\
+Known Jira issue types: {}.\n\
 Known Jira priorities: {}.\n\
 Use priority names exactly as listed. Examples: lowest priority -> priority = Lowest; high priority -> priority = High.\n\
 Important mapping rule: DTS and JTFTEST are Jira project keys. Names like STT, PilotLab, MR Studio, Transversal, area, or category are local planning labels, not Jira project keys.",
         JIRA_KNOWN_PROJECT_KEYS.join(", "),
-        JIRA_KNOWN_DTS_ISSUE_TYPES.join(", "),
-        JIRA_KNOWN_JTFTEST_ISSUE_TYPES.join(", "),
+        JIRA_KNOWN_ISSUE_TYPES.join(", "),
         JIRA_KNOWN_PRIORITIES.join(", ")
     )
 }
@@ -347,9 +343,7 @@ mod tests {
         let context = jira_generation_context();
 
         assert!(context.contains("Known Jira project keys: DTS, JTFTEST."));
-        assert!(
-            context.contains("Known issue types for DTS: Epic, Subtask, Tarea, Historia, Error.")
-        );
+        assert!(context.contains("Known Jira issue types: Bug, Story, Epic, subtask."));
         assert!(context.contains("Known Jira priorities: Highest, High, Medium, Low, Lowest."));
         assert!(context.contains("STT"));
     }
