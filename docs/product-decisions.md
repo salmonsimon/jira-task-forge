@@ -13,6 +13,31 @@ This document captures the product scope decisions from the grill session. UI co
 - Main tabs are `Trays` and `JQL`.
 - Global chip-style actions are `Categories` and `Settings`.
 
+## Roadmap Milestones
+
+- **Personal v1** is the near-term product milestone. It should be reliable
+  enough for Saimon's real Jira preparation workflow, with stronger tests and
+  security hardening over the current local-first app, but it does not need to
+  solve public distribution, multi-user administration, or full enterprise
+  authentication yet.
+- **Distributable v1** is a later milestone after Personal v1 proves useful.
+  It should let another person install, connect Jira and AI providers, understand
+  privacy/security boundaries, and use the app without Saimon's guidance.
+- Personal v1 work should avoid choices that block Distributable v1. OAuth,
+  installer/update polish, first-run privacy onboarding, distribution docs, and
+  a formal security review are expected to land in or before Distributable v1,
+  not as blockers for Personal v1 unless a specific Personal v1 risk demands it.
+- Distributable v1 preparation may be captured as notes or research during
+  Personal v1, but implementation work for OAuth, public installer/update flows,
+  distribution docs, and full onboarding belongs to the later Distributable v1
+  milestone unless explicitly pulled forward.
+- Personal v1 uses bring-your-own-key credentials: Jira API tokens and AI
+  provider API keys stored in the OS credential store. OAuth is a later V2 /
+  distributable research topic, not a Personal v1 blocker.
+- V2 should research Jira OAuth 2.0 and AI provider authentication options. If
+  OAuth is practical, prefer it for distribution. If not, keep BYOK with stronger
+  onboarding, documentation, redaction, and local secret-handling practices.
+
 ## Prototype Scope
 
 - The first prototype should be built inside the real app skeleton, not as a separate throwaway mock.
@@ -279,7 +304,14 @@ This document captures the product scope decisions from the grill session. UI co
   requires explicit confirmation to proceed without them.
 - The app should not generate placeholder descriptions just to satisfy a sync.
 - The assisted description panel supports notes and pasted images.
-- The AI asks questions until the required points are resolved, unless the user explicitly chooses to proceed with missing information.
+- For Personal v1, AI description assistance generates or improves a Jira
+  description from the task title, project, area, notes, and any available
+  context. When the available information is not enough to produce a useful
+  description, the AI should ask targeted follow-up questions before finalizing.
+- The Personal v1 AI description flow can be multi-step for clarification, but
+  it is not a general-purpose free-form chat inside the app.
+- Missing-description and missing-field review remains part of the existing
+  preflight flow rather than a separate AI review feature in Personal v1.
 - Story descriptions use:
   - a short user story intro
   - then full SRS Lite sections
@@ -318,7 +350,18 @@ Then include:
 ### 10. Riesgos y preguntas abiertas
 ```
 
-The AI should avoid inventing missing details and should ask follow-up questions before final generation.
+The AI should avoid inventing missing details and should leave uncertainty in
+the generated description when the source context is incomplete.
+
+Personal v1 should refine the current "Crear descripciones de JIRA" chat format
+into a fixed internal template before implementing AI description generation.
+The fixed format and prompt rules should be captured in a dedicated roadmap
+document such as `docs/jira-description-format.md`.
+- The Personal v1 clarification UX should be structured rather than chat-like:
+  AI shows the targeted questions it needs answered, Saimon responds in a single
+  textarea, and then the app generates an editable Jira description.
+- AI-generated descriptions are never uploaded automatically. They must remain
+  editable and are uploaded only through the normal `Create in Jira` flow.
 
 ## Images and Attachments
 
@@ -334,18 +377,27 @@ The AI should avoid inventing missing details and should ask follow-up questions
 - Images marked as Jira attachments are uploaded during Jira sync.
 - Images marked AI-only are used for context but are not uploaded.
 - Backups include images and attachment metadata.
+- Personal v1 attachment support should prioritize uploading files/images to
+  Jira from local tasks.
+- The app should attempt to store compressed copies of image attachments when it
+  can do so without adding disproportionate complexity or harming usefulness.
+- If attachment compression/upload proves too complex for Personal v1, the
+  fallback is to complete Jira creation with text descriptions first and defer
+  richer attachment support.
 
 ## Sub-tasks
 
 - Sub-tasks are not part of the quick capture input.
-- The AI can suggest sub-tasks from the assisted description panel.
+- Personal v1 sub-task suggestions should be hardcoded for known 3D work first,
+  rather than fully AI-generated.
 - Suggested sub-tasks appear as a proposal first.
 - The user can accept all, some, or none.
+- Proposed sub-tasks are selected by default before Jira sync.
+- Preflight should clearly state how many sub-tasks will be created and allow
+  Saimon to deselect the ones he does not want.
 - Accepted sub-tasks are created after their parent story/bug.
 - Sub-tasks do not use SRS Lite.
-- Sub-task descriptions should be simple:
-  - brief description
-  - acceptance criteria
+- Personal v1 does not require generated descriptions for sub-tasks.
 - V1 uses hardcoded sub-task templates only where useful, such as known 3D/modeling work.
 - No sub-task template editor is needed in v1.
 
@@ -423,6 +475,111 @@ The AI should avoid inventing missing details and should ask follow-up questions
 - Before distribution, add a short privacy/security note in Settings or first-run
   onboarding so users understand what leaves the machine during Jira and AI
   actions.
+
+## Personal V1 Quality And Security Bar
+
+- Personal v1 should not move into more Jira/AI feature expansion until the
+  current app surface has a strong quality and security stabilization pass.
+- The stabilization pass should raise Rust/Tauri backend line coverage back
+  above 80%.
+- The stabilization pass should add focused coverage for newer surfaces,
+  including OpenAI integration, backup/import behavior, service orchestration,
+  and command boundaries where useful.
+- The stabilization pass should introduce the first frontend test runner and
+  cover workflow/domain behavior before chasing broad UI percentage coverage.
+- The stabilization pass should include and apply a security checklist covering
+  key storage, backup/export/import, logs and error messages, Jira requests,
+  OpenAI requests, and attachment filesystem boundaries.
+- Settings should visibly explain which Jira and AI data leaves the local
+  machine, while preserving the current rule that secrets are stored in the OS
+  credential store and excluded from backups.
+- It is acceptable for this pass to take longer if it leaves the app at a level
+  that feels trustworthy for real personal use.
+- The stabilization pass can run as parallel technical-debt PRs. If automated
+  checks and live QA pass, agents may merge these stabilization PRs without
+  waiting for HITL approval on each individual PR.
+- The planned stabilization PRs are:
+  - Coverage Baseline: refresh the measured coverage report and standardize the
+    coverage command.
+  - Backend Coverage: raise Rust/Tauri backend line coverage above 80%, focusing
+    on newer and riskier modules first.
+  - Frontend Test Harness: introduce the first frontend test runner and cover
+    workflow/domain behavior.
+  - Security Hardening: document and apply a checklist for secrets, backups,
+    provider requests, logs/errors, and filesystem boundaries.
+- Stabilization PRs may be auto-merged after the relevant QA gate passes:
+  `npm run build`, `cargo test --manifest-path src-tauri/Cargo.toml`,
+  `cargo llvm-cov --summary-only` when coverage is touched, and focused native
+  QA for any affected UI or provider flow.
+- Coverage Baseline and Backend Coverage PRs do not require native live QA
+  unless they change runtime behavior.
+- Frontend Test Harness PRs require the new frontend test command plus a basic
+  app-open smoke check.
+- Security Hardening PRs require focused QA of Settings, backup export/import,
+  Jira test connection, OpenAI test connection, and Ask AI when those flows are
+  affected.
+- Agent-run dev servers should avoid port 1420 because Saimon uses it for local
+  testing.
+
+## Personal V1 Feature Order After Stabilization
+
+- After the quality and security stabilization pass, Personal v1 feature work
+  should continue in this order:
+  - Sub-task creation in Jira.
+  - Attachment metadata and filesystem policy polish where needed.
+  - Attachment upload to Jira.
+  - AI-assisted Jira descriptions and hardcoded 3D sub-task suggestions.
+- Sub-task creation should come before attachment upload because it is closer to
+  the current Jira creation flow, has less filesystem/security uncertainty, and
+  completes the core Jira issue hierarchy sooner.
+
+## Personal V1 Definition Of Done
+
+- Personal v1 is done when Saimon can use Jira Task Forge for a real Jira task
+  preparation and creation flow without falling back to CSV/manual Jira except
+  as an emergency workaround.
+- Personal v1 requires the quality and security stabilization bar to be met:
+  backend coverage above 80%, a minimal frontend test harness, an applied
+  security checklist, and visible Settings copy explaining which Jira and AI
+  data leaves the local machine.
+- Personal v1 Jira creation should support parent Story/Bug issues, sub-tasks,
+  attachments, understandable partial failure handling, and recovery flows.
+- Personal v1 AI should remain manually triggered and include useful JQL and
+  Jira description assistance. Hardcoded 3D sub-task suggestions are part of the
+  v1 workflow, but broad AI-generated sub-task planning is not required.
+  Silent background AI calls are out of scope.
+- Personal v1 is acceptable when the app can upload tasks with Jira descriptions
+  filled using the fixed internal description format and live QA has covered the
+  full creation flow.
+- Personal v1 final QA should run full write coverage only against `JTFTEST`.
+  Read-only QA against `DTS` is allowed for JQL, epic discovery, metadata
+  assumptions, priorities, issue types, and real-work examples. `DTS` must not
+  be mutated.
+- Personal v1 data safety requires backup/restore QA, secrets excluded from
+  backups, and useful redacted audit logs.
+- Installer polish and OAuth are not required for Personal v1 completion.
+
+## Personal V1.5 Polish
+
+- A real high-volume Jira upload week should be treated as a stress test for
+  Personal v1 behavior and feeling.
+- Feedback from that stress test can feed a Personal v1.5 polish pass focused on
+  workflow friction, perceived speed, recovery clarity, progress/audit feeling,
+  and small UI rough edges discovered during real use.
+- During the stress-test week, Saimon will report point problems in the Codex
+  conversation. Agents should group those reports into notes for later triage
+  instead of immediately turning every report into implementation work.
+- Create `docs/stress-test-notes.md` lazily when the first real stress-test
+  report arrives. Structure it for later review by type, severity, affected
+  flow, reproduction context, and likely roadmap bucket.
+- After the stress-test week, review the grouped notes and decide which items
+  belong in Personal v1 fixes, Personal v1.5 polish, or later roadmap work.
+- After Personal v1 is complete, run a dedicated Personal v1.5 polish grill using
+  `docs/stress-test-notes.md` as the source material.
+- After Personal v1.5, or when distribution becomes an active goal, run a
+  dedicated V2/distributable grill covering OAuth, installer/update flow,
+  onboarding, user documentation, AI provider authentication, and formal security
+  review.
 
 ## Backup and Restore
 
