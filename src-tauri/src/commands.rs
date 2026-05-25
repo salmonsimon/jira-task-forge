@@ -4,7 +4,7 @@ use tauri::State;
 use crate::backup::{BackupExportResult, BackupImportResult};
 use crate::models::{
     AppSettings, Category, JiraConnectionTestResult, JiraCreateIssuesResult, JqlFavorite,
-    JqlSearchResponse, LocalTask, NewTask, NewTray, Tray,
+    JqlSearchResponse, LocalTask, NewTask, NewTray, SyncAuditEvent, Tray,
 };
 use crate::services::AppServices;
 
@@ -323,6 +323,16 @@ pub fn create_recovery_tray_from_tasks(
     task_ids: Vec<String>,
 ) -> Result<Tray, String> {
     services.create_recovery_tray_from_tasks(&source_tray_id, &task_ids)
+}
+
+#[tauri::command]
+pub fn list_task_sync_audit_events(
+    services: State<'_, AppServices>,
+    task_id: String,
+) -> Result<Vec<SyncAuditEvent>, String> {
+    services
+        .list_task_sync_audit_events(&task_id)
+        .map_err(|error| error.to_string())
 }
 
 #[tauri::command]

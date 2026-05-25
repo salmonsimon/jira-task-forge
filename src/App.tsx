@@ -30,6 +30,7 @@ import {
   importPersistedBackup,
   listPersistedCategories,
   listPersistedJqlFavorites,
+  listPersistedTaskSyncLog,
   listPersistedTrays,
   markPersistedTasksCsvExported,
   openPersistedAtlassianApiTokensPage,
@@ -70,6 +71,7 @@ import type {
   MainTab,
   Panel,
   Priority,
+  SyncLogEntry,
   Tray
 } from "./lib/types";
 import { cn } from "./lib/utils";
@@ -99,6 +101,7 @@ export default function App() {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>("ltask-timer");
   const [categories, setCategories] = useState<Category[]>(() => [...appData.listProjects(), ...appData.listAreas()]);
   const [jqlFavorites, setJqlFavorites] = useState<JqlFavorite[]>(() => appData.listJqlFavorites());
+  const [taskSyncLogs, setTaskSyncLogs] = useState<Record<string, SyncLogEntry[]>>({});
   const [selectedFavoriteId, setSelectedFavoriteId] = useState<string | undefined>(appData.listJqlFavorites()[0]?.id);
   const [jqlRecentQueries, setJqlRecentQueries] = useState<JqlRecentQuery[]>([]);
   const [jqlMode, setJqlMode] = useState<"direct" | "ai">("ai");
@@ -135,6 +138,14 @@ export default function App() {
   const selectedTask = useMemo(() => {
     return trays.flatMap((tray) => tray.tasks).find((task) => task.id === selectedTaskId) ?? null;
   }, [selectedTaskId, trays]);
+
+  const selectedTaskWithSyncLog = useMemo(() => {
+    if (!selectedTask) return null;
+    return {
+      ...selectedTask,
+      syncLog: taskSyncLogs[selectedTask.id] ?? selectedTask.syncLog
+    };
+  }, [selectedTask, taskSyncLogs]);
 
   const selectedTaskTray = useMemo(() => {
     if (!selectedTaskId) return null;
@@ -252,6 +263,25 @@ export default function App() {
       setOpenPanel(null);
     }
   }, [openPanel, selectedTask]);
+
+  useEffect(() => {
+    if (openPanel !== "detail" || !selectedTaskId || !usesTauriPersistence) return;
+
+    let isCurrent = true;
+    listPersistedTaskSyncLog(selectedTaskId)
+      .then((syncLog) => {
+        if (!isCurrent) return;
+        setTaskSyncLogs((currentLogs) => ({ ...currentLogs, [selectedTaskId]: syncLog }));
+      })
+      .catch(() => {
+        if (!isCurrent) return;
+        setTaskSyncLogs((currentLogs) => ({ ...currentLogs, [selectedTaskId]: [] }));
+      });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [openPanel, selectedTaskId, usesTauriPersistence]);
 
   useEffect(() => {
     setCsvExportMessage(null);
@@ -1135,9 +1165,9 @@ export default function App() {
           )}
         </main>
 
-        {openPanel === "detail" && selectedTask ? (
+        {openPanel === "detail" && selectedTaskWithSyncLog ? (
           <TaskFocusWindow
-            task={selectedTask}
+            task={selectedTaskWithSyncLog}
             projects={projectOptions}
             areas={areaOptions}
             readOnly={selectedTaskTray?.state === "Archived"}

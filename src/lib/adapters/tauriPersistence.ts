@@ -9,6 +9,7 @@ import type {
   JqlQueryResult,
   LocalTask,
   Priority,
+  SyncLogEntry,
   SyncStatus,
   Tray,
   TrayState
@@ -59,6 +60,19 @@ type BackendJqlFavorite = {
   jql: string;
   created_at: string;
   updated_at: string;
+};
+
+type BackendSyncAuditEvent = {
+  id: string;
+  syncAttemptId: string | null;
+  trayId: string | null;
+  taskId: string | null;
+  eventType: string;
+  occurredAt: string;
+  outcome: string;
+  provider: string | null;
+  operation: string | null;
+  detail: unknown;
 };
 
 export type PersistedBackupExportResult = {
@@ -260,6 +274,11 @@ export async function createPersistedRecoveryTrayFromTasks(sourceTrayId: string,
   return mapTray(tray, []);
 }
 
+export async function listPersistedTaskSyncLog(taskId: string): Promise<SyncLogEntry[]> {
+  const events = await invoke<BackendSyncAuditEvent[]>("list_task_sync_audit_events", { taskId });
+  return events.map(mapSyncAuditEvent);
+}
+
 export async function exportPersistedBackup(path: string): Promise<PersistedBackupExportResult> {
   return invoke<PersistedBackupExportResult>("export_backup", { path });
 }
@@ -307,6 +326,15 @@ function mapJqlFavorite(favorite: BackendJqlFavorite): JqlFavorite {
   };
 }
 
+function mapSyncAuditEvent(event: BackendSyncAuditEvent): SyncLogEntry {
+  return {
+    id: event.id,
+    timestamp: formatTimestamp(event.occurredAt),
+    event: formatAuditEventTitle(event),
+    detail: formatAuditEventDetail(event.detail)
+  };
+}
+
 function mapTray(tray: BackendTray, tasks: LocalTask[]): Tray {
   return {
     id: tray.id,
@@ -316,6 +344,33 @@ function mapTray(tray: BackendTray, tasks: LocalTask[]): Tray {
     updatedAt: formatTimestamp(tray.updated_at),
     tasks
   };
+}
+
+function formatAuditEventTitle(event: BackendSyncAuditEvent): string {
+  const eventName = event.eventType
+    .replace(/^jira\./, "")
+    .split(".")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+  const outcome = event.outcome.charAt(0).toUpperCase() + event.outcome.slice(1);
+  return `${outcome}: ${eventName}`;
+}
+
+function formatAuditEventDetail(detail: unknown): string {
+  if (!detail || typeof detail !== "object") return "";
+  const value = detail as Record<string, unknown>;
+
+  if (typeof value.message === "string") return value.message;
+  if (Array.isArray(value.messages)) return value.messages.filter((message) => typeof message === "string").join(" ");
+
+  const summaryParts = [
+    typeof value.jiraKey === "string" ? value.jiraKey : null,
+    typeof value.summary === "string" ? value.summary : null,
+    typeof value.priority === "string" ? `Priority ${value.priority}` : null,
+    typeof value.source === "string" ? `Source ${value.source}` : null
+  ].filter(Boolean);
+
+  return summaryParts.length ? summaryParts.join(" · ") : "No additional details.";
 }
 
 function mapTrayState(state: BackendTray["state"]): TrayState {

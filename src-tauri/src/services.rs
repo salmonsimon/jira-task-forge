@@ -10,10 +10,11 @@ use crate::integrations::jira::{normalize_jira_site_url, JiraClient, JiraCredent
 use crate::jira_sync::JiraSyncRunner;
 use crate::models::{
     AppSettings, Category, JiraConnectionTestResult, JiraCreateIssuesResult, JqlFavorite,
-    JqlSearchResponse, LocalTask, NewTask, NewTray, Tray,
+    JqlSearchResponse, LocalTask, NewTask, NewTray, SyncAuditEvent, Tray,
 };
 use crate::repositories::{
-    CategoryRepository, JqlFavoriteRepository, SettingsRepository, TaskRepository, TrayRepository,
+    CategoryRepository, JqlFavoriteRepository, SettingsRepository, SyncRepository, TaskRepository,
+    TrayRepository,
 };
 
 #[derive(Clone)]
@@ -251,6 +252,11 @@ impl AppServices {
             .map_err(|error| error.to_string())?;
 
         Ok(recovery_tray)
+    }
+
+    pub fn list_task_sync_audit_events(&self, task_id: &str) -> DbResult<Vec<SyncAuditEvent>> {
+        let connection = self.connection.lock().expect("database lock poisoned");
+        SyncRepository::new(&connection).list_for_task(task_id)
     }
 
     pub fn export_backup_file(
