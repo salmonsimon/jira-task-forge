@@ -348,6 +348,13 @@ impl<'connection> JqlFavoriteRepository<'connection> {
         self.find_by_id(id)
     }
 
+    pub fn delete(&self, id: &str) -> DbResult<bool> {
+        let changed = self
+            .connection
+            .execute("DELETE FROM jql_favorites WHERE id = ?1", [id])?;
+        Ok(changed > 0)
+    }
+
     fn find_by_id(&self, id: &str) -> DbResult<Option<JqlFavorite>> {
         let mut statement = self.connection.prepare(
             "
@@ -1097,7 +1104,7 @@ mod tests {
     }
 
     #[test]
-    fn creates_and_updates_jql_favorites() {
+    fn creates_updates_and_deletes_jql_favorites() {
         let connection = open_in_memory_database().expect("database opens");
         let repository = JqlFavoriteRepository::new(&connection);
 
@@ -1121,6 +1128,16 @@ mod tests {
             .expect("favorite exists");
         assert_eq!(updated.name, "JTFTEST recent");
         assert_eq!(updated.jql, "project = JTFTEST ORDER BY created DESC");
+
+        assert!(repository.delete(&favorite.id).expect("favorite deletes"));
+        assert!(!repository
+            .delete(&favorite.id)
+            .expect("missing favorite delete is false"));
+        assert!(!repository
+            .list()
+            .expect("favorites list after delete")
+            .iter()
+            .any(|favorite| favorite.id == updated.id));
     }
 
     #[test]

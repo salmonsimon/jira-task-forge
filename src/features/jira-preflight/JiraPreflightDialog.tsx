@@ -62,6 +62,18 @@ export function JiraPreflightDialog({
   }, [preflight.tray.id]);
 
   useEffect(() => {
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousHtmlOverflow = document.documentElement.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = previousBodyOverflow;
+      document.documentElement.style.overflow = previousHtmlOverflow;
+    };
+  }, []);
+
+  useEffect(() => {
     function handleEscape(event: KeyboardEvent) {
       if (event.key === "Escape" && !isBusy) onClose();
     }
@@ -330,7 +342,11 @@ function PreflightWarningGroup({
             <ul className="mt-2 space-y-1.5">
               {group.warnings.map((warning, index) => (
                 <li className="text-sm text-[#dfe1e6]" key={`${warning.code}-${warning.taskId ?? "tray"}-${index}`}>
-                  {warning.taskId ? tasksById.get(warning.taskId)?.title || "Untitled task" : warning.message}
+                  {warning.taskId ? (
+                    <TaskWarningLine code={warning.code} task={tasksById.get(warning.taskId)} />
+                  ) : (
+                    warning.message
+                  )}
                 </li>
               ))}
             </ul>
@@ -339,6 +355,25 @@ function PreflightWarningGroup({
       </div>
     </div>
   );
+}
+
+function TaskWarningLine({ code, task }: { code: PreflightWarningCode; task: Tray["tasks"][number] | undefined }) {
+  if (!task) return <>Untitled task</>;
+
+  return (
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+      <span>{task.title || "Untitled task"}</span>
+      {code === "missing-epic" && task.project.trim() && task.area.trim() ? (
+        <span className="rounded bg-black/20 px-2 py-0.5 text-xs font-medium text-[#c7d1db]">
+          Epic target: {formatEpicTarget(task.project, task.area)}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+function formatEpicTarget(project: string, area: string) {
+  return `[${project.trim()}] ${area.trim()}`;
 }
 
 function groupWarningsByCode(warnings: PreflightWarning[]): Array<{ code: PreflightWarningCode; warnings: PreflightWarning[] }> {
@@ -363,7 +398,7 @@ function getWarningTitle(code: PreflightWarningCode): string {
     "missing-area": "Missing area",
     "missing-title": "Missing title",
     "missing-description": "Missing description",
-    "missing-epic": "Missing epic mapping",
+    "missing-epic": "Epic resolution",
     "retry-failed-task": "Failed tasks will retry",
     "exported-duplicate-risk": "CSV duplicate risk"
   };
@@ -381,7 +416,7 @@ function getWarningSummary(code: PreflightWarningCode, warning: PreflightWarning
     "missing-area": "These tasks need an area before Jira issue type and labels can be derived.",
     "missing-title": "These tasks need a title before they can be created.",
     "missing-description": "These tasks can still be created, but should be reviewed because their description is missing.",
-    "missing-epic": "These tasks can be resolved during Jira creation by creating or selecting an epic.",
+    "missing-epic": "Jira creation will search for each target epic by name and create it only if Jira has no match.",
     "retry-failed-task": "These failed tasks will be retried with their existing local identity.",
     "exported-duplicate-risk": "These tasks were exported to CSV, so confirm they were not already imported into Jira."
   };

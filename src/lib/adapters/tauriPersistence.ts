@@ -159,6 +159,10 @@ export async function updatePersistedJqlFavorite(
   return favorite ? mapJqlFavorite(favorite) : null;
 }
 
+export async function deletePersistedJqlFavorite(id: string): Promise<boolean> {
+  return invoke<boolean>("delete_jql_favorite", { id });
+}
+
 export async function hasPersistedJiraApiToken(): Promise<boolean> {
   return invoke<boolean>("has_jira_api_token");
 }
