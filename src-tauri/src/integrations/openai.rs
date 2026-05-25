@@ -296,10 +296,66 @@ fn validate_jql_draft(mut draft: JqlAiDraft) -> Result<JqlAiDraft, String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        extract_output_text, jira_generation_context, openai_error_message, validate_jql_draft,
+        extract_output_text, jira_generation_context, jql_generation_instructions,
+        openai_error_message, validate_jql_draft, OpenAiClient, OpenAiCredentials,
     };
     use crate::models::JqlAiDraft;
     use serde_json::json;
+
+    #[test]
+    fn redacts_openai_secret_debug_output() {
+        let credentials = OpenAiCredentials {
+            api_key: "sk-secret-value".to_string(),
+        };
+        let client = OpenAiClient::new(credentials.clone());
+
+        assert_eq!(
+            format!("{credentials:?}"),
+            r#"OpenAiCredentials { api_key: "<redacted>" }"#
+        );
+        assert_eq!(
+            format!("{client:?}"),
+            r#"OpenAiClient { api_key: "<redacted>" }"#
+        );
+    }
+
+    #[test]
+    fn rejects_empty_prompt_before_network_request() {
+        let client = OpenAiClient::new(OpenAiCredentials {
+            api_key: "sk-test".to_string(),
+        });
+
+        assert_eq!(
+            client
+                .draft_jql("gpt-4.1", "   ", Some("JTFTEST"))
+                .expect_err("empty prompt rejected"),
+            "Ask AI prompt is required."
+        );
+    }
+
+    #[test]
+    fn rejects_empty_model_before_network_request() {
+        let client = OpenAiClient::new(OpenAiCredentials {
+            api_key: "sk-test".to_string(),
+        });
+
+        assert_eq!(
+            client
+                .draft_jql("  ", "show latest DTS issue", Some("DTS"))
+                .expect_err("empty model rejected"),
+            "OpenAI model is required."
+        );
+    }
+
+    #[test]
+    fn instructions_pin_jira_safety_rules() {
+        let instructions = jql_generation_instructions();
+
+        assert!(instructions.contains("Return only valid JSON"));
+        assert!(instructions.contains("do not translate those into an issue type filter"));
+        assert!(instructions.contains("Do not replace a known Jira project key"));
+        assert!(instructions.contains("Never include markdown fences"));
+    }
 
     #[test]
     fn extracts_output_text_from_responses_payload() {
@@ -319,9 +375,55 @@ mod tests {
     }
 
     #[test]
+    fn extracts_top_level_output_text_when_present() {
+        let payload = json!({
+            "output_text": "{\"jql\":\"project = JTFTEST\",\"explanation\":\"ok\",\"warnings\":[]}",
+            "output": []
+        });
+
+        assert_eq!(
+            extract_output_text(&payload).expect("top-level output text extracts"),
+            "{\"jql\":\"project = JTFTEST\",\"explanation\":\"ok\",\"warnings\":[]}"
+        );
+    }
+
+    #[test]
+    fn rejects_missing_output_array() {
+        let payload = json!({ "id": "response_123" });
+
+        assert_eq!(
+            extract_output_text(&payload).expect_err("missing output rejected"),
+            "OpenAI response did not include output text."
+        );
+    }
+
+    #[test]
+    fn rejects_output_without_text_content() {
+        let payload = json!({
+            "output": [{
+                "content": [{
+                    "type": "refusal",
+                    "refusal": "no"
+                }]
+            }]
+        });
+
+        assert_eq!(
+            extract_output_text(&payload).expect_err("missing text rejected"),
+            "OpenAI response did not include output text."
+        );
+    }
+
+    #[test]
     fn reads_openai_error_messages() {
         let body = r#"{"error":{"message":"Invalid API key"}}"#;
         assert_eq!(openai_error_message(body), "Invalid API key");
+    }
+
+    #[test]
+    fn ignores_malformed_openai_error_payloads() {
+        assert_eq!(openai_error_message("not json"), "");
+        assert_eq!(openai_error_message(r#"{"error":{"message":123}}"#), "");
     }
 
     #[test]
@@ -336,6 +438,18 @@ mod tests {
         assert_eq!(draft.jql, "project = DTS ORDER BY updated DESC");
         assert_eq!(draft.explanation, "Generated JQL loaded into the editor.");
         assert_eq!(draft.warnings, vec!["assumed DTS"]);
+    }
+
+    #[test]
+    fn rejects_empty_jql_drafts() {
+        let error = validate_jql_draft(JqlAiDraft {
+            jql: " ".to_string(),
+            explanation: "Generated".to_string(),
+            warnings: Vec::new(),
+        })
+        .expect_err("empty jql rejected");
+
+        assert_eq!(error, "OpenAI returned an empty JQL query.");
     }
 
     #[test]
