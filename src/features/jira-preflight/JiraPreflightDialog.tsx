@@ -4,6 +4,7 @@ import { Button, LoadingOrb } from "../../components/ui";
 import type {
   JiraConnectionTestResult,
   JiraCreateIssuesResult,
+  JiraCreateProgress,
   PreflightWarning,
   PreflightWarningCode,
   Tray
@@ -25,6 +26,7 @@ export function JiraPreflightDialog({
   isCreatingRecoveryTray,
   createError,
   createResult,
+  createProgress,
   onClose,
   onCreate,
   onCreateRecoveryTray
@@ -34,6 +36,7 @@ export function JiraPreflightDialog({
   isCreatingRecoveryTray: boolean;
   createError: string | null;
   createResult: JiraCreateIssuesResult | null;
+  createProgress: JiraCreateProgress | null;
   onClose: () => void;
   onCreate: (options: { allowMissingDescriptions: boolean }) => void;
   onCreateRecoveryTray: () => void;
@@ -95,7 +98,7 @@ export function JiraPreflightDialog({
       >
         {isCreating ? (
           <div className="absolute inset-0 z-20 flex items-center justify-center bg-[#202328]/95 px-5 backdrop-blur-[2px]">
-            <JiraCreateLoading taskCount={preflight.createableTaskCount} />
+            <JiraCreateLoading taskCount={preflight.createableTaskCount} progress={createProgress} />
           </div>
         ) : null}
 
@@ -228,20 +231,43 @@ export function JiraPreflightDialog({
   );
 }
 
-function JiraCreateLoading({ taskCount }: { taskCount: number }) {
+function JiraCreateLoading({
+  taskCount,
+  progress
+}: {
+  taskCount: number;
+  progress: JiraCreateProgress | null;
+}) {
+  const hasDeterminateProgress = Boolean(progress && progress.totalSteps > 1);
+  const progressPercent = progress
+    ? Math.min(100, Math.max(0, Math.round((progress.completedSteps / Math.max(progress.totalSteps, 1)) * 100)))
+    : 0;
+  const progressWidth = hasDeterminateProgress ? `${progressPercent}%` : undefined;
+  const progressMeta = progress
+    ? `${Math.min(progress.completedSteps, progress.totalSteps)} of ${progress.totalSteps}`
+    : `${taskCount} ${taskCount === 1 ? "parent issue" : "parent issues"}`;
+
   return (
     <div className="w-full max-w-[420px] rounded border border-[#315a8a] bg-[#102d50] px-4 py-4 text-[#dfe1e6] shadow-2xl">
-      <div className="flex items-center gap-4">
-        <LoadingOrb size="md" />
-        <div className="min-w-0">
-          <div className="text-sm font-semibold text-[#f4f5f7]">Creating in Jira</div>
-          <p className="mt-1 text-sm text-[#b7d5ff]">
-            Preparing epics and {taskCount} {taskCount === 1 ? "parent issue" : "parent issues"}.
-          </p>
-        </div>
+      <div className="min-w-0">
+        <div className="text-sm font-semibold text-[#f4f5f7]">{progress?.label ?? "Creating in Jira"}</div>
+        <p className="mt-1 truncate text-sm text-[#b7d5ff]">
+          {progress?.detail ??
+            `Preparing epics and ${taskCount} ${taskCount === 1 ? "parent issue" : "parent issues"}.`}
+        </p>
       </div>
-      <div className="relative mt-4 h-1.5 overflow-hidden rounded-full bg-[#0b2442]">
-        <div className="jira-loading-bar absolute inset-y-0 w-1/2 rounded-full bg-[#579dff]" />
+      <div className="jira-progress-activity relative mt-4 h-2.5 overflow-hidden rounded-full bg-[#0b2442]">
+        <div
+          className={cn(
+            "absolute inset-y-0 rounded-full transition-all duration-300 ease-out",
+            hasDeterminateProgress ? "jira-progress-activity-fill left-0" : "jira-progress-activity-indeterminate"
+          )}
+          style={hasDeterminateProgress ? { width: progressWidth } : undefined}
+        />
+      </div>
+      <div className="mt-2 flex items-center justify-between gap-3 text-xs text-[#b7d5ff]">
+        <span className="truncate">{progress?.step ? progress.step.replace(/-/g, " ") : "working"}</span>
+        <span className="shrink-0">{hasDeterminateProgress ? `${progressPercent}% · ${progressMeta}` : progressMeta}</span>
       </div>
     </div>
   );

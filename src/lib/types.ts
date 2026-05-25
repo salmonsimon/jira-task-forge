@@ -165,3 +165,13 @@ export type JiraCreateIssuesResult = {
   failedTasks: JiraFailedTaskResult[];
   messages: string[];
 };
+
+export type JiraCreateProgress = {
+  syncAttemptId?: string | null;
+  step: string;
+  label: string;
+  detail?: string | null;
+  completedSteps: number;
+  totalSteps: number;
+  status: "running" | "succeeded" | "partial" | "failed" | "blocked";
+};

@@ -9,8 +9,8 @@ use crate::db::DbResult;
 use crate::integrations::jira::{normalize_jira_site_url, JiraClient, JiraCredentials};
 use crate::jira_sync::JiraSyncRunner;
 use crate::models::{
-    AppSettings, Category, JiraConnectionTestResult, JiraCreateIssuesResult, JqlFavorite,
-    JqlSearchResponse, LocalTask, NewTask, NewTray, SyncAuditEvent, Tray,
+    AppSettings, Category, JiraConnectionTestResult, JiraCreateIssuesResult, JiraCreateProgress,
+    JqlFavorite, JqlSearchResponse, LocalTask, NewTask, NewTray, SyncAuditEvent, Tray,
 };
 use crate::repositories::{
     CategoryRepository, JqlFavoriteRepository, SettingsRepository, SyncRepository, TaskRepository,
@@ -176,6 +176,18 @@ impl AppServices {
         tray_id: &str,
         allow_missing_descriptions: bool,
     ) -> Result<JiraCreateIssuesResult, String> {
+        self.create_jira_parent_issues_with_progress(tray_id, allow_missing_descriptions, |_| {})
+    }
+
+    pub fn create_jira_parent_issues_with_progress<F>(
+        &self,
+        tray_id: &str,
+        allow_missing_descriptions: bool,
+        report_progress: F,
+    ) -> Result<JiraCreateIssuesResult, String>
+    where
+        F: FnMut(JiraCreateProgress),
+    {
         let settings = self
             .get_app_settings()
             .map_err(|error| format!("Could not load Jira settings: {error}"))?;
@@ -190,7 +202,11 @@ impl AppServices {
         let mut client = self.jira_client()?;
         let connection = self.connection.lock().expect("database lock poisoned");
         JiraSyncRunner::new(&connection, &mut client, creation_project_key)
-            .create_parent_issues_from_tray(tray_id, allow_missing_descriptions)
+            .create_parent_issues_from_tray_with_progress(
+                tray_id,
+                allow_missing_descriptions,
+                report_progress,
+            )
     }
 
     pub fn create_task(&self, new_task: NewTask) -> DbResult<LocalTask> {
