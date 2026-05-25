@@ -1,4 +1,4 @@
-import { Check, Eye, EyeOff, Pencil, Plus, Tags, X } from "lucide-react";
+import { Check, Eye, EyeOff, Pencil, Plus, Tags, Trash2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button, PanelHeader } from "../../components/ui";
 import type { Category } from "../../lib/types";
@@ -9,12 +9,14 @@ export function CategoriesPanel({
   areas,
   onCreateCategory,
   onUpdateCategory,
+  onDeleteCategory,
   onClose
 }: {
   projects: Category[];
   areas: Category[];
   onCreateCategory: (categoryType: "project" | "area", name: string) => void | Promise<void>;
   onUpdateCategory: (categoryId: string, patch: Partial<Pick<Category, "hidden" | "name">>) => void | Promise<void>;
+  onDeleteCategory: (categoryId: string) => void | Promise<void>;
   onClose: () => void;
 }) {
   const panelRef = useRef<HTMLElement | null>(null);
@@ -39,6 +41,7 @@ export function CategoriesPanel({
           categories={projects}
           onCreateCategory={onCreateCategory}
           onUpdateCategory={onUpdateCategory}
+          onDeleteCategory={onDeleteCategory}
         />
         <CategoryList
           categoryType="area"
@@ -46,6 +49,7 @@ export function CategoriesPanel({
           categories={areas}
           onCreateCategory={onCreateCategory}
           onUpdateCategory={onUpdateCategory}
+          onDeleteCategory={onDeleteCategory}
         />
       </div>
     </aside>
@@ -57,13 +61,15 @@ function CategoryList({
   title,
   categories,
   onCreateCategory,
-  onUpdateCategory
+  onUpdateCategory,
+  onDeleteCategory
 }: {
   categoryType: "project" | "area";
   title: string;
   categories: Category[];
   onCreateCategory: (categoryType: "project" | "area", name: string) => void | Promise<void>;
   onUpdateCategory: (categoryId: string, patch: Partial<Pick<Category, "hidden" | "name">>) => void | Promise<void>;
+  onDeleteCategory: (categoryId: string) => void | Promise<void>;
 }) {
   const [isAdding, setIsAdding] = useState(false);
   const [newName, setNewName] = useState("");
@@ -125,7 +131,12 @@ function CategoryList({
           </div>
         ) : null}
         {categories.map((category) => (
-          <CategoryRow category={category} key={category.id} onUpdateCategory={onUpdateCategory} />
+          <CategoryRow
+            category={category}
+            key={category.id}
+            onDeleteCategory={onDeleteCategory}
+            onUpdateCategory={onUpdateCategory}
+          />
         ))}
       </div>
     </div>
@@ -134,9 +145,11 @@ function CategoryList({
 
 function CategoryRow({
   category,
+  onDeleteCategory,
   onUpdateCategory
 }: {
   category: Category;
+  onDeleteCategory: (categoryId: string) => void | Promise<void>;
   onUpdateCategory: (categoryId: string, patch: Partial<Pick<Category, "hidden" | "name">>) => void | Promise<void>;
 }) {
   const [isEditing, setIsEditing] = useState(false);
@@ -217,6 +230,14 @@ function CategoryRow({
               type="button"
             >
               {category.hidden ? <Eye size={14} /> : <EyeOff size={14} />}
+            </button>
+            <button
+              className="inline-flex h-7 w-7 items-center justify-center rounded text-[#42526e] opacity-0 transition hover:bg-[#ffebe6] hover:text-[#bf2600] group-hover:opacity-100 focus:opacity-100"
+              onClick={() => void onDeleteCategory(category.id)}
+              title={`Delete ${category.name}`}
+              type="button"
+            >
+              <Trash2 size={14} />
             </button>
           </>
         )}
