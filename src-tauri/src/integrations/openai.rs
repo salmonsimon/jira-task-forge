@@ -102,7 +102,7 @@ impl OpenAiClient {
         });
 
         let response = ureq::post(OPENAI_RESPONSES_URL)
-            .set("Authorization", &format!("Bearer {}", self.api_key))
+            .set("Authorization", &format!("Bearer {}", self.api_key.trim()))
             .set("Content-Type", "application/json")
             .set("Accept", "application/json")
             .timeout(OPENAI_REQUEST_TIMEOUT)
@@ -126,11 +126,11 @@ impl OpenAiClient {
             "store": false,
             "instructions": "Reply with the single word ok.",
             "input": "Connection test",
-            "max_output_tokens": 12
+            "max_output_tokens": 16
         });
 
         let response = ureq::post(OPENAI_RESPONSES_URL)
-            .set("Authorization", &format!("Bearer {}", self.api_key))
+            .set("Authorization", &format!("Bearer {}", self.api_key.trim()))
             .set("Content-Type", "application/json")
             .set("Accept", "application/json")
             .timeout(OPENAI_REQUEST_TIMEOUT)

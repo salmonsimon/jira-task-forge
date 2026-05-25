@@ -160,7 +160,7 @@ impl AppServices {
 
     pub fn save_openai_api_key(&self, api_key: &str) -> Result<(), keyring::Error> {
         let entry = keyring::Entry::new(OPENAI_CREDENTIAL_SERVICE, OPENAI_API_KEY_ACCOUNT)?;
-        entry.set_password(api_key)?;
+        entry.set_password(api_key.trim())?;
         entry.get_password()?;
         Ok(())
     }
@@ -410,7 +410,7 @@ impl AppServices {
             Ok(api_key) if api_key.trim().is_empty() => {
                 Err("OpenAI API key is empty. Save a new API key in Settings.".to_string())
             }
-            Ok(api_key) => Ok(api_key),
+            Ok(api_key) => Ok(api_key.trim().to_string()),
             Err(keyring::Error::NoEntry) => Err("OpenAI API key is required.".to_string()),
             Err(error) => Err(format!("Could not read OpenAI API key: {error}")),
         }

@@ -217,14 +217,15 @@ export function SettingsPanel({
               value={openAiApiKeyDraft}
               onChange={setOpenAiApiKeyDraft}
             />
-            <div className="flex gap-2">
-              <Button disabled={!openAiApiKeyDraft.trim()} variant="secondary" onClick={saveOpenAiKey}>
+            <div className="grid grid-cols-2 gap-2">
+              <Button className="min-w-0 whitespace-nowrap" disabled={!openAiApiKeyDraft.trim()} variant="secondary" onClick={saveOpenAiKey}>
                 Save key
               </Button>
-              <Button disabled={!hasOpenAiApiKey} variant="secondary" onClick={onDeleteOpenAiApiKey}>
+              <Button className="min-w-0 whitespace-nowrap" disabled={!hasOpenAiApiKey} variant="secondary" onClick={onDeleteOpenAiApiKey}>
                 Remove key
               </Button>
               <Button
+                className="col-span-2 min-w-0 whitespace-nowrap"
                 disabled={!canTestOpenAiConnection}
                 icon={isTestingOpenAiConnection ? <LoadingOrb size="xs" /> : undefined}
                 variant="secondary"
@@ -234,7 +235,7 @@ export function SettingsPanel({
               </Button>
             </div>
             {aiCredentialMessage ? (
-              <p className="mt-2 text-xs leading-relaxed text-[#6b778c]">{aiCredentialMessage}</p>
+              <p className="mt-2 break-words text-xs leading-relaxed text-[#6b778c]">{aiCredentialMessage}</p>
             ) : null}
           </div>
           <p className="mt-2 text-xs leading-relaxed text-[#6b778c]">

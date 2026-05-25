@@ -221,7 +221,8 @@ pub async fn save_openai_api_key(
     services: State<'_, AppServices>,
     api_key: String,
 ) -> Result<(), String> {
-    if api_key.trim().is_empty() {
+    let api_key = api_key.trim().to_string();
+    if api_key.is_empty() {
         return Err("OpenAI API key cannot be empty".to_string());
     }
 

@@ -654,13 +654,14 @@ export default function App() {
   }
 
   async function saveOpenAiApiKey(apiKey: string) {
-    if (!apiKey.trim()) {
+    const trimmedApiKey = apiKey.trim();
+    if (!trimmedApiKey) {
       setAiCredentialMessage("API key cannot be empty.");
       return false;
     }
 
     try {
-      await savePersistedOpenAiApiKey(apiKey);
+      await savePersistedOpenAiApiKey(trimmedApiKey);
       setHasOpenAiApiKey(true);
       setAiCredentialMessage("OpenAI API key saved in the OS credential store.");
       return true;
