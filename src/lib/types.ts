@@ -113,6 +113,12 @@ export type JqlQueryResult = {
   warningMessages: string[];
 };
 
+export type JqlAiDraft = {
+  jql: string;
+  explanation: string;
+  warnings: string[];
+};
+
 export type PreflightWarning = {
   code: PreflightWarningCode;
   severity: PreflightWarningSeverity;

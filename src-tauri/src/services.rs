@@ -7,10 +7,11 @@ use crate::backup::{
 };
 use crate::db::DbResult;
 use crate::integrations::jira::{normalize_jira_site_url, JiraClient, JiraCredentials};
+use crate::integrations::openai::{OpenAiClient, OpenAiCredentials};
 use crate::jira_sync::JiraSyncRunner;
 use crate::models::{
     AppSettings, Category, JiraConnectionTestResult, JiraCreateIssuesResult, JiraCreateProgress,
-    JqlFavorite, JqlSearchResponse, LocalTask, NewTask, NewTray, SyncAuditEvent, Tray,
+    JqlAiDraft, JqlFavorite, JqlSearchResponse, LocalTask, NewTask, NewTray, SyncAuditEvent, Tray,
 };
 use crate::repositories::{
     CategoryRepository, JqlFavoriteRepository, SettingsRepository, SyncRepository, TaskRepository,
@@ -24,6 +25,8 @@ pub struct AppServices {
 
 const JIRA_CREDENTIAL_SERVICE: &str = "jira-task-forge:jira";
 const JIRA_API_TOKEN_ACCOUNT: &str = "api-token";
+const OPENAI_CREDENTIAL_SERVICE: &str = "jira-task-forge:openai";
+const OPENAI_API_KEY_ACCOUNT: &str = "api-key";
 
 impl AppServices {
     pub fn new(connection: Connection) -> Self {
@@ -146,6 +149,30 @@ impl AppServices {
         }
     }
 
+    pub fn has_openai_api_key(&self) -> Result<bool, keyring::Error> {
+        let entry = keyring::Entry::new(OPENAI_CREDENTIAL_SERVICE, OPENAI_API_KEY_ACCOUNT)?;
+        match entry.get_password() {
+            Ok(_) => Ok(true),
+            Err(keyring::Error::NoEntry) => Ok(false),
+            Err(error) => Err(error),
+        }
+    }
+
+    pub fn save_openai_api_key(&self, api_key: &str) -> Result<(), keyring::Error> {
+        let entry = keyring::Entry::new(OPENAI_CREDENTIAL_SERVICE, OPENAI_API_KEY_ACCOUNT)?;
+        entry.set_password(api_key.trim())?;
+        entry.get_password()?;
+        Ok(())
+    }
+
+    pub fn delete_openai_api_key(&self) -> Result<(), keyring::Error> {
+        let entry = keyring::Entry::new(OPENAI_CREDENTIAL_SERVICE, OPENAI_API_KEY_ACCOUNT)?;
+        match entry.delete_credential() {
+            Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+            Err(error) => Err(error),
+        }
+    }
+
     pub fn test_jira_connection(&self) -> JiraConnectionTestResult {
         let client = match self.jira_client() {
             Ok(client) => client,
@@ -169,6 +196,36 @@ impl AppServices {
         max_results: usize,
     ) -> Result<JqlSearchResponse, String> {
         self.jira_client()?.search_jql(jql, max_results)
+    }
+
+    pub fn draft_jql_with_ai(&self, prompt: &str) -> Result<JqlAiDraft, String> {
+        let settings = self
+            .get_app_settings()
+            .map_err(|error| format!("Could not load AI settings: {error}"))?;
+        if settings.ai_provider != "OpenAI" {
+            return Err("OpenAI provider must be selected before using Ask AI.".to_string());
+        }
+
+        let client = self.openai_client()?;
+        client.draft_jql(
+            openai_model_or_default(&settings.ai_model),
+            prompt,
+            Some(&settings.jira_creation_project_key),
+        )
+    }
+
+    pub fn test_openai_connection(&self) -> Result<String, String> {
+        let settings = self
+            .get_app_settings()
+            .map_err(|error| format!("Could not load AI settings: {error}"))?;
+        if settings.ai_provider != "OpenAI" {
+            return Err(
+                "OpenAI provider must be selected before testing the connection.".to_string(),
+            );
+        }
+
+        self.openai_client()?.test_connection()?;
+        Ok("OpenAI connection succeeded.".to_string())
     }
 
     pub fn create_jira_parent_issues(
@@ -339,6 +396,24 @@ impl AppServices {
             api_token,
         }))
     }
+
+    fn openai_client(&self) -> Result<OpenAiClient, String> {
+        let api_key = self.openai_api_key()?;
+        Ok(OpenAiClient::new(OpenAiCredentials { api_key }))
+    }
+
+    fn openai_api_key(&self) -> Result<String, String> {
+        let entry = keyring::Entry::new(OPENAI_CREDENTIAL_SERVICE, OPENAI_API_KEY_ACCOUNT)
+            .map_err(|error| format!("Could not open OS credential store: {error}"))?;
+        match entry.get_password() {
+            Ok(api_key) if api_key.trim().is_empty() => {
+                Err("OpenAI API key is empty. Save a new API key in Settings.".to_string())
+            }
+            Ok(api_key) => Ok(api_key.trim().to_string()),
+            Err(keyring::Error::NoEntry) => Err("OpenAI API key is required.".to_string()),
+            Err(error) => Err(format!("Could not read OpenAI API key: {error}")),
+        }
+    }
 }
 
 fn failed_result(message: impl Into<String>) -> JiraConnectionTestResult {
@@ -347,6 +422,15 @@ fn failed_result(message: impl Into<String>) -> JiraConnectionTestResult {
         message: message.into(),
         account_display_name: None,
         account_email: None,
+    }
+}
+
+fn openai_model_or_default(model: &str) -> &str {
+    let model = model.trim();
+    if model.is_empty() {
+        "gpt-4.1"
+    } else {
+        model
     }
 }
 

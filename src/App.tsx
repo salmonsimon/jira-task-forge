@@ -23,11 +23,14 @@ import {
   deletePersistedCategory,
   deletePersistedJqlFavorite,
   deletePersistedJiraApiToken,
+  deletePersistedOpenAiApiKey,
   deletePersistedTray,
   deletePersistedTask,
+  draftPersistedJqlWithAi,
   exportPersistedBackup,
   getPersistedAppSettings,
   hasPersistedJiraApiToken,
+  hasPersistedOpenAiApiKey,
   importPersistedBackup,
   listPersistedCategories,
   listPersistedJqlFavorites,
@@ -41,7 +44,9 @@ import {
   runPersistedJqlQuery,
   saveCsvFile,
   savePersistedJiraApiToken,
+  savePersistedOpenAiApiKey,
   testPersistedJiraConnection,
+  testPersistedOpenAiConnection,
   updatePersistedAppSettings,
   updatePersistedCategory,
   updatePersistedJqlFavorite,
@@ -62,6 +67,7 @@ import type {
   AppSettings,
   BackupOperationNotice,
   Category,
+  JqlAiDraft,
   JqlFavorite,
   JqlRecentQuery,
   JqlResult,
@@ -89,8 +95,6 @@ const defaultAppSettings: AppSettings = {
   aiModel: "gpt-4.1",
   defaultContentLanguage: "Spanish"
 };
-const generatedJqlPreview =
-  'project = DTS AND labels = "Bug" AND priority in (High, Highest) AND statusCategory != Done ORDER BY priority DESC';
 const defaultJqlPrompt = "Show me high and highest open bugs for STT, sorted by priority";
 const atlassianApiTokensUrl = "https://id.atlassian.com/manage-profile/security/api-tokens";
 
@@ -109,10 +113,13 @@ export default function App() {
   const [jqlMode, setJqlMode] = useState<"direct" | "ai">("ai");
   const [jqlQuery, setJqlQuery] = useState(appData.listJqlFavorites()[0]?.jql ?? "");
   const [jqlPrompt, setJqlPrompt] = useState(defaultJqlPrompt);
+  const [jqlAiDraft, setJqlAiDraft] = useState<JqlAiDraft | null>(null);
+  const [jqlAiMessage, setJqlAiMessage] = useState<string | null>(null);
   const [jqlResults, setJqlResults] = useState<JqlResult[]>([]);
   const [jqlRunState, setJqlRunState] = useState<JqlRunState>("idle");
   const [jqlQueryMessage, setJqlQueryMessage] = useState<string | null>(null);
   const [isRunningJqlQuery, setIsRunningJqlQuery] = useState(false);
+  const [isDraftingJqlWithAi, setIsDraftingJqlWithAi] = useState(false);
   const [appSettings, setAppSettings] = useState<AppSettings>(defaultAppSettings);
   const [systemPrefersDark, setSystemPrefersDark] = useState(false);
   const [usesTauriPersistence, setUsesTauriPersistence] = useState(false);
@@ -120,10 +127,13 @@ export default function App() {
   const [trayPendingDelete, setTrayPendingDelete] = useState<Tray | null>(null);
   const [csvExportMessage, setCsvExportMessage] = useState<string | null>(null);
   const [hasJiraApiToken, setHasJiraApiToken] = useState(false);
+  const [hasOpenAiApiKey, setHasOpenAiApiKey] = useState(false);
   const [jiraCredentialMessage, setJiraCredentialMessage] = useState<string | null>(null);
+  const [aiCredentialMessage, setAiCredentialMessage] = useState<string | null>(null);
   const [jiraConnectionResult, setJiraConnectionResult] = useState<JiraConnectionTestResult | null>(null);
   const [backupNotice, setBackupNotice] = useState<BackupOperationNotice | null>(null);
   const [isTestingJiraConnection, setIsTestingJiraConnection] = useState(false);
+  const [isTestingOpenAiConnection, setIsTestingOpenAiConnection] = useState(false);
   const [isRunningJiraPreflight, setIsRunningJiraPreflight] = useState(false);
   const [jiraCreatePreflight, setJiraCreatePreflight] = useState<JiraCreatePreflight | null>(null);
   const [isCreatingJiraIssues, setIsCreatingJiraIssues] = useState(false);
@@ -171,10 +181,11 @@ export default function App() {
       listPersistedTrays(),
       getPersistedAppSettings(),
       hasPersistedJiraApiToken(),
+      hasPersistedOpenAiApiKey(),
       listPersistedCategories(),
       listPersistedJqlFavorites()
     ])
-      .then(([persistedTrays, persistedSettings, hasPersistedToken, persistedCategories, persistedJqlFavorites]) => {
+      .then(([persistedTrays, persistedSettings, hasPersistedToken, hasPersistedAiKey, persistedCategories, persistedJqlFavorites]) => {
         if (!isCurrent) return;
         const nextCategories = persistedCategories.length ? persistedCategories : [...appData.listProjects(), ...appData.listAreas()];
         const nextJqlFavorites = persistedJqlFavorites.length ? persistedJqlFavorites : appData.listJqlFavorites();
@@ -183,6 +194,7 @@ export default function App() {
         setTrays(persistedTrays);
         setAppSettings(persistedSettings);
         setHasJiraApiToken(hasPersistedToken);
+        setHasOpenAiApiKey(hasPersistedAiKey);
         setCategories(nextCategories);
         setJqlFavorites(nextJqlFavorites);
         setSelectedFavoriteId((currentFavoriteId) =>
@@ -641,6 +653,53 @@ export default function App() {
     }
   }
 
+  async function saveOpenAiApiKey(apiKey: string) {
+    const trimmedApiKey = apiKey.trim();
+    if (!trimmedApiKey) {
+      setAiCredentialMessage("API key cannot be empty.");
+      return false;
+    }
+
+    try {
+      await savePersistedOpenAiApiKey(trimmedApiKey);
+      setHasOpenAiApiKey(true);
+      setAiCredentialMessage("OpenAI API key saved in the OS credential store.");
+      return true;
+    } catch {
+      setAiCredentialMessage("Could not save OpenAI API key in the OS credential store.");
+      return false;
+    }
+  }
+
+  async function deleteOpenAiApiKey() {
+    try {
+      await deletePersistedOpenAiApiKey();
+      setHasOpenAiApiKey(false);
+      setAiCredentialMessage("OpenAI API key removed from the OS credential store.");
+    } catch {
+      setAiCredentialMessage("Could not remove OpenAI API key.");
+    }
+  }
+
+  async function testOpenAiConnection() {
+    flushSync(() => {
+      setIsTestingOpenAiConnection(true);
+      setAiCredentialMessage(null);
+    });
+    const loadingStartedAt = performance.now();
+    await waitForNextPaint();
+
+    try {
+      const message = await testPersistedOpenAiConnection();
+      setAiCredentialMessage(message);
+    } catch (error) {
+      setAiCredentialMessage(formatUnknownError(error, "Could not test OpenAI connection."));
+    } finally {
+      await waitForMinimumElapsed(loadingStartedAt, 700);
+      setIsTestingOpenAiConnection(false);
+    }
+  }
+
   async function testJiraConnection() {
     flushSync(() => {
       setIsTestingJiraConnection(true);
@@ -706,7 +765,7 @@ export default function App() {
   }
 
   async function saveJqlFavorite() {
-    const query = (jqlMode === "ai" ? generatedJqlPreview : jqlQuery).trim();
+    const query = jqlQuery.trim();
     if (!query) {
       setJqlQueryMessage("JQL query is required before saving a favorite.");
       return;
@@ -761,7 +820,7 @@ export default function App() {
   }
 
   async function runJqlQuery() {
-    const query = (jqlMode === "ai" ? generatedJqlPreview : jqlQuery).trim();
+    const query = jqlQuery.trim();
     if (!query) {
       setJqlResults([]);
       setJqlRunState("error");
@@ -798,6 +857,47 @@ export default function App() {
     } finally {
       await waitForMinimumElapsed(loadingStartedAt, 1000);
       setIsRunningJqlQuery(false);
+    }
+  }
+
+  async function draftJqlWithAi() {
+    const prompt = jqlPrompt.trim();
+    if (!prompt) {
+      setJqlAiMessage("Describe the Jira issues you want to find.");
+      return;
+    }
+    if (!hasOpenAiApiKey && usesTauriPersistence) {
+      setJqlAiMessage("Save an OpenAI API key in Settings before using Ask AI.");
+      return;
+    }
+
+    setIsDraftingJqlWithAi(true);
+    setJqlAiDraft(null);
+    setJqlAiMessage("Drafting JQL...");
+    const loadingStartedAt = performance.now();
+    await waitForNextPaint();
+
+    try {
+      const draft = usesTauriPersistence
+        ? await draftPersistedJqlWithAi(prompt)
+        : {
+            jql: 'project = DTS AND labels = "Bug" AND priority in (High, Highest) AND statusCategory != Done ORDER BY priority DESC',
+            explanation: "Generated a local preview query because the native AI backend is unavailable.",
+            warnings: ["Preview mode only."]
+          };
+      setJqlAiDraft(draft);
+      setSelectedFavoriteId(undefined);
+      setJqlMode("direct");
+      setJqlQuery(draft.jql);
+      setJqlResults([]);
+      setJqlRunState("idle");
+      setJqlQueryMessage("AI-generated JQL loaded into the editor. Review it, then run the query.");
+      setJqlAiMessage(formatJqlAiDraftMessage(draft));
+    } catch (error) {
+      setJqlAiMessage(formatUnknownError(error, "Could not draft JQL with AI."));
+    } finally {
+      await waitForMinimumElapsed(loadingStartedAt, 700);
+      setIsDraftingJqlWithAi(false);
     }
   }
 
@@ -1191,8 +1291,11 @@ export default function App() {
               setJqlQuery={setJqlQuery}
               jqlPrompt={jqlPrompt}
               setJqlPrompt={setJqlPrompt}
-              generatedJqlPreview={generatedJqlPreview}
+              jqlAiDraft={jqlAiDraft}
+              jqlAiMessage={jqlAiMessage}
+              onDraftJqlWithAi={draftJqlWithAi}
               onRunQuery={runJqlQuery}
+              isDraftingJqlWithAi={isDraftingJqlWithAi}
               isRunningQuery={isRunningJqlQuery}
               queryMessage={jqlQueryMessage}
             />
@@ -1224,12 +1327,18 @@ export default function App() {
           <SettingsPanel
             settings={appSettings}
             hasJiraApiToken={hasJiraApiToken}
+            hasOpenAiApiKey={hasOpenAiApiKey}
             jiraCredentialMessage={jiraCredentialMessage}
+            aiCredentialMessage={aiCredentialMessage}
             jiraConnectionResult={jiraConnectionResult}
             isTestingJiraConnection={isTestingJiraConnection}
+            isTestingOpenAiConnection={isTestingOpenAiConnection}
             onChange={updateAppSettings}
             onSaveJiraApiToken={saveJiraApiToken}
             onDeleteJiraApiToken={deleteJiraApiToken}
+            onSaveOpenAiApiKey={saveOpenAiApiKey}
+            onDeleteOpenAiApiKey={deleteOpenAiApiKey}
+            onTestOpenAiConnection={testOpenAiConnection}
             onTestJiraConnection={testJiraConnection}
             onOpenJiraApiTokens={openJiraApiTokensPage}
             onExportBackup={exportBackup}
@@ -1542,8 +1651,19 @@ function formatJqlQueryMessage(resultCount: number, isLast: boolean, warningMess
 }
 
 function formatJqlQueryError(error: unknown): string {
-  const message = typeof error === "string" ? error : error instanceof Error ? error.message : "Could not run JQL query.";
+  const message = formatUnknownError(error, "Could not run JQL query.");
   return `JQL query failed. ${message}`;
+}
+
+function formatJqlAiDraftMessage(draft: JqlAiDraft): string {
+  const warningText = draft.warnings.length ? ` ${draft.warnings.join(" ")}` : "";
+  return `${draft.explanation}${warningText}`;
+}
+
+function formatUnknownError(error: unknown, fallback: string): string {
+  if (typeof error === "string" && error.trim()) return error;
+  if (error instanceof Error && error.message.trim()) return error.message;
+  return fallback;
 }
 
 function formatBackupTimestamp(date: Date): string {

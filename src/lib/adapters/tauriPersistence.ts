@@ -3,6 +3,7 @@ import type {
   AppSettings,
   Category,
   IssueType,
+  JqlAiDraft,
   JiraCreateIssuesResult,
   JiraConnectionTestResult,
   JqlFavorite,
@@ -201,12 +202,32 @@ export async function deletePersistedJiraApiToken(): Promise<void> {
   await invoke("delete_jira_api_token");
 }
 
+export async function hasPersistedOpenAiApiKey(): Promise<boolean> {
+  return invoke<boolean>("has_openai_api_key");
+}
+
+export async function savePersistedOpenAiApiKey(apiKey: string): Promise<void> {
+  await invoke("save_openai_api_key", { apiKey });
+}
+
+export async function deletePersistedOpenAiApiKey(): Promise<void> {
+  await invoke("delete_openai_api_key");
+}
+
+export async function testPersistedOpenAiConnection(): Promise<string> {
+  return invoke<string>("test_openai_connection");
+}
+
 export async function testPersistedJiraConnection(): Promise<JiraConnectionTestResult> {
   return invoke<JiraConnectionTestResult>("test_jira_connection");
 }
 
 export async function runPersistedJqlQuery(jql: string, maxResults = 50): Promise<JqlQueryResult> {
   return invoke<JqlQueryResult>("run_jql_query", { jql, maxResults });
+}
+
+export async function draftPersistedJqlWithAi(prompt: string): Promise<JqlAiDraft> {
+  return invoke<JqlAiDraft>("draft_jql_with_ai", { prompt });
 }
 
 export async function createPersistedJiraParentIssues(

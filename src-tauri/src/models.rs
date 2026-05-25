@@ -140,6 +140,14 @@ pub struct JqlSearchResponse {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct JqlAiDraft {
+    pub jql: String,
+    pub explanation: String,
+    pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct JqlResult {
     pub key: String,
     pub project: String,

@@ -3,8 +3,8 @@ use tauri::{AppHandle, Emitter, State};
 
 use crate::backup::{BackupExportResult, BackupImportResult};
 use crate::models::{
-    AppSettings, Category, JiraConnectionTestResult, JiraCreateIssuesResult, JqlFavorite,
-    JqlSearchResponse, LocalTask, NewTask, NewTray, SyncAuditEvent, Tray,
+    AppSettings, Category, JiraConnectionTestResult, JiraCreateIssuesResult, JqlAiDraft,
+    JqlFavorite, JqlSearchResponse, LocalTask, NewTask, NewTray, SyncAuditEvent, Tray,
 };
 use crate::services::AppServices;
 
@@ -206,6 +206,56 @@ pub async fn delete_jira_api_token(services: State<'_, AppServices>) -> Result<(
 }
 
 #[tauri::command]
+pub async fn has_openai_api_key(services: State<'_, AppServices>) -> Result<bool, String> {
+    let services = services.inner().clone();
+    run_blocking_result("Credential worker", move || {
+        services
+            .has_openai_api_key()
+            .map_err(|error| error.to_string())
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn save_openai_api_key(
+    services: State<'_, AppServices>,
+    api_key: String,
+) -> Result<(), String> {
+    let api_key = api_key.trim().to_string();
+    if api_key.is_empty() {
+        return Err("OpenAI API key cannot be empty".to_string());
+    }
+
+    let services = services.inner().clone();
+    run_blocking_result("Credential worker", move || {
+        services
+            .save_openai_api_key(&api_key)
+            .map_err(|error| error.to_string())
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn delete_openai_api_key(services: State<'_, AppServices>) -> Result<(), String> {
+    let services = services.inner().clone();
+    run_blocking_result("Credential worker", move || {
+        services
+            .delete_openai_api_key()
+            .map_err(|error| error.to_string())
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn test_openai_connection(services: State<'_, AppServices>) -> Result<String, String> {
+    let services = services.inner().clone();
+    run_blocking_result("OpenAI connection worker", move || {
+        services.test_openai_connection()
+    })
+    .await
+}
+
+#[tauri::command]
 pub async fn test_jira_connection(
     services: State<'_, AppServices>,
 ) -> Result<JiraConnectionTestResult, String> {
@@ -227,6 +277,15 @@ pub async fn run_jql_query(
         services.run_jql_query(&jql, max_results.unwrap_or(50))
     })
     .await
+}
+
+#[tauri::command]
+pub async fn draft_jql_with_ai(
+    services: State<'_, AppServices>,
+    prompt: String,
+) -> Result<JqlAiDraft, String> {
+    let services = services.inner().clone();
+    run_blocking_result("JQL AI worker", move || services.draft_jql_with_ai(&prompt)).await
 }
 
 #[tauri::command]

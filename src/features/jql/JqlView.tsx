@@ -1,7 +1,7 @@
 import { Bot, Check, History, Loader2, Pencil, Search, Star, X } from "lucide-react";
 import { useEffect, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from "react";
-import { Button, IssueTypeBadge, PriorityBadge, SegmentedControl } from "../../components/ui";
-import type { JqlFavorite, JqlRecentQuery, JqlResult, JqlRunState } from "../../lib/types";
+import { Button, IssueTypeBadge, LoadingOrb, PriorityBadge, SegmentedControl } from "../../components/ui";
+import type { JqlAiDraft, JqlFavorite, JqlRecentQuery, JqlResult, JqlRunState } from "../../lib/types";
 import { cn } from "../../lib/utils";
 
 export function JqlView({
@@ -21,8 +21,11 @@ export function JqlView({
   setJqlQuery,
   jqlPrompt,
   setJqlPrompt,
-  generatedJqlPreview,
+  jqlAiDraft,
+  jqlAiMessage,
+  onDraftJqlWithAi,
   onRunQuery,
+  isDraftingJqlWithAi,
   isRunningQuery,
   queryMessage
 }: {
@@ -42,8 +45,11 @@ export function JqlView({
   setJqlQuery: (query: string) => void;
   jqlPrompt: string;
   setJqlPrompt: (prompt: string) => void;
-  generatedJqlPreview: string;
+  jqlAiDraft: JqlAiDraft | null;
+  jqlAiMessage: string | null;
+  onDraftJqlWithAi: () => void;
   onRunQuery: () => void;
+  isDraftingJqlWithAi: boolean;
   isRunningQuery: boolean;
   queryMessage: string | null;
 }) {
@@ -53,8 +59,12 @@ export function JqlView({
 
   function handleRunShortcut(event: ReactKeyboardEvent<HTMLElement>) {
     if (event.defaultPrevented) return;
-    if (!isAskAiMode && (event.ctrlKey || event.metaKey) && event.key === "Enter") {
-      event.preventDefault();
+    if (!(event.ctrlKey || event.metaKey) || event.key !== "Enter") return;
+
+    event.preventDefault();
+    if (isAskAiMode) {
+      onDraftJqlWithAi();
+    } else {
       onRunQuery();
     }
   }
@@ -106,7 +116,7 @@ export function JqlView({
         <div className="flex items-center justify-between border-b border-[#dfe1e6] px-4 py-3">
           <div>
             <h1 className="text-lg font-semibold">JQL</h1>
-            <p className="text-xs text-[#6b778c]">Run direct JQL now. Ask AI is coming later.</p>
+            <p className="text-xs text-[#6b778c]">Draft JQL with AI, review it, then run direct queries against Jira.</p>
           </div>
           <Button
             variant="secondary"
@@ -129,24 +139,45 @@ export function JqlView({
           <SegmentedControl
             value={jqlMode}
             options={[
-              { label: "Ask AI (soon)", value: "ai" },
+              { label: "Ask AI", value: "ai" },
               { label: "Direct JQL", value: "direct" }
             ]}
             onChange={(value) => setJqlMode(value as "ai" | "direct")}
           />
           {isAskAiMode ? (
-            <div className="mt-3 rounded border border-dashed border-[#c1c7d0] bg-[#f7f8fa] px-4 py-5">
-              <div className="flex items-start gap-3">
-                <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded border border-[#dfe1e6] bg-white text-[#6b778c]">
-                  <Bot size={16} />
+            <div className="mt-3 rounded border border-[#dfe1e6] bg-[#f7f8fa] px-4 py-4">
+              <label className="block">
+                <span className="mb-2 flex items-center gap-2 text-sm font-semibold text-[#172b4d]">
+                  <Bot size={15} />
+                  Describe the Jira issues to find
+                </span>
+                <textarea
+                  className="h-24 w-full resize-none rounded border border-[#c1c7d0] bg-white p-3 text-sm outline-none focus:border-[#4c9aff] focus:ring-2 focus:ring-[#deebff]"
+                  value={jqlPrompt}
+                  onChange={(event) => setJqlPrompt(event.target.value)}
+                  onKeyDown={handleRunShortcut}
+                  placeholder="Show me high priority open bugs for STT updated this week"
+                />
+              </label>
+              <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0 text-xs leading-relaxed text-[#6b778c]">
+                  {jqlAiMessage ?? "AI drafts JQL and loads it into Direct JQL. It will not run automatically."}
                 </div>
-                <div className="min-w-0">
-                  <div className="text-sm font-semibold text-[#172b4d]">Ask AI is not available yet</div>
-                  <p className="mt-1 max-w-[560px] text-xs leading-relaxed text-[#6b778c]">
-                    Use Direct JQL to search Jira issues. AI-assisted query drafting will be wired in a later slice.
-                  </p>
-                </div>
+                <Button
+                  className="min-w-[132px] shrink-0 whitespace-nowrap"
+                  disabled={isDraftingJqlWithAi}
+                  icon={isDraftingJqlWithAi ? <LoadingOrb size="xs" /> : <Bot size={14} />}
+                  onClick={onDraftJqlWithAi}
+                >
+                  {isDraftingJqlWithAi ? "Drafting" : "Draft JQL"}
+                </Button>
               </div>
+              {jqlAiDraft ? (
+                <div className="mt-3 rounded border border-[#c1c7d0] bg-white px-3 py-2">
+                  <div className="text-xs font-semibold text-[#6b778c]">Last generated JQL</div>
+                  <div className="mt-1 break-words font-mono text-xs text-[#172b4d]">{jqlAiDraft.jql}</div>
+                </div>
+              ) : null}
             </div>
           ) : (
             <>
