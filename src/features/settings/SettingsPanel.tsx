@@ -6,12 +6,16 @@ import type { AppSettings, JiraConnectionTestResult, ThemeMode } from "../../lib
 export function SettingsPanel({
   settings,
   hasJiraApiToken,
+  hasOpenAiApiKey,
   jiraCredentialMessage,
+  aiCredentialMessage,
   jiraConnectionResult,
   isTestingJiraConnection,
   onChange,
   onSaveJiraApiToken,
   onDeleteJiraApiToken,
+  onSaveOpenAiApiKey,
+  onDeleteOpenAiApiKey,
   onTestJiraConnection,
   onOpenJiraApiTokens,
   onExportBackup,
@@ -20,12 +24,16 @@ export function SettingsPanel({
 }: {
   settings: AppSettings;
   hasJiraApiToken: boolean;
+  hasOpenAiApiKey: boolean;
   jiraCredentialMessage: string | null;
+  aiCredentialMessage: string | null;
   jiraConnectionResult: JiraConnectionTestResult | null;
   isTestingJiraConnection: boolean;
   onChange: (settings: Partial<AppSettings>) => void;
   onSaveJiraApiToken: (token: string) => Promise<boolean>;
   onDeleteJiraApiToken: () => void;
+  onSaveOpenAiApiKey: (apiKey: string) => Promise<boolean>;
+  onDeleteOpenAiApiKey: () => void;
   onTestJiraConnection: () => void;
   onOpenJiraApiTokens: () => void;
   onExportBackup: () => void;
@@ -34,6 +42,7 @@ export function SettingsPanel({
 }) {
   const panelRef = useRef<HTMLElement | null>(null);
   const [jiraApiTokenDraft, setJiraApiTokenDraft] = useState("");
+  const [openAiApiKeyDraft, setOpenAiApiKeyDraft] = useState("");
   const canTestJiraConnection =
     Boolean(settings.jiraSiteUrl.trim()) &&
     Boolean(settings.jiraAccountEmail.trim()) &&
@@ -43,6 +52,11 @@ export function SettingsPanel({
   async function saveJiraToken() {
     const saved = await onSaveJiraApiToken(jiraApiTokenDraft);
     if (saved) setJiraApiTokenDraft("");
+  }
+
+  async function saveOpenAiKey() {
+    const saved = await onSaveOpenAiApiKey(openAiApiKeyDraft);
+    if (saved) setOpenAiApiKeyDraft("");
   }
 
   useEffect(() => {
@@ -177,6 +191,37 @@ export function SettingsPanel({
             onChange={(aiProvider) => onChange({ aiProvider: aiProvider as AppSettings["aiProvider"] })}
           />
           <SettingsInput label="Model" value={settings.aiModel} onChange={(aiModel) => onChange({ aiModel })} />
+          <div className="mt-3 rounded border border-[#dfe1e6] bg-[#f7f8fa] p-3">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <div>
+                <div className="text-xs font-medium text-[#6b778c]">OpenAI API key</div>
+                <div className="text-sm font-medium text-[#172b4d]">
+                  {hasOpenAiApiKey ? "Credential saved" : "No credential saved"}
+                </div>
+              </div>
+              <span className={`rounded px-2 py-1 text-xs font-medium ${hasOpenAiApiKey ? "bg-[#e3fcef] text-[#006644]" : "bg-[#f4f5f7] text-[#6b778c]"}`}>
+                {hasOpenAiApiKey ? "Saved" : "Missing"}
+              </span>
+            </div>
+            <SettingsInput
+              label="New API key"
+              masked
+              placeholder={hasOpenAiApiKey ? "Enter a new key to replace it" : "Paste OpenAI API key"}
+              value={openAiApiKeyDraft}
+              onChange={setOpenAiApiKeyDraft}
+            />
+            <div className="flex gap-2">
+              <Button disabled={!openAiApiKeyDraft.trim()} variant="secondary" onClick={saveOpenAiKey}>
+                Save key
+              </Button>
+              <Button disabled={!hasOpenAiApiKey} variant="secondary" onClick={onDeleteOpenAiApiKey}>
+                Remove key
+              </Button>
+            </div>
+            {aiCredentialMessage ? (
+              <p className="mt-2 text-xs leading-relaxed text-[#6b778c]">{aiCredentialMessage}</p>
+            ) : null}
+          </div>
           <SettingsSelect
             label="Default content language"
             value={settings.defaultContentLanguage}
