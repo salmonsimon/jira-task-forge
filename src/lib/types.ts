@@ -85,6 +85,8 @@ export type JqlRecentQuery = {
   resultCount?: number;
 };
 
+export type JqlRunState = "idle" | "running" | "success" | "error";
+
 export type JqlResult = {
   key: string;
   project: string;

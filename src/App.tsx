@@ -58,6 +58,8 @@ import type {
   Category,
   JqlFavorite,
   JqlRecentQuery,
+  JqlResult,
+  JqlRunState,
   JiraConnectionTestResult,
   JiraCreateIssuesResult,
   LocalTask,
@@ -98,7 +100,8 @@ export default function App() {
   const [jqlMode, setJqlMode] = useState<"direct" | "ai">("ai");
   const [jqlQuery, setJqlQuery] = useState(appData.listJqlFavorites()[0]?.jql ?? "");
   const [jqlPrompt, setJqlPrompt] = useState(defaultJqlPrompt);
-  const [jqlResults, setJqlResults] = useState(() => appData.listJqlResults());
+  const [jqlResults, setJqlResults] = useState<JqlResult[]>([]);
+  const [jqlRunState, setJqlRunState] = useState<JqlRunState>("idle");
   const [jqlQueryMessage, setJqlQueryMessage] = useState<string | null>(null);
   const [isRunningJqlQuery, setIsRunningJqlQuery] = useState(false);
   const [appSettings, setAppSettings] = useState<AppSettings>(defaultAppSettings);
@@ -582,6 +585,8 @@ export default function App() {
     if (favorite) {
       setJqlQuery(favorite.jql);
       setJqlMode("direct");
+      setJqlResults([]);
+      setJqlRunState("idle");
       setJqlQueryMessage(null);
     }
   }
@@ -590,6 +595,8 @@ export default function App() {
     setSelectedFavoriteId(undefined);
     setJqlMode("direct");
     setJqlQuery(recentQuery.jql);
+    setJqlResults([]);
+    setJqlRunState("idle");
     setJqlQueryMessage(null);
   }
 
@@ -672,11 +679,13 @@ export default function App() {
     const query = (jqlMode === "ai" ? generatedJqlPreview : jqlQuery).trim();
     if (!query) {
       setJqlResults([]);
+      setJqlRunState("error");
       setJqlQueryMessage("JQL query is required.");
       return;
     }
 
     setIsRunningJqlQuery(true);
+    setJqlRunState("running");
     const loadingStartedAt = performance.now();
     await waitForNextPaint();
     setJqlResults([]);
@@ -693,10 +702,12 @@ export default function App() {
             warningMessages: []
       };
       setJqlResults(queryResult.results);
+      setJqlRunState("success");
       recordJqlRecentQuery(query, { status: "success", resultCount: queryResult.results.length });
       setJqlQueryMessage(formatJqlQueryMessage(queryResult.results.length, queryResult.isLast, queryResult.warningMessages));
     } catch (error) {
       setJqlResults([]);
+      setJqlRunState("error");
       recordJqlRecentQuery(query, { status: "error" });
       setJqlQueryMessage(formatJqlQueryError(error));
     } finally {
@@ -1003,6 +1014,7 @@ export default function App() {
               onDeleteFavorite={deleteJqlFavorite}
               onSelectRecent={selectJqlRecentQuery}
               results={jqlResults}
+              runState={jqlRunState}
               jqlQuery={jqlQuery}
               setJqlQuery={setJqlQuery}
               jqlPrompt={jqlPrompt}

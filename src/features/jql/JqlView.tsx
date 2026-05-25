@@ -1,7 +1,7 @@
-import { Bot, Check, History, Loader2, Pencil, Search, Sparkles, Star, X } from "lucide-react";
+import { Bot, Check, History, Loader2, Pencil, Search, Star, X } from "lucide-react";
 import { useEffect, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from "react";
 import { Button, IssueTypeBadge, PriorityBadge, SegmentedControl } from "../../components/ui";
-import type { JqlFavorite, JqlRecentQuery, JqlResult } from "../../lib/types";
+import type { JqlFavorite, JqlRecentQuery, JqlResult, JqlRunState } from "../../lib/types";
 import { cn } from "../../lib/utils";
 
 export function JqlView({
@@ -16,6 +16,7 @@ export function JqlView({
   onDeleteFavorite,
   onSelectRecent,
   results,
+  runState,
   jqlQuery,
   setJqlQuery,
   jqlPrompt,
@@ -36,6 +37,7 @@ export function JqlView({
   onDeleteFavorite: (favoriteId: string) => void | Promise<void>;
   onSelectRecent: (recentQuery: JqlRecentQuery) => void;
   results: JqlResult[];
+  runState: JqlRunState;
   jqlQuery: string;
   setJqlQuery: (query: string) => void;
   jqlPrompt: string;
@@ -46,11 +48,12 @@ export function JqlView({
   queryMessage: string | null;
 }) {
   const selectedFavorite = favorites.find((favorite) => favorite.id === selectedFavoriteId);
-  const currentQueryFavorite = favorites.find((favorite) => favorite.jql.trim() === jqlQuery.trim());
+  const isAskAiMode = jqlMode === "ai";
+  const currentQueryFavorite = isAskAiMode ? undefined : favorites.find((favorite) => favorite.jql.trim() === jqlQuery.trim());
 
   function handleRunShortcut(event: ReactKeyboardEvent<HTMLElement>) {
     if (event.defaultPrevented) return;
-    if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+    if (!isAskAiMode && (event.ctrlKey || event.metaKey) && event.key === "Enter") {
       event.preventDefault();
       onRunQuery();
     }
@@ -103,12 +106,14 @@ export function JqlView({
         <div className="flex items-center justify-between border-b border-[#dfe1e6] px-4 py-3">
           <div>
             <h1 className="text-lg font-semibold">JQL</h1>
-            <p className="text-xs text-[#6b778c]">Run direct JQL or ask AI to draft it first.</p>
+            <p className="text-xs text-[#6b778c]">Run direct JQL now. Ask AI is coming later.</p>
           </div>
           <Button
             variant="secondary"
+            disabled={isAskAiMode}
             icon={<Star className={currentQueryFavorite ? "fill-current" : undefined} size={14} />}
             onClick={() => {
+              if (isAskAiMode) return;
               if (currentQueryFavorite) {
                 void onDeleteFavorite(currentQueryFavorite.id);
                 return;
@@ -124,44 +129,48 @@ export function JqlView({
           <SegmentedControl
             value={jqlMode}
             options={[
-              { label: "Ask AI", value: "ai" },
+              { label: "Ask AI (soon)", value: "ai" },
               { label: "Direct JQL", value: "direct" }
             ]}
             onChange={(value) => setJqlMode(value as "ai" | "direct")}
           />
-          <textarea
-            className="mt-3 h-24 w-full resize-none rounded border border-[#c1c7d0] p-3 text-sm outline-none focus:border-[#4c9aff] focus:ring-2 focus:ring-[#deebff]"
-            value={jqlMode === "ai" ? jqlPrompt : jqlQuery}
-            onChange={(event) => (jqlMode === "ai" ? setJqlPrompt(event.target.value) : setJqlQuery(event.target.value))}
-            onKeyDown={handleRunShortcut}
-          />
-          {jqlMode === "ai" ? (
-            <div className="mt-3 rounded border border-[#dfe1e6] bg-[#f7f8fa] p-3">
-              <div className="mb-1 flex items-center gap-2 text-xs font-semibold uppercase text-[#6b778c]">
-                <Bot size={14} />
-                Generated JQL preview
+          {isAskAiMode ? (
+            <div className="mt-3 rounded border border-dashed border-[#c1c7d0] bg-[#f7f8fa] px-4 py-5">
+              <div className="flex items-start gap-3">
+                <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded border border-[#dfe1e6] bg-white text-[#6b778c]">
+                  <Bot size={16} />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold text-[#172b4d]">Ask AI is not available yet</div>
+                  <p className="mt-1 max-w-[560px] text-xs leading-relaxed text-[#6b778c]">
+                    Use Direct JQL to search Jira issues. AI-assisted query drafting will be wired in a later slice.
+                  </p>
+                </div>
               </div>
-              <code className="text-sm text-[#172b4d]">{generatedJqlPreview}</code>
             </div>
-          ) : null}
-          <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div className="min-w-0 text-xs leading-relaxed text-[#6b778c]">{queryMessage}</div>
-            <div className="flex shrink-0 flex-wrap justify-end gap-2">
-              {jqlMode === "ai" ? (
-                <Button variant="secondary" icon={<Sparkles size={14} />}>
-                  Generate JQL
-                </Button>
-              ) : null}
-              <Button
-                className="min-w-[112px] shrink-0 whitespace-nowrap"
-                disabled={isRunningQuery}
-                icon={isRunningQuery ? <Loader2 className="animate-spin" size={14} /> : <Search size={14} />}
-                onClick={onRunQuery}
-              >
-                {isRunningQuery ? "Running" : "Run query"}
-              </Button>
-            </div>
-          </div>
+          ) : (
+            <>
+              <textarea
+                className="mt-3 h-24 w-full resize-none rounded border border-[#c1c7d0] p-3 text-sm outline-none focus:border-[#4c9aff] focus:ring-2 focus:ring-[#deebff]"
+                value={jqlQuery}
+                onChange={(event) => setJqlQuery(event.target.value)}
+                onKeyDown={handleRunShortcut}
+              />
+              <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0 text-xs leading-relaxed text-[#6b778c]">{queryMessage}</div>
+                <div className="flex shrink-0 flex-wrap justify-end gap-2">
+                  <Button
+                    className="min-w-[112px] shrink-0 whitespace-nowrap"
+                    disabled={isRunningQuery}
+                    icon={isRunningQuery ? <Loader2 className="animate-spin" size={14} /> : <Search size={14} />}
+                    onClick={onRunQuery}
+                  >
+                    {isRunningQuery ? "Running" : "Run query"}
+                  </Button>
+                </div>
+              </div>
+            </>
+          )}
         </div>
 
         <div className="p-4">
@@ -200,13 +209,44 @@ export function JqlView({
               </table>
             </div>
           ) : (
-            <div className="rounded border border-dashed border-[#c1c7d0] bg-[#f7f8fa] px-4 py-6 text-sm text-[#6b778c]">
-              {queryMessage ?? "Run a JQL query to populate this table."}
-            </div>
+            <JqlResultsEmptyState queryMessage={queryMessage} runState={runState} />
           )}
         </div>
       </div>
     </section>
+  );
+}
+
+function JqlResultsEmptyState({
+  queryMessage,
+  runState
+}: {
+  queryMessage: string | null;
+  runState: JqlRunState;
+}) {
+  const copyByState: Record<JqlRunState, { title: string; detail?: string }> = {
+    idle: {
+      title: "Run a JQL query to populate this table."
+    },
+    running: {
+      title: "Running JQL query..."
+    },
+    success: {
+      title: "No issues matched this JQL query.",
+      detail: queryMessage ?? undefined
+    },
+    error: {
+      title: "JQL query failed.",
+      detail: queryMessage ?? undefined
+    }
+  };
+  const copy = copyByState[runState];
+
+  return (
+    <div className="rounded border border-dashed border-[#c1c7d0] bg-[#f7f8fa] px-4 py-6 text-sm text-[#6b778c]">
+      <div className="font-medium text-[#172b4d]">{copy.title}</div>
+      {copy.detail ? <div className="mt-1 text-xs leading-relaxed">{copy.detail}</div> : null}
+    </div>
   );
 }
 
