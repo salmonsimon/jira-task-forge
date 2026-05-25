@@ -158,6 +158,13 @@ pub fn update_jql_favorite(
 }
 
 #[tauri::command]
+pub fn delete_jql_favorite(services: State<'_, AppServices>, id: String) -> Result<bool, String> {
+    services
+        .delete_jql_favorite(&id)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 pub async fn has_jira_api_token(services: State<'_, AppServices>) -> Result<bool, String> {
     let services = services.inner().clone();
     run_blocking_result("Credential worker", move || {
@@ -359,12 +366,25 @@ fn platform_open_command(url: &str) -> Result<Command, String> {
     }
 
     if cfg!(target_os = "linux") {
+        if is_wsl() {
+            let mut command = Command::new("powershell.exe");
+            command.args(["-NoProfile", "-Command", "Start-Process", "-FilePath", url]);
+            return Ok(command);
+        }
+
         let mut command = Command::new("xdg-open");
         command.arg(url);
         return Ok(command);
     }
 
     Err("Opening external links is not supported on this platform.".to_string())
+}
+
+fn is_wsl() -> bool {
+    std::fs::read_to_string("/proc/sys/kernel/osrelease")
+        .or_else(|_| std::fs::read_to_string("/proc/version"))
+        .map(|contents| contents.to_ascii_lowercase().contains("microsoft"))
+        .unwrap_or(false)
 }
 
 fn validate_jira_issue_url(url: &str) -> Result<String, String> {
@@ -416,7 +436,8 @@ fn derive_issue_type_from_area(area: &str) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::{
-        derive_issue_type_from_area, platform_open_command, save_csv_file, validate_jira_issue_url,
+        derive_issue_type_from_area, is_wsl, platform_open_command, save_csv_file,
+        validate_jira_issue_url,
     };
 
     #[test]
@@ -466,7 +487,11 @@ mod tests {
             assert_eq!(command.get_program(), "open");
             assert!(command.get_args().any(|arg| arg == "https://example.test"));
         } else if cfg!(target_os = "linux") {
-            assert_eq!(command.get_program(), "xdg-open");
+            if is_wsl() {
+                assert_eq!(command.get_program(), "powershell.exe");
+            } else {
+                assert_eq!(command.get_program(), "xdg-open");
+            }
             assert!(command.get_args().any(|arg| arg == "https://example.test"));
         }
     }

@@ -113,6 +113,11 @@ impl AppServices {
         JqlFavoriteRepository::new(&connection).update(id, name, jql)
     }
 
+    pub fn delete_jql_favorite(&self, id: &str) -> DbResult<bool> {
+        let connection = self.connection.lock().expect("database lock poisoned");
+        JqlFavoriteRepository::new(&connection).delete(id)
+    }
+
     pub fn has_jira_api_token(&self) -> Result<bool, keyring::Error> {
         let entry = keyring::Entry::new(JIRA_CREDENTIAL_SERVICE, JIRA_API_TOKEN_ACCOUNT)?;
         match entry.get_password() {

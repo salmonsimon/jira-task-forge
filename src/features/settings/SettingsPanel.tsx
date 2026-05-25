@@ -80,17 +80,8 @@ export function SettingsPanel({
             value={settings.jiraAccountEmail}
             onChange={(jiraAccountEmail) => onChange({ jiraAccountEmail })}
           />
-          <SettingsSelect
-            label="Auth method"
-            value={settings.jiraAuthMethod}
-            options={[
-              { label: "API token fallback", value: "api-token" },
-              { label: "OAuth-ready later", value: "oauth-ready" }
-            ]}
-            onChange={(jiraAuthMethod) => onChange({ jiraAuthMethod: jiraAuthMethod as AppSettings["jiraAuthMethod"] })}
-          />
           <p className="mt-2 text-xs leading-relaxed text-[#6b778c]">
-            Tokens are never stored in SQLite or backups. The backend stores the token in the OS credential store.
+            Jira uses API tokens for now. Tokens are never stored in SQLite or backups. The backend stores the token in the OS credential store.
           </p>
           <div className="mt-3 rounded border border-[#dfe1e6] bg-[#f7f8fa] p-3">
             <SettingsInput

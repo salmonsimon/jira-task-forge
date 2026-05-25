@@ -47,6 +47,7 @@ pub fn run() {
             commands::list_jql_favorites,
             commands::create_jql_favorite,
             commands::update_jql_favorite,
+            commands::delete_jql_favorite,
             commands::has_jira_api_token,
             commands::save_jira_api_token,
             commands::delete_jira_api_token,

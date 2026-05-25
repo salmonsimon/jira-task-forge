@@ -1,5 +1,5 @@
-import { Bot, Check, History, Loader2, Pencil, Search, Sparkles, Star, X } from "lucide-react";
-import { useEffect, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { Bot, Check, Loader2, Pencil, Search, Sparkles, Star, X } from "lucide-react";
+import { useEffect, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from "react";
 import { Button, IssueTypeBadge, PriorityBadge, SegmentedControl } from "../../components/ui";
 import type { JqlFavorite, JqlResult } from "../../lib/types";
 import { cn } from "../../lib/utils";
@@ -12,6 +12,7 @@ export function JqlView({
   favorites,
   onSaveFavorite,
   onRenameFavorite,
+  onDeleteFavorite,
   results,
   jqlQuery,
   setJqlQuery,
@@ -29,6 +30,7 @@ export function JqlView({
   favorites: JqlFavorite[];
   onSaveFavorite: () => void | Promise<void>;
   onRenameFavorite: (favoriteId: string, name: string) => void | Promise<void>;
+  onDeleteFavorite: (favoriteId: string) => void | Promise<void>;
   results: JqlResult[];
   jqlQuery: string;
   setJqlQuery: (query: string) => void;
@@ -40,9 +42,18 @@ export function JqlView({
   queryMessage: string | null;
 }) {
   const selectedFavorite = favorites.find((favorite) => favorite.id === selectedFavoriteId) ?? favorites[0];
+  const isCurrentQueryFavorite = favorites.some((favorite) => favorite.jql.trim() === jqlQuery.trim());
+
+  function handleRunShortcut(event: ReactKeyboardEvent<HTMLElement>) {
+    if (event.defaultPrevented) return;
+    if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+      event.preventDefault();
+      onRunQuery();
+    }
+  }
 
   return (
-    <section className="grid flex-1 grid-cols-[280px_1fr] gap-4 px-5 py-4">
+    <section className="grid flex-1 grid-cols-[280px_1fr] gap-4 px-5 py-4" onKeyDown={handleRunShortcut}>
       {isRunningQuery ? <JqlLoadingOverlay /> : null}
       <aside className="rounded border border-[#dfe1e6] bg-white">
         <div className="border-b border-[#dfe1e6] px-4 py-3">
@@ -58,19 +69,10 @@ export function JqlView({
               key={favorite.id}
               selected={selectedFavorite?.id === favorite.id}
               onRenameFavorite={onRenameFavorite}
+              onDeleteFavorite={onDeleteFavorite}
               onSelect={() => setSelectedFavoriteId(favorite.id)}
             />
           ))}
-        </div>
-        <div className="border-t border-[#dfe1e6] px-4 py-3">
-          <div className="mb-2 flex items-center gap-2 text-sm font-semibold">
-            <History size={15} />
-            Recent
-          </div>
-          <div className="space-y-2 text-xs text-[#6b778c]">
-            <div>project = DTS AND statusCategory != Done</div>
-            <div>issuetype = Epic ORDER BY updated DESC</div>
-          </div>
         </div>
       </aside>
 
@@ -80,8 +82,18 @@ export function JqlView({
             <h1 className="text-lg font-semibold">JQL</h1>
             <p className="text-xs text-[#6b778c]">Run direct JQL or ask AI to draft it first.</p>
           </div>
-          <Button variant="secondary" icon={<Star size={14} />} onClick={onSaveFavorite}>
-            Save favorite
+          <Button
+            variant="secondary"
+            icon={<Star className={isCurrentQueryFavorite ? "fill-current" : undefined} size={14} />}
+            onClick={() => {
+              if (selectedFavorite && selectedFavorite.jql.trim() === jqlQuery.trim()) {
+                void onDeleteFavorite(selectedFavorite.id);
+                return;
+              }
+              void onSaveFavorite();
+            }}
+          >
+            {selectedFavorite && selectedFavorite.jql.trim() === jqlQuery.trim() ? "Unsave favorite" : "Save favorite"}
           </Button>
         </div>
 
@@ -98,6 +110,7 @@ export function JqlView({
             className="mt-3 h-24 w-full resize-none rounded border border-[#c1c7d0] p-3 text-sm outline-none focus:border-[#4c9aff] focus:ring-2 focus:ring-[#deebff]"
             value={jqlMode === "ai" ? jqlPrompt : jqlQuery}
             onChange={(event) => (jqlMode === "ai" ? setJqlPrompt(event.target.value) : setJqlQuery(event.target.value))}
+            onKeyDown={handleRunShortcut}
           />
           {jqlMode === "ai" ? (
             <div className="mt-3 rounded border border-[#dfe1e6] bg-[#f7f8fa] p-3">
@@ -178,11 +191,13 @@ function FavoriteListItem({
   favorite,
   selected,
   onRenameFavorite,
+  onDeleteFavorite,
   onSelect
 }: {
   favorite: JqlFavorite;
   selected: boolean;
   onRenameFavorite: (favoriteId: string, name: string) => void | Promise<void>;
+  onDeleteFavorite: (favoriteId: string) => void | Promise<void>;
   onSelect: () => void;
 }) {
   const [isEditing, setIsEditing] = useState(false);
@@ -238,6 +253,7 @@ function FavoriteListItem({
             onChange={(event) => setDraftName(event.target.value)}
             onClick={(event) => event.stopPropagation()}
             onKeyDown={(event) => {
+              event.stopPropagation();
               if (event.key === "Enter") acceptEditing();
               if (event.key === "Escape") cancelEditing();
             }}
@@ -266,14 +282,27 @@ function FavoriteListItem({
             </button>
           </>
         ) : (
-          <button
-            aria-label={`Rename favorite ${favorite.name}`}
-            className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-[#6b778c] opacity-0 transition hover:bg-[#ebecf0] hover:text-[#172b4d] group-hover:opacity-100 focus:opacity-100"
-            onClick={beginEditing}
-            type="button"
-          >
-            <Pencil size={12} />
-          </button>
+          <>
+            <button
+              aria-label={`Remove favorite ${favorite.name}`}
+              className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-[#ffab00] transition hover:bg-[#ebecf0] hover:text-[#ffab00]"
+              onClick={(event) => {
+                event.stopPropagation();
+                void onDeleteFavorite(favorite.id);
+              }}
+              type="button"
+            >
+              <Star className="fill-current" size={12} />
+            </button>
+            <button
+              aria-label={`Rename favorite ${favorite.name}`}
+              className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-[#6b778c] opacity-0 transition hover:bg-[#ebecf0] hover:text-[#172b4d] group-hover:opacity-100 focus:opacity-100"
+              onClick={beginEditing}
+              type="button"
+            >
+              <Pencil size={12} />
+            </button>
+          </>
         )}
       </div>
       <div className="mt-1 line-clamp-2 text-xs text-[#6b778c]">{favorite.jql}</div>

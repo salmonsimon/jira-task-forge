@@ -19,6 +19,7 @@ import {
   createPersistedTask,
   createPersistedTray,
   deletePersistedCategory,
+  deletePersistedJqlFavorite,
   deletePersistedJiraApiToken,
   deletePersistedTray,
   deletePersistedTask,
@@ -624,6 +625,20 @@ export default function App() {
     );
   }
 
+  async function deleteJqlFavorite(favoriteId: string) {
+    const deleted = usesTauriPersistence ? await deletePersistedJqlFavorite(favoriteId) : true;
+    if (!deleted) return;
+
+    const nextFavorites = jqlFavorites.filter((favorite) => favorite.id !== favoriteId);
+    const nextFavorite = nextFavorites[0];
+    setJqlFavorites(nextFavorites);
+    if (selectedFavoriteId === favoriteId) {
+      setSelectedFavoriteId(nextFavorite?.id);
+      if (nextFavorite) setJqlQuery(nextFavorite.jql);
+    }
+    setJqlQueryMessage("Favorite removed.");
+  }
+
   async function runJqlQuery() {
     const query = jqlMode === "ai" ? generatedJqlPreview : jqlQuery.trim();
     if (!query) {
@@ -953,6 +968,7 @@ export default function App() {
               favorites={jqlFavorites}
               onSaveFavorite={saveJqlFavorite}
               onRenameFavorite={renameJqlFavorite}
+              onDeleteFavorite={deleteJqlFavorite}
               results={jqlResults}
               jqlQuery={jqlQuery}
               setJqlQuery={setJqlQuery}
