@@ -224,8 +224,7 @@ impl AppServices {
             );
         }
 
-        self.openai_client()?
-            .test_connection(openai_model_or_default(&settings.ai_model))?;
+        self.openai_client()?.test_connection()?;
         Ok("OpenAI connection succeeded.".to_string())
     }
 

@@ -5,7 +5,9 @@ use serde_json::{json, Value};
 use crate::models::JqlAiDraft;
 
 const OPENAI_RESPONSES_URL: &str = "https://api.openai.com/v1/responses";
+const OPENAI_MODELS_URL: &str = "https://api.openai.com/v1/models";
 const OPENAI_REQUEST_TIMEOUT: Duration = Duration::from_secs(45);
+const OPENAI_REQUEST_ATTEMPTS: usize = 2;
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct OpenAiCredentials {
@@ -101,42 +103,58 @@ impl OpenAiClient {
             "max_output_tokens": 700
         });
 
-        let response = ureq::post(OPENAI_RESPONSES_URL)
-            .set("Authorization", &format!("Bearer {}", self.api_key.trim()))
-            .set("Content-Type", "application/json")
-            .set("Accept", "application/json")
-            .timeout(OPENAI_REQUEST_TIMEOUT)
-            .send_json(payload);
-
-        let response_json = parse_openai_response(response)?;
+        let response_json = self.post_json_with_retry(payload)?;
         let output_text = extract_output_text(&response_json)?;
         let draft: JqlAiDraft = serde_json::from_str(&output_text)
             .map_err(|error| format!("OpenAI returned an invalid JQL draft payload: {error}"))?;
         validate_jql_draft(draft)
     }
 
-    pub fn test_connection(&self, model: &str) -> Result<(), String> {
-        let model = model.trim();
-        if model.is_empty() {
-            return Err("OpenAI model is required.".to_string());
+    pub fn test_connection(&self) -> Result<(), String> {
+        self.get_models_with_retry().map(|_| ())
+    }
+
+    fn post_json_with_retry(&self, payload: Value) -> Result<Value, String> {
+        let mut last_error = None;
+        for attempt in 1..=OPENAI_REQUEST_ATTEMPTS {
+            let response = ureq::post(OPENAI_RESPONSES_URL)
+                .set("Authorization", &format!("Bearer {}", self.api_key.trim()))
+                .set("Content-Type", "application/json")
+                .set("Accept", "application/json")
+                .timeout(OPENAI_REQUEST_TIMEOUT)
+                .send_json(payload.clone());
+
+            match parse_openai_response(response) {
+                Ok(value) => return Ok(value),
+                Err(error) if error.retryable && attempt < OPENAI_REQUEST_ATTEMPTS => {
+                    last_error = Some(error.message);
+                }
+                Err(error) => return Err(error.message),
+            }
         }
 
-        let payload = json!({
-            "model": model,
-            "store": false,
-            "instructions": "Reply with the single word ok.",
-            "input": "Connection test",
-            "max_output_tokens": 16
-        });
+        Err(last_error.unwrap_or_else(|| "OpenAI request failed.".to_string()))
+    }
 
-        let response = ureq::post(OPENAI_RESPONSES_URL)
-            .set("Authorization", &format!("Bearer {}", self.api_key.trim()))
-            .set("Content-Type", "application/json")
-            .set("Accept", "application/json")
-            .timeout(OPENAI_REQUEST_TIMEOUT)
-            .send_json(payload);
+    fn get_models_with_retry(&self) -> Result<Value, String> {
+        let mut last_error = None;
+        for attempt in 1..=OPENAI_REQUEST_ATTEMPTS {
+            let response = ureq::get(OPENAI_MODELS_URL)
+                .set("Authorization", &format!("Bearer {}", self.api_key.trim()))
+                .set("Accept", "application/json")
+                .timeout(OPENAI_REQUEST_TIMEOUT)
+                .call();
 
-        parse_openai_response(response).map(|_| ())
+            match parse_openai_response(response) {
+                Ok(value) => return Ok(value),
+                Err(error) if error.retryable && attempt < OPENAI_REQUEST_ATTEMPTS => {
+                    last_error = Some(error.message);
+                }
+                Err(error) => return Err(error.message),
+            }
+        }
+
+        Err(last_error.unwrap_or_else(|| "OpenAI request failed.".to_string()))
     }
 }
 
@@ -152,23 +170,42 @@ If the request is ambiguous, still produce the safest useful JQL and include the
 Never include markdown fences."
 }
 
-fn parse_openai_response(response: Result<ureq::Response, ureq::Error>) -> Result<Value, String> {
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct OpenAiRequestError {
+    message: String,
+    retryable: bool,
+}
+
+fn parse_openai_response(
+    response: Result<ureq::Response, ureq::Error>,
+) -> Result<Value, OpenAiRequestError> {
     match response {
         Ok(response) => response
             .into_json::<Value>()
-            .map_err(|error| format!("OpenAI returned an unexpected payload: {error}")),
+            .map_err(|error| OpenAiRequestError {
+                message: format!("OpenAI returned an unexpected payload: {error}"),
+                retryable: false,
+            }),
         Err(ureq::Error::Status(status, response)) => {
             let body_text = response.into_string().unwrap_or_default();
             let message = openai_error_message(&body_text);
+            let retryable = (500..=599).contains(&status);
             if message.is_empty() {
-                Err(format!("OpenAI request failed with HTTP {status}."))
+                Err(OpenAiRequestError {
+                    message: format!("OpenAI request failed with HTTP {status}."),
+                    retryable,
+                })
             } else {
-                Err(format!(
-                    "OpenAI request failed with HTTP {status}: {message}"
-                ))
+                Err(OpenAiRequestError {
+                    message: format!("OpenAI request failed with HTTP {status}: {message}"),
+                    retryable,
+                })
             }
         }
-        Err(error) => Err(format!("OpenAI request could not reach the API: {error}")),
+        Err(error) => Err(OpenAiRequestError {
+            message: format!("OpenAI request could not reach the API: {error}"),
+            retryable: true,
+        }),
     }
 }
 
