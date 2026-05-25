@@ -32,9 +32,9 @@ export function CategoriesPanel({
   }, [onClose]);
 
   return (
-    <aside ref={panelRef} className="fixed right-0 top-0 z-30 flex h-screen w-[420px] flex-col border-l border-[#dfe1e6] bg-white shadow-xl">
+    <aside ref={panelRef} className="fixed right-0 top-0 z-30 flex h-screen w-[420px] overscroll-contain border-l border-[#dfe1e6] bg-white shadow-xl">
       <PanelHeader title="Categories" subtitle="Projects and areas available in capture controls" onClose={onClose} />
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className="flex-1 overflow-y-auto overscroll-contain p-4">
         <CategoryList
           categoryType="project"
           title="Projects"

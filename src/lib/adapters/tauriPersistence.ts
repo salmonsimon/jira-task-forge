@@ -61,6 +61,18 @@ type BackendJqlFavorite = {
   updated_at: string;
 };
 
+export type PersistedBackupExportResult = {
+  path: string;
+  recordCounts: Record<string, number>;
+  secretsIncluded: boolean;
+};
+
+export type PersistedBackupImportResult = {
+  importedCounts: Record<string, number>;
+  skippedCounts: Record<string, number>;
+  warnings: string[];
+};
+
 export async function listPersistedTrays(): Promise<Tray[]> {
   const [backendTrays, backendTasks] = await Promise.all([
     invoke<BackendTray[]>("list_trays"),
@@ -246,6 +258,14 @@ export async function markPersistedTasksCsvExported(taskIds: string[]): Promise<
 export async function createPersistedRecoveryTrayFromTasks(sourceTrayId: string, taskIds: string[]): Promise<Tray> {
   const tray = await invoke<BackendTray>("create_recovery_tray_from_tasks", { sourceTrayId, taskIds });
   return mapTray(tray, []);
+}
+
+export async function exportPersistedBackup(path: string): Promise<PersistedBackupExportResult> {
+  return invoke<PersistedBackupExportResult>("export_backup", { path });
+}
+
+export async function importPersistedBackup(path: string): Promise<PersistedBackupImportResult> {
+  return invoke<PersistedBackupImportResult>("import_backup", { path });
 }
 
 export async function saveCsvFile(path: string, contents: string): Promise<void> {

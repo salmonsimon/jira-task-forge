@@ -1,3 +1,4 @@
+mod backup;
 mod commands;
 mod db;
 mod integrations;
@@ -60,6 +61,8 @@ pub fn run() {
             commands::update_task_details,
             commands::mark_tasks_csv_exported,
             commands::create_recovery_tray_from_tasks,
+            commands::export_backup,
+            commands::import_backup,
             commands::save_csv_file,
             commands::open_atlassian_api_tokens_page,
             commands::open_jira_issue_url

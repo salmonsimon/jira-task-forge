@@ -2,6 +2,8 @@ node_modules/
 dist/
 dist-ssr/
 *.local
+jira-task-forge-backup-*.json
+src-tauri/jira-task-forge-backup-*.json
 
 # Tauri / Rust
 src-tauri/target/
