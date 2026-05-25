@@ -144,37 +144,70 @@ button {
   background-color: #2b2f36 !important;
 }
 
-.app-loading-orb,
-.app-loading-ring,
-.app-loading-icon,
-.jira-loading-bar {
+.app-loading-dot,
+.jira-loading-bar,
+.jira-progress-activity-fill,
+.jira-progress-activity-indeterminate {
   transform: translateZ(0);
   will-change: transform, opacity;
 }
 
-.app-loading-ring-fast {
-  animation: jira-loading-spin 820ms linear infinite;
+.app-loading-dot {
+  animation: jira-loading-dot 1000ms ease-in-out infinite;
 }
 
-.app-loading-ring-slow {
-  animation: jira-loading-spin 1280ms linear infinite reverse;
+.app-loading-dot:nth-child(2) {
+  animation-delay: 140ms;
 }
 
-.app-loading-icon {
-  animation: jira-loading-spin 960ms linear infinite;
+.app-loading-dot:nth-child(3) {
+  animation-delay: 280ms;
 }
 
 .jira-loading-bar {
   animation: jira-loading-bar-slide 1200ms ease-in-out infinite;
 }
 
-@keyframes jira-loading-spin {
-  from {
-    transform: translateZ(0) rotate(0deg);
+.jira-progress-activity-fill {
+  background: linear-gradient(90deg, #7ee2a8, #85b8ff);
+  overflow: hidden;
+}
+
+.jira-progress-activity-fill::after,
+.jira-progress-activity-indeterminate::after {
+  animation: jira-progress-stripes 900ms linear infinite;
+  background-image: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.2) 25%,
+    transparent 25%,
+    transparent 50%,
+    rgba(255, 255, 255, 0.2) 50%,
+    rgba(255, 255, 255, 0.2) 75%,
+    transparent 75%,
+    transparent
+  );
+  background-size: 18px 18px;
+  content: "";
+  inset: 0;
+  position: absolute;
+}
+
+.jira-progress-activity-indeterminate {
+  animation: jira-loading-bar-slide 1200ms ease-in-out infinite;
+  background: linear-gradient(90deg, #7ee2a8, #85b8ff);
+  width: 52%;
+}
+
+@keyframes jira-loading-dot {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: translate3d(0, 0, 0);
   }
 
-  to {
-    transform: translateZ(0) rotate(360deg);
+  45% {
+    opacity: 1;
+    transform: translate3d(0, -3px, 0);
   }
 }
 
@@ -191,6 +224,12 @@ button {
   100% {
     opacity: 0.45;
     transform: translate3d(230%, 0, 0);
+  }
+}
+
+@keyframes jira-progress-stripes {
+  to {
+    background-position: 18px 0;
   }
 }
 

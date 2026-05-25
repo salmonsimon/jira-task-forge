@@ -249,21 +249,18 @@ function JiraCreateLoading({
 
   return (
     <div className="w-full max-w-[420px] rounded border border-[#315a8a] bg-[#102d50] px-4 py-4 text-[#dfe1e6] shadow-2xl">
-      <div className="flex items-center gap-4">
-        <LoadingOrb size="md" />
-        <div className="min-w-0">
-          <div className="text-sm font-semibold text-[#f4f5f7]">{progress?.label ?? "Creating in Jira"}</div>
-          <p className="mt-1 truncate text-sm text-[#b7d5ff]">
-            {progress?.detail ??
-              `Preparing epics and ${taskCount} ${taskCount === 1 ? "parent issue" : "parent issues"}.`}
-          </p>
-        </div>
+      <div className="min-w-0">
+        <div className="text-sm font-semibold text-[#f4f5f7]">{progress?.label ?? "Creating in Jira"}</div>
+        <p className="mt-1 truncate text-sm text-[#b7d5ff]">
+          {progress?.detail ??
+            `Preparing epics and ${taskCount} ${taskCount === 1 ? "parent issue" : "parent issues"}.`}
+        </p>
       </div>
-      <div className="relative mt-4 h-1.5 overflow-hidden rounded-full bg-[#0b2442]">
+      <div className="jira-progress-activity relative mt-4 h-2.5 overflow-hidden rounded-full bg-[#0b2442]">
         <div
           className={cn(
-            "absolute inset-y-0 rounded-full bg-[#579dff] transition-all duration-300 ease-out",
-            hasDeterminateProgress ? "left-0" : "jira-loading-bar w-1/2"
+            "absolute inset-y-0 rounded-full transition-all duration-300 ease-out",
+            hasDeterminateProgress ? "jira-progress-activity-fill left-0" : "jira-progress-activity-indeterminate"
           )}
           style={hasDeterminateProgress ? { width: progressWidth } : undefined}
         />
