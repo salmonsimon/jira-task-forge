@@ -1,4 +1,4 @@
-import { Bot, Download, ExternalLink, KeyRound, Settings, UploadCloud } from "lucide-react";
+import { Bot, Check, ChevronDown, Download, ExternalLink, KeyRound, Settings, UploadCloud } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button, DetailBlock, LoadingOrb, PanelHeader, SegmentedControl } from "../../components/ui";
 import type { AppSettings, JiraConnectionTestResult, ThemeMode } from "../../lib/types";
@@ -11,11 +11,13 @@ export function SettingsPanel({
   aiCredentialMessage,
   jiraConnectionResult,
   isTestingJiraConnection,
+  isTestingOpenAiConnection,
   onChange,
   onSaveJiraApiToken,
   onDeleteJiraApiToken,
   onSaveOpenAiApiKey,
   onDeleteOpenAiApiKey,
+  onTestOpenAiConnection,
   onTestJiraConnection,
   onOpenJiraApiTokens,
   onExportBackup,
@@ -29,11 +31,13 @@ export function SettingsPanel({
   aiCredentialMessage: string | null;
   jiraConnectionResult: JiraConnectionTestResult | null;
   isTestingJiraConnection: boolean;
+  isTestingOpenAiConnection: boolean;
   onChange: (settings: Partial<AppSettings>) => void;
   onSaveJiraApiToken: (token: string) => Promise<boolean>;
   onDeleteJiraApiToken: () => void;
   onSaveOpenAiApiKey: (apiKey: string) => Promise<boolean>;
   onDeleteOpenAiApiKey: () => void;
+  onTestOpenAiConnection: () => void;
   onTestJiraConnection: () => void;
   onOpenJiraApiTokens: () => void;
   onExportBackup: () => void;
@@ -48,6 +52,10 @@ export function SettingsPanel({
     Boolean(settings.jiraAccountEmail.trim()) &&
     hasJiraApiToken &&
     !isTestingJiraConnection;
+  const canTestOpenAiConnection =
+    settings.aiProvider === "OpenAI" &&
+    hasOpenAiApiKey &&
+    !isTestingOpenAiConnection;
 
   async function saveJiraToken() {
     const saved = await onSaveJiraApiToken(jiraApiTokenDraft);
@@ -190,7 +198,6 @@ export function SettingsPanel({
             ]}
             onChange={(aiProvider) => onChange({ aiProvider: aiProvider as AppSettings["aiProvider"] })}
           />
-          <SettingsInput label="Model" value={settings.aiModel} onChange={(aiModel) => onChange({ aiModel })} />
           <div className="mt-3 rounded border border-[#dfe1e6] bg-[#f7f8fa] p-3">
             <div className="mb-2 flex items-center justify-between gap-2">
               <div>
@@ -217,22 +224,19 @@ export function SettingsPanel({
               <Button disabled={!hasOpenAiApiKey} variant="secondary" onClick={onDeleteOpenAiApiKey}>
                 Remove key
               </Button>
+              <Button
+                disabled={!canTestOpenAiConnection}
+                icon={isTestingOpenAiConnection ? <LoadingOrb size="xs" /> : undefined}
+                variant="secondary"
+                onClick={onTestOpenAiConnection}
+              >
+                {isTestingOpenAiConnection ? "Testing..." : "Test connection"}
+              </Button>
             </div>
             {aiCredentialMessage ? (
               <p className="mt-2 text-xs leading-relaxed text-[#6b778c]">{aiCredentialMessage}</p>
             ) : null}
           </div>
-          <SettingsSelect
-            label="Default content language"
-            value={settings.defaultContentLanguage}
-            options={[
-              { label: "Spanish", value: "Spanish" },
-              { label: "English", value: "English" }
-            ]}
-            onChange={(defaultContentLanguage) =>
-              onChange({ defaultContentLanguage: defaultContentLanguage as AppSettings["defaultContentLanguage"] })
-            }
-          />
           <p className="mt-2 text-xs leading-relaxed text-[#6b778c]">
             AI keys follow the same secret boundary as Jira credentials and are never included in backups.
           </p>
@@ -294,20 +298,39 @@ function SettingsSelect({
   options: Array<{ label: string; value: string }>;
   onChange: (value: string) => void;
 }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const selectedOption = options.find((option) => option.value === value) ?? options[0];
+
   return (
-    <label className="mb-3 block">
-      <span className="mb-1 block text-xs font-medium text-[#6b778c]">{label}</span>
-      <select
-        className="h-9 w-full rounded border border-[#c1c7d0] bg-white px-2 text-sm outline-none focus:border-[#4c9aff] focus:ring-2 focus:ring-[#deebff]"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
+    <div className="relative mb-3">
+      <div className="mb-1 block text-xs font-medium text-[#6b778c]">{label}</div>
+      <button
+        className="flex h-9 w-full items-center justify-between gap-2 rounded border border-[#c1c7d0] bg-white px-2 text-left text-sm text-[#172b4d] outline-none hover:bg-[#f4f5f7] focus:border-[#4c9aff] focus:ring-2 focus:ring-[#deebff]"
+        onBlur={() => window.setTimeout(() => setIsOpen(false), 120)}
+        onClick={() => setIsOpen((currentValue) => !currentValue)}
+        type="button"
       >
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-    </label>
+        <span>{selectedOption.label}</span>
+        <ChevronDown size={14} />
+      </button>
+      {isOpen ? (
+        <div className="absolute z-40 mt-1 w-full overflow-hidden rounded border border-[#c1c7d0] bg-white py-1 text-sm shadow-xl">
+          {options.map((option) => (
+            <button
+              className="flex w-full items-center justify-between gap-2 px-2 py-2 text-left text-[#172b4d] hover:bg-[#f4f5f7]"
+              key={option.value}
+              onClick={() => {
+                onChange(option.value);
+                setIsOpen(false);
+              }}
+              type="button"
+            >
+              <span>{option.label}</span>
+              {option.value === value ? <Check size={13} /> : null}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
   );
 }

@@ -46,6 +46,7 @@ import {
   savePersistedJiraApiToken,
   savePersistedOpenAiApiKey,
   testPersistedJiraConnection,
+  testPersistedOpenAiConnection,
   updatePersistedAppSettings,
   updatePersistedCategory,
   updatePersistedJqlFavorite,
@@ -132,6 +133,7 @@ export default function App() {
   const [jiraConnectionResult, setJiraConnectionResult] = useState<JiraConnectionTestResult | null>(null);
   const [backupNotice, setBackupNotice] = useState<BackupOperationNotice | null>(null);
   const [isTestingJiraConnection, setIsTestingJiraConnection] = useState(false);
+  const [isTestingOpenAiConnection, setIsTestingOpenAiConnection] = useState(false);
   const [isRunningJiraPreflight, setIsRunningJiraPreflight] = useState(false);
   const [jiraCreatePreflight, setJiraCreatePreflight] = useState<JiraCreatePreflight | null>(null);
   const [isCreatingJiraIssues, setIsCreatingJiraIssues] = useState(false);
@@ -678,6 +680,25 @@ export default function App() {
     }
   }
 
+  async function testOpenAiConnection() {
+    flushSync(() => {
+      setIsTestingOpenAiConnection(true);
+      setAiCredentialMessage(null);
+    });
+    const loadingStartedAt = performance.now();
+    await waitForNextPaint();
+
+    try {
+      const message = await testPersistedOpenAiConnection();
+      setAiCredentialMessage(message);
+    } catch (error) {
+      setAiCredentialMessage(formatUnknownError(error, "Could not test OpenAI connection."));
+    } finally {
+      await waitForMinimumElapsed(loadingStartedAt, 700);
+      setIsTestingOpenAiConnection(false);
+    }
+  }
+
   async function testJiraConnection() {
     flushSync(() => {
       setIsTestingJiraConnection(true);
@@ -872,7 +893,7 @@ export default function App() {
       setJqlQueryMessage("AI-generated JQL loaded into the editor. Review it, then run the query.");
       setJqlAiMessage(formatJqlAiDraftMessage(draft));
     } catch (error) {
-      setJqlAiMessage(error instanceof Error ? error.message : "Could not draft JQL with AI.");
+      setJqlAiMessage(formatUnknownError(error, "Could not draft JQL with AI."));
     } finally {
       await waitForMinimumElapsed(loadingStartedAt, 700);
       setIsDraftingJqlWithAi(false);
@@ -1310,11 +1331,13 @@ export default function App() {
             aiCredentialMessage={aiCredentialMessage}
             jiraConnectionResult={jiraConnectionResult}
             isTestingJiraConnection={isTestingJiraConnection}
+            isTestingOpenAiConnection={isTestingOpenAiConnection}
             onChange={updateAppSettings}
             onSaveJiraApiToken={saveJiraApiToken}
             onDeleteJiraApiToken={deleteJiraApiToken}
             onSaveOpenAiApiKey={saveOpenAiApiKey}
             onDeleteOpenAiApiKey={deleteOpenAiApiKey}
+            onTestOpenAiConnection={testOpenAiConnection}
             onTestJiraConnection={testJiraConnection}
             onOpenJiraApiTokens={openJiraApiTokensPage}
             onExportBackup={exportBackup}
@@ -1627,13 +1650,19 @@ function formatJqlQueryMessage(resultCount: number, isLast: boolean, warningMess
 }
 
 function formatJqlQueryError(error: unknown): string {
-  const message = typeof error === "string" ? error : error instanceof Error ? error.message : "Could not run JQL query.";
+  const message = formatUnknownError(error, "Could not run JQL query.");
   return `JQL query failed. ${message}`;
 }
 
 function formatJqlAiDraftMessage(draft: JqlAiDraft): string {
   const warningText = draft.warnings.length ? ` ${draft.warnings.join(" ")}` : "";
   return `${draft.explanation}${warningText}`;
+}
+
+function formatUnknownError(error: unknown, fallback: string): string {
+  if (typeof error === "string" && error.trim()) return error;
+  if (error instanceof Error && error.message.trim()) return error.message;
+  return fallback;
 }
 
 function formatBackupTimestamp(date: Date): string {

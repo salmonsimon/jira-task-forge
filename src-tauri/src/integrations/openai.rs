@@ -114,6 +114,30 @@ impl OpenAiClient {
             .map_err(|error| format!("OpenAI returned an invalid JQL draft payload: {error}"))?;
         validate_jql_draft(draft)
     }
+
+    pub fn test_connection(&self, model: &str) -> Result<(), String> {
+        let model = model.trim();
+        if model.is_empty() {
+            return Err("OpenAI model is required.".to_string());
+        }
+
+        let payload = json!({
+            "model": model,
+            "store": false,
+            "instructions": "Reply with the single word ok.",
+            "input": "Connection test",
+            "max_output_tokens": 12
+        });
+
+        let response = ureq::post(OPENAI_RESPONSES_URL)
+            .set("Authorization", &format!("Bearer {}", self.api_key))
+            .set("Content-Type", "application/json")
+            .set("Accept", "application/json")
+            .timeout(OPENAI_REQUEST_TIMEOUT)
+            .send_json(payload);
+
+        parse_openai_response(response).map(|_| ())
+    }
 }
 
 fn jql_generation_instructions() -> &'static str {

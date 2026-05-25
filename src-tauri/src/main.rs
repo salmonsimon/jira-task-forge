@@ -55,6 +55,7 @@ pub fn run() {
             commands::has_openai_api_key,
             commands::save_openai_api_key,
             commands::delete_openai_api_key,
+            commands::test_openai_connection,
             commands::test_jira_connection,
             commands::run_jql_query,
             commands::draft_jql_with_ai,

@@ -246,6 +246,15 @@ pub async fn delete_openai_api_key(services: State<'_, AppServices>) -> Result<(
 }
 
 #[tauri::command]
+pub async fn test_openai_connection(services: State<'_, AppServices>) -> Result<String, String> {
+    let services = services.inner().clone();
+    run_blocking_result("OpenAI connection worker", move || {
+        services.test_openai_connection()
+    })
+    .await
+}
+
+#[tauri::command]
 pub async fn test_jira_connection(
     services: State<'_, AppServices>,
 ) -> Result<JiraConnectionTestResult, String> {

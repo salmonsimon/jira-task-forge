@@ -208,10 +208,25 @@ impl AppServices {
 
         let client = self.openai_client()?;
         client.draft_jql(
-            &settings.ai_model,
+            openai_model_or_default(&settings.ai_model),
             prompt,
             Some(&settings.jira_creation_project_key),
         )
+    }
+
+    pub fn test_openai_connection(&self) -> Result<String, String> {
+        let settings = self
+            .get_app_settings()
+            .map_err(|error| format!("Could not load AI settings: {error}"))?;
+        if settings.ai_provider != "OpenAI" {
+            return Err(
+                "OpenAI provider must be selected before testing the connection.".to_string(),
+            );
+        }
+
+        self.openai_client()?
+            .test_connection(openai_model_or_default(&settings.ai_model))?;
+        Ok("OpenAI connection succeeded.".to_string())
     }
 
     pub fn create_jira_parent_issues(
@@ -408,6 +423,15 @@ fn failed_result(message: impl Into<String>) -> JiraConnectionTestResult {
         message: message.into(),
         account_display_name: None,
         account_email: None,
+    }
+}
+
+fn openai_model_or_default(model: &str) -> &str {
+    let model = model.trim();
+    if model.is_empty() {
+        "gpt-4.1"
+    } else {
+        model
     }
 }
 
