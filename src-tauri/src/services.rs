@@ -436,7 +436,7 @@ fn openai_model_or_default(model: &str) -> &str {
 
 #[cfg(test)]
 mod tests {
-    use super::{failed_result, AppServices};
+    use super::{failed_result, openai_model_or_default, AppServices};
     use crate::db::open_in_memory_database;
     use crate::models::{AppSettings, NewTask, NewTray, TrayState};
 
@@ -614,6 +614,169 @@ mod tests {
                 .expect("settings reload")
                 .jira_account_email,
             "saimon@example.com"
+        );
+    }
+
+    #[test]
+    fn manages_categories_and_jql_favorites_through_services() {
+        let services = AppServices::new(open_in_memory_database().expect("database opens"));
+
+        let category = services
+            .create_category("area", "Animation")
+            .expect("category creates");
+        assert_eq!(category.name, "Animation");
+        assert!(services
+            .list_categories(Some("area"))
+            .expect("categories list")
+            .iter()
+            .any(|candidate| candidate.id == category.id));
+
+        let updated_category = services
+            .update_category(&category.id, Some("Rigging"), Some(true))
+            .expect("category updates")
+            .expect("category exists");
+        assert_eq!(updated_category.name, "Rigging");
+        assert!(updated_category.hidden);
+
+        let favorite = services
+            .create_jql_favorite("Latest DTS", "project = DTS ORDER BY created DESC")
+            .expect("favorite creates");
+        let updated_favorite = services
+            .update_jql_favorite(
+                &favorite.id,
+                Some("Latest JTFTEST"),
+                Some("project = JTFTEST ORDER BY created DESC"),
+            )
+            .expect("favorite updates")
+            .expect("favorite exists");
+        assert_eq!(updated_favorite.name, "Latest JTFTEST");
+        assert_eq!(
+            updated_favorite.jql,
+            "project = JTFTEST ORDER BY created DESC"
+        );
+        assert_eq!(
+            services.list_jql_favorites().expect("favorites list").len(),
+            1
+        );
+
+        assert!(services
+            .delete_jql_favorite(&favorite.id)
+            .expect("favorite deletes"));
+        assert!(services
+            .delete_category(&category.id)
+            .expect("category deletes"));
+    }
+
+    #[test]
+    fn exports_and_imports_backup_files_through_services() {
+        let source_services = AppServices::new(open_in_memory_database().expect("database opens"));
+        let tray = source_services
+            .create_tray(NewTray {
+                name: "File backup tray".to_string(),
+            })
+            .expect("tray creates");
+        source_services
+            .create_task(NewTask {
+                tray_id: tray.id,
+                project: "STT".to_string(),
+                area: "Bug".to_string(),
+                title: "File backup task".to_string(),
+                priority: "High".to_string(),
+                issue_type: "Bug".to_string(),
+                content_language: "Spanish".to_string(),
+            })
+            .expect("task creates");
+        let path = std::env::temp_dir().join(format!(
+            "jira-task-forge-backup-{}.json",
+            uuid::Uuid::new_v4()
+        ));
+        let path_string = path.to_string_lossy().to_string();
+
+        let export_result = source_services
+            .export_backup_file(&path_string, Some("0.1.0-test".to_string()))
+            .expect("backup exports");
+        assert_eq!(export_result.path, path_string);
+        assert!(!export_result.secrets_included);
+        assert_eq!(export_result.record_counts["trays"], 1);
+
+        let target_services = AppServices::new(open_in_memory_database().expect("database opens"));
+        let import_result = target_services
+            .import_backup_file(&path_string)
+            .expect("backup imports");
+        assert_eq!(import_result.imported_counts["trays"], 1);
+        assert_eq!(
+            target_services
+                .list_tasks()
+                .expect("tasks list")
+                .first()
+                .expect("task imported")
+                .title,
+            "File backup task"
+        );
+
+        std::fs::remove_file(path).expect("backup file cleanup");
+    }
+
+    #[test]
+    fn rejects_invalid_backup_file_inputs_through_services() {
+        let services = AppServices::new(open_in_memory_database().expect("database opens"));
+
+        assert_eq!(
+            services
+                .export_backup_file("   ", None)
+                .expect_err("empty export path rejected"),
+            "Backup path cannot be empty."
+        );
+        assert_eq!(
+            services
+                .import_backup_file("   ")
+                .expect_err("empty import path rejected"),
+            "Backup path cannot be empty."
+        );
+
+        let path = std::env::temp_dir().join(format!(
+            "jira-task-forge-invalid-backup-{}.json",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::write(&path, "not json").expect("invalid backup writes");
+
+        let error = services
+            .import_backup_file(&path.to_string_lossy())
+            .expect_err("invalid json rejected");
+        assert!(error.starts_with("Could not parse backup file:"));
+
+        std::fs::remove_file(path).expect("invalid backup cleanup");
+    }
+
+    #[test]
+    fn defaults_openai_model_when_blank() {
+        assert_eq!(openai_model_or_default(""), "gpt-4.1");
+        assert_eq!(openai_model_or_default("   "), "gpt-4.1");
+        assert_eq!(openai_model_or_default("gpt-4.1-mini"), "gpt-4.1-mini");
+        assert_eq!(openai_model_or_default("  gpt-4.1  "), "gpt-4.1");
+    }
+
+    #[test]
+    fn returns_early_openai_errors_before_keyring_or_network_work() {
+        let services = AppServices::new(open_in_memory_database().expect("database opens"));
+        services
+            .update_app_settings(AppSettings {
+                ai_provider: "None".to_string(),
+                ..AppSettings::default()
+            })
+            .expect("settings update");
+
+        assert_eq!(
+            services
+                .test_openai_connection()
+                .expect_err("provider must be OpenAI"),
+            "OpenAI provider must be selected before testing the connection."
+        );
+        assert_eq!(
+            services
+                .draft_jql_with_ai("show latest DTS issue")
+                .expect_err("provider must be OpenAI"),
+            "OpenAI provider must be selected before using Ask AI."
         );
     }
 
