@@ -57,6 +57,7 @@ import type {
   AppSettings,
   Category,
   JqlFavorite,
+  JqlRecentQuery,
   JiraConnectionTestResult,
   JiraCreateIssuesResult,
   LocalTask,
@@ -92,7 +93,8 @@ export default function App() {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>("ltask-timer");
   const [categories, setCategories] = useState<Category[]>(() => [...appData.listProjects(), ...appData.listAreas()]);
   const [jqlFavorites, setJqlFavorites] = useState<JqlFavorite[]>(() => appData.listJqlFavorites());
-  const [selectedFavoriteId, setSelectedFavoriteId] = useState(appData.listJqlFavorites()[0]?.id);
+  const [selectedFavoriteId, setSelectedFavoriteId] = useState<string | undefined>(appData.listJqlFavorites()[0]?.id);
+  const [jqlRecentQueries, setJqlRecentQueries] = useState<JqlRecentQuery[]>([]);
   const [jqlMode, setJqlMode] = useState<"direct" | "ai">("ai");
   const [jqlQuery, setJqlQuery] = useState(appData.listJqlFavorites()[0]?.jql ?? "");
   const [jqlPrompt, setJqlPrompt] = useState(defaultJqlPrompt);
@@ -584,6 +586,33 @@ export default function App() {
     }
   }
 
+  function selectJqlRecentQuery(recentQuery: JqlRecentQuery) {
+    setSelectedFavoriteId(undefined);
+    setJqlMode("direct");
+    setJqlQuery(recentQuery.jql);
+    setJqlQueryMessage(null);
+  }
+
+  function recordJqlRecentQuery(
+    query: string,
+    result: Pick<JqlRecentQuery, "status" | "resultCount">
+  ) {
+    const normalizedQuery = query.trim();
+    if (!normalizedQuery) return;
+
+    setJqlRecentQueries((currentQueries) => {
+      const nextQuery: JqlRecentQuery = {
+        id: `recent-${Date.now().toString(36)}`,
+        jql: normalizedQuery,
+        ranAt: new Date().toISOString(),
+        status: result.status,
+        resultCount: result.status === "success" ? result.resultCount : undefined
+      };
+      const dedupedQueries = currentQueries.filter((recentQuery) => recentQuery.jql.trim() !== normalizedQuery);
+      return [nextQuery, ...dedupedQueries].slice(0, 5);
+    });
+  }
+
   async function saveJqlFavorite() {
     const query = (jqlMode === "ai" ? generatedJqlPreview : jqlQuery).trim();
     if (!query) {
@@ -640,7 +669,7 @@ export default function App() {
   }
 
   async function runJqlQuery() {
-    const query = jqlMode === "ai" ? generatedJqlPreview : jqlQuery.trim();
+    const query = (jqlMode === "ai" ? generatedJqlPreview : jqlQuery).trim();
     if (!query) {
       setJqlResults([]);
       setJqlQueryMessage("JQL query is required.");
@@ -664,9 +693,11 @@ export default function App() {
             warningMessages: []
       };
       setJqlResults(queryResult.results);
+      recordJqlRecentQuery(query, { status: "success", resultCount: queryResult.results.length });
       setJqlQueryMessage(formatJqlQueryMessage(queryResult.results.length, queryResult.isLast, queryResult.warningMessages));
     } catch (error) {
       setJqlResults([]);
+      recordJqlRecentQuery(query, { status: "error" });
       setJqlQueryMessage(formatJqlQueryError(error));
     } finally {
       await waitForMinimumElapsed(loadingStartedAt, 1000);
@@ -966,9 +997,11 @@ export default function App() {
               selectedFavoriteId={selectedFavoriteId}
               setSelectedFavoriteId={selectJqlFavorite}
               favorites={jqlFavorites}
+              recentQueries={jqlRecentQueries}
               onSaveFavorite={saveJqlFavorite}
               onRenameFavorite={renameJqlFavorite}
               onDeleteFavorite={deleteJqlFavorite}
+              onSelectRecent={selectJqlRecentQuery}
               results={jqlResults}
               jqlQuery={jqlQuery}
               setJqlQuery={setJqlQuery}

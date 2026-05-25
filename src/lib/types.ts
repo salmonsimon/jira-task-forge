@@ -77,6 +77,14 @@ export type JqlFavorite = {
   jql: string;
 };
 
+export type JqlRecentQuery = {
+  id: string;
+  jql: string;
+  ranAt: string;
+  status: "success" | "error";
+  resultCount?: number;
+};
+
 export type JqlResult = {
   key: string;
   project: string;

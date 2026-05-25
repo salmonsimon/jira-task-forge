@@ -1,7 +1,7 @@
-import { Bot, Check, Loader2, Pencil, Search, Sparkles, Star, X } from "lucide-react";
+import { Bot, Check, History, Loader2, Pencil, Search, Sparkles, Star, X } from "lucide-react";
 import { useEffect, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from "react";
 import { Button, IssueTypeBadge, PriorityBadge, SegmentedControl } from "../../components/ui";
-import type { JqlFavorite, JqlResult } from "../../lib/types";
+import type { JqlFavorite, JqlRecentQuery, JqlResult } from "../../lib/types";
 import { cn } from "../../lib/utils";
 
 export function JqlView({
@@ -10,9 +10,11 @@ export function JqlView({
   selectedFavoriteId,
   setSelectedFavoriteId,
   favorites,
+  recentQueries,
   onSaveFavorite,
   onRenameFavorite,
   onDeleteFavorite,
+  onSelectRecent,
   results,
   jqlQuery,
   setJqlQuery,
@@ -28,9 +30,11 @@ export function JqlView({
   selectedFavoriteId: string | undefined;
   setSelectedFavoriteId: (id: string) => void;
   favorites: JqlFavorite[];
+  recentQueries: JqlRecentQuery[];
   onSaveFavorite: () => void | Promise<void>;
   onRenameFavorite: (favoriteId: string, name: string) => void | Promise<void>;
   onDeleteFavorite: (favoriteId: string) => void | Promise<void>;
+  onSelectRecent: (recentQuery: JqlRecentQuery) => void;
   results: JqlResult[];
   jqlQuery: string;
   setJqlQuery: (query: string) => void;
@@ -41,8 +45,8 @@ export function JqlView({
   isRunningQuery: boolean;
   queryMessage: string | null;
 }) {
-  const selectedFavorite = favorites.find((favorite) => favorite.id === selectedFavoriteId) ?? favorites[0];
-  const isCurrentQueryFavorite = favorites.some((favorite) => favorite.jql.trim() === jqlQuery.trim());
+  const selectedFavorite = favorites.find((favorite) => favorite.id === selectedFavoriteId);
+  const currentQueryFavorite = favorites.find((favorite) => favorite.jql.trim() === jqlQuery.trim());
 
   function handleRunShortcut(event: ReactKeyboardEvent<HTMLElement>) {
     if (event.defaultPrevented) return;
@@ -74,6 +78,25 @@ export function JqlView({
             />
           ))}
         </div>
+        <div className="border-t border-[#dfe1e6] px-4 py-3">
+          <div className="mb-2 flex items-center gap-2 text-sm font-semibold">
+            <History size={15} />
+            Recent
+          </div>
+          {recentQueries.length ? (
+            <div className="space-y-1">
+              {recentQueries.map((recentQuery) => (
+                <RecentQueryItem
+                  key={recentQuery.id}
+                  recentQuery={recentQuery}
+                  onSelect={() => onSelectRecent(recentQuery)}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="text-xs text-[#6b778c]">No recent queries this session</div>
+          )}
+        </div>
       </aside>
 
       <div className="min-w-0 rounded border border-[#dfe1e6] bg-white">
@@ -84,16 +107,16 @@ export function JqlView({
           </div>
           <Button
             variant="secondary"
-            icon={<Star className={isCurrentQueryFavorite ? "fill-current" : undefined} size={14} />}
+            icon={<Star className={currentQueryFavorite ? "fill-current" : undefined} size={14} />}
             onClick={() => {
-              if (selectedFavorite && selectedFavorite.jql.trim() === jqlQuery.trim()) {
-                void onDeleteFavorite(selectedFavorite.id);
+              if (currentQueryFavorite) {
+                void onDeleteFavorite(currentQueryFavorite.id);
                 return;
               }
               void onSaveFavorite();
             }}
           >
-            {selectedFavorite && selectedFavorite.jql.trim() === jqlQuery.trim() ? "Unsave favorite" : "Save favorite"}
+            {currentQueryFavorite ? "Unsave favorite" : "Save favorite"}
           </Button>
         </div>
 
@@ -185,6 +208,37 @@ export function JqlView({
       </div>
     </section>
   );
+}
+
+function RecentQueryItem({
+  recentQuery,
+  onSelect
+}: {
+  recentQuery: JqlRecentQuery;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      className="block w-full rounded px-2 py-2 text-left hover:bg-[#f4f8ff] focus:outline-none focus:ring-2 focus:ring-[#4c9aff]"
+      onClick={onSelect}
+      type="button"
+    >
+      <div className="truncate text-xs font-medium text-[#172b4d]">{recentQuery.jql}</div>
+      <div className="mt-1 text-[11px] text-[#6b778c]">{formatRecentQueryMeta(recentQuery)}</div>
+    </button>
+  );
+}
+
+function formatRecentQueryMeta(recentQuery: JqlRecentQuery) {
+  const time = new Intl.DateTimeFormat(undefined, {
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(new Date(recentQuery.ranAt));
+
+  if (recentQuery.status === "error") return `Error · ${time}`;
+
+  const resultCount = recentQuery.resultCount ?? 0;
+  return `${resultCount} ${resultCount === 1 ? "result" : "results"} · ${time}`;
 }
 
 function FavoriteListItem({
