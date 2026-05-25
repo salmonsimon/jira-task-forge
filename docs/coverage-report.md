@@ -1,23 +1,51 @@
 # Coverage Report
 
-Date: 2026-05-24
+Date: 2026-05-25
 
 Scope: Rust/Tauri backend only. The React frontend still has no automated test
 runner or coverage harness; frontend validation remains `npm run build` plus
 manual/native QA.
 
-Tooling:
+## Commands
+
+Install the coverage tool once in the WSL checkout:
 
 ```bash
 rustup component add llvm-tools-preview
 cargo install cargo-llvm-cov
-cd src-tauri
-cargo llvm-cov --summary-only
 ```
 
-## Summary
+Then measure backend coverage from the repo root:
 
-Baseline after PR #27:
+```bash
+npm run coverage:rust
+```
+
+Equivalent direct command:
+
+```bash
+cd src-tauri
+${CARGO:-$HOME/.cargo/bin/cargo} llvm-cov --summary-only
+```
+
+## Current Baseline
+
+Measured after PR #41, which added JQL Ask AI drafting and the OpenAI backend
+integration, plus the recent backup/restore, audit log, progress, JQL recent
+history, and settings work.
+
+- Tests: 61 passed
+- Line coverage: 73.60%
+- Region coverage: 72.57%
+- Function coverage: 59.03%
+
+This is the baseline for the Personal v1 quality/security stabilization pass.
+The target is to bring Rust/Tauri backend line coverage back above 80% before
+continuing with larger Jira/AI feature expansion.
+
+## Historical Baselines
+
+After PR #27:
 
 - Tests: 30 passed
 - Line coverage: 71.56%
@@ -31,13 +59,6 @@ After the first coverage pass:
 - Region coverage: 75.71%
 - Function coverage: 61.34%
 
-Delta from baseline:
-
-- +15 Rust tests
-- +4.66 percentage points line coverage
-- +4.12 percentage points region coverage
-- +7.01 percentage points function coverage
-
 After the service coverage pass:
 
 - Tests: 50 passed
@@ -45,64 +66,55 @@ After the service coverage pass:
 - Region coverage: 80.54%
 - Function coverage: 67.22%
 
-Delta from the first coverage pass:
-
-- +5 Rust tests
-- +4.45 percentage points line coverage
-- +4.83 percentage points region coverage
-- +5.88 percentage points function coverage
-
-## Final Rust Coverage By File
+## Current Rust Coverage By File
 
 | File | Line Coverage | Region Coverage | Function Coverage |
 | --- | ---: | ---: | ---: |
-| `src-tauri/src/commands.rs` | 17.26% | 26.22% | 10.81% |
-| `src-tauri/src/db.rs` | 86.36% | 80.18% | 77.78% |
-| `src-tauri/src/integrations/jira.rs` | 65.06% | 62.19% | 73.33% |
-| `src-tauri/src/jira_sync.rs` | 87.97% | 86.68% | 86.24% |
+| `src-tauri/src/backup.rs` | 73.14% | 65.13% | 68.57% |
+| `src-tauri/src/commands.rs` | 20.11% | 27.73% | 10.57% |
+| `src-tauri/src/db.rs` | 89.39% | 82.95% | 83.33% |
+| `src-tauri/src/integrations/jira.rs` | 40.06% | 41.60% | 50.00% |
+| `src-tauri/src/integrations/jira_mapping.rs` | 100.00% | 99.39% | 100.00% |
+| `src-tauri/src/integrations/openai.rs` | 34.41% | 37.72% | 41.38% |
+| `src-tauri/src/jira_sync.rs` | 86.53% | 85.25% | 85.29% |
 | `src-tauri/src/main.rs` | 0.00% | 0.00% | 0.00% |
 | `src-tauri/src/models.rs` | 100.00% | 100.00% | 100.00% |
-| `src-tauri/src/repositories.rs` | 94.87% | 92.13% | 92.54% |
-| `src-tauri/src/services.rs` | 85.92% | 82.80% | 72.97% |
-| **TOTAL** | **80.67%** | **80.54%** | **67.22%** |
+| `src-tauri/src/repositories.rs` | 93.68% | 90.02% | 92.23% |
+| `src-tauri/src/services.rs` | 60.46% | 57.39% | 41.79% |
+| `src-tauri/src/sync_audit.rs` | 97.73% | 99.26% | 100.00% |
+| **TOTAL** | **73.60%** | **72.57%** | **59.03%** |
 
-## What Improved
+## What Changed Since The Previous Report
 
-- `commands.rs`: covered issue type derivation, CSV path validation, CSV write,
-  and external-link command construction.
-- `db.rs`: covered app database creation, parent directory creation, and
-  idempotent migration recording.
-- `integrations/jira.rs`: covered hostless URL handling, non-string Jira error
-  payloads, JQL result mapping defaults, create-field mapping, encoded issue
-  browse URLs, and Unicode path segment encoding.
-- `models.rs`: covered tray state database values, unknown state rejection,
-  default Jira creation project key, and the legacy
-  `jiraSandboxProjectKey` alias.
-- `repositories.rs`: covered sync attempt/audit event persistence.
-- `services.rs`: covered local tray lifecycle, local task lifecycle, settings,
-  recovery tray creation, and early Jira validation errors before keyring or
+- New modules and larger surfaces landed without a matching deep test pass:
+  `backup.rs`, `integrations/openai.rs`, and expanded `services.rs` /
+  `commands.rs`.
+- Core persistence and sync remain strong: `repositories.rs`, `jira_sync.rs`,
+  `jira_mapping.rs`, `models.rs`, and `sync_audit.rs` are still well covered.
+- Overall line coverage dropped from 80.67% to 73.60% because the denominator
+  grew faster than test coverage.
+
+## Next Coverage Targets
+
+Raise backend line coverage above 80% by focusing on:
+
+- `integrations/openai.rs`: request payload shaping, response parsing, retry
+  classification, JSON draft validation, and redaction expectations.
+- `backup.rs`: merge/skip behavior, manifest counts, rejected secret-bearing
+  backups, malformed files, and attachment metadata handling.
+- `services.rs`: orchestration around backup/import, OpenAI/Jira settings
+  validation, JQL favorites, and early-return behavior that avoids keyring or
   network work.
-
-The pass also fixed a small URL-normalization edge case: `https://` now reports
-the useful host error instead of being transformed into a non-HTTPS-looking
-string by trailing slash trimming.
+- `commands.rs`: command boundary helpers where behavior can be tested without
+  depending on Tauri runtime state.
 
 ## Remaining Gaps
 
-- `services.rs` is now mostly covered for local-first behavior. Remaining gaps
-  are primarily OS keyring and real Jira network paths; increasing those
-  cleanly should come with explicit keyring/Jira Adapter seams rather than
-  brittle environment-dependent tests.
-- `commands.rs` remains low because Tauri `State` command wrappers are mostly
-  integration glue. More coverage would be easier after extracting command
-  worker helpers or adding Tauri command integration tests.
-- `main.rs` is untested app bootstrap. It is usually better covered by smoke
-  tests or native launch checks than unit tests.
-- Function coverage remains below 80% because `commands.rs` and `main.rs`
-  contain many wrapper/bootstrap functions that are not good unit-test targets.
-  Raising all coverage dimensions to 80% should wait for a Tauri integration
-  test harness or an explicit decision to exclude bootstrap/glue files from
-  backend coverage gates.
-- Frontend coverage is still absent. The next useful step is to add a frontend
-  test runner around domain helpers and workflow state before chasing UI
-  percentage coverage.
+- The React frontend still has no automated test runner. The next stabilization
+  PR should add a frontend test harness around workflow/domain behavior before
+  chasing UI coverage percentages.
+- `commands.rs` and `main.rs` are mostly glue/bootstrap. Do not chase high
+  function coverage there unless useful seams are extracted or a Tauri
+  integration smoke harness is added.
+- OS keyring and real Jira/OpenAI network paths should stay behind explicit
+  seams or live QA. Avoid brittle environment-dependent unit tests.
