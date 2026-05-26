@@ -455,6 +455,15 @@ document such as `docs/jira-description-format.md`.
   the Settings UI allows saving it to the OS credential store.
 - Jira and AI provider credential controls should use the same action shape:
   `Save key`, `Remove key`, and `Test connection`.
+- AI provider credential controls should include a provider-specific
+  `Create or manage key` link. Personal v1 points OpenAI to
+  `https://platform.openai.com/home`; V2 provider expansion should route Claude
+  to `https://platform.claude.com/dashboard` and Gemini to
+  `https://aistudio.google.com/api-keys` when those providers are available.
+- Claude and Gemini may appear in the Personal v1 provider selector as planned
+  V2 options with key-management links, but OpenAI remains the only active
+  provider for key storage, connection testing, and AI generation until the V2
+  provider adapters land.
 - Connection success and failure should appear as clear app-level notifications,
   not as result panels inserted into the Settings column.
 - Settings can be exported/imported without secrets.

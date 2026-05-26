@@ -74,6 +74,7 @@ pub fn run() {
             commands::import_backup,
             commands::save_csv_file,
             commands::open_atlassian_api_tokens_page,
+            commands::open_ai_provider_api_keys_page,
             commands::open_jira_issue_url
         ])
         .run(tauri::generate_context!())

@@ -10,6 +10,9 @@ use crate::services::AppServices;
 
 const ATLASSIAN_API_TOKENS_URL: &str =
     "https://id.atlassian.com/manage-profile/security/api-tokens";
+const OPENAI_API_KEYS_URL: &str = "https://platform.openai.com/home";
+const CLAUDE_API_KEYS_URL: &str = "https://platform.claude.com/dashboard";
+const GEMINI_API_KEYS_URL: &str = "https://aistudio.google.com/api-keys";
 
 async fn run_blocking_result<T, F>(worker_name: &str, work: F) -> Result<T, String>
 where
@@ -460,9 +463,28 @@ pub fn open_atlassian_api_tokens_page() -> Result<(), String> {
 }
 
 #[tauri::command]
+pub fn open_ai_provider_api_keys_page(ai_provider: String) -> Result<(), String> {
+    open_external_url(ai_provider_api_keys_url(&ai_provider)?)
+}
+
+#[tauri::command]
 pub fn open_jira_issue_url(url: String) -> Result<(), String> {
     let url = validate_jira_issue_url(&url)?;
     open_external_url(&url)
+}
+
+fn ai_provider_api_keys_url(ai_provider: &str) -> Result<&'static str, String> {
+    let normalized_provider = ai_provider.trim().to_ascii_lowercase();
+    match normalized_provider.as_str() {
+        "openai" => Ok(OPENAI_API_KEYS_URL),
+        "claude" | "anthropic" | "anthropic claude" => Ok(CLAUDE_API_KEYS_URL),
+        "gemini" | "google gemini" | "google" => Ok(GEMINI_API_KEYS_URL),
+        "none" | "" => Err("Select an AI provider before opening its API key page.".to_string()),
+        _ => Err(format!(
+            "API key page is not configured for AI provider '{}'.",
+            ai_provider.trim()
+        )),
+    }
 }
 
 fn open_external_url(url: &str) -> Result<(), String> {
@@ -559,8 +581,8 @@ mod tests {
     use std::path::Path;
 
     use super::{
-        derive_issue_type_from_area, is_wsl, platform_open_command, save_csv_file,
-        validate_jira_issue_url,
+        ai_provider_api_keys_url, derive_issue_type_from_area, is_wsl, platform_open_command,
+        save_csv_file, validate_jira_issue_url,
     };
 
     #[test]
@@ -615,6 +637,26 @@ mod tests {
             "Summary\nTask\n"
         );
         std::fs::remove_file(path).expect("csv cleanup");
+    }
+
+    #[test]
+    fn resolves_ai_provider_api_key_pages() {
+        assert_eq!(
+            ai_provider_api_keys_url("OpenAI").expect("openai url resolves"),
+            "https://platform.openai.com/home"
+        );
+        assert_eq!(
+            ai_provider_api_keys_url("Claude").expect("claude url resolves"),
+            "https://platform.claude.com/dashboard"
+        );
+        assert_eq!(
+            ai_provider_api_keys_url("Gemini").expect("gemini url resolves"),
+            "https://aistudio.google.com/api-keys"
+        );
+        assert_eq!(
+            ai_provider_api_keys_url("None").expect_err("none has no key page"),
+            "Select an AI provider before opening its API key page."
+        );
     }
 
     #[test]

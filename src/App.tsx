@@ -37,6 +37,7 @@ import {
   listPersistedTaskSyncLog,
   listPersistedTrays,
   markPersistedTasksCsvExported,
+  openPersistedAiProviderApiKeysPage,
   openPersistedAtlassianApiTokensPage,
   openPersistedJiraIssueUrl,
   renamePersistedTray,
@@ -76,6 +77,7 @@ import {
 } from "./lib/domain";
 import type {
   AppSettings,
+  AiProvider,
   BackupOperationNotice,
   Category,
   CredentialConnectionTestResult,
@@ -109,6 +111,11 @@ const defaultAppSettings: AppSettings = {
 };
 const defaultJqlPrompt = "Show me high and highest open bugs for STT, sorted by priority";
 const atlassianApiTokensUrl = "https://id.atlassian.com/manage-profile/security/api-tokens";
+const aiProviderApiKeysUrls: Partial<Record<AiProvider, string>> = {
+  OpenAI: "https://platform.openai.com/home",
+  Claude: "https://platform.claude.com/dashboard",
+  Gemini: "https://aistudio.google.com/api-keys"
+};
 
 type ConnectionNotice = {
   id: number;
@@ -660,6 +667,27 @@ export default function App() {
     window.open(atlassianApiTokensUrl, "_blank", "noopener,noreferrer");
   }
 
+  async function openAiProviderApiKeysPage() {
+    const url = aiProviderApiKeysUrls[appSettings.aiProvider];
+    if (!url) {
+      setAiCredentialMessage("Select an AI provider before opening its API key page.");
+      return;
+    }
+
+    if (usesTauriPersistence) {
+      try {
+        await openPersistedAiProviderApiKeysPage(appSettings.aiProvider);
+        return;
+      } catch {
+        setAiCredentialMessage(
+          `Could not open ${appSettings.aiProvider} automatically. Open ${url} in your browser.`
+        );
+      }
+    }
+
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
+
   function showConnectionNotice(notice: Omit<ConnectionNotice, "id">) {
     setConnectionNotice({
       ...notice,
@@ -977,6 +1005,10 @@ export default function App() {
     const prompt = jqlPrompt.trim();
     if (!prompt) {
       setJqlAiMessage("Describe the Jira issues you want to find.");
+      return;
+    }
+    if (usesTauriPersistence && appSettings.aiProvider !== "OpenAI") {
+      setJqlAiMessage("Claude and Gemini support is planned for V2. Select OpenAI to use Ask AI now.");
       return;
     }
     if (!hasOpenAiApiKey && usesTauriPersistence) {
@@ -1476,6 +1508,7 @@ export default function App() {
             onTestJiraConnection={testJiraConnection}
             onTestJiraApiToken={testJiraApiToken}
             onOpenJiraApiTokens={openJiraApiTokensPage}
+            onOpenAiProviderApiKeys={openAiProviderApiKeysPage}
             onExportBackup={exportBackup}
             onImportBackup={importBackup}
             onClose={() => setOpenPanel(null)}

@@ -2,7 +2,26 @@ import { Bot, Check, ChevronDown, Download, ExternalLink, KeyRound, Settings, Up
 import { useEffect, useRef, useState } from "react";
 import { Button, DetailBlock, LoadingOrb, PanelHeader, SegmentedControl } from "../../components/ui";
 import { getCredentialDraftControls, type CredentialDraftTestStatus } from "../../lib/domain";
-import type { AppSettings, CredentialConnectionTestResult, JiraConnectionTestResult, ThemeMode } from "../../lib/types";
+import type { AiProvider, AppSettings, CredentialConnectionTestResult, JiraConnectionTestResult, ThemeMode } from "../../lib/types";
+
+const aiProviderOptions: Array<{ label: string; value: AiProvider }> = [
+  { label: "OpenAI", value: "OpenAI" },
+  { label: "Claude", value: "Claude" },
+  { label: "Gemini", value: "Gemini" },
+  { label: "None", value: "None" }
+];
+
+const aiProviderKeyLabels: Record<Exclude<AiProvider, "None">, string> = {
+  OpenAI: "OpenAI API key",
+  Claude: "Claude API key",
+  Gemini: "Gemini API key"
+};
+
+const aiProviderKeyPlaceholders: Record<Exclude<AiProvider, "None">, string> = {
+  OpenAI: "Paste OpenAI API key",
+  Claude: "Claude support is planned for V2",
+  Gemini: "Gemini support is planned for V2"
+};
 
 export function SettingsPanel({
   settings,
@@ -22,6 +41,7 @@ export function SettingsPanel({
   onTestJiraConnection,
   onTestJiraApiToken,
   onOpenJiraApiTokens,
+  onOpenAiProviderApiKeys,
   onExportBackup,
   onImportBackup,
   onClose
@@ -43,6 +63,7 @@ export function SettingsPanel({
   onTestJiraConnection: () => Promise<JiraConnectionTestResult>;
   onTestJiraApiToken: (token: string) => Promise<JiraConnectionTestResult>;
   onOpenJiraApiTokens: () => void;
+  onOpenAiProviderApiKeys: () => void;
   onExportBackup: () => void;
   onImportBackup: () => void;
   onClose: () => void;
@@ -54,6 +75,14 @@ export function SettingsPanel({
   const [jiraTokenDraftTestStatus, setJiraTokenDraftTestStatus] = useState<CredentialDraftTestStatus>("idle");
   const [openAiApiKeyDraft, setOpenAiApiKeyDraft] = useState("");
   const [openAiKeyDraftTestStatus, setOpenAiKeyDraftTestStatus] = useState<CredentialDraftTestStatus>("idle");
+  const selectedAiProvider = settings.aiProvider === "None" ? "OpenAI" : settings.aiProvider;
+  const isOpenAiSelected = settings.aiProvider === "OpenAI";
+  const selectedAiProviderKeyLabel = settings.aiProvider === "None" ? "AI provider API key" : aiProviderKeyLabels[selectedAiProvider];
+  const selectedAiProviderPlaceholder = settings.aiProvider === "None"
+    ? "Select an AI provider"
+    : isOpenAiSelected && hasOpenAiApiKey
+    ? "Enter a new key to replace it"
+    : aiProviderKeyPlaceholders[selectedAiProvider];
   const jiraTokenDraftControls = getCredentialDraftControls({
     hasConnectionSettings: Boolean(settings.jiraSiteUrl.trim() && settings.jiraAccountEmail.trim()),
     hasSavedCredential: hasJiraApiToken,
@@ -243,41 +272,55 @@ export function SettingsPanel({
           <SettingsSelect
             label="Provider"
             value={settings.aiProvider}
-            options={[
-              { label: "OpenAI", value: "OpenAI" },
-              { label: "None", value: "None" }
-            ]}
+            options={aiProviderOptions}
             onChange={(aiProvider) => onChange({ aiProvider: aiProvider as AppSettings["aiProvider"] })}
           />
           <div className="mt-3 rounded border border-[#dfe1e6] bg-[#f7f8fa] p-3">
             <div className="mb-2 flex items-center justify-between gap-2">
               <div>
-                <div className="text-xs font-medium text-[#6b778c]">OpenAI API key</div>
+                <div className="text-xs font-medium text-[#6b778c]">{selectedAiProviderKeyLabel}</div>
                 <div className="text-sm font-medium text-[#172b4d]">
-                  {hasOpenAiApiKey ? "Credential saved" : "No credential saved"}
+                  {settings.aiProvider === "None"
+                    ? "No AI provider selected"
+                    : isOpenAiSelected
+                    ? hasOpenAiApiKey
+                      ? "Credential saved"
+                      : "No credential saved"
+                    : "Provider support planned for V2"}
                 </div>
+                {settings.aiProvider !== "None" ? (
+                  <button
+                    className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-[#0052cc] hover:underline"
+                    onClick={onOpenAiProviderApiKeys}
+                    type="button"
+                  >
+                    Create or manage key
+                    <ExternalLink size={11} />
+                  </button>
+                ) : null}
               </div>
-              <span className={`rounded px-2 py-1 text-xs font-medium ${hasOpenAiApiKey ? "bg-[#e3fcef] text-[#006644]" : "bg-[#f4f5f7] text-[#6b778c]"}`}>
-                {hasOpenAiApiKey ? "Saved" : "Missing"}
+              <span className={`rounded px-2 py-1 text-xs font-medium ${isOpenAiSelected && hasOpenAiApiKey ? "bg-[#e3fcef] text-[#006644]" : "bg-[#f4f5f7] text-[#6b778c]"}`}>
+                {settings.aiProvider === "None" ? "Off" : isOpenAiSelected ? (hasOpenAiApiKey ? "Saved" : "Missing") : "V2"}
               </span>
             </div>
             <SettingsInput
               label="New API key"
               masked
-              placeholder={hasOpenAiApiKey ? "Enter a new key to replace it" : "Paste OpenAI API key"}
+              disabled={!isOpenAiSelected}
+              placeholder={selectedAiProviderPlaceholder}
               value={openAiApiKeyDraft}
               onChange={updateOpenAiApiKeyDraft}
             />
             <div className="grid grid-cols-2 gap-2">
-              <Button className="min-w-0 whitespace-nowrap" disabled={!openAiKeyDraftControls.canSaveDraft} variant="secondary" onClick={saveOpenAiKey}>
+              <Button className="min-w-0 whitespace-nowrap" disabled={!isOpenAiSelected || !openAiKeyDraftControls.canSaveDraft} variant="secondary" onClick={saveOpenAiKey}>
                 Save key
               </Button>
-              <Button className="min-w-0 whitespace-nowrap" disabled={!hasOpenAiApiKey} variant="secondary" onClick={onDeleteOpenAiApiKey}>
+              <Button className="min-w-0 whitespace-nowrap" disabled={!isOpenAiSelected || !hasOpenAiApiKey} variant="secondary" onClick={onDeleteOpenAiApiKey}>
                 Remove key
               </Button>
               <Button
                 className="col-span-2 min-w-0 whitespace-nowrap"
-                disabled={!openAiKeyDraftControls.canTestConnection}
+                disabled={!isOpenAiSelected || !openAiKeyDraftControls.canTestConnection}
                 icon={isTestingOpenAiConnection ? <LoadingOrb size="xs" /> : undefined}
                 variant="secondary"
                 onClick={testOpenAiKeyConnection}
@@ -288,6 +331,10 @@ export function SettingsPanel({
             {openAiApiKeyDraft ? (
               <p className="mt-2 break-words text-xs leading-relaxed text-[#6b778c]">
                 {openAiKeyDraftStatusMessage(openAiKeyDraftTestStatus, openAiKeyDraftControls.hasConnectionSettings)}
+              </p>
+            ) : !isOpenAiSelected && settings.aiProvider !== "None" ? (
+              <p className="mt-2 break-words text-xs leading-relaxed text-[#6b778c]">
+                {settings.aiProvider} key storage and connection testing will use this same flow in V2. OpenAI remains the active Personal v1 provider.
               </p>
             ) : null}
             {aiCredentialMessage ? (
@@ -336,12 +383,14 @@ function openAiKeyDraftStatusMessage(status: CredentialDraftTestStatus, hasConne
 function SettingsInput({
   label,
   value,
+  disabled = false,
   masked = false,
   placeholder,
   onChange
 }: {
   label: string;
   value: string;
+  disabled?: boolean;
   masked?: boolean;
   placeholder?: string;
   onChange: (value: string) => void;
@@ -350,7 +399,8 @@ function SettingsInput({
     <label className="mb-3 block">
       <span className="mb-1 block text-xs font-medium text-[#6b778c]">{label}</span>
       <input
-        className={`h-9 w-full rounded border border-[#c1c7d0] bg-white px-2 text-sm outline-none focus:border-[#4c9aff] focus:ring-2 focus:ring-[#deebff] ${masked ? "secret-input" : ""}`}
+        className={`h-9 w-full rounded border border-[#c1c7d0] bg-white px-2 text-sm outline-none focus:border-[#4c9aff] focus:ring-2 focus:ring-[#deebff] disabled:cursor-not-allowed disabled:bg-[#f4f5f7] disabled:text-[#6b778c] ${masked ? "secret-input" : ""}`}
+        disabled={disabled}
         placeholder={placeholder}
         type="text"
         value={value}

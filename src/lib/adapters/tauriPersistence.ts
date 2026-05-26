@@ -254,6 +254,10 @@ export async function openPersistedAtlassianApiTokensPage(): Promise<void> {
   await invoke("open_atlassian_api_tokens_page");
 }
 
+export async function openPersistedAiProviderApiKeysPage(aiProvider: AppSettings["aiProvider"]): Promise<void> {
+  await invoke("open_ai_provider_api_keys_page", { aiProvider });
+}
+
 export async function openPersistedJiraIssueUrl(url: string): Promise<void> {
   await invoke("open_jira_issue_url", { url });
 }

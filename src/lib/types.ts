@@ -6,6 +6,7 @@ export type SyncStatus = "Pending" | "Failed" | "Exported" | "Created";
 export type TrayState = "Active" | "Needs attention" | "Completed" | "Archived";
 export type IssueType = "Story" | "Bug" | "Sub-task";
 export type AttachmentPurpose = "AI only" | "Jira attachment" | "AI + Jira attachment";
+export type AiProvider = "OpenAI" | "Claude" | "Gemini" | "None";
 export type PreflightWarningSeverity = "blocking" | "resolvable";
 export type PreflightWarningCode =
   | "empty-tray"
@@ -132,7 +133,7 @@ export type AppSettings = {
   jiraAccountEmail: string;
   jiraAuthMethod: "api-token" | "oauth-ready";
   jiraCreationProjectKey: string;
-  aiProvider: "OpenAI" | "None";
+  aiProvider: AiProvider;
   aiModel: string;
   defaultContentLanguage: "Spanish" | "English";
 };
