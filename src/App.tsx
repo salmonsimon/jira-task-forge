@@ -58,6 +58,7 @@ import {
   canDeleteTask,
   canDuplicateTask,
   addJqlRecentQuery,
+  canExportTrayCsv,
   classifyTrayPreflightWarnings,
   countCsvExportableTasks,
   deriveIssueTypeFromArea,
@@ -1076,25 +1077,34 @@ export default function App() {
 
   async function exportTrayCsv(tray: Tray) {
     const csvExportOptions = { includeExported: true };
-    const exportableTasks = tray.tasks.filter((task) => isEligibleForCsvExport(task, csvExportOptions));
-    const exportableCount = countCsvExportableTasks(tray.tasks, csvExportOptions);
-    if (exportableCount === 0) {
-      setCsvExportMessage("No pending, failed, or exported tasks to export.");
+    if (!canExportTrayCsv(tray, csvExportOptions)) {
+      setCsvExportMessage(
+        tray.state === "Completed"
+          ? "Completed Jira trays cannot be exported to CSV."
+          : "No pending, failed, or exported tasks to export."
+      );
       return;
     }
+    const exportableTasks = tray.tasks.filter((task) => isEligibleForCsvExport(task, csvExportOptions));
+    const exportableCount = countCsvExportableTasks(tray.tasks, csvExportOptions);
 
     const csv = exportLocalTasksToCsv(tray.tasks, { includeExported: true });
     const defaultFilename = `${toFileSlug(tray.name)}-${new Date().toISOString().slice(0, 10)}.csv`;
     const defaultPath = await getDefaultCsvExportPath(defaultFilename);
-    const path = await save({
-      defaultPath,
+    const saveOptions: {
+      defaultPath?: string;
+      filters: Array<{ name: string; extensions: string[] }>;
+    } = {
       filters: [
         {
           name: "CSV",
           extensions: ["csv"]
         }
       ]
-    });
+    };
+    if (defaultPath) saveOptions.defaultPath = defaultPath;
+
+    const path = await save(saveOptions);
 
     if (!path) {
       setCsvExportMessage("CSV export cancelled.");
@@ -1103,8 +1113,8 @@ export default function App() {
 
     try {
       await saveCsvFile(path, `\uFEFF${csv}`);
-    } catch {
-      setCsvExportMessage("CSV could not be saved.");
+    } catch (error) {
+      setCsvExportMessage(formatUnknownError(error, "CSV could not be saved."));
       return;
     }
 
@@ -1228,9 +1238,13 @@ export default function App() {
     }
   }
 
-  async function createJiraParentIssues(options: { allowMissingDescriptions: boolean }) {
+  async function createJiraParentIssues(options: { allowMissingDescriptions: boolean; includeExportedTasks: boolean }) {
     if (!jiraCreatePreflight || !usesTauriPersistence) return;
 
+    const selectedCreateableTaskCount = countJiraApiCreateableTasks(
+      jiraCreatePreflight.tray.tasks,
+      options.includeExportedTasks
+    );
     flushSync(() => {
       setIsCreatingJiraIssues(true);
       setJiraCreateResult(null);
@@ -1239,8 +1253,8 @@ export default function App() {
         syncAttemptId: null,
         step: "starting",
         label: "Starting Jira creation",
-        detail: `${jiraCreatePreflight.createableTaskCount} createable ${
-          jiraCreatePreflight.createableTaskCount === 1 ? "parent issue" : "parent issues"
+        detail: `${selectedCreateableTaskCount} createable ${
+          selectedCreateableTaskCount === 1 ? "parent issue" : "parent issues"
         }`,
         completedSteps: 0,
         totalSteps: 1,
@@ -1256,7 +1270,8 @@ export default function App() {
     try {
       const result = await createPersistedJiraParentIssues(
         jiraCreatePreflight.tray.id,
-        options.allowMissingDescriptions
+        options.allowMissingDescriptions,
+        options.includeExportedTasks
       );
       const persistedTrays = await listPersistedTrays();
       setTrays(persistedTrays);
@@ -1809,6 +1824,15 @@ function countTasksBySyncStatus(tasks: LocalTask[]): Record<LocalTask["syncStatu
   );
 }
 
+function countJiraApiCreateableTasks(tasks: LocalTask[], includeExportedTasks: boolean): number {
+  return tasks.filter(
+    (task) =>
+      task.syncStatus !== "Created" &&
+      task.issueType !== "Sub-task" &&
+      (includeExportedTasks || task.syncStatus !== "Exported")
+  ).length;
+}
+
 function toFileSlug(value: string): string {
   const slug = value
     .trim()
@@ -1819,12 +1843,17 @@ function toFileSlug(value: string): string {
   return slug || "tray";
 }
 
-async function getDefaultCsvExportPath(filename: string): Promise<string> {
+async function getDefaultCsvExportPath(filename: string): Promise<string | undefined> {
   try {
-    return await join(await downloadDir(), filename);
+    const defaultPath = await join(await downloadDir(), filename);
+    return isAbsoluteFilePath(defaultPath) ? defaultPath : undefined;
   } catch {
-    return filename;
+    return undefined;
   }
+}
+
+function isAbsoluteFilePath(path: string): boolean {
+  return path.startsWith("/") || /^[A-Za-z]:[\\/]/.test(path) || path.startsWith("\\\\");
 }
 
 function delay(milliseconds: number): Promise<void> {

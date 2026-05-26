@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { deriveTrayStateFromTasks, isTrayComplete } from "./trays";
+import { deriveTrayStateFromTasks, deriveTrayStatusTag, isTrayComplete } from "./trays";
 
 describe("tray domain helpers", () => {
   it("requires at least one created task to be complete", () => {
@@ -13,5 +13,14 @@ describe("tray domain helpers", () => {
     expect(deriveTrayStateFromTasks([{ syncStatus: "Failed" }])).toBe("Needs attention");
     expect(deriveTrayStateFromTasks([{ syncStatus: "Pending" }])).toBe("Active");
     expect(deriveTrayStateFromTasks([{ syncStatus: "Failed" }], "Archived")).toBe("Archived");
+  });
+
+  it("shows exported as a tray status tag for active trays with exported tasks", () => {
+    expect(deriveTrayStatusTag([{ syncStatus: "Exported" }])).toBe("Exported");
+    expect(deriveTrayStatusTag([{ syncStatus: "Created" }, { syncStatus: "Exported" }])).toBe("Exported");
+    expect(deriveTrayStatusTag([{ syncStatus: "Pending" }, { syncStatus: "Exported" }])).toBe("Active");
+    expect(deriveTrayStatusTag([{ syncStatus: "Created" }])).toBe("Completed");
+    expect(deriveTrayStatusTag([{ syncStatus: "Failed" }, { syncStatus: "Exported" }])).toBe("Needs attention");
+    expect(deriveTrayStatusTag([{ syncStatus: "Exported" }], "Archived")).toBe("Archived");
   });
 });

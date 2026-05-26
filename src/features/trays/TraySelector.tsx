@@ -1,6 +1,7 @@
 import { Archive, Check, FolderKanban, PanelRightOpen, Pencil, RotateCcw, Trash2, Plus, X } from "lucide-react";
 import { useState, type MouseEvent } from "react";
 import { Button, IconButton, TrayStateBadge } from "../../components/ui";
+import { deriveTrayStatusTag } from "../../lib/domain";
 import type { Tray } from "../../lib/types";
 
 export function TraySelector({
@@ -114,7 +115,7 @@ export function TraySelector({
                     </IconButton>
                   </>
                 )}
-                <TrayStateBadge state={tray.state} />
+                <TrayStateBadge state={deriveTrayStatusTag(tray.tasks, tray.state)} />
               </div>
               <div className="mt-1 text-xs text-[#6b778c]">{tray.summary}</div>
             </div>

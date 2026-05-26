@@ -265,14 +265,21 @@ impl AppServices {
         &self,
         tray_id: &str,
         allow_missing_descriptions: bool,
+        include_exported_tasks: bool,
     ) -> Result<JiraCreateIssuesResult, String> {
-        self.create_jira_parent_issues_with_progress(tray_id, allow_missing_descriptions, |_| {})
+        self.create_jira_parent_issues_with_progress(
+            tray_id,
+            allow_missing_descriptions,
+            include_exported_tasks,
+            |_| {},
+        )
     }
 
     pub fn create_jira_parent_issues_with_progress<F>(
         &self,
         tray_id: &str,
         allow_missing_descriptions: bool,
+        include_exported_tasks: bool,
         report_progress: F,
     ) -> Result<JiraCreateIssuesResult, String>
     where
@@ -295,6 +302,7 @@ impl AppServices {
             .create_parent_issues_from_tray_with_progress(
                 tray_id,
                 allow_missing_descriptions,
+                include_exported_tasks,
                 report_progress,
             )
     }
@@ -881,7 +889,7 @@ mod tests {
 
         assert_eq!(
             services
-                .create_jira_parent_issues(&tray.id, true)
+                .create_jira_parent_issues(&tray.id, true, true)
                 .expect_err("missing project key should fail"),
             "Jira creation project key is required."
         );
@@ -912,7 +920,7 @@ mod tests {
             .expect("settings update");
         assert_eq!(
             services
-                .create_jira_parent_issues(&tray.id, true)
+                .create_jira_parent_issues(&tray.id, true, true)
                 .expect_err("missing email should fail"),
             "Jira account email is required."
         );

@@ -240,11 +240,13 @@ export async function draftPersistedJqlWithAi(prompt: string): Promise<JqlAiDraf
 
 export async function createPersistedJiraParentIssues(
   trayId: string,
-  allowMissingDescriptions: boolean
+  allowMissingDescriptions: boolean,
+  includeExportedTasks: boolean
 ): Promise<JiraCreateIssuesResult> {
   return invoke<JiraCreateIssuesResult>("create_jira_parent_issues", {
     trayId,
-    allowMissingDescriptions
+    allowMissingDescriptions,
+    includeExportedTasks
   });
 }
 

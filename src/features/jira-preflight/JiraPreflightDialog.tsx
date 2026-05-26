@@ -38,18 +38,32 @@ export function JiraPreflightDialog({
   createResult: JiraCreateIssuesResult | null;
   createProgress: JiraCreateProgress | null;
   onClose: () => void;
-  onCreate: (options: { allowMissingDescriptions: boolean }) => void;
+  onCreate: (options: { allowMissingDescriptions: boolean; includeExportedTasks: boolean }) => void;
   onCreateRecoveryTray: () => void;
 }) {
   const [missingDescriptionsConfirmed, setMissingDescriptionsConfirmed] = useState(false);
+  const [exportedTasksIncluded, setExportedTasksIncluded] = useState(false);
   const blockingWarnings = preflight.warnings.filter((warning) => warning.severity === "blocking");
   const reviewWarnings = preflight.warnings.filter((warning) => warning.severity !== "blocking");
-  const hasMissingDescriptions = reviewWarnings.some((warning) => warning.code === "missing-description");
+  const exportedTaskIds = new Set(
+    preflight.tray.tasks
+      .filter((task) => task.syncStatus === "Exported" && task.issueType !== "Sub-task")
+      .map((task) => task.id)
+  );
+  const exportedDuplicateRiskCount = exportedTaskIds.size;
+  const includedWarnings = reviewWarnings.filter(
+    (warning) => exportedTasksIncluded || !warning.taskId || !exportedTaskIds.has(warning.taskId)
+  );
+  const hasMissingDescriptions = includedWarnings.some((warning) => warning.code === "missing-description");
   const needsMissingDescriptionConfirmation = hasMissingDescriptions && !missingDescriptionsConfirmed;
+  const includedCreateableTaskCount = Math.max(
+    0,
+    preflight.createableTaskCount - (exportedTasksIncluded ? 0 : exportedDuplicateRiskCount)
+  );
   const isBusy = isCreating || isCreatingRecoveryTray;
   const canCreate =
     blockingWarnings.length === 0 &&
-    preflight.createableTaskCount > 0 &&
+    includedCreateableTaskCount > 0 &&
     preflight.credentialStatus !== "checking" &&
     !needsMissingDescriptionConfirmation &&
     !isBusy;
@@ -62,6 +76,7 @@ export function JiraPreflightDialog({
 
   useEffect(() => {
     setMissingDescriptionsConfirmed(false);
+    setExportedTasksIncluded(false);
   }, [preflight.tray.id]);
 
   useEffect(() => {
@@ -98,7 +113,7 @@ export function JiraPreflightDialog({
       >
         {isCreating ? (
           <div className="absolute inset-0 z-20 flex items-center justify-center bg-[#202328]/95 px-5 backdrop-blur-[2px]">
-            <JiraCreateLoading taskCount={preflight.createableTaskCount} progress={createProgress} />
+            <JiraCreateLoading taskCount={includedCreateableTaskCount} progress={createProgress} />
           </div>
         ) : null}
 
@@ -106,7 +121,7 @@ export function JiraPreflightDialog({
           <div>
             <h2 className="text-base font-semibold text-[#f4f5f7]">Jira create preflight</h2>
             <p className="mt-1 text-xs text-[#aeb3bd]">
-              {preflight.tray.name} · {preflight.createableTaskCount} createable tasks
+              {preflight.tray.name} · {preflightTaskCountLabel(includedCreateableTaskCount, preflight.createableTaskCount, exportedDuplicateRiskCount)}
             </p>
           </div>
           <button
@@ -172,6 +187,35 @@ export function JiraPreflightDialog({
             />
           ) : null}
 
+          {exportedDuplicateRiskCount ? (
+            <button
+              aria-checked={exportedTasksIncluded}
+              className={cn(
+                "flex w-full min-w-0 items-center gap-3 rounded border border-[#7f5f01] bg-[#2f2606] px-3 py-3 text-left text-sm text-[#dfe1e6] transition hover:bg-[#3a3008] focus:outline-none focus:ring-2 focus:ring-[#579dff] focus:ring-offset-2 focus:ring-offset-[#202328]",
+                isBusy && "cursor-not-allowed opacity-60"
+              )}
+              disabled={isBusy}
+              onClick={() => setExportedTasksIncluded((currentValue) => !currentValue)}
+              role="checkbox"
+              type="button"
+            >
+              <span
+                aria-hidden="true"
+                className={cn(
+                  "flex h-5 w-5 shrink-0 items-center justify-center rounded border transition",
+                  exportedTasksIncluded
+                    ? "border-[#579dff] bg-[#0c66e4] text-white"
+                    : "border-[#9f7f18] bg-[#1f1a06] text-transparent"
+                )}
+              >
+                <Check size={14} strokeWidth={3} />
+              </span>
+              <span className="min-w-0 flex-1 leading-relaxed">
+                Include {exportedDuplicateRiskCount} previously exported {exportedDuplicateRiskCount === 1 ? "task" : "tasks"} in this Jira API run.
+              </span>
+            </button>
+          ) : null}
+
           {hasMissingDescriptions ? (
             <button
               aria-checked={missingDescriptionsConfirmed}
@@ -221,7 +265,12 @@ export function JiraPreflightDialog({
             disabled={!canCreate}
             icon={isCreating ? <Loader2 className="animate-spin" size={16} /> : undefined}
             variant={canCreate || isCreating ? "darkPrimary" : "darkSecondary"}
-            onClick={() => onCreate({ allowMissingDescriptions: missingDescriptionsConfirmed })}
+            onClick={() =>
+              onCreate({
+                allowMissingDescriptions: missingDescriptionsConfirmed,
+                includeExportedTasks: exportedTasksIncluded
+              })
+            }
           >
             {isCreating ? "Creating..." : "Create in Jira"}
           </Button>
@@ -271,6 +320,20 @@ function JiraCreateLoading({
       </div>
     </div>
   );
+}
+
+function preflightTaskCountLabel(
+  includedCreateableTaskCount: number,
+  createableTaskCount: number,
+  exportedDuplicateRiskCount: number
+): string {
+  if (!exportedDuplicateRiskCount) {
+    return `${createableTaskCount} createable ${createableTaskCount === 1 ? "task" : "tasks"}`;
+  }
+
+  return `${includedCreateableTaskCount} selected of ${createableTaskCount} createable ${
+    createableTaskCount === 1 ? "task" : "tasks"
+  }`;
 }
 
 function CreateResultSummary({

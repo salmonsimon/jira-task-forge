@@ -1,4 +1,4 @@
-import type { LocalTask, SyncStatus } from "../types";
+import type { LocalTask, SyncStatus, TrayState } from "../types";
 
 export type LocalTaskCsvExportOptions = {
   includeExported?: boolean;
@@ -55,4 +55,11 @@ export function countCsvExportableTasks(
   options: LocalTaskCsvExportOptions = {}
 ): number {
   return tasks.filter((task) => isEligibleForCsvExport(task, options)).length;
+}
+
+export function canExportTrayCsv(
+  tray: { state: TrayState; tasks: Pick<LocalTask, "syncStatus">[] },
+  options: LocalTaskCsvExportOptions = {}
+): boolean {
+  return tray.state !== "Completed" && countCsvExportableTasks(tray.tasks, options) > 0;
 }
