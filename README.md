@@ -13,8 +13,8 @@ favorites/recent history, AI-assisted JQL drafting through the Tauri backend,
 sync audit activity, and a guarded `Create in Jira` flow that creates required
 epics plus parent Story/Bug issues.
 
-It does not yet create sub-tasks, upload real attachments, or validate the Jira
-CSV upload fallback after API creation.
+It does not yet create sub-tasks, upload real attachments, or validate manual
+Jira admin CSV import after API creation.
 
 ## Stack
 
