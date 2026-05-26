@@ -4,81 +4,27 @@ import type {
   AppSettings,
   AssistedDescriptionDraft,
   Category,
-  IssueType,
   JqlAiDraft,
   JiraCreateIssuesResult,
   JiraConnectionTestResult,
   JqlFavorite,
   JqlQueryResult,
   LocalTask,
-  Priority,
   SyncLogEntry,
-  SyncStatus,
-  Tray,
-  TrayState
+  Tray
 } from "../types";
-
-type BackendTray = {
-  id: string;
-  name: string;
-  state: "Active" | "NeedsAttention" | "Completed" | "Archived";
-  created_at: string;
-  updated_at: string;
-  archived_at: string | null;
-};
-
-type BackendTask = {
-  id: string;
-  tray_id: string;
-  project: string;
-  area: string;
-  title: string;
-  priority: Priority;
-  issue_type: IssueType;
-  sync_status: SyncStatus;
-  description_status: "Ready" | "Missing" | "Draft";
-  description: string | null;
-  content_language: "Spanish" | "English";
-  jira_key: string | null;
-  jira_url: string | null;
-  epic_key: string | null;
-  parent_task_id: string | null;
-  task_order: number;
-  created_at: string;
-  updated_at: string;
-};
-
-type BackendCategory = {
-  id: string;
-  category_type: "project" | "area";
-  name: string;
-  source: "local" | "jira";
-  hidden: boolean;
-  ignored: boolean;
-  created_at: string;
-  updated_at: string;
-};
-
-type BackendJqlFavorite = {
-  id: string;
-  name: string;
-  jql: string;
-  created_at: string;
-  updated_at: string;
-};
-
-type BackendSyncAuditEvent = {
-  id: string;
-  syncAttemptId: string | null;
-  trayId: string | null;
-  taskId: string | null;
-  eventType: string;
-  occurredAt: string;
-  outcome: string;
-  provider: string | null;
-  operation: string | null;
-  detail: unknown;
-};
+import {
+  mapBackendCategory as mapCategory,
+  mapBackendJqlFavorite as mapJqlFavorite,
+  mapBackendSyncAuditEvent as mapSyncAuditEvent,
+  mapBackendTask as mapTask,
+  mapBackendTray as mapTray,
+  type BackendCategory,
+  type BackendJqlFavorite,
+  type BackendSyncAuditEvent,
+  type BackendTask,
+  type BackendTray
+} from "./tauriContracts";
 
 export type PersistedBackupExportResult = {
   path: string;
@@ -382,132 +328,6 @@ export async function importPersistedBackup(path: string): Promise<PersistedBack
 
 export async function saveCsvFile(path: string, contents: string): Promise<void> {
   await invoke("save_csv_file", { path, contents });
-}
-
-function mapTask(task: BackendTask): LocalTask {
-  return {
-    id: task.id,
-    project: task.project,
-    area: task.area,
-    title: task.title,
-    priority: task.priority,
-    issueType: task.issue_type,
-    syncStatus: task.sync_status,
-    descriptionStatus: task.description_status,
-    description: task.description ?? undefined,
-    language: task.content_language,
-    jiraKey: task.jira_key ?? undefined,
-    jiraUrl: task.jira_url ?? undefined,
-    epic: task.epic_key ?? undefined,
-    parentTaskId: task.parent_task_id ?? undefined
-  };
-}
-
-function mapCategory(category: BackendCategory): Category {
-  return {
-    id: category.id,
-    categoryType: category.category_type,
-    name: category.name,
-    source: category.source,
-    hidden: category.hidden
-  };
-}
-
-function mapJqlFavorite(favorite: BackendJqlFavorite): JqlFavorite {
-  return {
-    id: favorite.id,
-    name: favorite.name,
-    jql: favorite.jql
-  };
-}
-
-function mapSyncAuditEvent(event: BackendSyncAuditEvent): SyncLogEntry {
-  return {
-    id: event.id,
-    timestamp: formatTimestamp(event.occurredAt),
-    event: formatAuditEventTitle(event),
-    detail: formatAuditEventDetail(event.detail)
-  };
-}
-
-function mapTray(tray: BackendTray, tasks: LocalTask[]): Tray {
-  return {
-    id: tray.id,
-    name: tray.name,
-    state: mapTrayState(tray.state),
-    summary: summarizeTrayTasks(tasks),
-    updatedAt: formatTimestamp(tray.updated_at),
-    tasks
-  };
-}
-
-function formatAuditEventTitle(event: BackendSyncAuditEvent): string {
-  const eventName = event.eventType
-    .replace(/^jira\./, "")
-    .split(".")
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-  const outcome = event.outcome.charAt(0).toUpperCase() + event.outcome.slice(1);
-  return `${outcome}: ${eventName}`;
-}
-
-function formatAuditEventDetail(detail: unknown): string {
-  if (!detail || typeof detail !== "object") return "";
-  const value = detail as Record<string, unknown>;
-
-  if (typeof value.message === "string") return value.message;
-  if (Array.isArray(value.messages)) return value.messages.filter((message) => typeof message === "string").join(" ");
-
-  const summaryParts = [
-    typeof value.jiraKey === "string" ? value.jiraKey : null,
-    typeof value.summary === "string" ? value.summary : null,
-    typeof value.priority === "string" ? `Priority ${value.priority}` : null,
-    typeof value.source === "string" ? `Source ${value.source}` : null
-  ].filter(Boolean);
-
-  return summaryParts.length ? summaryParts.join(" · ") : "No additional details.";
-}
-
-function mapTrayState(state: BackendTray["state"]): TrayState {
-  if (state === "NeedsAttention") return "Needs attention";
-  return state;
-}
-
-function formatTimestamp(timestamp: string): string {
-  const parsed = new Date(timestamp);
-  if (Number.isNaN(parsed.getTime())) return timestamp;
-
-  return parsed.toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit"
-  });
-}
-
-function summarizeTrayTasks(tasks: LocalTask[]): string {
-  const parentTasks = tasks.filter((task) => task.issueType !== "Sub-task" && !task.parentTaskId);
-  const subtaskCount = tasks.length - parentTasks.length;
-  if (parentTasks.length === 0 && subtaskCount === 0) return "No tasks";
-
-  const counts = parentTasks.reduce(
-    (summary, task) => {
-      summary[task.syncStatus] += 1;
-      return summary;
-    },
-    { Pending: 0, Failed: 0, Exported: 0, Created: 0 } satisfies Record<LocalTask["syncStatus"], number>
-  );
-
-  return [
-    `${parentTasks.length} ${parentTasks.length === 1 ? "task" : "tasks"}`,
-    subtaskCount ? `${subtaskCount} ${subtaskCount === 1 ? "sub-task" : "sub-tasks"}` : null,
-    counts.Pending ? `${counts.Pending} pending` : null,
-    counts.Failed ? `${counts.Failed} failed` : null,
-    counts.Exported ? `${counts.Exported} exported` : null,
-    counts.Created ? `${counts.Created} created` : null
-  ]
-    .filter(Boolean)
-    .join(" · ");
 }
 
 function normalizeAppSettings(settings: AppSettings): AppSettings {

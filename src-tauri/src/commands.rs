@@ -2,18 +2,16 @@ use std::{path::Path, process::Command};
 use tauri::{AppHandle, Emitter, State};
 
 use crate::backup::{BackupExportResult, BackupImportResult};
+use crate::integrations::ai::ai_provider_api_key_page_url;
 use crate::models::{
     AppSettings, AssistedDescriptionDraft, Category, JiraConnectionTestResult,
-    JiraCreateIssuesResult, JqlAiDraft, JqlFavorite, JqlSearchResponse, LocalTask, NewTask,
-    NewSubtask, NewTray, SyncAuditEvent, Tray,
+    JiraCreateIssuesResult, JqlAiDraft, JqlFavorite, JqlSearchResponse, LocalTask, NewSubtask,
+    NewTask, NewTray, SyncAuditEvent, Tray,
 };
 use crate::services::AppServices;
 
 const ATLASSIAN_API_TOKENS_URL: &str =
     "https://id.atlassian.com/manage-profile/security/api-tokens";
-const OPENAI_API_KEYS_URL: &str = "https://platform.openai.com/home";
-const CLAUDE_API_KEYS_URL: &str = "https://platform.claude.com/dashboard";
-const GEMINI_API_KEYS_URL: &str = "https://aistudio.google.com/api-keys";
 
 async fn run_blocking_result<T, F>(worker_name: &str, work: F) -> Result<T, String>
 where
@@ -549,17 +547,7 @@ pub fn open_jira_issue_url(url: String) -> Result<(), String> {
 }
 
 fn ai_provider_api_keys_url(ai_provider: &str) -> Result<&'static str, String> {
-    let normalized_provider = ai_provider.trim().to_ascii_lowercase();
-    match normalized_provider.as_str() {
-        "openai" => Ok(OPENAI_API_KEYS_URL),
-        "claude" | "anthropic" | "anthropic claude" => Ok(CLAUDE_API_KEYS_URL),
-        "gemini" | "google gemini" | "google" | "google ai studio" => Ok(GEMINI_API_KEYS_URL),
-        "none" | "" => Err("Select an AI provider before opening its API key page.".to_string()),
-        _ => Err(format!(
-            "API key page is not configured for AI provider '{}'.",
-            ai_provider.trim()
-        )),
-    }
+    ai_provider_api_key_page_url(ai_provider)
 }
 
 fn open_external_url(url: &str) -> Result<(), String> {

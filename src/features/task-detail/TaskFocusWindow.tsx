@@ -1,6 +1,7 @@
 import { Check, ChevronDown, Image, Link2, Loader2, Pencil, Plus, Settings, Sparkles, Trash2, X } from "lucide-react";
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { Button, DescriptionBadge, IconButton, IssueTypeBadge, PriorityBadge, SyncBadge } from "../../components/ui";
+import { appOverlayLayers, useAppOverlay } from "../../lib/app-overlays";
 import { isTaskReadOnly } from "../../lib/domain";
 import type { AssistedDescriptionDraft, LocalTask, Priority } from "../../lib/types";
 
@@ -206,18 +207,17 @@ export function TaskFocusWindow({
     }
   }
 
-  useEffect(() => {
-    function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === "Escape" && !descriptionProposal) {
-        const target = event.target as Element | null;
-        if (target?.closest("[data-description-editor]")) return;
-        onClose();
-      }
+  const overlay = useAppOverlay({
+    layer: appOverlayLayers.focusedTask,
+    onDismiss: onClose,
+    dismissOnEscape: true,
+    dismissOnBackdrop: true,
+    lockScroll: true,
+    shouldDismiss: (reason, event) => {
+      if (reason !== "escape") return true;
+      return !(event?.target instanceof Element && event.target.closest("[data-description-editor]"));
     }
-
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [descriptionProposal, onClose]);
+  });
 
   const showAiDescriptionEditor = !readOnly && descriptionEditorMode === "ai";
   const showManualDescriptionEditor = !readOnly && descriptionEditorMode === "manual";
@@ -226,14 +226,11 @@ export function TaskFocusWindow({
   return (
     <div
       className="fixed inset-0 z-40 bg-[#091e42]/60 px-8 py-8 backdrop-blur-[1px]"
-      onPointerDown={(event) => {
-        event.stopPropagation();
-        if (event.target === event.currentTarget) onClose();
-      }}
+      {...overlay.backdropProps}
     >
       <section
         className="mx-auto flex h-full max-h-[900px] w-full max-w-[1240px] overflow-hidden rounded border border-[#3b4454] bg-[#2b2d31] text-[#dfe1e6] shadow-2xl"
-        onPointerDown={(event) => event.stopPropagation()}
+        {...overlay.surfaceProps}
       >
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="flex items-center justify-between border-b border-[#454852] px-7 py-4">
@@ -625,30 +622,21 @@ function DescriptionProposalDialog({
   proposedDescription: string;
   taskTitle: string;
 }) {
-  useEffect(() => {
-    function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        event.stopPropagation();
-        onClose();
-      }
-    }
-
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [onClose]);
+  const overlay = useAppOverlay({
+    layer: appOverlayLayers.nestedModal,
+    onDismiss: onClose,
+    dismissOnEscape: true,
+    dismissOnBackdrop: true
+  });
 
   return (
     <div
       className="fixed inset-0 z-50 bg-[#091e42]/70 px-4 py-6 backdrop-blur-sm"
-      onPointerDown={(event) => {
-        event.stopPropagation();
-        if (event.target === event.currentTarget) onClose();
-      }}
+      {...overlay.backdropProps}
     >
       <section
         className="mx-auto flex h-full max-h-[840px] w-full max-w-[980px] flex-col overflow-hidden rounded border border-[#5d6470] bg-[#25272c] text-[#dfe1e6] shadow-2xl"
-        onPointerDown={(event) => event.stopPropagation()}
+        {...overlay.surfaceProps}
       >
         <div className="flex items-start justify-between gap-4 border-b border-[#454852] px-5 py-4">
           <div className="min-w-0">
