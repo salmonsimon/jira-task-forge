@@ -1,10 +1,11 @@
-import { Check, ChevronDown, Image, Link2, Settings, Sparkles, X } from "lucide-react";
+import { Check, ChevronDown, Image, Link2, Loader2, Pencil, Settings, Sparkles, X } from "lucide-react";
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { Button, DescriptionBadge, IconButton, IssueTypeBadge, PriorityBadge, SyncBadge } from "../../components/ui";
 import { isTaskReadOnly } from "../../lib/domain";
 import type { AssistedDescriptionDraft, LocalTask, Priority } from "../../lib/types";
 
 const priorities: Priority[] = ["Highest", "High", "Medium", "Low", "Lowest"];
+type DescriptionEditorMode = "hidden" | "ai" | "manual";
 
 export function TaskFocusWindow({
   task,
@@ -13,7 +14,7 @@ export function TaskFocusWindow({
   readOnly: forceReadOnly = false,
   onUpdateDetails,
   onGenerateDescription,
-  onApplyDescriptionProposal,
+  onSaveDescription,
   onOpenJiraIssue,
   onClose,
   isGeneratingDescription = false
@@ -24,34 +25,61 @@ export function TaskFocusWindow({
   readOnly?: boolean;
   onUpdateDetails: (taskId: string, task: { project: string; area: string; priority: Priority }) => void | Promise<void>;
   onGenerateDescription: (taskId: string, additionalContext: string) => Promise<AssistedDescriptionDraft>;
-  onApplyDescriptionProposal: (taskId: string, description: string) => void | Promise<void>;
+  onSaveDescription: (taskId: string, description: string) => void | Promise<void>;
   onOpenJiraIssue: (url: string) => void | Promise<void>;
   onClose: () => void;
   isGeneratingDescription?: boolean;
 }) {
   const readOnly = forceReadOnly || isTaskReadOnly(task);
+  const hasDescription = Boolean(task.description?.trim());
+  const [descriptionEditorMode, setDescriptionEditorMode] = useState<DescriptionEditorMode>(() =>
+    hasDescription ? "hidden" : "ai"
+  );
   const [descriptionContext, setDescriptionContext] = useState("");
   const [descriptionMessage, setDescriptionMessage] = useState<string | null>(null);
   const [clarificationQuestions, setClarificationQuestions] = useState<string[]>([]);
   const [descriptionProposal, setDescriptionProposal] = useState<string | null>(null);
   const [isApplyingDescriptionProposal, setIsApplyingDescriptionProposal] = useState(false);
+  const [manualDescriptionDraft, setManualDescriptionDraft] = useState(task.description ?? "");
+  const [manualDescriptionMessage, setManualDescriptionMessage] = useState<string | null>(null);
+  const [isSavingManualDescription, setIsSavingManualDescription] = useState(false);
 
   useEffect(() => {
+    setDescriptionEditorMode(task.description?.trim() ? "hidden" : "ai");
     setDescriptionContext("");
     setDescriptionMessage(null);
     setClarificationQuestions([]);
     setDescriptionProposal(null);
     setIsApplyingDescriptionProposal(false);
+    setManualDescriptionDraft(task.description ?? "");
+    setManualDescriptionMessage(null);
+    setIsSavingManualDescription(false);
   }, [task.id]);
 
   function cancelDescriptionContext() {
     setDescriptionContext("");
     setDescriptionMessage(null);
     setClarificationQuestions([]);
+    if (task.description?.trim()) setDescriptionEditorMode("hidden");
+  }
+
+  function openAiDescriptionEditor() {
+    setDescriptionEditorMode("ai");
+    setDescriptionMessage(null);
+    setClarificationQuestions([]);
+    setManualDescriptionMessage(null);
+  }
+
+  function openManualDescriptionEditor() {
+    setDescriptionEditorMode("manual");
+    setManualDescriptionDraft(task.description ?? "");
+    setManualDescriptionMessage(null);
+    setDescriptionMessage(null);
+    setClarificationQuestions([]);
   }
 
   async function generateDescription() {
-    if (readOnly) return;
+    if (readOnly || isGeneratingDescription) return;
     setDescriptionMessage("Generating description...");
     setClarificationQuestions([]);
 
@@ -79,8 +107,9 @@ export function TaskFocusWindow({
 
     setIsApplyingDescriptionProposal(true);
     try {
-      await onApplyDescriptionProposal(task.id, descriptionProposal);
+      await onSaveDescription(task.id, descriptionProposal);
       setDescriptionProposal(null);
+      setDescriptionEditorMode("hidden");
       setDescriptionContext("");
       setDescriptionMessage(null);
       setClarificationQuestions([]);
@@ -92,9 +121,68 @@ export function TaskFocusWindow({
     }
   }
 
+  function cancelManualDescriptionEdit() {
+    setManualDescriptionDraft(task.description ?? "");
+    setManualDescriptionMessage(null);
+    setDescriptionEditorMode(task.description?.trim() ? "hidden" : "ai");
+  }
+
+  async function saveManualDescription() {
+    if (readOnly || isSavingManualDescription) return;
+
+    const nextDescription = manualDescriptionDraft.trim();
+    if (!nextDescription) {
+      setManualDescriptionMessage("Description cannot be empty.");
+      return;
+    }
+
+    setIsSavingManualDescription(true);
+    setManualDescriptionMessage(null);
+    try {
+      await onSaveDescription(task.id, nextDescription);
+      setDescriptionEditorMode("hidden");
+    } catch (error) {
+      setManualDescriptionMessage(error instanceof Error ? error.message : "Could not save the description.");
+    } finally {
+      setIsSavingManualDescription(false);
+    }
+  }
+
+  function handleDescriptionContextKeyDown(event: ReactKeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+      event.preventDefault();
+      event.stopPropagation();
+      void generateDescription();
+      return;
+    }
+
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      cancelDescriptionContext();
+    }
+  }
+
+  function handleManualDescriptionKeyDown(event: ReactKeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+      event.preventDefault();
+      event.stopPropagation();
+      void saveManualDescription();
+      return;
+    }
+
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      cancelManualDescriptionEdit();
+    }
+  }
+
   useEffect(() => {
     function closeOnEscape(event: KeyboardEvent) {
       if (event.key === "Escape" && !descriptionProposal) {
+        const target = event.target as Element | null;
+        if (target?.closest("[data-description-editor]")) return;
         onClose();
       }
     }
@@ -102,6 +190,10 @@ export function TaskFocusWindow({
     window.addEventListener("keydown", closeOnEscape);
     return () => window.removeEventListener("keydown", closeOnEscape);
   }, [descriptionProposal, onClose]);
+
+  const showAiDescriptionEditor = !readOnly && descriptionEditorMode === "ai";
+  const showManualDescriptionEditor = !readOnly && descriptionEditorMode === "manual";
+  const manualDescriptionHasChanges = manualDescriptionDraft.trim() !== (task.description ?? "").trim();
 
   return (
     <div
@@ -165,7 +257,44 @@ export function TaskFocusWindow({
             </h2>
 
             <FocusSection title="Description">
-              {task.description ? (
+              {hasDescription && !readOnly ? (
+                <div className="mb-3 flex justify-end gap-2">
+                  <IconButton title="Edit description" onClick={openManualDescriptionEditor}>
+                    <Pencil size={15} />
+                  </IconButton>
+                  <Button variant="darkSecondary" icon={<Sparkles size={14} />} onClick={openAiDescriptionEditor}>
+                    AI
+                  </Button>
+                </div>
+              ) : null}
+              {hasDescription && showAiDescriptionEditor ? (
+                <DescriptionAiContextPanel
+                  clarificationQuestions={clarificationQuestions}
+                  descriptionContext={descriptionContext}
+                  descriptionMessage={descriptionMessage}
+                  isGeneratingDescription={isGeneratingDescription}
+                  onCancel={cancelDescriptionContext}
+                  onChange={setDescriptionContext}
+                  onGenerate={() => {
+                    void generateDescription();
+                  }}
+                  onKeyDown={handleDescriptionContextKeyDown}
+                />
+              ) : null}
+              {showManualDescriptionEditor ? (
+                <ManualDescriptionEditor
+                  draft={manualDescriptionDraft}
+                  hasChanges={manualDescriptionHasChanges}
+                  isSaving={isSavingManualDescription}
+                  message={manualDescriptionMessage}
+                  onCancel={cancelManualDescriptionEdit}
+                  onChange={setManualDescriptionDraft}
+                  onKeyDown={handleManualDescriptionKeyDown}
+                  onSave={() => {
+                    void saveManualDescription();
+                  }}
+                />
+              ) : task.description ? (
                 <pre className="whitespace-pre-wrap text-sm leading-relaxed text-[#dfe1e6]">{task.description}</pre>
               ) : (
                 <div className="text-sm text-[#aeb3bd]">
@@ -173,52 +302,19 @@ export function TaskFocusWindow({
                   {task.notes ? <div className="mt-2 text-[#dfe1e6]">{task.notes}</div> : null}
                 </div>
               )}
-              {!readOnly ? (
-                <div className="mt-4 overflow-hidden rounded border border-[#454852] bg-[#25272c]">
-                  <div className="flex items-center justify-between border-b border-[#454852] px-3 py-2">
-                    <div className="inline-flex items-center gap-2 text-sm font-semibold text-[#f4f5f7]">
-                      <Sparkles size={14} className="text-[#85b8ff]" />
-                      AI context
-                    </div>
-                  </div>
-                  <textarea
-                    className="min-h-[150px] w-full resize-y border-0 bg-[#1f2126] p-3 text-sm leading-relaxed text-[#dfe1e6] outline-none placeholder:text-[#7f858f] focus:ring-2 focus:ring-inset focus:ring-[#85b8ff]"
-                    value={descriptionContext}
-                    onChange={(event) => setDescriptionContext(event.target.value)}
-                    placeholder="Add behavior, constraints, expected validation, or answers to the questions below."
-                  />
-                  {descriptionMessage ? (
-                    <div className="border-t border-[#454852] px-3 py-2 text-xs leading-relaxed text-[#aeb3bd]">{descriptionMessage}</div>
-                  ) : null}
-                  {clarificationQuestions.length ? (
-                    <div className="border-t border-[#454852] bg-[#22252a] px-3 py-2 text-sm text-[#dfe1e6]">
-                      <div className="mb-2 text-xs font-semibold text-[#aeb3bd]">Clarification questions</div>
-                      <ul className="space-y-1">
-                        {clarificationQuestions.map((question) => (
-                          <li className="flex gap-2" key={question}>
-                            <span className="text-[#85b8ff]">-</span>
-                            <span>{question}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ) : null}
-                  <div className="flex justify-end gap-2 border-t border-[#454852] px-3 py-3">
-                    <Button disabled={isGeneratingDescription} variant="darkSecondary" onClick={cancelDescriptionContext}>
-                      Cancel
-                    </Button>
-                    <Button
-                      disabled={isGeneratingDescription}
-                      variant="darkPrimary"
-                      icon={<Sparkles size={14} />}
-                      onClick={() => {
-                        void generateDescription();
-                      }}
-                    >
-                      {isGeneratingDescription ? "Generating" : "Generate"}
-                    </Button>
-                  </div>
-                </div>
+              {!hasDescription && showAiDescriptionEditor ? (
+                <DescriptionAiContextPanel
+                  clarificationQuestions={clarificationQuestions}
+                  descriptionContext={descriptionContext}
+                  descriptionMessage={descriptionMessage}
+                  isGeneratingDescription={isGeneratingDescription}
+                  onCancel={cancelDescriptionContext}
+                  onChange={setDescriptionContext}
+                  onGenerate={() => {
+                    void generateDescription();
+                  }}
+                  onKeyDown={handleDescriptionContextKeyDown}
+                />
               ) : null}
             </FocusSection>
 
@@ -308,6 +404,125 @@ export function TaskFocusWindow({
   );
 }
 
+function DescriptionAiContextPanel({
+  clarificationQuestions,
+  descriptionContext,
+  descriptionMessage,
+  isGeneratingDescription,
+  onCancel,
+  onChange,
+  onGenerate,
+  onKeyDown
+}: {
+  clarificationQuestions: string[];
+  descriptionContext: string;
+  descriptionMessage: string | null;
+  isGeneratingDescription: boolean;
+  onCancel: () => void;
+  onChange: (value: string) => void;
+  onGenerate: () => void;
+  onKeyDown: (event: ReactKeyboardEvent<HTMLTextAreaElement>) => void;
+}) {
+  return (
+    <div className="relative mt-4 overflow-hidden rounded border border-[#454852] bg-[#25272c]" data-description-editor>
+      {isGeneratingDescription ? (
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#1f2126]/80 px-4 text-sm font-medium text-[#dfe1e6] backdrop-blur-[2px]">
+          <span className="inline-flex items-center gap-2 rounded border border-[#454852] bg-[#25272c] px-4 py-3 shadow-xl">
+            <Loader2 className="animate-spin text-[#85b8ff]" size={16} />
+            Generating description proposal...
+          </span>
+        </div>
+      ) : null}
+      <div className="flex items-center justify-between border-b border-[#454852] px-3 py-2">
+        <div className="inline-flex items-center gap-2 text-sm font-semibold text-[#f4f5f7]">
+          <Sparkles size={14} className="text-[#85b8ff]" />
+          Description prompt
+        </div>
+      </div>
+      <textarea
+        className="min-h-[150px] w-full resize-y border-0 bg-[#1f2126] p-3 text-sm leading-relaxed text-[#dfe1e6] outline-none placeholder:text-[#7f858f] focus:ring-2 focus:ring-inset focus:ring-[#85b8ff]"
+        disabled={isGeneratingDescription}
+        onChange={(event) => onChange(event.target.value)}
+        onKeyDown={onKeyDown}
+        placeholder="Describe what should be built, fixed, or validated. The AI will combine this note with the task title, project, area, and your description preferences to draft a Jira-ready proposal."
+        value={descriptionContext}
+      />
+      {descriptionMessage ? (
+        <div className="border-t border-[#454852] px-3 py-2 text-xs leading-relaxed text-[#aeb3bd]">{descriptionMessage}</div>
+      ) : null}
+      {clarificationQuestions.length ? (
+        <div className="border-t border-[#454852] bg-[#22252a] px-3 py-2 text-sm text-[#dfe1e6]">
+          <div className="mb-2 text-xs font-semibold text-[#aeb3bd]">Clarification questions</div>
+          <ul className="space-y-1">
+            {clarificationQuestions.map((question) => (
+              <li className="flex gap-2" key={question}>
+                <span className="text-[#85b8ff]">-</span>
+                <span>{question}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      <div className="flex justify-end gap-2 border-t border-[#454852] px-3 py-3">
+        <Button disabled={isGeneratingDescription} variant="darkSecondary" onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button disabled={isGeneratingDescription} variant="darkPrimary" icon={<Sparkles size={14} />} onClick={onGenerate}>
+          Generate
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function ManualDescriptionEditor({
+  draft,
+  hasChanges,
+  isSaving,
+  message,
+  onCancel,
+  onChange,
+  onKeyDown,
+  onSave
+}: {
+  draft: string;
+  hasChanges: boolean;
+  isSaving: boolean;
+  message: string | null;
+  onCancel: () => void;
+  onChange: (value: string) => void;
+  onKeyDown: (event: ReactKeyboardEvent<HTMLTextAreaElement>) => void;
+  onSave: () => void;
+}) {
+  return (
+    <div className="overflow-hidden rounded border border-[#454852] bg-[#25272c]" data-description-editor>
+      <div className="flex items-center justify-between border-b border-[#454852] px-3 py-2">
+        <div className="inline-flex items-center gap-2 text-sm font-semibold text-[#f4f5f7]">
+          <Pencil size={14} className="text-[#85b8ff]" />
+          Edit description
+        </div>
+      </div>
+      <textarea
+        autoFocus
+        className="min-h-[420px] w-full resize-y border-0 bg-[#1f2126] p-3 font-mono text-sm leading-relaxed text-[#dfe1e6] outline-none placeholder:text-[#7f858f] focus:ring-2 focus:ring-inset focus:ring-[#85b8ff]"
+        disabled={isSaving}
+        onChange={(event) => onChange(event.target.value)}
+        onKeyDown={onKeyDown}
+        value={draft}
+      />
+      {message ? <div className="border-t border-[#454852] px-3 py-2 text-sm text-[#ffb4a8]">{message}</div> : null}
+      <div className="flex justify-end gap-2 border-t border-[#454852] px-3 py-3">
+        <Button disabled={isSaving} variant="darkSecondary" onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button disabled={isSaving || !hasChanges || !draft.trim()} variant="darkPrimary" icon={isSaving ? <Loader2 className="animate-spin" size={14} /> : <Check size={14} />} onClick={onSave}>
+          {isSaving ? "Saving" : "Save"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function DescriptionProposalDialog({
   currentDescription,
   isApplying,
@@ -353,7 +568,6 @@ function DescriptionProposalDialog({
             <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-[#f4f5f7]">
               <Sparkles size={16} className="text-[#85b8ff]" />
               AI proposal review
-              <span className="rounded bg-[#1d3b66] px-2 py-1 text-xs font-medium text-[#85b8ff]">Proposal Ready</span>
             </div>
             <p className="mt-1 truncate text-sm text-[#aeb3bd]">{taskTitle}</p>
           </div>
@@ -367,27 +581,6 @@ function DescriptionProposalDialog({
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#454852] px-3 py-2">
               <div className="flex min-w-0 flex-wrap items-center gap-2">
                 <span className="font-medium text-[#f4f5f7]">Description</span>
-                <span className="rounded bg-[#1d3b66] px-2 py-1 text-xs font-medium text-[#85b8ff]">Pending</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <button
-                  className="inline-flex h-7 w-7 items-center justify-center rounded text-[#7ee2a8] transition hover:bg-[#183f2e] disabled:cursor-not-allowed disabled:opacity-50"
-                  disabled={isApplying}
-                  onClick={onAccept}
-                  title="Accept proposal"
-                  type="button"
-                >
-                  <Check size={14} />
-                </button>
-                <button
-                  className="inline-flex h-7 w-7 items-center justify-center rounded text-[#ffb4a8] transition hover:bg-[#5d1f1a] disabled:cursor-not-allowed disabled:opacity-50"
-                  disabled={isApplying}
-                  onClick={onClose}
-                  title="Reject proposal"
-                  type="button"
-                >
-                  <X size={14} />
-                </button>
               </div>
             </div>
             <div className="bg-[#1f2126] font-mono text-xs leading-5">
@@ -407,7 +600,12 @@ function DescriptionProposalDialog({
           <Button disabled={isApplying} icon={<X size={14} />} onClick={onClose} variant="darkSecondary">
             Reject
           </Button>
-          <Button disabled={isApplying} icon={<Check size={14} />} onClick={onAccept} variant="darkPrimary">
+          <Button
+            disabled={isApplying}
+            icon={isApplying ? <Loader2 className="animate-spin" size={14} /> : <Check size={14} />}
+            onClick={onAccept}
+            variant="darkPrimary"
+          >
             {isApplying ? "Applying" : "Accept proposal"}
           </Button>
         </div>

@@ -623,7 +623,7 @@ export default function App() {
     }
   }
 
-  async function applyTaskDescriptionProposal(taskId: string, description: string) {
+  async function saveTaskDescription(taskId: string, description: string) {
     const tray = trays.find((candidate) => candidate.tasks.some((task) => task.id === taskId));
     const task = tray?.tasks.find((candidate) => candidate.id === taskId);
     const nextDescription = description.trim();
@@ -631,7 +631,7 @@ export default function App() {
       throw new Error("This task cannot be edited.");
     }
     if (!nextDescription) {
-      throw new Error("The proposed description is empty.");
+      throw new Error("Description cannot be empty.");
     }
 
     const nextTask = usesTauriPersistence
@@ -642,7 +642,7 @@ export default function App() {
           descriptionStatus: "Ready" as const
         };
     if (!nextTask) {
-      throw new Error("Could not apply the proposed description.");
+      throw new Error("Could not save the description.");
     }
     if (nextTask) replaceTask(nextTask);
   }
@@ -1571,7 +1571,7 @@ export default function App() {
             readOnly={selectedTaskTray?.state === "Archived"}
             onUpdateDetails={updateTaskDetails}
             onGenerateDescription={generateTaskDescription}
-            onApplyDescriptionProposal={applyTaskDescriptionProposal}
+            onSaveDescription={saveTaskDescription}
             onOpenJiraIssue={openJiraIssue}
             onClose={() => setOpenPanel(null)}
             isGeneratingDescription={generatingDescriptionTaskId === selectedTaskWithSyncLog.id}

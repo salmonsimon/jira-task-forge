@@ -16,6 +16,8 @@ const JIRA_KNOWN_PROJECT_KEYS: &[&str] = &["DTS", "JTFTEST"];
 const JIRA_KNOWN_ISSUE_TYPES: &[&str] = &["Bug", "Story", "Epic", "subtask"];
 const JIRA_KNOWN_PRIORITIES: &[&str] = &["Highest", "High", "Medium", "Low", "Lowest"];
 const SIMPLE_TASK_TITLE_WORD_LIMIT: usize = 4;
+const ASSISTED_DESCRIPTION_BASE_CONTEXT: &str =
+    include_str!("../../../docs/assisted-description-context.md");
 const ASSISTED_DESCRIPTION_REQUIRED_HEADINGS: &[&str] = &[
     "## Historia de usuario",
     "## Contexto",
@@ -567,7 +569,10 @@ fn task_description_generation_instructions() -> &'static str {
     "You generate Assisted Descriptions for Jira Task Forge Local Tasks. Return only valid JSON matching the schema. \
 Generated Jira task descriptions may be Spanish when the task language is Spanish. UI copy is not part of the response. \
 Use the exact Markdown section headings from the requested template. \
+Use the base context as user and project preference context, especially stack defaults. \
 Do not invent product behavior, implementation scope, acceptance criteria, risk, observability, or rollback detail. \
+Prefer drafting over asking for clarification when the title, area, and user context describe a concrete problem or desired outcome. \
+Do not ask about known defaults from the base context, such as the engine or primary stack. \
 If the title and context are too thin to fill any useful section, return status needs_clarification with up to three concise questions in the task language and description null. \
 If only one section is uncertain, draft the useful sections and put a short explicit uncertainty note in that section instead of making facts up. \
 Keep the description compact and Jira-ready. Do not include markdown fences."
@@ -587,7 +592,8 @@ fn task_description_generation_context(task: &LocalTask, additional_context: &st
     };
 
     format!(
-        "Local Task context:\n\
+        "Base context:\n{base_context}\n\n\
+Local Task context:\n\
 - Project: {project}\n\
 - Area: {area}\n\
 - Issue type: {issue_type}\n\
@@ -597,6 +603,7 @@ fn task_description_generation_context(task: &LocalTask, additional_context: &st
 - Existing description: {existing_description}\n\
 - Additional user context: {additional_context}\n\n\
 Target Markdown format:\n{template}",
+        base_context = ASSISTED_DESCRIPTION_BASE_CONTEXT.trim(),
         project = task.project,
         area = task.area,
         issue_type = task.issue_type,
@@ -901,8 +908,9 @@ mod tests {
     use super::{
         ai_model_or_default, extract_claude_output_text, extract_gemini_output_text,
         extract_openai_output_text, provider_error_message, strip_json_fence,
-        task_description_needs_clarification, validate_assisted_description_draft,
-        validate_jql_draft, AiClient, AiCredentials, AiProvider,
+        task_description_generation_context, task_description_needs_clarification,
+        validate_assisted_description_draft, validate_jql_draft, AiClient, AiCredentials,
+        AiProvider,
     };
     use crate::models::{AssistedDescriptionDraft, JqlAiDraft, LocalTask};
     use serde_json::json;
@@ -995,6 +1003,19 @@ mod tests {
             &task,
             "Crear un set dressing de maquinas expendedoras para el anden del Metro, validando escala, materiales y ubicacion final."
         ));
+    }
+
+    #[test]
+    fn task_description_context_includes_user_stack_defaults() {
+        let task = task_with_title("bug mesa");
+        let context = task_description_generation_context(
+            &task,
+            "mesa aparece sin patas en runtime y afecta todas las escenas",
+        );
+
+        assert!(context.contains("Unreal Engine 5"));
+        assert!(context.contains("Do not ask which engine"));
+        assert!(context.contains("Additional user context: mesa aparece sin patas"));
     }
 
     #[test]
