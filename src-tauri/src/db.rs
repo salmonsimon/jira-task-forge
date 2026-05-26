@@ -4,7 +4,16 @@ use std::path::{Path, PathBuf};
 use rusqlite::Connection;
 use time::OffsetDateTime;
 
-const INITIAL_SCHEMA: &str = include_str!("migrations/0001_initial_schema.sql");
+const MIGRATIONS: &[(&str, &str)] = &[
+    (
+        "0001_initial_schema",
+        include_str!("migrations/0001_initial_schema.sql"),
+    ),
+    (
+        "0002_task_descriptions",
+        include_str!("migrations/0002_task_descriptions.sql"),
+    ),
+];
 
 pub type DbResult<T> = Result<T, DbError>;
 
@@ -96,19 +105,21 @@ fn run_migrations(connection: &mut Connection) -> DbResult<()> {
         ",
     )?;
 
-    let already_applied: bool = transaction.query_row(
-        "SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version = '0001_initial_schema')",
-        [],
-        |row| row.get(0),
-    )?;
-
-    if !already_applied {
-        transaction.execute_batch(INITIAL_SCHEMA)?;
-        let applied_at = utc_now_string()?;
-        transaction.execute(
-            "INSERT INTO schema_migrations (version, applied_at) VALUES (?1, ?2)",
-            ("0001_initial_schema", applied_at),
+    for (version, migration_sql) in MIGRATIONS {
+        let already_applied: bool = transaction.query_row(
+            "SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version = ?1)",
+            [version],
+            |row| row.get(0),
         )?;
+
+        if !already_applied {
+            transaction.execute_batch(migration_sql)?;
+            let applied_at = utc_now_string()?;
+            transaction.execute(
+                "INSERT INTO schema_migrations (version, applied_at) VALUES (?1, ?2)",
+                (*version, applied_at),
+            )?;
+        }
     }
 
     transaction.commit()?;
@@ -181,7 +192,7 @@ mod tests {
                     row.get(0)
                 })
                 .expect("migration count reads");
-            assert_eq!(migration_count, 1);
+            assert_eq!(migration_count, 2);
         }
 
         assert!(path.exists());
@@ -193,7 +204,7 @@ mod tests {
                     row.get(0)
                 })
                 .expect("migration count reads");
-            assert_eq!(migration_count, 1);
+            assert_eq!(migration_count, 2);
         }
 
         fs::remove_dir_all(app_data_dir).expect("database cleanup");

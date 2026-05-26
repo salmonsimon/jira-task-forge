@@ -2,7 +2,7 @@ import { Check, ChevronDown, CircleAlert, Image, Link2, Settings, Sparkles, X } 
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { Button, DescriptionBadge, IconButton, IssueTypeBadge, PriorityBadge, SyncBadge } from "../../components/ui";
 import { isTaskReadOnly } from "../../lib/domain";
-import type { LocalTask, Priority } from "../../lib/types";
+import type { AssistedDescriptionDraft, LocalTask, Priority } from "../../lib/types";
 
 const priorities: Priority[] = ["Highest", "High", "Medium", "Low", "Lowest"];
 
@@ -12,18 +12,61 @@ export function TaskFocusWindow({
   areas,
   readOnly: forceReadOnly = false,
   onUpdateDetails,
+  onGenerateDescription,
+  onMarkDescriptionReady,
   onOpenJiraIssue,
-  onClose
+  onClose,
+  isGeneratingDescription = false
 }: {
   task: LocalTask;
   projects: string[];
   areas: string[];
   readOnly?: boolean;
   onUpdateDetails: (taskId: string, task: { project: string; area: string; priority: Priority }) => void | Promise<void>;
+  onGenerateDescription: (taskId: string, additionalContext: string) => Promise<AssistedDescriptionDraft>;
+  onMarkDescriptionReady: (taskId: string) => void | Promise<void>;
   onOpenJiraIssue: (url: string) => void | Promise<void>;
   onClose: () => void;
+  isGeneratingDescription?: boolean;
 }) {
   const readOnly = forceReadOnly || isTaskReadOnly(task);
+  const [descriptionContext, setDescriptionContext] = useState("");
+  const [descriptionMessage, setDescriptionMessage] = useState<string | null>(null);
+  const [clarificationQuestions, setClarificationQuestions] = useState<string[]>([]);
+
+  useEffect(() => {
+    setDescriptionContext("");
+    setDescriptionMessage(null);
+    setClarificationQuestions([]);
+  }, [task.id]);
+
+  function reviewMissingInfo() {
+    setDescriptionMessage("Add the missing context, then generate again.");
+    setClarificationQuestions([
+      "Que usuario o persona se ve afectado, y que necesita lograr?",
+      "Que debe cambiar, incluyendo lo mas importante dentro y fuera de alcance?",
+      "Como debe validar el exito QA, Arte, Programacion u otro responsable?"
+    ]);
+  }
+
+  async function generateDescription() {
+    if (readOnly) return;
+    setDescriptionMessage("Generating description...");
+    setClarificationQuestions([]);
+
+    try {
+      const draft = await onGenerateDescription(task.id, descriptionContext);
+      if (draft.status === "needs_clarification") {
+        setDescriptionMessage("More context is needed before generating a useful description.");
+        setClarificationQuestions(draft.clarificationQuestions);
+        return;
+      }
+      setDescriptionMessage("Generated description saved to the task.");
+      setClarificationQuestions([]);
+    } catch (error) {
+      setDescriptionMessage(error instanceof Error ? error.message : "Could not generate a description.");
+    }
+  }
 
   useEffect(() => {
     function closeOnEscape(event: KeyboardEvent) {
@@ -107,13 +150,42 @@ export function TaskFocusWindow({
                 </div>
               )}
               <div className="mt-4 flex gap-2">
-                <Button variant="darkSecondary" icon={<CircleAlert size={14} />}>
+                <Button disabled={readOnly} variant="darkSecondary" icon={<CircleAlert size={14} />} onClick={reviewMissingInfo}>
                   Review missing info
                 </Button>
-                <Button variant="darkSecondary" icon={<Sparkles size={14} />}>
-                  Generate description
+                <Button
+                  disabled={readOnly || isGeneratingDescription}
+                  variant="darkSecondary"
+                  icon={<Sparkles size={14} />}
+                  onClick={() => {
+                    void generateDescription();
+                  }}
+                >
+                  {isGeneratingDescription ? "Generating" : "Generate description"}
                 </Button>
               </div>
+              {!readOnly ? (
+                <label className="mt-4 block">
+                  <span className="mb-2 block text-xs font-semibold text-[#aeb3bd]">AI context</span>
+                  <textarea
+                    className="h-24 w-full resize-none rounded border border-[#5c606a] bg-[#22252a] p-3 text-sm text-[#dfe1e6] outline-none placeholder:text-[#8f96a3] focus:border-[#579dff] focus:ring-2 focus:ring-[#1d355c]"
+                    value={descriptionContext}
+                    onChange={(event) => setDescriptionContext(event.target.value)}
+                    placeholder="Add behavior, constraints, expected validation, or answers to the questions below."
+                  />
+                </label>
+              ) : null}
+              {descriptionMessage ? <div className="mt-3 text-xs leading-relaxed text-[#aeb3bd]">{descriptionMessage}</div> : null}
+              {clarificationQuestions.length ? (
+                <div className="mt-3 rounded border border-[#5c606a] bg-[#22252a] px-3 py-2 text-sm text-[#dfe1e6]">
+                  <div className="mb-2 text-xs font-semibold text-[#aeb3bd]">Clarification questions</div>
+                  <ul className="space-y-1">
+                    {clarificationQuestions.map((question) => (
+                      <li key={question}>- {question}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
             </FocusSection>
 
             <FocusSection title="Attachments" count={task.attachments?.length ?? 0}>
@@ -177,7 +249,15 @@ export function TaskFocusWindow({
 
         <aside className="w-[360px] overflow-y-auto border-l border-[#454852] bg-[#303238] p-5">
           <div className="mb-5 flex items-center gap-2">
-            <Button variant="darkPrimary">Ready for Jira</Button>
+            <Button
+              disabled={readOnly || !task.description?.trim() || task.descriptionStatus === "Ready"}
+              variant="darkPrimary"
+              onClick={() => {
+                void onMarkDescriptionReady(task.id);
+              }}
+            >
+              Ready for Jira
+            </Button>
             <Button variant="darkSecondary" icon={<Sparkles size={14} />}>
               AI
             </Button>
