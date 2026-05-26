@@ -321,7 +321,7 @@ fn list_tasks(connection: &Connection) -> DbResult<Vec<LocalTask>> {
     let mut statement = connection.prepare(
         "
         SELECT id, tray_id, project, area, title, priority, issue_type, sync_status,
-               description_status, content_language, jira_key, jira_url, epic_key,
+               description_status, description, content_language, jira_key, jira_url, epic_key,
                parent_task_id, task_order, created_at, updated_at
         FROM tasks
         ORDER BY tray_id ASC, task_order ASC, created_at ASC
@@ -523,10 +523,10 @@ fn import_tasks(connection: &Connection, tasks: &[LocalTask]) -> DbResult<usize>
             "
             INSERT OR IGNORE INTO tasks (
                 id, tray_id, project, area, title, priority, issue_type, sync_status,
-                description_status, content_language, jira_key, jira_url, epic_key,
+                description_status, description, content_language, jira_key, jira_url, epic_key,
                 parent_task_id, task_order, created_at, updated_at
             )
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, NULL, ?14, ?15, ?16)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, NULL, ?15, ?16, ?17)
             ",
             params![
                 task.id,
@@ -538,6 +538,7 @@ fn import_tasks(connection: &Connection, tasks: &[LocalTask]) -> DbResult<usize>
                 task.issue_type,
                 task.sync_status,
                 task.description_status,
+                task.description,
                 task.content_language,
                 task.jira_key,
                 task.jira_url,
@@ -691,14 +692,15 @@ fn map_task(row: &rusqlite::Row<'_>) -> rusqlite::Result<LocalTask> {
         issue_type: row.get(6)?,
         sync_status: row.get(7)?,
         description_status: row.get(8)?,
-        content_language: row.get(9)?,
-        jira_key: row.get(10)?,
-        jira_url: row.get(11)?,
-        epic_key: row.get(12)?,
-        parent_task_id: row.get(13)?,
-        task_order: row.get(14)?,
-        created_at: row.get(15)?,
-        updated_at: row.get(16)?,
+        description: row.get(9)?,
+        content_language: row.get(10)?,
+        jira_key: row.get(11)?,
+        jira_url: row.get(12)?,
+        epic_key: row.get(13)?,
+        parent_task_id: row.get(14)?,
+        task_order: row.get(15)?,
+        created_at: row.get(16)?,
+        updated_at: row.get(17)?,
     })
 }
 
