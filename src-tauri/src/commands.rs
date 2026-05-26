@@ -1,7 +1,4 @@
-use std::{
-    path::{Path, PathBuf},
-    process::Command,
-};
+use std::{path::Path, process::Command};
 use tauri::{AppHandle, Emitter, State};
 
 use crate::backup::{BackupExportResult, BackupImportResult};
@@ -454,8 +451,6 @@ pub fn save_csv_file(path: String, contents: String) -> Result<(), String> {
     }
 
     let path = Path::new(path);
-    reject_dev_watched_csv_path(path)?;
-
     std::fs::write(path, contents).map_err(|error| error.to_string())
 }
 
@@ -559,49 +554,6 @@ fn derive_issue_type_from_area(area: &str) -> &'static str {
     }
 }
 
-fn reject_dev_watched_csv_path(path: &Path) -> Result<(), String> {
-    let source_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
-    if path_is_inside(path, source_dir) {
-        return Err(
-            "Choose a CSV export location outside the app source folder. Saving under src-tauri restarts the development app."
-                .to_string(),
-        );
-    }
-
-    Ok(())
-}
-
-fn path_is_inside(path: &Path, base_dir: &Path) -> bool {
-    let Ok(base_dir) = base_dir.canonicalize() else {
-        return false;
-    };
-    let target_path = absolute_path(path);
-
-    if target_path.exists() {
-        return target_path
-            .canonicalize()
-            .map(|resolved| resolved.starts_with(&base_dir))
-            .unwrap_or(false);
-    }
-
-    target_path
-        .parent()
-        .and_then(|parent| parent.canonicalize().ok())
-        .map(|parent| parent.join(target_path.file_name().unwrap_or_default()))
-        .map(|resolved| resolved.starts_with(&base_dir))
-        .unwrap_or(false)
-}
-
-fn absolute_path(path: &Path) -> PathBuf {
-    if path.is_absolute() {
-        path.to_path_buf()
-    } else {
-        std::env::current_dir()
-            .map(|current_dir| current_dir.join(path))
-            .unwrap_or_else(|_| path.to_path_buf())
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::path::Path;
@@ -648,19 +600,18 @@ mod tests {
     }
 
     #[test]
-    fn rejects_csv_exports_inside_tauri_source_dir() {
+    fn writes_csv_contents_to_source_tree_path() {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join(format!("jira-task-forge-csv-{}.csv", uuid::Uuid::new_v4()));
 
+        save_csv_file(path.to_string_lossy().to_string(), "Summary\nTask\n".to_string())
+            .expect("source-tree csv saves");
+
         assert_eq!(
-            save_csv_file(path.to_string_lossy().to_string(), "Summary\n".to_string())
-                .expect_err("source tree csv should fail"),
-            "Choose a CSV export location outside the app source folder. Saving under src-tauri restarts the development app."
+            std::fs::read_to_string(&path).expect("csv reads"),
+            "Summary\nTask\n"
         );
-        assert!(
-            !path.exists(),
-            "the guarded save path should not create a source-tree csv"
-        );
+        std::fs::remove_file(path).expect("csv cleanup");
     }
 
     #[test]
