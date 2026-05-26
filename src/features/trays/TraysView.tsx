@@ -1,6 +1,7 @@
 import { Archive, Check, Download, Filter, Loader2, Pencil, RotateCcw, UploadCloud, X } from "lucide-react";
 import { useState } from "react";
 import { Button, IconButton, TrayStateBadge } from "../../components/ui";
+import { deriveTrayStatusTag } from "../../lib/domain";
 import type { LocalTask, Priority, Tray } from "../../lib/types";
 import { groupTasksByProject } from "./groupTasksByProject";
 import { ProjectTaskGroup } from "./ProjectTaskGroup";
@@ -214,7 +215,7 @@ function TrayHeaderName({
         <IconButton title="Cancel tray rename" onClick={cancelRename}>
           <X size={16} />
         </IconButton>
-        <TrayStateBadge state={tray.state} />
+        <TrayStateBadge state={deriveTrayStatusTag(tray.tasks, tray.state)} />
       </div>
     );
   }
@@ -225,7 +226,7 @@ function TrayHeaderName({
       <IconButton title="Rename tray" onClick={beginRename}>
         <Pencil size={14} />
       </IconButton>
-      <TrayStateBadge state={tray.state} />
+      <TrayStateBadge state={deriveTrayStatusTag(tray.tasks, tray.state)} />
     </div>
   );
 }

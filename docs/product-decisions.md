@@ -82,6 +82,8 @@ This document captures the product scope decisions from the grill session. UI co
   - `Completed`
   - `Archived`
 - A tray becomes `Completed` automatically when all tasks in it are created in Jira.
+- The tray list may show an `Exported` presentation tag for active trays that
+  contain exported tasks; this does not add a persisted tray state.
 - Completed trays stay visible until the user manually archives them.
 - Archived trays are hidden from the main flow and shown only in an explicit archived view.
 - Trays can be archived regardless of task state.

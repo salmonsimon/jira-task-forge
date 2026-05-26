@@ -80,5 +80,17 @@ export function DescriptionBadge({ status, dark = false }: { status: "Ready" | "
 }
 
 export function TrayStateBadge({ state }: { state: string }) {
-  return <span className="rounded bg-[#f4f5f7] px-2 py-1 text-xs font-medium text-[#42526e]">{state}</span>;
+  const classes: Record<string, string> = {
+    Active: "bg-[#f4f5f7] text-[#42526e]",
+    Archived: "bg-[#f4f5f7] text-[#6b778c]",
+    Completed: "bg-[#e3fcef] text-[#006644]",
+    Exported: "bg-[#fff0b3] text-[#974f0c]",
+    "Needs attention": "bg-[#ffebe6] text-[#bf2600]"
+  };
+
+  return (
+    <span className={cn("rounded px-2 py-1 text-xs font-medium", classes[state] ?? "bg-[#f4f5f7] text-[#42526e]")}>
+      {state}
+    </span>
+  );
 }
