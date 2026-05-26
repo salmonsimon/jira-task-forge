@@ -256,17 +256,21 @@ export function TaskFocusWindow({
               [{task.area}] {task.title}
             </h2>
 
-            <FocusSection title="Description">
-              {hasDescription && !readOnly ? (
-                <div className="mb-3 flex justify-end gap-2">
-                  <IconButton title="Edit description" onClick={openManualDescriptionEditor}>
-                    <Pencil size={15} />
-                  </IconButton>
-                  <Button variant="darkSecondary" icon={<Sparkles size={14} />} onClick={openAiDescriptionEditor}>
-                    AI
-                  </Button>
-                </div>
-              ) : null}
+            <FocusSection
+              title="Description"
+              actions={
+                hasDescription && !readOnly ? (
+                  <>
+                    <IconButton title="Edit description" onClick={openManualDescriptionEditor}>
+                      <Pencil size={15} />
+                    </IconButton>
+                    <Button variant="darkSecondary" onClick={openAiDescriptionEditor}>
+                      Regenerate
+                    </Button>
+                  </>
+                ) : null
+              }
+            >
               {hasDescription && showAiDescriptionEditor ? (
                 <DescriptionAiContextPanel
                   clarificationQuestions={clarificationQuestions}
@@ -467,7 +471,7 @@ function DescriptionAiContextPanel({
         <Button disabled={isGeneratingDescription} variant="darkSecondary" onClick={onCancel}>
           Cancel
         </Button>
-        <Button disabled={isGeneratingDescription} variant="darkPrimary" icon={<Sparkles size={14} />} onClick={onGenerate}>
+        <Button disabled={isGeneratingDescription} variant="darkPrimary" onClick={onGenerate}>
           Generate
         </Button>
       </div>
@@ -667,7 +671,17 @@ function trimDiffLines(value: string) {
   return [...lines.slice(0, maxLines).map((line) => line || " "), `... ${lines.length - maxLines} more lines`];
 }
 
-function FocusSection({ title, count, children }: { title: string; count?: number; children: ReactNode }) {
+function FocusSection({
+  title,
+  count,
+  actions,
+  children
+}: {
+  title: string;
+  count?: number;
+  actions?: ReactNode;
+  children: ReactNode;
+}) {
   return (
     <section className="mb-7">
       <div className="mb-3 flex items-center gap-2 text-base font-semibold text-[#f4f5f7]">
@@ -676,6 +690,7 @@ function FocusSection({ title, count, children }: { title: string; count?: numbe
         {typeof count === "number" ? (
           <span className="rounded bg-[#454852] px-1.5 py-0.5 text-xs text-[#dfe1e6]">{count}</span>
         ) : null}
+        {actions ? <div className="ml-1 flex items-center gap-2">{actions}</div> : null}
       </div>
       {children}
     </section>
