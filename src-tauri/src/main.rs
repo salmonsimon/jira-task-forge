@@ -54,10 +54,15 @@ pub fn run() {
             commands::save_jira_api_token,
             commands::delete_jira_api_token,
             commands::has_openai_api_key,
+            commands::has_ai_provider_api_key,
             commands::save_openai_api_key,
+            commands::save_ai_provider_api_key,
             commands::delete_openai_api_key,
+            commands::delete_ai_provider_api_key,
             commands::test_openai_connection,
+            commands::test_ai_provider_connection,
             commands::test_openai_api_key,
+            commands::test_ai_provider_api_key,
             commands::test_jira_connection,
             commands::test_jira_api_token,
             commands::run_jql_query,
@@ -74,6 +79,7 @@ pub fn run() {
             commands::import_backup,
             commands::save_csv_file,
             commands::open_atlassian_api_tokens_page,
+            commands::open_ai_provider_api_keys_page,
             commands::open_jira_issue_url
         ])
         .run(tauri::generate_context!())

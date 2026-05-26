@@ -37,11 +37,10 @@ This document captures the product scope decisions from the grill session. UI co
 - V2 should research Jira OAuth 2.0 and AI provider authentication options. If
   OAuth is practical, prefer it for distribution. If not, keep BYOK with stronger
   onboarding, documentation, redaction, and local secret-handling practices.
-- V2 should add optional AI provider support for Anthropic Claude, Google
-  Gemini, and OpenRouter after the OpenAI Personal v1 flow is stable. These
-  providers should reuse the same provider/model/key pattern validated for
-  OpenAI: local OS credential storage, backups without secrets, redacted logs,
-  and a successful `Test connection` before saving a new API key.
+- Personal v1 supports OpenAI, Anthropic Claude, and Google Gemini using the
+  same provider/model/key pattern: local OS credential storage, backups without
+  secrets, redacted logs, and a successful `Test connection` before saving a new
+  API key. V2 should add optional OpenRouter support through that same pattern.
 
 ## Prototype Scope
 
@@ -455,6 +454,11 @@ document such as `docs/jira-description-format.md`.
   the Settings UI allows saving it to the OS credential store.
 - Jira and AI provider credential controls should use the same action shape:
   `Save key`, `Remove key`, and `Test connection`.
+- AI provider credential controls should include a provider-specific
+  `Create or manage key` link. Personal v1 routes OpenAI to
+  `https://platform.openai.com/home`, Claude to
+  `https://platform.claude.com/dashboard`, and Gemini to
+  `https://aistudio.google.com/api-keys`.
 - Connection success and failure should appear as clear app-level notifications,
   not as result panels inserted into the Settings column.
 - Settings can be exported/imported without secrets.
@@ -464,9 +468,9 @@ document such as `docs/jira-description-format.md`.
 ## AI Configuration
 
 - V1 includes a provider/model selector.
-- Personal v1 AI provider implementation is OpenAI-first. Claude, Gemini, and
-  OpenRouter belong to V2/provider expansion, not the Personal v1 completion
-  bar.
+- Personal v1 supports OpenAI, Claude, and Gemini as active AI providers for
+  key storage, connection testing, and Ask AI JQL generation. OpenRouter remains
+  part of the later V2/provider expansion.
 - AI runs only through explicit user actions.
 - No silent background AI calls.
 - AI actions include:

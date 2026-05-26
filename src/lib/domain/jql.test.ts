@@ -103,6 +103,9 @@ describe("JQL workflow domain helpers", () => {
     expect(redactSensitiveText("Authorization: Bearer jira-secret-token")).toBe(
       "Authorization: Bearer <redacted>"
     );
+    expect(redactSensitiveText("Gemini rejected AIzaSySecretValue1234567890")).toBe(
+      "Gemini rejected <redacted>"
+    );
     expect(
       formatJqlAiDraftMessage({
         jql: "project = DTS",

@@ -37,10 +37,16 @@ export function TaskFocusWindow({
   }, [onClose]);
 
   return (
-    <div className="fixed inset-0 z-40 bg-[#091e42]/60 px-8 py-8 backdrop-blur-[1px]" onMouseDown={onClose}>
+    <div
+      className="fixed inset-0 z-40 bg-[#091e42]/60 px-8 py-8 backdrop-blur-[1px]"
+      onPointerDown={(event) => {
+        event.stopPropagation();
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
       <section
         className="mx-auto flex h-full max-h-[900px] w-full max-w-[1240px] overflow-hidden rounded border border-[#3b4454] bg-[#2b2d31] text-[#dfe1e6] shadow-2xl"
-        onMouseDown={(event) => event.stopPropagation()}
+        onPointerDown={(event) => event.stopPropagation()}
       >
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="flex items-center justify-between border-b border-[#454852] px-7 py-4">

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { flushSync } from "react-dom";
 import { listen } from "@tauri-apps/api/event";
 import { downloadDir, join } from "@tauri-apps/api/path";
@@ -21,34 +21,35 @@ import {
   createPersistedTask,
   createPersistedTray,
   deletePersistedCategory,
+  deletePersistedAiProviderApiKey,
   deletePersistedJqlFavorite,
   deletePersistedJiraApiToken,
-  deletePersistedOpenAiApiKey,
   deletePersistedTray,
   deletePersistedTask,
   draftPersistedJqlWithAi,
   exportPersistedBackup,
   getPersistedAppSettings,
+  hasPersistedAiProviderApiKey,
   hasPersistedJiraApiToken,
-  hasPersistedOpenAiApiKey,
   importPersistedBackup,
   listPersistedCategories,
   listPersistedJqlFavorites,
   listPersistedTaskSyncLog,
   listPersistedTrays,
   markPersistedTasksCsvExported,
+  openPersistedAiProviderApiKeysPage,
   openPersistedAtlassianApiTokensPage,
   openPersistedJiraIssueUrl,
   renamePersistedTray,
   restorePersistedTray,
   runPersistedJqlQuery,
   saveCsvFile,
+  savePersistedAiProviderApiKey,
   savePersistedJiraApiToken,
-  savePersistedOpenAiApiKey,
-  testPersistedOpenAiApiKey,
+  testPersistedAiProviderApiKey,
+  testPersistedAiProviderConnection,
   testPersistedJiraApiToken,
   testPersistedJiraConnection,
-  testPersistedOpenAiConnection,
   updatePersistedAppSettings,
   updatePersistedCategory,
   updatePersistedJqlFavorite,
@@ -76,6 +77,7 @@ import {
 } from "./lib/domain";
 import type {
   AppSettings,
+  AiProvider,
   BackupOperationNotice,
   Category,
   CredentialConnectionTestResult,
@@ -109,6 +111,11 @@ const defaultAppSettings: AppSettings = {
 };
 const defaultJqlPrompt = "Show me high and highest open bugs for STT, sorted by priority";
 const atlassianApiTokensUrl = "https://id.atlassian.com/manage-profile/security/api-tokens";
+const aiProviderApiKeysUrls: Partial<Record<AiProvider, string>> = {
+  OpenAI: "https://platform.openai.com/home",
+  Claude: "https://platform.claude.com/dashboard",
+  Gemini: "https://aistudio.google.com/api-keys"
+};
 
 type ConnectionNotice = {
   id: number;
@@ -155,13 +162,13 @@ export default function App() {
   const [csvExportMessage, setCsvExportMessage] = useState<string | null>(null);
   const [csvExportNotice, setCsvExportNotice] = useState<CsvExportNotice | null>(null);
   const [hasJiraApiToken, setHasJiraApiToken] = useState(false);
-  const [hasOpenAiApiKey, setHasOpenAiApiKey] = useState(false);
+  const [hasAiProviderApiKey, setHasAiProviderApiKey] = useState(false);
   const [jiraCredentialMessage, setJiraCredentialMessage] = useState<string | null>(null);
   const [aiCredentialMessage, setAiCredentialMessage] = useState<string | null>(null);
   const [connectionNotice, setConnectionNotice] = useState<ConnectionNotice | null>(null);
   const [backupNotice, setBackupNotice] = useState<BackupOperationNotice | null>(null);
   const [isTestingJiraConnection, setIsTestingJiraConnection] = useState(false);
-  const [isTestingOpenAiConnection, setIsTestingOpenAiConnection] = useState(false);
+  const [isTestingAiProviderConnection, setIsTestingAiProviderConnection] = useState(false);
   const [isRunningJiraPreflight, setIsRunningJiraPreflight] = useState(false);
   const [jiraCreatePreflight, setJiraCreatePreflight] = useState<JiraCreatePreflight | null>(null);
   const [isCreatingJiraIssues, setIsCreatingJiraIssues] = useState(false);
@@ -209,11 +216,10 @@ export default function App() {
       listPersistedTrays(),
       getPersistedAppSettings(),
       hasPersistedJiraApiToken(),
-      hasPersistedOpenAiApiKey(),
       listPersistedCategories(),
       listPersistedJqlFavorites()
     ])
-      .then(([persistedTrays, persistedSettings, hasPersistedToken, hasPersistedAiKey, persistedCategories, persistedJqlFavorites]) => {
+      .then(([persistedTrays, persistedSettings, hasPersistedToken, persistedCategories, persistedJqlFavorites]) => {
         if (!isCurrent) return;
         const nextCategories = persistedCategories.length ? persistedCategories : [...appData.listProjects(), ...appData.listAreas()];
         const nextJqlFavorites = persistedJqlFavorites.length ? persistedJqlFavorites : appData.listJqlFavorites();
@@ -222,7 +228,6 @@ export default function App() {
         setTrays(persistedTrays);
         setAppSettings(persistedSettings);
         setHasJiraApiToken(hasPersistedToken);
-        setHasOpenAiApiKey(hasPersistedAiKey);
         setCategories(nextCategories);
         setJqlFavorites(nextJqlFavorites);
         setSelectedFavoriteId((currentFavoriteId) =>
@@ -248,6 +253,28 @@ export default function App() {
       isCurrent = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!usesTauriPersistence || appSettings.aiProvider === "None") {
+      setHasAiProviderApiKey(false);
+      return;
+    }
+
+    let isCurrent = true;
+    hasPersistedAiProviderApiKey(appSettings.aiProvider)
+      .then((hasCredential) => {
+        if (!isCurrent) return;
+        setHasAiProviderApiKey(hasCredential);
+      })
+      .catch(() => {
+        if (!isCurrent) return;
+        setHasAiProviderApiKey(false);
+      });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [appSettings.aiProvider, usesTauriPersistence]);
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
@@ -660,6 +687,27 @@ export default function App() {
     window.open(atlassianApiTokensUrl, "_blank", "noopener,noreferrer");
   }
 
+  async function openAiProviderApiKeysPage() {
+    const url = aiProviderApiKeysUrls[appSettings.aiProvider];
+    if (!url) {
+      setAiCredentialMessage("Select an AI provider before opening its API key page.");
+      return;
+    }
+
+    if (usesTauriPersistence) {
+      try {
+        await openPersistedAiProviderApiKeysPage(appSettings.aiProvider);
+        return;
+      } catch {
+        setAiCredentialMessage(
+          `Could not open ${appSettings.aiProvider} automatically. Open ${url} in your browser.`
+        );
+      }
+    }
+
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
+
   function showConnectionNotice(notice: Omit<ConnectionNotice, "id">) {
     setConnectionNotice({
       ...notice,
@@ -718,83 +766,92 @@ export default function App() {
     }
   }
 
-  async function saveOpenAiApiKey(apiKey: string) {
+  async function saveAiProviderApiKey(apiKey: string) {
     const trimmedApiKey = apiKey.trim();
     if (!trimmedApiKey) {
       setAiCredentialMessage("API key cannot be empty.");
       return false;
     }
+    if (appSettings.aiProvider === "None") {
+      setAiCredentialMessage("Select an AI provider before saving an API key.");
+      return false;
+    }
 
     try {
-      await savePersistedOpenAiApiKey(trimmedApiKey);
-      setHasOpenAiApiKey(true);
-      setAiCredentialMessage("OpenAI API key saved in the OS credential store.");
+      await savePersistedAiProviderApiKey(appSettings.aiProvider, trimmedApiKey);
+      setHasAiProviderApiKey(true);
+      setAiCredentialMessage(`${appSettings.aiProvider} API key saved in the OS credential store.`);
       return true;
     } catch {
-      setAiCredentialMessage("Could not save OpenAI API key in the OS credential store.");
+      setAiCredentialMessage(`Could not save ${appSettings.aiProvider} API key in the OS credential store.`);
       return false;
     }
   }
 
-  async function deleteOpenAiApiKey() {
+  async function deleteAiProviderApiKey() {
+    if (appSettings.aiProvider === "None") {
+      setAiCredentialMessage("Select an AI provider before removing an API key.");
+      return;
+    }
+
     try {
-      await deletePersistedOpenAiApiKey();
-      setHasOpenAiApiKey(false);
-      setAiCredentialMessage("OpenAI API key removed from the OS credential store.");
+      await deletePersistedAiProviderApiKey(appSettings.aiProvider);
+      setHasAiProviderApiKey(false);
+      setAiCredentialMessage(`${appSettings.aiProvider} API key removed from the OS credential store.`);
     } catch {
-      setAiCredentialMessage("Could not remove OpenAI API key.");
+      setAiCredentialMessage(`Could not remove ${appSettings.aiProvider} API key.`);
     }
   }
 
-  async function testOpenAiConnection(): Promise<CredentialConnectionTestResult> {
+  async function testAiProviderConnection(): Promise<CredentialConnectionTestResult> {
     flushSync(() => {
-      setIsTestingOpenAiConnection(true);
+      setIsTestingAiProviderConnection(true);
       setAiCredentialMessage(null);
     });
     const loadingStartedAt = performance.now();
     await waitForNextPaint();
 
     try {
-      const message = await testPersistedOpenAiConnection();
+      const message = await testPersistedAiProviderConnection();
       const result: CredentialConnectionTestResult = { ok: true, message };
       showAiConnectionNotice(result);
       return result;
     } catch (error) {
       const result: CredentialConnectionTestResult = {
         ok: false,
-        message: formatUnknownError(error, "Could not test OpenAI connection.")
+        message: formatUnknownError(error, "Could not test AI provider connection.")
       };
       showAiConnectionNotice(result);
       return result;
     } finally {
       await waitForMinimumElapsed(loadingStartedAt, 700);
-      setIsTestingOpenAiConnection(false);
+      setIsTestingAiProviderConnection(false);
     }
   }
 
-  async function testOpenAiApiKey(apiKey: string): Promise<CredentialConnectionTestResult> {
+  async function testAiProviderApiKey(apiKey: string): Promise<CredentialConnectionTestResult> {
     flushSync(() => {
-      setIsTestingOpenAiConnection(true);
+      setIsTestingAiProviderConnection(true);
       setAiCredentialMessage(null);
     });
     const loadingStartedAt = performance.now();
     await waitForNextPaint();
 
     try {
-      const message = await testPersistedOpenAiApiKey(apiKey);
+      const message = await testPersistedAiProviderApiKey(appSettings.aiProvider, apiKey);
       const result: CredentialConnectionTestResult = { ok: true, message };
       showAiConnectionNotice(result);
       return result;
     } catch (error) {
       const result: CredentialConnectionTestResult = {
         ok: false,
-        message: formatUnknownError(error, "Could not test OpenAI connection.")
+        message: formatUnknownError(error, "Could not test AI provider connection.")
       };
       showAiConnectionNotice(result);
       return result;
     } finally {
       await waitForMinimumElapsed(loadingStartedAt, 700);
-      setIsTestingOpenAiConnection(false);
+      setIsTestingAiProviderConnection(false);
     }
   }
 
@@ -979,8 +1036,12 @@ export default function App() {
       setJqlAiMessage("Describe the Jira issues you want to find.");
       return;
     }
-    if (!hasOpenAiApiKey && usesTauriPersistence) {
-      setJqlAiMessage("Save an OpenAI API key in Settings before using Ask AI.");
+    if (usesTauriPersistence && appSettings.aiProvider === "None") {
+      setJqlAiMessage("Select an AI provider in Settings before using Ask AI.");
+      return;
+    }
+    if (!hasAiProviderApiKey && usesTauriPersistence) {
+      setJqlAiMessage(`Save a ${appSettings.aiProvider} API key in Settings before using Ask AI.`);
       return;
     }
 
@@ -1461,21 +1522,22 @@ export default function App() {
           <SettingsPanel
             settings={appSettings}
             hasJiraApiToken={hasJiraApiToken}
-            hasOpenAiApiKey={hasOpenAiApiKey}
+            hasAiProviderApiKey={hasAiProviderApiKey}
             jiraCredentialMessage={jiraCredentialMessage}
             aiCredentialMessage={aiCredentialMessage}
             isTestingJiraConnection={isTestingJiraConnection}
-            isTestingOpenAiConnection={isTestingOpenAiConnection}
+            isTestingAiProviderConnection={isTestingAiProviderConnection}
             onChange={updateAppSettings}
             onSaveJiraApiToken={saveJiraApiToken}
             onDeleteJiraApiToken={deleteJiraApiToken}
-            onSaveOpenAiApiKey={saveOpenAiApiKey}
-            onDeleteOpenAiApiKey={deleteOpenAiApiKey}
-            onTestOpenAiConnection={testOpenAiConnection}
-            onTestOpenAiApiKey={testOpenAiApiKey}
+            onSaveAiProviderApiKey={saveAiProviderApiKey}
+            onDeleteAiProviderApiKey={deleteAiProviderApiKey}
+            onTestAiProviderConnection={testAiProviderConnection}
+            onTestAiProviderApiKey={testAiProviderApiKey}
             onTestJiraConnection={testJiraConnection}
             onTestJiraApiToken={testJiraApiToken}
             onOpenJiraApiTokens={openJiraApiTokensPage}
+            onOpenAiProviderApiKeys={openAiProviderApiKeysPage}
             onExportBackup={exportBackup}
             onImportBackup={importBackup}
             onClose={() => setOpenPanel(null)}
@@ -1529,7 +1591,7 @@ function ConnectionNoticeToast({
   return (
     <div
       className="fixed inset-0 z-[60] flex items-start justify-center px-4 pt-4"
-      onMouseDown={onClose}
+      onPointerDown={(event) => dismissBackdropPointerDown(event, onClose)}
     >
       <section
         className={`pointer-events-auto rounded border px-4 py-3 shadow-2xl ${
@@ -1537,7 +1599,7 @@ function ConnectionNoticeToast({
             ? "border-[#abf5d1] bg-[#e3fcef] text-[#006644]"
             : "border-[#ffbdad] bg-[#ffebe6] text-[#bf2600]"
         }`}
-        onMouseDown={(event) => event.stopPropagation()}
+        onPointerDown={stopPointerDownPropagation}
       >
         <div className="flex items-start gap-3">
           <div className="mt-0.5 shrink-0">{isSuccess ? <CheckCircle2 size={18} /> : <AlertTriangle size={18} />}</div>
@@ -1578,13 +1640,13 @@ function CsvExportNoticeToast({
   return (
     <div
       className="fixed inset-0 z-[65] flex items-center justify-center px-4"
-      onMouseDown={onClose}
+      onPointerDown={(event) => dismissBackdropPointerDown(event, onClose)}
       role="status"
       aria-live="polite"
     >
       <section
         className="pointer-events-auto w-full max-w-[580px] rounded border border-[#216e4e] bg-[#143c2b] text-[#dffcf0] shadow-2xl"
-        onMouseDown={(event) => event.stopPropagation()}
+        onPointerDown={stopPointerDownPropagation}
       >
         <div className="flex items-start justify-between gap-4 px-6 py-5">
           <div className="flex min-w-0 gap-4">
@@ -1623,6 +1685,18 @@ function useNoticeDismiss(onClose: () => void) {
   }, [onClose]);
 }
 
+function dismissBackdropPointerDown(
+  event: ReactPointerEvent<HTMLElement>,
+  onClose: () => void
+) {
+  event.stopPropagation();
+  if (event.target === event.currentTarget) onClose();
+}
+
+function stopPointerDownPropagation(event: ReactPointerEvent<HTMLElement>) {
+  event.stopPropagation();
+}
+
 function BackupNoticeDialog({
   notice,
   onClose
@@ -1644,10 +1718,13 @@ function BackupNoticeDialog({
   }, [onClose]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#091e42]/60 px-4 backdrop-blur-[1px]" onMouseDown={onClose}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[#091e42]/60 px-4 backdrop-blur-[1px]"
+      onPointerDown={(event) => dismissBackdropPointerDown(event, onClose)}
+    >
       <section
         className="w-full max-w-[520px] rounded border border-[#3b4454] bg-[#2b2d31] text-[#dfe1e6] shadow-2xl"
-        onMouseDown={(event) => event.stopPropagation()}
+        onPointerDown={stopPointerDownPropagation}
       >
         <div className="flex items-start justify-between gap-4 border-b border-[#454852] px-5 py-4">
           <div className="flex items-start gap-3">
@@ -1748,10 +1825,13 @@ function ConfirmDialog({
   }, [onCancel]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#091e42]/60 px-4 backdrop-blur-[1px]" onMouseDown={onCancel}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[#091e42]/60 px-4 backdrop-blur-[1px]"
+      onPointerDown={(event) => dismissBackdropPointerDown(event, onCancel)}
+    >
       <section
         className="w-full max-w-[440px] rounded border border-[#3b4454] bg-[#2b2d31] text-[#dfe1e6] shadow-2xl"
-        onMouseDown={(event) => event.stopPropagation()}
+        onPointerDown={stopPointerDownPropagation}
       >
         <div className="border-b border-[#454852] px-5 py-4">
           <h2 className="text-base font-semibold text-[#f4f5f7]">{title}</h2>

@@ -98,6 +98,7 @@ fn is_secret_shaped_word(word: &str) -> bool {
 
     (lowercase.starts_with("sk-") && word.len() >= 10)
         || (lowercase.starts_with("svcac") && word.len() >= 10)
+        || (word.starts_with("AIza") && word.len() >= 20)
         || (word.len() >= 12 && word.matches('*').count() >= 6)
 }
 
@@ -148,5 +149,12 @@ mod tests {
         let redacted = redact_secret_fragments("OpenAI rejected sk-proj-secretValue123456");
 
         assert_eq!(redacted, "OpenAI rejected <redacted>");
+    }
+
+    #[test]
+    fn redacts_unmarked_gemini_keys() {
+        let redacted = redact_secret_fragments("Gemini rejected AIzaSySecretValue1234567890");
+
+        assert_eq!(redacted, "Gemini rejected <redacted>");
     }
 }
