@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "test": "vitest run",
+    "test": "TMPDIR=${TMPDIR:-/tmp} vitest run",
     "coverage:rust": "cd src-tauri && ${CARGO:-$HOME/.cargo/bin/cargo} llvm-cov --summary-only",
     "tauri": "tauri"
   },
