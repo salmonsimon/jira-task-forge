@@ -153,9 +153,15 @@ where
             .filter(|task| task.sync_status != "Created" && task.issue_type != "Sub-task")
             .cloned()
             .collect::<Vec<_>>();
-        result.skipped_issue_count = tasks.len().saturating_sub(parent_tasks.len());
+        let subtask_tasks = tasks
+            .iter()
+            .filter(|task| task.sync_status != "Created" && task.issue_type == "Sub-task")
+            .cloned()
+            .collect::<Vec<_>>();
+        let createable_task_count = parent_tasks.len() + subtask_tasks.len();
+        result.skipped_issue_count = tasks.len().saturating_sub(createable_task_count);
         let epic_group_count = count_project_area_groups(&parent_tasks);
-        total_steps = 4 + epic_group_count + parent_tasks.len();
+        total_steps = 4 + epic_group_count + parent_tasks.len() + subtask_tasks.len();
         report_jira_create_progress(
             &mut report_progress,
             Some(&sync_attempt_id),
@@ -163,11 +169,11 @@ where
             "Validating local tasks",
             Some(&format!(
                 "{} createable {}",
-                parent_tasks.len(),
-                if parent_tasks.len() == 1 {
-                    "parent issue"
+                createable_task_count,
+                if createable_task_count == 1 {
+                    "Jira issue"
                 } else {
-                    "parent issues"
+                    "Jira issues"
                 }
             )),
             completed_steps,
@@ -175,8 +181,11 @@ where
             "running",
         );
 
-        let local_blockers =
-            self.validate_local_preflight(&parent_tasks, allow_missing_descriptions);
+        let local_blockers = self.validate_local_preflight(
+            &parent_tasks,
+            &subtask_tasks,
+            allow_missing_descriptions,
+        );
         if !local_blockers.is_empty() {
             report_jira_create_progress(
                 &mut report_progress,
@@ -231,7 +240,7 @@ where
             }
         };
         completed_steps += 1;
-        let plan = match ResolvedCreateMetadata::resolve(&metadata, &parent_tasks) {
+        let plan = match ResolvedCreateMetadata::resolve(&metadata, &parent_tasks, &subtask_tasks) {
             Ok(plan) => plan,
             Err(messages) => {
                 report_jira_create_progress(
@@ -265,7 +274,7 @@ where
                 json!({
                     "jiraProjectKey": self.creation_project_key,
                     "issueTypes": plan.issue_type_names(),
-                    "taskCount": parent_tasks.len(),
+                    "taskCount": createable_task_count,
                 }),
             )
             .map_err(db_error_message)?;
@@ -339,6 +348,15 @@ where
         completed_steps += 1;
 
         let mut had_non_blocking_warning = false;
+        let mut parent_jira_keys = tasks
+            .iter()
+            .filter_map(|task| {
+                task.jira_key
+                    .as_ref()
+                    .filter(|key| !key.trim().is_empty())
+                    .map(|key| (task.id.clone(), key.clone()))
+            })
+            .collect::<HashMap<_, _>>();
         let groups = group_tasks_by_project_area(parent_tasks);
         for ((local_project, area), group_tasks) in groups {
             let epic_summary = format!("[{local_project}] {area}");
@@ -431,6 +449,7 @@ where
                         "{} already had Jira key {existing_key}; local status was repaired.",
                         task.title
                     ));
+                    parent_jira_keys.insert(task.id.clone(), existing_key.to_string());
                     completed_steps += 1;
                     continue;
                 }
@@ -449,6 +468,7 @@ where
 
                 match self.gateway.create_issue(payload) {
                     Ok(created_issue) => {
+                        let created_key = created_issue.key.clone();
                         let issue_url = self.gateway.issue_browse_url(&created_issue.key);
                         TaskRepository::new(self.connection)
                             .mark_jira_created(&task.id, &created_issue.key, &issue_url, &epic_key)
@@ -496,6 +516,7 @@ where
                             summary: jira_parent_summary(&task),
                             epic_key: Some(epic_key.clone()),
                         });
+                        parent_jira_keys.insert(task.id.clone(), created_key);
                         completed_steps += 1;
                     }
                     Err(message) => {
@@ -508,6 +529,125 @@ where
                             &message,
                             &mut result,
                             "jira.issue.create",
+                        )?;
+                        completed_steps += 1;
+                    }
+                }
+            }
+        }
+
+        if let Some(subtask_issue_type) = plan.subtask.as_ref() {
+            for subtask in subtask_tasks {
+                report_jira_create_progress(
+                    &mut report_progress,
+                    Some(&sync_attempt_id),
+                    "subtask",
+                    "Creating Jira sub-task",
+                    Some(&subtask.title),
+                    completed_steps,
+                    total_steps,
+                    "running",
+                );
+
+                let Some(parent_task_id) = subtask.parent_task_id.as_deref() else {
+                    record_task_failure(
+                        self.connection,
+                        &sync_repository,
+                        &sync_attempt_id,
+                        tray_id,
+                        &subtask,
+                        "Sub-task is missing a parent local task.",
+                        &mut result,
+                        "jira.subtask.parent_missing",
+                    )?;
+                    completed_steps += 1;
+                    continue;
+                };
+                let Some(parent_jira_key) = parent_jira_keys.get(parent_task_id) else {
+                    record_task_failure(
+                        self.connection,
+                        &sync_repository,
+                        &sync_attempt_id,
+                        tray_id,
+                        &subtask,
+                        "Sub-task parent has no Jira key yet.",
+                        &mut result,
+                        "jira.subtask.parent_missing",
+                    )?;
+                    completed_steps += 1;
+                    continue;
+                };
+
+                if let Some(existing_key) =
+                    subtask.jira_key.as_deref().filter(|key| !key.is_empty())
+                {
+                    let existing_url = subtask
+                        .jira_url
+                        .clone()
+                        .unwrap_or_else(|| self.gateway.issue_browse_url(existing_key));
+                    TaskRepository::new(self.connection)
+                        .mark_jira_subtask_created(&subtask.id, existing_key, &existing_url)
+                        .map_err(db_error_message)?;
+                    result.skipped_issue_count += 1;
+                    result.messages.push(format!(
+                        "{} already had Jira key {existing_key}; local sub-task status was repaired.",
+                        subtask.title
+                    ));
+                    completed_steps += 1;
+                    continue;
+                }
+
+                let payload = build_subtask_issue_payload(
+                    subtask_issue_type,
+                    &self.creation_project_key,
+                    &subtask,
+                    parent_jira_key,
+                    &sync_attempt_id,
+                    reporter_account_id.as_deref(),
+                );
+
+                match self.gateway.create_issue(payload) {
+                    Ok(created_issue) => {
+                        let issue_url = self.gateway.issue_browse_url(&created_issue.key);
+                        TaskRepository::new(self.connection)
+                            .mark_jira_subtask_created(&subtask.id, &created_issue.key, &issue_url)
+                            .map_err(db_error_message)?;
+                        sync_repository
+                            .record_event(
+                                &sync_attempt_id,
+                                tray_id,
+                                Some(&subtask.id),
+                                "jira.subtask.created",
+                                "succeeded",
+                                JIRA_PROVIDER_OPERATION,
+                                json!({
+                                    "jiraKey": created_issue.key,
+                                    "parentJiraKey": parent_jira_key,
+                                    "issueType": subtask.issue_type,
+                                }),
+                            )
+                            .map_err(db_error_message)?;
+                        result.created_issue_count += 1;
+                        result.created_issues.push(JiraCreatedIssueResult {
+                            task_id: Some(subtask.id.clone()),
+                            key: created_issue.key,
+                            url: issue_url,
+                            issue_type: subtask.issue_type.clone(),
+                            summary: jira_subtask_summary(&subtask),
+                            epic_key: None,
+                        });
+                        completed_steps += 1;
+                    }
+                    Err(message) => {
+                        record_task_failure(
+                            self.connection,
+                            &sync_repository,
+                            &sync_attempt_id,
+                            tray_id,
+                            &subtask,
+                            &message,
+                            &mut result,
+                            "jira.subtask.create",
                         )?;
                         completed_steps += 1;
                     }
@@ -579,17 +719,18 @@ where
     fn validate_local_preflight(
         &self,
         parent_tasks: &[LocalTask],
+        subtask_tasks: &[LocalTask],
         allow_missing_descriptions: bool,
     ) -> Vec<String> {
         let mut messages = Vec::new();
         if self.creation_project_key.is_empty() {
             messages.push("Jira creation project key is required.".to_string());
         }
-        if parent_tasks.is_empty() {
-            messages.push("There are no pending parent Story or Bug tasks to create.".to_string());
+        if parent_tasks.is_empty() && subtask_tasks.is_empty() {
+            messages.push("There are no pending Jira tasks to create.".to_string());
         }
 
-        for task in parent_tasks {
+        for task in parent_tasks.iter().chain(subtask_tasks.iter()) {
             if task.project.trim().is_empty() {
                 messages.push(format!("{} is missing a local project.", task.title));
             }
@@ -605,7 +746,7 @@ where
                     task.title
                 ));
             }
-            if task.issue_type != "Story" && task.issue_type != "Bug" {
+            if !matches!(task.issue_type.as_str(), "Story" | "Bug" | "Sub-task") {
                 messages.push(format!(
                     "{} has unsupported issue type {} for this Jira write slice.",
                     task.title, task.issue_type
@@ -649,12 +790,14 @@ struct ResolvedCreateMetadata {
     epic: IssueTypePlan,
     story: Option<IssueTypePlan>,
     bug: Option<IssueTypePlan>,
+    subtask: Option<IssueTypePlan>,
 }
 
 impl ResolvedCreateMetadata {
     fn resolve(
         metadata: &JiraCreateMetadata,
         parent_tasks: &[LocalTask],
+        subtask_tasks: &[LocalTask],
     ) -> Result<Self, Vec<String>> {
         let mut messages = Vec::new();
         let epic = find_issue_type(&metadata.issue_types, IssueTypeRole::Epic)
@@ -671,6 +814,12 @@ impl ResolvedCreateMetadata {
         } else {
             None
         };
+        let subtask = if !subtask_tasks.is_empty() {
+            find_issue_type(&metadata.issue_types, IssueTypeRole::SubTask)
+                .map(|issue_type| IssueTypePlan::resolve(issue_type, IssueTypeRole::SubTask))
+        } else {
+            None
+        };
 
         let Some(epic) = epic else {
             messages.push("Jira create metadata does not include an Epic issue type.".to_string());
@@ -682,6 +831,10 @@ impl ResolvedCreateMetadata {
         if parent_tasks.iter().any(|task| task.issue_type == "Bug") && bug.is_none() {
             messages.push("Jira create metadata does not include a Bug issue type.".to_string());
         }
+        if !subtask_tasks.is_empty() && subtask.is_none() {
+            messages
+                .push("Jira create metadata does not include a Sub-task issue type.".to_string());
+        }
 
         let mut plans = vec![epic.clone()];
         if let Some(story) = story.clone() {
@@ -690,12 +843,20 @@ impl ResolvedCreateMetadata {
         if let Some(bug) = bug.clone() {
             plans.push(bug);
         }
+        if let Some(subtask) = subtask.clone() {
+            plans.push(subtask);
+        }
         for plan in &plans {
             messages.extend(plan.validation_messages());
         }
 
         if messages.is_empty() {
-            Ok(Self { epic, story, bug })
+            Ok(Self {
+                epic,
+                story,
+                bug,
+                subtask,
+            })
         } else {
             Err(messages)
         }
@@ -705,6 +866,7 @@ impl ResolvedCreateMetadata {
         match local_issue_type {
             "Story" => self.story.as_ref(),
             "Bug" => self.bug.as_ref(),
+            "Sub-task" => self.subtask.as_ref(),
             _ => None,
         }
     }
@@ -716,6 +878,9 @@ impl ResolvedCreateMetadata {
         }
         if let Some(bug) = &self.bug {
             names.push(bug.name.clone());
+        }
+        if let Some(subtask) = &self.subtask {
+            names.push(subtask.name.clone());
         }
         names
     }
@@ -730,6 +895,10 @@ impl ResolvedCreateMetadata {
                 .bug
                 .as_ref()
                 .is_some_and(|bug| bug.requires_field("reporter"))
+            || self
+                .subtask
+                .as_ref()
+                .is_some_and(|subtask| subtask.requires_field("reporter"))
     }
 }
 
@@ -818,7 +987,10 @@ impl IssueTypePlan {
     fn can_populate_required_field(&self, field: &JiraCreateFieldMetadata) -> bool {
         match field.key.as_str() {
             "summary" | "issuetype" | "project" | "priority" | "labels" | "reporter" => true,
-            "parent" => matches!(self.role, IssueTypeRole::Story | IssueTypeRole::Bug),
+            "parent" => matches!(
+                self.role,
+                IssueTypeRole::Story | IssueTypeRole::Bug | IssueTypeRole::SubTask
+            ),
             "description" => false,
             _ if matches!(self.role, IssueTypeRole::Epic) && is_epic_name_field(field) => true,
             _ if matches!(self.role, IssueTypeRole::Story | IssueTypeRole::Bug)
@@ -839,6 +1011,7 @@ enum IssueTypeRole {
     Epic,
     Story,
     Bug,
+    SubTask,
 }
 
 #[derive(Debug, Clone)]
@@ -859,16 +1032,7 @@ fn find_issue_type(
 ) -> Option<&JiraCreateIssueTypeMetadata> {
     issue_types
         .iter()
-        .filter(|issue_type| {
-            if matches!(
-                role,
-                IssueTypeRole::Epic | IssueTypeRole::Story | IssueTypeRole::Bug
-            ) {
-                !issue_type.subtask
-            } else {
-                true
-            }
-        })
+        .filter(|issue_type| matches!(role, IssueTypeRole::SubTask) == issue_type.subtask)
         .find(|issue_type| issue_type_name_matches(&issue_type.name, role))
 }
 
@@ -880,6 +1044,10 @@ fn issue_type_name_matches(name: &str, role: IssueTypeRole) -> bool {
         IssueTypeRole::Bug => matches!(
             normalized.as_str(),
             "bug" | "error" | "defecto" | "incidencia"
+        ),
+        IssueTypeRole::SubTask => matches!(
+            normalized.as_str(),
+            "sub-task" | "subtask" | "sub tarea" | "subtarea"
         ),
     }
 }
@@ -1063,6 +1231,45 @@ fn build_parent_issue_payload(
     })
 }
 
+fn build_subtask_issue_payload(
+    issue_type: &IssueTypePlan,
+    jira_project_key: &str,
+    task: &LocalTask,
+    parent_jira_key: &str,
+    sync_attempt_id: &str,
+    reporter_account_id: Option<&str>,
+) -> Value {
+    let mut fields = json!({
+        "project": { "key": jira_project_key },
+        "issuetype": { "id": issue_type.id },
+        "summary": jira_subtask_summary(task),
+        "parent": { "key": parent_jira_key },
+        "labels": labels_for(&task.project, &task.area),
+    });
+    if issue_type.field("priority").is_some() {
+        fields["priority"] = priority_value(issue_type.field("priority"), &task.priority);
+    }
+    if let Some(account_id) = reporter_account_id {
+        fields["reporter"] = json!({ "accountId": account_id });
+    }
+
+    json!({
+        "fields": fields,
+        "properties": [{
+            "key": JIRA_TASK_FORGE_PROPERTY_KEY,
+            "value": {
+                "source": "jira-task-forge",
+                "syncAttemptId": sync_attempt_id,
+                "localTaskId": task.id,
+                "parentLocalTaskId": task.parent_task_id.as_deref(),
+                "localProject": task.project,
+                "area": task.area,
+                "kind": "subtask"
+            }
+        }]
+    })
+}
+
 fn update_issue_priority_after_create<Gateway>(
     gateway: &mut Gateway,
     sync_repository: &SyncRepository<'_>,
@@ -1137,6 +1344,10 @@ fn jira_parent_summary(task: &LocalTask) -> String {
     } else {
         format!("{prefix} {title}")
     }
+}
+
+fn jira_subtask_summary(task: &LocalTask) -> String {
+    task.title.trim().to_string()
 }
 
 fn priority_value(priority_field: Option<&JiraCreateFieldMetadata>, local_priority: &str) -> Value {
@@ -1399,6 +1610,193 @@ mod tests {
             gateway.created_payloads[1]["properties"][0]["value"]["localTaskId"],
             json!(task.id)
         );
+    }
+
+    #[test]
+    fn creates_subtasks_after_parent_issue_creation() {
+        let connection = open_in_memory_database().expect("database opens");
+        let tray_repository = TrayRepository::new(&connection);
+        let task_repository = TaskRepository::new(&connection);
+        let tray = tray_repository
+            .create(NewTray {
+                name: "Sub-task sync".to_string(),
+            })
+            .expect("tray creates");
+        let parent_task = task_repository
+            .create(NewTask {
+                tray_id: tray.id.clone(),
+                project: "STT".to_string(),
+                area: "Programacion".to_string(),
+                title: "Parent with child".to_string(),
+                priority: "High".to_string(),
+                issue_type: "Story".to_string(),
+                content_language: "Spanish".to_string(),
+            })
+            .expect("parent task creates");
+        let subtask = create_subtask_row(
+            &connection,
+            &tray.id,
+            Some(&parent_task.id),
+            "Implement child step",
+        );
+        let mut gateway = FakeJiraGateway::new();
+        gateway.created_keys = vec![
+            "JTFTEST-10".to_string(),
+            "JTFTEST-11".to_string(),
+            "JTFTEST-12".to_string(),
+        ];
+
+        let mut runner = JiraSyncRunner::new(&connection, &mut gateway, "JTFTEST".to_string());
+        let result = runner
+            .create_parent_issues_from_tray(&tray.id, true)
+            .expect("sync succeeds");
+
+        assert_eq!(result.status, "succeeded");
+        assert_eq!(result.created_issue_count, 2);
+        assert_eq!(result.failed_issue_count, 0);
+        assert_eq!(result.created_issues[0].key, "JTFTEST-11");
+        assert_eq!(result.created_issues[1].key, "JTFTEST-12");
+        assert_eq!(result.created_issues[1].issue_type, "Sub-task");
+        assert_eq!(result.created_issues[1].summary, "Implement child step");
+
+        assert_eq!(gateway.created_payloads.len(), 3);
+        assert_eq!(
+            gateway.created_payloads[2]["fields"]["parent"]["key"],
+            json!("JTFTEST-11")
+        );
+        assert_eq!(
+            gateway.created_payloads[2]["properties"][0]["value"]["kind"],
+            json!("subtask")
+        );
+        assert_eq!(
+            gateway.created_payloads[2]["properties"][0]["value"]["parentLocalTaskId"],
+            json!(parent_task.id)
+        );
+
+        let tasks = TaskRepository::new(&connection)
+            .list_for_tray(&tray.id)
+            .expect("tasks list");
+        let persisted_subtask = tasks
+            .iter()
+            .find(|candidate| candidate.id == subtask.id)
+            .expect("subtask remains");
+        assert_eq!(persisted_subtask.sync_status, "Created");
+        assert_eq!(persisted_subtask.jira_key.as_deref(), Some("JTFTEST-12"));
+        assert_eq!(persisted_subtask.epic_key, None);
+    }
+
+    #[test]
+    fn creates_pending_subtask_when_parent_already_has_jira_key() {
+        let connection = open_in_memory_database().expect("database opens");
+        let tray_repository = TrayRepository::new(&connection);
+        let task_repository = TaskRepository::new(&connection);
+        let tray = tray_repository
+            .create(NewTray {
+                name: "Sub-task retry".to_string(),
+            })
+            .expect("tray creates");
+        let parent_task = task_repository
+            .create(NewTask {
+                tray_id: tray.id.clone(),
+                project: "STT".to_string(),
+                area: "Programacion".to_string(),
+                title: "Already created parent".to_string(),
+                priority: "High".to_string(),
+                issue_type: "Story".to_string(),
+                content_language: "Spanish".to_string(),
+            })
+            .expect("parent task creates");
+        task_repository
+            .mark_jira_created(
+                &parent_task.id,
+                "JTFTEST-30",
+                "https://example.atlassian.net/browse/JTFTEST-30",
+                "JTFTEST-29",
+            )
+            .expect("parent marked created");
+        let subtask = create_subtask_row(
+            &connection,
+            &tray.id,
+            Some(&parent_task.id),
+            "Retry child only",
+        );
+        let mut gateway = FakeJiraGateway::new();
+        gateway.created_keys = vec!["JTFTEST-31".to_string()];
+
+        let mut runner = JiraSyncRunner::new(&connection, &mut gateway, "JTFTEST".to_string());
+        let result = runner
+            .create_parent_issues_from_tray(&tray.id, true)
+            .expect("sync succeeds");
+
+        assert_eq!(result.status, "succeeded");
+        assert_eq!(result.created_issue_count, 1);
+        assert_eq!(result.skipped_issue_count, 1);
+        assert_eq!(gateway.created_payloads.len(), 1);
+        assert_eq!(
+            gateway.created_payloads[0]["fields"]["parent"]["key"],
+            json!("JTFTEST-30")
+        );
+
+        let persisted_subtask = TaskRepository::new(&connection)
+            .list_for_tray(&tray.id)
+            .expect("tasks list")
+            .into_iter()
+            .find(|candidate| candidate.id == subtask.id)
+            .expect("subtask remains");
+        assert_eq!(persisted_subtask.sync_status, "Created");
+        assert_eq!(persisted_subtask.jira_key.as_deref(), Some("JTFTEST-31"));
+    }
+
+    #[test]
+    fn fails_subtask_without_parent_jira_key_without_recreating_parent() {
+        let connection = open_in_memory_database().expect("database opens");
+        let tray_repository = TrayRepository::new(&connection);
+        let task_repository = TaskRepository::new(&connection);
+        let tray = tray_repository
+            .create(NewTray {
+                name: "Missing parent key".to_string(),
+            })
+            .expect("tray creates");
+        let parent_task = task_repository
+            .create(NewTask {
+                tray_id: tray.id.clone(),
+                project: "STT".to_string(),
+                area: "Programacion".to_string(),
+                title: "Local parent only".to_string(),
+                priority: "High".to_string(),
+                issue_type: "Story".to_string(),
+                content_language: "Spanish".to_string(),
+            })
+            .expect("parent task creates");
+        connection
+            .execute(
+                "UPDATE tasks SET sync_status = 'Created', jira_key = NULL, jira_url = NULL WHERE id = ?1",
+                [&parent_task.id],
+            )
+            .expect("parent marked created without key");
+        let subtask = create_subtask_row(
+            &connection,
+            &tray.id,
+            Some(&parent_task.id),
+            "Cannot create child",
+        );
+        let mut gateway = FakeJiraGateway::new();
+        gateway.created_keys = Vec::new();
+
+        let mut runner = JiraSyncRunner::new(&connection, &mut gateway, "JTFTEST".to_string());
+        let result = runner
+            .create_parent_issues_from_tray(&tray.id, true)
+            .expect("sync returns failure result");
+
+        assert_eq!(result.status, "failed");
+        assert_eq!(result.created_issue_count, 0);
+        assert_eq!(result.failed_issue_count, 1);
+        assert!(gateway.created_payloads.is_empty());
+        assert!(result
+            .failed_tasks
+            .iter()
+            .any(|failure| failure.task_id == subtask.id
+                && failure.message.contains("parent has no Jira key")));
     }
 
     #[test]
@@ -1777,6 +2175,7 @@ mod tests {
                 issue_type("10000", "Epic", IssueTypeRole::Epic),
                 issue_type("10001", "Historia", IssueTypeRole::Story),
                 issue_type("10002", "Bug", IssueTypeRole::Bug),
+                subtask_issue_type("10003", "Sub-task"),
             ],
         }
     }
@@ -1788,6 +2187,7 @@ mod tests {
                 localized_issue_type("10039", "Epic", IssueTypeRole::Epic),
                 localized_issue_type("10042", "Historia", IssueTypeRole::Story),
                 localized_issue_type("10044", "Error", IssueTypeRole::Bug),
+                subtask_issue_type("10045", "Subtarea"),
             ],
         }
     }
@@ -1834,6 +2234,57 @@ mod tests {
             subtask: false,
             fields,
         }
+    }
+
+    fn subtask_issue_type(id: &str, name: &str) -> JiraCreateIssueTypeMetadata {
+        JiraCreateIssueTypeMetadata {
+            id: id.to_string(),
+            name: name.to_string(),
+            subtask: true,
+            fields: vec![
+                field("project", "Project", true),
+                field("issuetype", "Issue Type", true),
+                field("summary", "Summary", true),
+                field("parent", "Parent", true),
+                field("labels", "Labels", false),
+                priority_field(),
+            ],
+        }
+    }
+
+    fn create_subtask_row(
+        connection: &Connection,
+        tray_id: &str,
+        parent_task_id: Option<&str>,
+        title: &str,
+    ) -> LocalTask {
+        let task_repository = TaskRepository::new(connection);
+        let task_order = task_repository
+            .list_for_tray(tray_id)
+            .expect("tasks list")
+            .len() as i64;
+        let id = uuid::Uuid::new_v4().to_string();
+        let now = "2026-05-25T00:00:00Z";
+        connection
+            .execute(
+                "
+                INSERT INTO tasks (
+                    id, tray_id, project, area, title, priority, issue_type, sync_status,
+                    description_status, content_language, jira_key, jira_url, epic_key,
+                    parent_task_id, task_order, created_at, updated_at
+                )
+                VALUES (?1, ?2, 'STT', 'Programacion', ?3, 'Medium', 'Sub-task', 'Pending',
+                    'Ready', 'Spanish', NULL, NULL, NULL, ?4, ?5, ?6, ?6)
+                ",
+                (id.as_str(), tray_id, title, parent_task_id, task_order, now),
+            )
+            .expect("subtask inserts");
+        task_repository
+            .list_for_tray(tray_id)
+            .expect("tasks list")
+            .into_iter()
+            .find(|task| task.id == id)
+            .expect("subtask exists")
     }
 
     fn field(key: &str, name: &str, required: bool) -> JiraCreateFieldMetadata {

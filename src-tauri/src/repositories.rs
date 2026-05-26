@@ -637,6 +637,40 @@ impl<'connection> TaskRepository<'connection> {
         Ok(self.list_all()?.into_iter().find(|task| task.id == task_id))
     }
 
+    pub fn mark_jira_subtask_created(
+        &self,
+        task_id: &str,
+        jira_key: &str,
+        jira_url: &str,
+    ) -> DbResult<Option<LocalTask>> {
+        let now = utc_now_string()?;
+        let tray_id = self.connection.query_row(
+            "SELECT tray_id FROM tasks WHERE id = ?1",
+            [task_id],
+            |row| row.get::<_, String>(0),
+        );
+
+        let Ok(tray_id) = tray_id else {
+            return Ok(None);
+        };
+
+        self.connection.execute(
+            "
+            UPDATE tasks
+            SET sync_status = 'Created',
+                jira_key = ?1,
+                jira_url = ?2,
+                epic_key = NULL,
+                updated_at = ?3
+            WHERE id = ?4
+            ",
+            (jira_key, jira_url, now.as_str(), task_id),
+        )?;
+        self.touch_tray(&tray_id, &now)?;
+
+        Ok(self.list_all()?.into_iter().find(|task| task.id == task_id))
+    }
+
     pub fn mark_jira_failed(&self, task_id: &str) -> DbResult<Option<LocalTask>> {
         let now = utc_now_string()?;
         let tray_id = self.connection.query_row(
