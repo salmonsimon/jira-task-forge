@@ -77,7 +77,7 @@ export function TraysView({
 
   const grouped = groupTasksByProject(selectedTray.tasks);
   const isArchived = selectedTray.state === "Archived";
-  const createableTaskCount = selectedTray.tasks.filter((task) => task.syncStatus !== "Created" && task.issueType !== "Sub-task").length;
+  const createableTaskCount = selectedTray.tasks.filter((task) => task.syncStatus !== "Created").length;
   const canCreateInJira = !isArchived && createableTaskCount > 0 && !isRunningJiraPreflight;
   const canExportCsv = canExportTrayCsv(selectedTray, { includeExported: true });
 

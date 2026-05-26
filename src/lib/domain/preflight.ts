@@ -30,7 +30,16 @@ export function classifyTaskPreflightWarnings(task: LocalTask): PreflightWarning
     });
   }
 
-  if (task.descriptionStatus === "Missing") {
+  if (task.issueType === "Sub-task" && !task.parentTaskId) {
+    warnings.push({
+      code: "missing-parent-task",
+      severity: "blocking",
+      taskId: task.id,
+      message: "Sub-task is missing its parent local task."
+    });
+  }
+
+  if (task.issueType !== "Sub-task" && task.descriptionStatus === "Missing") {
     warnings.push({
       code: "missing-description",
       severity: "resolvable",
@@ -39,7 +48,7 @@ export function classifyTaskPreflightWarnings(task: LocalTask): PreflightWarning
     });
   }
 
-  if (!task.epic) {
+  if (task.issueType !== "Sub-task" && !task.epic) {
     warnings.push({
       code: "missing-epic",
       severity: "resolvable",
@@ -63,6 +72,7 @@ export function classifyTaskPreflightWarnings(task: LocalTask): PreflightWarning
 export function classifyTrayPreflightWarnings(tasks: LocalTask[]): PreflightWarning[] {
   const createableTasks = tasks.filter((task) => task.syncStatus !== "Created");
   const warnings = createableTasks.flatMap(classifyTaskPreflightWarnings);
+  const tasksById = new Map(tasks.map((task) => [task.id, task]));
 
   if (createableTasks.length === 0) {
     warnings.push({
@@ -73,6 +83,25 @@ export function classifyTrayPreflightWarnings(tasks: LocalTask[]): PreflightWarn
   }
 
   for (const task of createableTasks) {
+    if (task.issueType === "Sub-task" && task.parentTaskId) {
+      const parentTask = tasksById.get(task.parentTaskId);
+      if (!parentTask) {
+        warnings.push({
+          code: "missing-parent-task",
+          severity: "blocking",
+          taskId: task.id,
+          message: "Sub-task parent is no longer in this tray."
+        });
+      } else if (parentTask.syncStatus === "Created" && !parentTask.jiraKey) {
+        warnings.push({
+          code: "missing-parent-task",
+          severity: "blocking",
+          taskId: task.id,
+          message: "Sub-task parent is marked Created but has no Jira key to attach to."
+        });
+      }
+    }
+
     if (task.syncStatus === "Exported") {
       warnings.push({
         code: "exported-duplicate-risk",

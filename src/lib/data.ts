@@ -28,7 +28,7 @@ export const trays: Tray[] = [
     id: "tray-week-20",
     name: "Semana 20 STT + PilotLab",
     state: "Needs attention",
-    summary: "12 tasks · 8 pending · 1 failed · 3 created",
+    summary: "12 tasks · 10 sub-tasks · 8 pending · 1 failed · 3 created",
     updatedAt: "Today",
     tasks: [
       {
@@ -93,14 +93,67 @@ export const trays: Tray[] = [
         syncStatus: "Pending",
         descriptionStatus: "Missing",
         language: "Spanish",
-        epic: "DTS-832 [STT] 3D",
-        subtasks: [
-          "Recolectar referencias",
-          "Definir escala y restricciones",
-          "Modelar base del asset",
-          "Texturizar",
-          "Revisar en contexto"
-        ]
+        epic: "DTS-832 [STT] 3D"
+      },
+      {
+        id: "ltask-vending-reference",
+        project: "STT",
+        area: "3D",
+        title: "Recolectar referencias",
+        priority: "Medium",
+        issueType: "Sub-task",
+        syncStatus: "Pending",
+        descriptionStatus: "Ready",
+        language: "Spanish",
+        parentTaskId: "ltask-vending"
+      },
+      {
+        id: "ltask-vending-scale",
+        project: "STT",
+        area: "3D",
+        title: "Definir escala y restricciones",
+        priority: "Medium",
+        issueType: "Sub-task",
+        syncStatus: "Pending",
+        descriptionStatus: "Ready",
+        language: "Spanish",
+        parentTaskId: "ltask-vending"
+      },
+      {
+        id: "ltask-vending-model",
+        project: "STT",
+        area: "3D",
+        title: "Modelar base del asset",
+        priority: "Medium",
+        issueType: "Sub-task",
+        syncStatus: "Pending",
+        descriptionStatus: "Ready",
+        language: "Spanish",
+        parentTaskId: "ltask-vending"
+      },
+      {
+        id: "ltask-vending-texture",
+        project: "STT",
+        area: "3D",
+        title: "Texturizar",
+        priority: "Medium",
+        issueType: "Sub-task",
+        syncStatus: "Pending",
+        descriptionStatus: "Ready",
+        language: "Spanish",
+        parentTaskId: "ltask-vending"
+      },
+      {
+        id: "ltask-vending-review",
+        project: "STT",
+        area: "3D",
+        title: "Revisar en contexto",
+        priority: "Medium",
+        issueType: "Sub-task",
+        syncStatus: "Pending",
+        descriptionStatus: "Ready",
+        language: "Spanish",
+        parentTaskId: "ltask-vending"
       },
       {
         id: "ltask-score-timer-map",
@@ -164,8 +217,67 @@ export const trays: Tray[] = [
         syncStatus: "Pending",
         descriptionStatus: "Missing",
         language: "Spanish",
-        epic: "DTS-825 [PilotLab] 3D",
-        subtasks: ["Recolectar referencias", "Definir escala", "Modelar base", "Texturizar", "Integrar en escena"]
+        epic: "DTS-825 [PilotLab] 3D"
+      },
+      {
+        id: "ltask-ticket-machine-reference",
+        project: "PilotLab",
+        area: "3D",
+        title: "Recolectar referencias",
+        priority: "Medium",
+        issueType: "Sub-task",
+        syncStatus: "Pending",
+        descriptionStatus: "Ready",
+        language: "Spanish",
+        parentTaskId: "ltask-ticket-machine"
+      },
+      {
+        id: "ltask-ticket-machine-scale",
+        project: "PilotLab",
+        area: "3D",
+        title: "Definir escala y restricciones",
+        priority: "Medium",
+        issueType: "Sub-task",
+        syncStatus: "Pending",
+        descriptionStatus: "Ready",
+        language: "Spanish",
+        parentTaskId: "ltask-ticket-machine"
+      },
+      {
+        id: "ltask-ticket-machine-model",
+        project: "PilotLab",
+        area: "3D",
+        title: "Modelar base del asset",
+        priority: "Medium",
+        issueType: "Sub-task",
+        syncStatus: "Pending",
+        descriptionStatus: "Ready",
+        language: "Spanish",
+        parentTaskId: "ltask-ticket-machine"
+      },
+      {
+        id: "ltask-ticket-machine-texture",
+        project: "PilotLab",
+        area: "3D",
+        title: "Texturizar",
+        priority: "Medium",
+        issueType: "Sub-task",
+        syncStatus: "Pending",
+        descriptionStatus: "Ready",
+        language: "Spanish",
+        parentTaskId: "ltask-ticket-machine"
+      },
+      {
+        id: "ltask-ticket-machine-review",
+        project: "PilotLab",
+        area: "3D",
+        title: "Revisar en contexto",
+        priority: "Medium",
+        issueType: "Sub-task",
+        syncStatus: "Pending",
+        descriptionStatus: "Ready",
+        language: "Spanish",
+        parentTaskId: "ltask-ticket-machine"
       },
       {
         id: "ltask-refactor-flow",

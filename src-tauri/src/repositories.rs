@@ -4,8 +4,8 @@ use uuid::Uuid;
 
 use crate::db::{utc_now_string, DbError, DbResult};
 use crate::models::{
-    AppSettings, Category, JqlFavorite, LocalTask, NewTask, NewTray, SyncAuditEvent, Tray,
-    TrayState,
+    AppSettings, Category, JqlFavorite, LocalTask, NewSubtask, NewTask, NewTray, SyncAuditEvent,
+    Tray, TrayState,
 };
 
 const APP_SETTINGS_KEY: &str = "app_settings";
@@ -426,6 +426,81 @@ impl<'connection> TaskRepository<'connection> {
             jira_url: None,
             epic_key: None,
             parent_task_id: None,
+            task_order,
+            created_at: now.clone(),
+            updated_at: now,
+        };
+
+        self.connection.execute(
+            "
+            INSERT INTO tasks (
+                id, tray_id, project, area, title, priority, issue_type, sync_status,
+                description_status, description, content_language, jira_key, jira_url, epic_key,
+                parent_task_id, task_order, created_at, updated_at
+            )
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)
+            ",
+            params![
+                task.id,
+                task.tray_id,
+                task.project,
+                task.area,
+                task.title,
+                task.priority,
+                task.issue_type,
+                task.sync_status,
+                task.description_status,
+                task.description,
+                task.content_language,
+                task.jira_key,
+                task.jira_url,
+                task.epic_key,
+                task.parent_task_id,
+                task.task_order,
+                task.created_at,
+                task.updated_at
+            ],
+        )?;
+
+        self.touch_tray(&task.tray_id, &task.updated_at)?;
+
+        Ok(task)
+    }
+
+    pub fn create_subtask(&self, new_subtask: NewSubtask) -> DbResult<LocalTask> {
+        let parent = self
+            .find_by_id(&new_subtask.parent_task_id)?
+            .ok_or_else(|| DbError::InvalidData("Sub-task parent was not found.".to_string()))?;
+        if parent.issue_type == "Sub-task" {
+            return Err(DbError::InvalidData(
+                "Sub-tasks cannot be nested under another sub-task.".to_string(),
+            ));
+        }
+
+        let title = normalize_display_name(&new_subtask.title)?;
+        let now = utc_now_string()?;
+        let task_order: i64 = self.connection.query_row(
+            "SELECT COALESCE(MAX(task_order), -1) + 1 FROM tasks WHERE tray_id = ?1",
+            [&parent.tray_id],
+            |row| row.get(0),
+        )?;
+
+        let task = LocalTask {
+            id: Uuid::new_v4().to_string(),
+            tray_id: parent.tray_id.clone(),
+            project: parent.project.clone(),
+            area: parent.area.clone(),
+            title,
+            priority: parent.priority.clone(),
+            issue_type: "Sub-task".to_string(),
+            sync_status: "Pending".to_string(),
+            description_status: "Ready".to_string(),
+            description: None,
+            content_language: parent.content_language.clone(),
+            jira_key: None,
+            jira_url: None,
+            epic_key: None,
+            parent_task_id: Some(parent.id.clone()),
             task_order,
             created_at: now.clone(),
             updated_at: now,
@@ -1362,6 +1437,58 @@ mod tests {
             task_repository.list_for_tray(&tray.id).expect("tasks list"),
             vec![second]
         );
+    }
+
+    #[test]
+    fn creates_subtask_under_parent_task() {
+        let connection = open_in_memory_database().expect("database opens");
+        let tray_repository = TrayRepository::new(&connection);
+        let task_repository = TaskRepository::new(&connection);
+        let tray = tray_repository
+            .create(NewTray {
+                name: "Sub-task tray".to_string(),
+            })
+            .expect("tray creates");
+        let parent = task_repository
+            .create(NewTask {
+                tray_id: tray.id.clone(),
+                project: "STT".to_string(),
+                area: "3D".to_string(),
+                title: "Model vending machine".to_string(),
+                priority: "High".to_string(),
+                issue_type: "Story".to_string(),
+                content_language: "Spanish".to_string(),
+            })
+            .expect("parent task creates");
+
+        let subtask = task_repository
+            .create_subtask(NewSubtask {
+                parent_task_id: parent.id.clone(),
+                title: "Reference pass".to_string(),
+            })
+            .expect("sub-task creates");
+
+        assert_eq!(subtask.tray_id, tray.id);
+        assert_eq!(subtask.project, parent.project);
+        assert_eq!(subtask.area, parent.area);
+        assert_eq!(subtask.priority, parent.priority);
+        assert_eq!(subtask.issue_type, "Sub-task");
+        assert_eq!(subtask.description_status, "Ready");
+        assert_eq!(subtask.parent_task_id.as_deref(), Some(parent.id.as_str()));
+        assert_eq!(subtask.task_order, 1);
+    }
+
+    #[test]
+    fn rejects_subtask_without_parent_task() {
+        let connection = open_in_memory_database().expect("database opens");
+        let task_repository = TaskRepository::new(&connection);
+
+        let result = task_repository.create_subtask(NewSubtask {
+            parent_task_id: "missing-parent".to_string(),
+            title: "Reference pass".to_string(),
+        });
+
+        assert!(matches!(result, Err(DbError::InvalidData(_))));
     }
 
     #[test]

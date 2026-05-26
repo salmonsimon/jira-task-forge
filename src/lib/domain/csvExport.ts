@@ -7,9 +7,11 @@ export type LocalTaskCsvExportOptions = {
 const CSV_HEADERS = ["Summary", "Issue Type", "Labels", "Description"] as const;
 
 export function isEligibleForCsvExport(
-  task: Pick<LocalTask, "syncStatus">,
+  task: Pick<LocalTask, "syncStatus"> & Partial<Pick<LocalTask, "issueType">>,
   options: LocalTaskCsvExportOptions = {}
 ): boolean {
+  if (task.issueType === "Sub-task") return false;
+
   const eligibleStatuses: SyncStatus[] = options.includeExported
     ? ["Pending", "Failed", "Exported"]
     : ["Pending", "Failed"];
@@ -51,14 +53,14 @@ export function exportLocalTasksToCsv(
 }
 
 export function countCsvExportableTasks(
-  tasks: Pick<LocalTask, "syncStatus">[],
+  tasks: Array<Pick<LocalTask, "syncStatus"> & Partial<Pick<LocalTask, "issueType">>>,
   options: LocalTaskCsvExportOptions = {}
 ): number {
   return tasks.filter((task) => isEligibleForCsvExport(task, options)).length;
 }
 
 export function canExportTrayCsv(
-  tray: { state: TrayState; tasks: Pick<LocalTask, "syncStatus">[] },
+  tray: { state: TrayState; tasks: Array<Pick<LocalTask, "syncStatus"> & Partial<Pick<LocalTask, "issueType">>> },
   options: LocalTaskCsvExportOptions = {}
 ): boolean {
   return tray.state !== "Completed" && countCsvExportableTasks(tray.tasks, options) > 0;

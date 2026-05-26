@@ -47,7 +47,7 @@ export function JiraPreflightDialog({
   const reviewWarnings = preflight.warnings.filter((warning) => warning.severity !== "blocking");
   const exportedTaskIds = new Set(
     preflight.tray.tasks
-      .filter((task) => task.syncStatus === "Exported" && task.issueType !== "Sub-task")
+      .filter((task) => task.syncStatus === "Exported")
       .map((task) => task.id)
   );
   const exportedDuplicateRiskCount = exportedTaskIds.size;
@@ -162,6 +162,8 @@ export function JiraPreflightDialog({
               <span className="rounded bg-[#102d50] px-2 py-1 text-xs font-medium text-[#85b8ff]">{preflight.creationTarget}</span>
             </div>
           </div>
+
+          <SubtaskCreationSummary tray={preflight.tray} includeExportedTasks={exportedTasksIncluded} />
 
           {blockingWarnings.length ? (
             <PreflightWarningGroup
@@ -318,6 +320,65 @@ function JiraCreateLoading({
       <div className="mt-2 flex items-center justify-between gap-3 text-xs text-[#b7d5ff]">
         <span className="truncate">{progress?.step ? progress.step.replace(/-/g, " ") : "working"}</span>
         <span className="shrink-0">{hasDeterminateProgress ? `${progressPercent}% · ${progressMeta}` : progressMeta}</span>
+      </div>
+    </div>
+  );
+}
+
+function SubtaskCreationSummary({
+  tray,
+  includeExportedTasks
+}: {
+  tray: Tray;
+  includeExportedTasks: boolean;
+}) {
+  const tasksById = new Map(tray.tasks.map((task) => [task.id, task]));
+  const subtaskGroups = tray.tasks
+    .filter(
+      (task) =>
+        task.issueType === "Sub-task" &&
+        task.parentTaskId &&
+        task.syncStatus !== "Created" &&
+        (includeExportedTasks || task.syncStatus !== "Exported")
+    )
+    .reduce<Array<{ parentTask: Tray["tasks"][number] | undefined; subtasks: Tray["tasks"] }>>((groups, subtask) => {
+      const parentTask = subtask.parentTaskId ? tasksById.get(subtask.parentTaskId) : undefined;
+      const existingGroup = groups.find((group) => group.parentTask?.id === parentTask?.id);
+      if (existingGroup) {
+        existingGroup.subtasks.push(subtask);
+        return groups;
+      }
+
+      groups.push({ parentTask, subtasks: [subtask] });
+      return groups;
+    }, []);
+
+  if (!subtaskGroups.length) return null;
+
+  const subtaskCount = subtaskGroups.reduce((total, group) => total + group.subtasks.length, 0);
+
+  return (
+    <div className="rounded border border-[#315a8a] bg-[#102d50] px-3 py-3">
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-sm font-semibold text-[#f4f5f7]">Sub-task creation</span>
+        <span className="rounded bg-[#0b2442] px-2 py-1 text-xs font-medium text-[#b7d5ff]">
+          {subtaskCount} {subtaskCount === 1 ? "sub-task" : "sub-tasks"}
+        </span>
+      </div>
+      <div className="mt-2 space-y-2">
+        {subtaskGroups.map((group) => (
+          <div className="rounded border border-[#244d7a] bg-[#0b2442] px-3 py-2" key={group.parentTask?.id ?? "missing-parent"}>
+            <div className="text-sm font-medium text-[#f4f5f7]">{group.parentTask?.title ?? "Missing parent task"}</div>
+            <ul className="mt-1 space-y-1 text-xs text-[#b7d5ff]">
+              {group.subtasks.map((subtask) => (
+                <li className="flex gap-2" key={subtask.id}>
+                  <span>-</span>
+                  <span>{subtask.title}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -487,6 +548,7 @@ function getWarningTitle(code: PreflightWarningCode): string {
     "missing-project": "Missing project",
     "missing-area": "Missing area",
     "missing-title": "Missing title",
+    "missing-parent-task": "Missing sub-task parent",
     "missing-description": "Missing description",
     "missing-epic": "Epic resolution",
     "retry-failed-task": "Failed tasks will retry",
@@ -505,6 +567,7 @@ function getWarningSummary(code: PreflightWarningCode, warning: PreflightWarning
     "missing-project": "These tasks need a Jira project before they can be created.",
     "missing-area": "These tasks need an area before Jira issue type and labels can be derived.",
     "missing-title": "These tasks need a title before they can be created.",
+    "missing-parent-task": warning.message,
     "missing-description": "These tasks can still be created, but should be reviewed because their description is missing.",
     "missing-epic": "Jira creation will search for each target epic by name and create it only if Jira has no match.",
     "retry-failed-task": "These failed tasks will be retried with their existing local identity.",

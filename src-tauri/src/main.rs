@@ -70,6 +70,7 @@ pub fn run() {
             commands::generate_task_description,
             commands::create_jira_parent_issues,
             commands::create_task,
+            commands::create_subtask,
             commands::list_tasks,
             commands::delete_task,
             commands::update_task_details,

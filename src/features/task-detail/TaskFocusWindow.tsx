@@ -1,4 +1,4 @@
-import { Check, ChevronDown, Image, Link2, Loader2, Pencil, Settings, Sparkles, X } from "lucide-react";
+import { Check, ChevronDown, Image, Link2, Loader2, Pencil, Plus, Settings, Sparkles, Trash2, X } from "lucide-react";
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { Button, DescriptionBadge, IconButton, IssueTypeBadge, PriorityBadge, SyncBadge } from "../../components/ui";
 import { isTaskReadOnly } from "../../lib/domain";
@@ -9,10 +9,13 @@ type DescriptionEditorMode = "hidden" | "ai" | "manual";
 
 export function TaskFocusWindow({
   task,
+  childTasks,
   projects,
   areas,
   readOnly: forceReadOnly = false,
   onUpdateDetails,
+  onAddSubtask,
+  onDeleteSubtask,
   onGenerateDescription,
   onSaveDescription,
   onOpenJiraIssue,
@@ -20,10 +23,13 @@ export function TaskFocusWindow({
   isGeneratingDescription = false
 }: {
   task: LocalTask;
+  childTasks: LocalTask[];
   projects: string[];
   areas: string[];
   readOnly?: boolean;
   onUpdateDetails: (taskId: string, task: { project: string; area: string; priority: Priority }) => void | Promise<void>;
+  onAddSubtask: (taskId: string, title: string) => void | Promise<void>;
+  onDeleteSubtask: (taskId: string) => void | Promise<void>;
   onGenerateDescription: (taskId: string, additionalContext: string) => Promise<AssistedDescriptionDraft>;
   onSaveDescription: (taskId: string, description: string) => void | Promise<void>;
   onOpenJiraIssue: (url: string) => void | Promise<void>;
@@ -31,6 +37,8 @@ export function TaskFocusWindow({
   isGeneratingDescription?: boolean;
 }) {
   const readOnly = forceReadOnly || isTaskReadOnly(task);
+  const [isAddingSubtask, setIsAddingSubtask] = useState(false);
+  const [newSubtaskTitle, setNewSubtaskTitle] = useState("");
   const hasDescription = Boolean(task.description?.trim());
   const [descriptionEditorMode, setDescriptionEditorMode] = useState<DescriptionEditorMode>(() =>
     hasDescription ? "hidden" : "ai"
@@ -46,6 +54,8 @@ export function TaskFocusWindow({
 
   useEffect(() => {
     setDescriptionEditorMode(task.description?.trim() ? "hidden" : "ai");
+    setIsAddingSubtask(false);
+    setNewSubtaskTitle("");
     setDescriptionContext("");
     setDescriptionMessage(null);
     setClarificationQuestions([]);
@@ -55,6 +65,24 @@ export function TaskFocusWindow({
     setManualDescriptionMessage(null);
     setIsSavingManualDescription(false);
   }, [task.id]);
+
+  function startAddingSubtask() {
+    setNewSubtaskTitle("");
+    setIsAddingSubtask(true);
+  }
+
+  function cancelAddingSubtask() {
+    setNewSubtaskTitle("");
+    setIsAddingSubtask(false);
+  }
+
+  function submitNewSubtask() {
+    const title = newSubtaskTitle.trim();
+    if (!title) return;
+    void onAddSubtask(task.id, title);
+    setNewSubtaskTitle("");
+    setIsAddingSubtask(false);
+  }
 
   function cancelDescriptionContext() {
     setDescriptionContext("");
@@ -344,23 +372,78 @@ export function TaskFocusWindow({
               )}
             </FocusSection>
 
-            <FocusSection title="Sub-tasks">
-              {task.subtasks?.length ? (
+            <FocusSection title="Sub-tasks" count={childTasks.length}>
+              {childTasks.length ? (
                 <div className="space-y-2">
-                  {task.subtasks.map((subtask) => (
-                    <label className="flex items-center gap-2 text-sm text-[#dfe1e6]" key={subtask}>
-                      <input defaultChecked type="checkbox" />
-                      {subtask}
-                    </label>
-                  ))}
-                  <div className="mt-3 flex gap-2">
-                    <Button variant="darkSecondary">Add selected</Button>
-                    <Button variant="darkGhost">Discard</Button>
-                  </div>
+                  {childTasks.map((subtask) => {
+                    const canDeleteSubtask = !readOnly && subtask.syncStatus !== "Created";
+                    return (
+                      <div
+                        className="flex min-w-0 items-center gap-2 rounded border border-[#454852] bg-[#22252a] px-3 py-2 text-sm text-[#dfe1e6]"
+                        key={subtask.id}
+                      >
+                        <span
+                          aria-hidden="true"
+                          className="flex h-4 w-4 shrink-0 items-center justify-center rounded border border-[#579dff] bg-[#0c66e4] text-white"
+                        >
+                          <Check size={11} strokeWidth={3} />
+                        </span>
+                        <span className="min-w-0 flex-1 truncate font-medium text-[#f4f5f7]">{subtask.title}</span>
+                        <SyncBadge status={subtask.syncStatus} dark />
+                        {subtask.jiraKey ? <span className="shrink-0 text-xs text-[#85b8ff]">{subtask.jiraKey}</span> : null}
+                        <button
+                          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded text-[#aeb3bd] hover:bg-[#3a3d43] hover:text-[#ffb4a8] disabled:pointer-events-none disabled:opacity-40"
+                          disabled={!canDeleteSubtask}
+                          onClick={() => {
+                            void onDeleteSubtask(subtask.id);
+                          }}
+                          title={canDeleteSubtask ? "Delete sub-task" : "Created sub-tasks cannot be deleted"}
+                          type="button"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
               ) : (
-                <div className="text-sm text-[#aeb3bd]">No sub-tasks proposed yet.</div>
+                <div className="text-sm text-[#aeb3bd]">No sub-tasks yet.</div>
               )}
+              {!readOnly && task.issueType !== "Sub-task" ? (
+                isAddingSubtask ? (
+                  <div className="mt-3 flex items-center gap-2 rounded border border-[#454852] bg-[#22252a] px-3 py-2">
+                    <span
+                      aria-hidden="true"
+                      className="flex h-4 w-4 shrink-0 items-center justify-center rounded border border-[#6b7280] text-transparent"
+                    >
+                      <Check size={11} strokeWidth={3} />
+                    </span>
+                    <input
+                      autoFocus
+                      className="h-8 min-w-0 flex-1 rounded border border-[#579dff] bg-[#1f2126] px-2 text-sm text-[#f4f5f7] outline-none"
+                      onChange={(event) => setNewSubtaskTitle(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") submitNewSubtask();
+                        if (event.key === "Escape") cancelAddingSubtask();
+                      }}
+                      placeholder="Sub-task title"
+                      value={newSubtaskTitle}
+                    />
+                    <Button disabled={!newSubtaskTitle.trim()} variant="darkPrimary" onClick={submitNewSubtask}>
+                      Add
+                    </Button>
+                    <Button variant="darkGhost" onClick={cancelAddingSubtask}>
+                      Cancel
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="mt-3">
+                    <Button variant="darkSecondary" icon={<Plus size={14} />} onClick={startAddingSubtask}>
+                      Add More
+                    </Button>
+                  </div>
+                )
+              ) : null}
             </FocusSection>
 
             <FocusSection title="Activity">
