@@ -508,7 +508,7 @@ function ManualDescriptionEditor({
       </div>
       <textarea
         autoFocus
-        className="min-h-[420px] w-full resize-y border-0 bg-[#1f2126] p-3 font-mono text-sm leading-relaxed text-[#dfe1e6] outline-none placeholder:text-[#7f858f] focus:ring-2 focus:ring-inset focus:ring-[#85b8ff]"
+        className="h-[320px] max-h-[42vh] min-h-[220px] w-full resize-y border-0 bg-[#1f2126] p-3 font-mono text-sm leading-relaxed text-[#dfe1e6] outline-none placeholder:text-[#7f858f] focus:ring-2 focus:ring-inset focus:ring-[#85b8ff]"
         disabled={isSaving}
         onChange={(event) => onChange(event.target.value)}
         onKeyDown={onKeyDown}
