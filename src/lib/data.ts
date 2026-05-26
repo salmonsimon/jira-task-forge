@@ -28,7 +28,7 @@ export const trays: Tray[] = [
     id: "tray-week-20",
     name: "Semana 20 STT + PilotLab",
     state: "Needs attention",
-    summary: "12 tasks · 8 pending · 1 failed · 3 created",
+    summary: "12 tasks · 10 sub-tasks · 8 pending · 1 failed · 3 created",
     updatedAt: "Today",
     tasks: [
       {

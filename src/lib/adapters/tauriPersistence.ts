@@ -459,9 +459,11 @@ function formatTimestamp(timestamp: string): string {
 }
 
 function summarizeTrayTasks(tasks: LocalTask[]): string {
-  if (tasks.length === 0) return "No tasks";
+  const parentTasks = tasks.filter((task) => task.issueType !== "Sub-task" && !task.parentTaskId);
+  const subtaskCount = tasks.length - parentTasks.length;
+  if (parentTasks.length === 0 && subtaskCount === 0) return "No tasks";
 
-  const counts = tasks.reduce(
+  const counts = parentTasks.reduce(
     (summary, task) => {
       summary[task.syncStatus] += 1;
       return summary;
@@ -470,7 +472,8 @@ function summarizeTrayTasks(tasks: LocalTask[]): string {
   );
 
   return [
-    `${tasks.length} ${tasks.length === 1 ? "task" : "tasks"}`,
+    `${parentTasks.length} ${parentTasks.length === 1 ? "task" : "tasks"}`,
+    subtaskCount ? `${subtaskCount} ${subtaskCount === 1 ? "sub-task" : "sub-tasks"}` : null,
     counts.Pending ? `${counts.Pending} pending` : null,
     counts.Failed ? `${counts.Failed} failed` : null,
     counts.Exported ? `${counts.Exported} exported` : null,

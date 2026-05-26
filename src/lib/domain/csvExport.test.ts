@@ -58,6 +58,16 @@ describe("CSV export domain helpers", () => {
     );
   });
 
+  it("keeps sub-tasks out of CSV exports", () => {
+    const csv = exportLocalTasksToCsv([
+      task({ id: "parent", title: "Parent task", issueType: "Story" }),
+      task({ id: "subtask", title: "Hidden child", issueType: "Sub-task", parentTaskId: "parent" })
+    ]);
+
+    expect(csv).toBe(["Summary,Issue Type,Labels,Description", "Parent task,Historia,Bug,Line one"].join("\n"));
+    expect(countCsvExportableTasks([{ syncStatus: "Pending", issueType: "Sub-task" }])).toBe(0);
+  });
+
   it("maps local bug issue type to the JTFTEST importer value", () => {
     expect(exportLocalTasksToCsv([task({ issueType: "Bug" })])).toBe(
       ["Summary,Issue Type,Labels,Description", "Fix timer,Error,Bug,Line one"].join("\n")
