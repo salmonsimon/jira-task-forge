@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { flushSync } from "react-dom";
 import { listen } from "@tauri-apps/api/event";
 import { downloadDir, join } from "@tauri-apps/api/path";
@@ -1591,7 +1591,7 @@ function ConnectionNoticeToast({
   return (
     <div
       className="fixed inset-0 z-[60] flex items-start justify-center px-4 pt-4"
-      onMouseDown={onClose}
+      onPointerDown={(event) => dismissBackdropPointerDown(event, onClose)}
     >
       <section
         className={`pointer-events-auto rounded border px-4 py-3 shadow-2xl ${
@@ -1599,7 +1599,7 @@ function ConnectionNoticeToast({
             ? "border-[#abf5d1] bg-[#e3fcef] text-[#006644]"
             : "border-[#ffbdad] bg-[#ffebe6] text-[#bf2600]"
         }`}
-        onMouseDown={(event) => event.stopPropagation()}
+        onPointerDown={stopPointerDownPropagation}
       >
         <div className="flex items-start gap-3">
           <div className="mt-0.5 shrink-0">{isSuccess ? <CheckCircle2 size={18} /> : <AlertTriangle size={18} />}</div>
@@ -1640,13 +1640,13 @@ function CsvExportNoticeToast({
   return (
     <div
       className="fixed inset-0 z-[65] flex items-center justify-center px-4"
-      onMouseDown={onClose}
+      onPointerDown={(event) => dismissBackdropPointerDown(event, onClose)}
       role="status"
       aria-live="polite"
     >
       <section
         className="pointer-events-auto w-full max-w-[580px] rounded border border-[#216e4e] bg-[#143c2b] text-[#dffcf0] shadow-2xl"
-        onMouseDown={(event) => event.stopPropagation()}
+        onPointerDown={stopPointerDownPropagation}
       >
         <div className="flex items-start justify-between gap-4 px-6 py-5">
           <div className="flex min-w-0 gap-4">
@@ -1685,6 +1685,18 @@ function useNoticeDismiss(onClose: () => void) {
   }, [onClose]);
 }
 
+function dismissBackdropPointerDown(
+  event: ReactPointerEvent<HTMLElement>,
+  onClose: () => void
+) {
+  event.stopPropagation();
+  if (event.target === event.currentTarget) onClose();
+}
+
+function stopPointerDownPropagation(event: ReactPointerEvent<HTMLElement>) {
+  event.stopPropagation();
+}
+
 function BackupNoticeDialog({
   notice,
   onClose
@@ -1706,10 +1718,13 @@ function BackupNoticeDialog({
   }, [onClose]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#091e42]/60 px-4 backdrop-blur-[1px]" onMouseDown={onClose}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[#091e42]/60 px-4 backdrop-blur-[1px]"
+      onPointerDown={(event) => dismissBackdropPointerDown(event, onClose)}
+    >
       <section
         className="w-full max-w-[520px] rounded border border-[#3b4454] bg-[#2b2d31] text-[#dfe1e6] shadow-2xl"
-        onMouseDown={(event) => event.stopPropagation()}
+        onPointerDown={stopPointerDownPropagation}
       >
         <div className="flex items-start justify-between gap-4 border-b border-[#454852] px-5 py-4">
           <div className="flex items-start gap-3">
@@ -1810,10 +1825,13 @@ function ConfirmDialog({
   }, [onCancel]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#091e42]/60 px-4 backdrop-blur-[1px]" onMouseDown={onCancel}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[#091e42]/60 px-4 backdrop-blur-[1px]"
+      onPointerDown={(event) => dismissBackdropPointerDown(event, onCancel)}
+    >
       <section
         className="w-full max-w-[440px] rounded border border-[#3b4454] bg-[#2b2d31] text-[#dfe1e6] shadow-2xl"
-        onMouseDown={(event) => event.stopPropagation()}
+        onPointerDown={stopPointerDownPropagation}
       >
         <div className="border-b border-[#454852] px-5 py-4">
           <h2 className="text-base font-semibold text-[#f4f5f7]">{title}</h2>

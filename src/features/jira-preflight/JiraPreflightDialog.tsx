@@ -103,13 +103,14 @@ export function JiraPreflightDialog({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-[#091e42]/60 px-4 backdrop-blur-[1px]"
-      onMouseDown={() => {
-        if (!isBusy) onClose();
+      onPointerDown={(event) => {
+        event.stopPropagation();
+        if (!isBusy && event.target === event.currentTarget) onClose();
       }}
     >
       <section
         className="relative flex max-h-[calc(100vh-72px)] w-full max-w-[620px] flex-col overflow-hidden rounded border border-[#3b4454] bg-[#202328] text-[#dfe1e6] shadow-2xl"
-        onMouseDown={(event) => event.stopPropagation()}
+        onPointerDown={(event) => event.stopPropagation()}
       >
         {isCreating ? (
           <div className="absolute inset-0 z-20 flex items-center justify-center bg-[#202328]/95 px-5 backdrop-blur-[2px]">
