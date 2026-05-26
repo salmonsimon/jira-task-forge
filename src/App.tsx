@@ -111,6 +111,13 @@ const defaultAppSettings: AppSettings = {
   defaultContentLanguage: "Spanish"
 };
 const defaultJqlPrompt = "Show me high and highest open bugs for STT, sorted by priority";
+const default3dSubtaskTitles = [
+  "Recolectar referencias",
+  "Definir escala y restricciones",
+  "Modelar base del asset",
+  "Texturizar",
+  "Revisar en contexto"
+];
 const atlassianApiTokensUrl = "https://id.atlassian.com/manage-profile/security/api-tokens";
 const aiProviderApiKeysUrls: Partial<Record<AiProvider, string>> = {
   OpenAI: "https://platform.openai.com/home",
@@ -403,6 +410,35 @@ export default function App() {
     return `ltask-local-${Date.now().toString(36)}-${taskIdCounter.current}`;
   }
 
+  function getDefaultSubtaskTitles(task: Pick<LocalTask, "area" | "issueType">) {
+    if (task.issueType === "Sub-task") return [];
+    return task.area.trim().toLowerCase() === "3d" ? default3dSubtaskTitles : [];
+  }
+
+  async function createSubtasksForParent(parentTask: LocalTask, titles: string[]): Promise<LocalTask[]> {
+    const normalizedTitles = dedupeSubtaskTitles(titles);
+    const createdSubtasks: LocalTask[] = [];
+
+    for (const title of normalizedTitles) {
+      const draftSubtask: LocalTask = {
+        id: nextTaskId(),
+        project: parentTask.project,
+        area: parentTask.area,
+        title,
+        priority: parentTask.priority,
+        issueType: "Sub-task",
+        syncStatus: "Pending",
+        descriptionStatus: "Ready",
+        language: parentTask.language,
+        parentTaskId: parentTask.id
+      };
+      const nextSubtask = usesTauriPersistence ? await createPersistedSubtask(parentTask.id, title) : draftSubtask;
+      createdSubtasks.push(nextSubtask);
+    }
+
+    return createdSubtasks;
+  }
+
   async function createTray() {
     const trayName = "New tray";
     const nextTray = usesTauriPersistence
@@ -503,10 +539,11 @@ export default function App() {
       language: "Spanish"
     };
     const nextTask = usesTauriPersistence ? await createPersistedTask(draftTask, selectedTrayId) : draftTask;
+    const defaultSubtasks = await createSubtasksForParent(nextTask, getDefaultSubtaskTitles(nextTask));
 
     setTrays((currentTrays) =>
       currentTrays.map((tray) =>
-        tray.id === selectedTrayId ? updateTrayTasks(tray, [...tray.tasks, nextTask]) : tray
+        tray.id === selectedTrayId ? updateTrayTasks(tray, [...tray.tasks, nextTask, ...defaultSubtasks]) : tray
       )
     );
     setSelectedTaskId(nextTask.id);
@@ -582,44 +619,45 @@ export default function App() {
       : nextTask;
 
     if (!persistedTask) return;
+    const existingChildTitles = tray.tasks
+      .filter((candidateTask) => candidateTask.parentTaskId === taskId)
+      .map((childTask) => childTask.title);
+    const defaultSubtaskTitles = getDefaultSubtaskTitles(persistedTask).filter(
+      (title) => !existingChildTitles.some((existingTitle) => existingTitle.trim().toLowerCase() === title.trim().toLowerCase())
+    );
+    const createdDefaultSubtasks = defaultSubtaskTitles.length
+      ? await createSubtasksForParent(persistedTask, defaultSubtaskTitles)
+      : [];
 
     setTrays((currentTrays) =>
-      currentTrays.map((candidate) =>
-        candidate.id === tray.id
-          ? updateTrayTasks(
-              candidate,
-              candidate.tasks.map((candidateTask) => (candidateTask.id === taskId ? persistedTask : candidateTask))
-            )
-          : candidate
-      )
+      currentTrays.map((candidate) => {
+        if (candidate.id !== tray.id) return candidate;
+
+        const nextTasks = candidate.tasks.map((candidateTask) => (candidateTask.id === taskId ? persistedTask : candidateTask));
+        if (createdDefaultSubtasks.length) {
+          const parentIndex = nextTasks.findIndex((candidateTask) => candidateTask.id === taskId);
+          let insertIndex = parentIndex + 1;
+          while (nextTasks[insertIndex]?.parentTaskId === taskId) insertIndex += 1;
+          nextTasks.splice(insertIndex, 0, ...createdDefaultSubtasks);
+        }
+        return updateTrayTasks(candidate, nextTasks);
+      })
     );
   }
 
-  async function acceptSubtaskProposals(parentTaskId: string, selectedTitles: string[]) {
+  async function addSubtaskToTask(parentTaskId: string, title: string) {
     const parentTray = trays.find((tray) => tray.tasks.some((task) => task.id === parentTaskId));
     const parentTask = parentTray?.tasks.find((task) => task.id === parentTaskId);
-    if (!parentTray || !parentTask || parentTray.state === "Archived" || parentTask.syncStatus === "Created") return;
+    if (!parentTray || !parentTask || parentTray.state === "Archived" || parentTask.syncStatus === "Created" || parentTask.issueType === "Sub-task") return;
 
-    const normalizedTitles = selectedTitles.map((title) => title.trim()).filter(Boolean);
-    if (normalizedTitles.length === 0) return;
+    const normalizedTitle = title.trim();
+    if (!normalizedTitle) return;
+    const existingChildTitle = parentTray.tasks.some(
+      (task) => task.parentTaskId === parentTaskId && task.title.trim().toLowerCase() === normalizedTitle.toLowerCase()
+    );
+    if (existingChildTitle) return;
 
-    const createdSubtasks: LocalTask[] = [];
-    for (const title of normalizedTitles) {
-      const draftSubtask: LocalTask = {
-        id: nextTaskId(),
-        project: parentTask.project,
-        area: parentTask.area,
-        title,
-        priority: parentTask.priority,
-        issueType: "Sub-task",
-        syncStatus: "Pending",
-        descriptionStatus: "Ready",
-        language: parentTask.language,
-        parentTaskId: parentTask.id
-      };
-      const nextSubtask = usesTauriPersistence ? await createPersistedSubtask(parentTask.id, title) : draftSubtask;
-      createdSubtasks.push(nextSubtask);
-    }
+    const createdSubtasks = await createSubtasksForParent(parentTask, [normalizedTitle]);
 
     setTrays((currentTrays) =>
       currentTrays.map((tray) => {
@@ -628,35 +666,12 @@ export default function App() {
         const parentIndex = tray.tasks.findIndex((task) => task.id === parentTask.id);
         if (parentIndex === -1) return tray;
 
-        const accepted = new Set(normalizedTitles);
-        const nextParent = {
-          ...tray.tasks[parentIndex],
-          subtasks: tray.tasks[parentIndex].subtasks?.filter((subtask) => !accepted.has(subtask.trim()))
-        };
-        if (nextParent.subtasks?.length === 0) nextParent.subtasks = undefined;
-
         const nextTasks = [...tray.tasks];
-        nextTasks[parentIndex] = nextParent;
-        nextTasks.splice(parentIndex + 1, 0, ...createdSubtasks);
+        let insertIndex = parentIndex + 1;
+        while (nextTasks[insertIndex]?.parentTaskId === parentTask.id) insertIndex += 1;
+        nextTasks.splice(insertIndex, 0, ...createdSubtasks);
         return updateTrayTasks(tray, nextTasks);
       })
-    );
-  }
-
-  function discardSubtaskProposals(parentTaskId: string) {
-    const parentTray = trays.find((tray) => tray.tasks.some((task) => task.id === parentTaskId));
-    const parentTask = parentTray?.tasks.find((task) => task.id === parentTaskId);
-    if (!parentTray || !parentTask || parentTray.state === "Archived" || parentTask.syncStatus === "Created") return;
-
-    setTrays((currentTrays) =>
-      currentTrays.map((tray) =>
-        tray.id === parentTray.id
-          ? updateTrayTasks(
-              tray,
-              tray.tasks.map((task) => (task.id === parentTaskId ? { ...task, subtasks: undefined } : task))
-            )
-          : tray
-      )
     );
   }
 
@@ -1571,8 +1586,8 @@ export default function App() {
             areas={areaOptions}
             readOnly={selectedTaskTray?.state === "Archived"}
             onUpdateDetails={updateTaskDetails}
-            onAcceptSubtasks={acceptSubtaskProposals}
-            onDiscardSubtasks={discardSubtaskProposals}
+            onAddSubtask={addSubtaskToTask}
+            onDeleteSubtask={deleteTask}
             onOpenJiraIssue={openJiraIssue}
             onClose={() => setOpenPanel(null)}
           />
@@ -2006,6 +2021,19 @@ function cloneTrays(trays: Tray[]): Tray[] {
       subtasks: task.subtasks ? [...task.subtasks] : undefined
     }))
   }));
+}
+
+function dedupeSubtaskTitles(titles: string[]): string[] {
+  const seen = new Set<string>();
+  const normalizedTitles: string[] = [];
+  for (const title of titles) {
+    const normalizedTitle = title.trim();
+    const key = normalizedTitle.toLowerCase();
+    if (!normalizedTitle || seen.has(key)) continue;
+    seen.add(key);
+    normalizedTitles.push(normalizedTitle);
+  }
+  return normalizedTitles;
 }
 
 function updateTrayTasks(tray: Tray, tasks: LocalTask[]): Tray {

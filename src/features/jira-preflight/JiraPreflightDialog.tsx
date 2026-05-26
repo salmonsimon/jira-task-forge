@@ -163,6 +163,8 @@ export function JiraPreflightDialog({
             </div>
           </div>
 
+          <SubtaskCreationSummary tray={preflight.tray} includeExportedTasks={exportedTasksIncluded} />
+
           {blockingWarnings.length ? (
             <PreflightWarningGroup
               icon={<AlertTriangle size={16} />}
@@ -318,6 +320,65 @@ function JiraCreateLoading({
       <div className="mt-2 flex items-center justify-between gap-3 text-xs text-[#b7d5ff]">
         <span className="truncate">{progress?.step ? progress.step.replace(/-/g, " ") : "working"}</span>
         <span className="shrink-0">{hasDeterminateProgress ? `${progressPercent}% · ${progressMeta}` : progressMeta}</span>
+      </div>
+    </div>
+  );
+}
+
+function SubtaskCreationSummary({
+  tray,
+  includeExportedTasks
+}: {
+  tray: Tray;
+  includeExportedTasks: boolean;
+}) {
+  const tasksById = new Map(tray.tasks.map((task) => [task.id, task]));
+  const subtaskGroups = tray.tasks
+    .filter(
+      (task) =>
+        task.issueType === "Sub-task" &&
+        task.parentTaskId &&
+        task.syncStatus !== "Created" &&
+        (includeExportedTasks || task.syncStatus !== "Exported")
+    )
+    .reduce<Array<{ parentTask: Tray["tasks"][number] | undefined; subtasks: Tray["tasks"] }>>((groups, subtask) => {
+      const parentTask = subtask.parentTaskId ? tasksById.get(subtask.parentTaskId) : undefined;
+      const existingGroup = groups.find((group) => group.parentTask?.id === parentTask?.id);
+      if (existingGroup) {
+        existingGroup.subtasks.push(subtask);
+        return groups;
+      }
+
+      groups.push({ parentTask, subtasks: [subtask] });
+      return groups;
+    }, []);
+
+  if (!subtaskGroups.length) return null;
+
+  const subtaskCount = subtaskGroups.reduce((total, group) => total + group.subtasks.length, 0);
+
+  return (
+    <div className="rounded border border-[#315a8a] bg-[#102d50] px-3 py-3">
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-sm font-semibold text-[#f4f5f7]">Sub-task creation</span>
+        <span className="rounded bg-[#0b2442] px-2 py-1 text-xs font-medium text-[#b7d5ff]">
+          {subtaskCount} {subtaskCount === 1 ? "sub-task" : "sub-tasks"}
+        </span>
+      </div>
+      <div className="mt-2 space-y-2">
+        {subtaskGroups.map((group) => (
+          <div className="rounded border border-[#244d7a] bg-[#0b2442] px-3 py-2" key={group.parentTask?.id ?? "missing-parent"}>
+            <div className="text-sm font-medium text-[#f4f5f7]">{group.parentTask?.title ?? "Missing parent task"}</div>
+            <ul className="mt-1 space-y-1 text-xs text-[#b7d5ff]">
+              {group.subtasks.map((subtask) => (
+                <li className="flex gap-2" key={subtask.id}>
+                  <span>-</span>
+                  <span>{subtask.title}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
       </div>
     </div>
   );
