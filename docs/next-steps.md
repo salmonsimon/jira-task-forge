@@ -4,12 +4,12 @@ This document is the default execution path for the repo. It is meant to support
 
 ## Current Checkpoint
 
-Date: 2026-05-24
+Date: 2026-05-25
 
 Main is up to date at:
 
 ```text
-65bf0cf Add guarded Jira parent issue creation
+d588934 Update coverage report after stabilization tests (#47)
 ```
 
 Merged since the first in-memory tray interactions:
@@ -34,6 +34,21 @@ Merged since the first in-memory tray interactions:
   preflight, epic resolution/creation, parent Story/Bug creation, priority
   fallback updates, local recovery, JTFTEST live QA, and compositor-friendly
   loading treatments for the Jira write path.
+- PR #27: hardened Jira sync diagnostics.
+- PR #28/#32: increased backend coverage, including service-layer workflows.
+- PR #29/#30/#31: extracted command-worker, sync-audit detail, and Jira
+  response mapping helpers.
+- PR #33/#34: wired Jira links, JQL favorites/admin controls, preflight
+  checkbox polish, and category deletion fixes.
+- PR #37: added honest JQL states and the AI placeholder.
+- PR #38: added backup restore MVP.
+- PR #39: showed task sync audit activity.
+- PR #41: added JQL Ask AI drafting through the OpenAI backend integration.
+- PR #42: documented the Personal v1 roadmap.
+- PR #43/#44/#45: refreshed and raised Rust coverage for backup, OpenAI, and
+  services.
+- PR #46: added the first frontend Vitest domain test harness.
+- PR #47: updated the coverage report after stabilization tests.
 
 Open for HITL review:
 
@@ -43,19 +58,23 @@ Open for HITL review:
 
 Current validation:
 
-- `npm install` may be needed after pulling because `@tauri-apps/plugin-dialog` was added.
+- `npm install` may be needed after pulling because Vitest and Tauri dialog
+  dependencies are part of the current checkpoint.
 - `npm run build` passes on `main` after dependencies are installed.
 - `cargo fmt -- --check` passes after installing Rust/Cargo with rustup.
-- `cargo test` passes in the current WSL checkout. As of the first coverage
-  pass, the Rust suite has 50 tests covering SQLite schema/repositories,
-  settings defaults, Jira URL/error helpers, guarded Jira parent issue sync,
-  Jira credential debug redaction, sync audit error redaction/capping, backend
-  delete protection for created tasks, command/model/db helper behavior, and
-  service-layer local-first workflows.
+- `cargo test` passes in the current WSL checkout. As of PR #47, the Rust suite
+  has 82 tests covering SQLite schema/repositories, settings defaults, Jira URL
+  and error helpers, guarded Jira parent issue sync, Jira credential debug
+  redaction, sync audit error redaction/capping, backend delete protection for
+  created tasks, command/model/db helper behavior, service-layer local-first
+  workflows, backup behavior, and OpenAI integration helpers.
 - Rust coverage is measured with `cargo llvm-cov --summary-only`. The current
-  Rust line coverage is 80.67%; see `docs/coverage-report.md`.
-- There is no automated frontend test runner yet. Frontend validation is
-  currently TypeScript/Vite build plus manual/live QA.
+  Rust line coverage is 78.26%; see `docs/coverage-report.md`.
+- `TMPDIR=/tmp npm test` passes in WSL with 12 frontend domain tests. Plain
+  `npm test` can fail in this environment when Vitest inherits a Windows temp
+  path that is not creatable from WSL.
+- The React frontend has a test runner but no coverage reporting or component/
+  DOM test strategy yet.
 - Playwright screenshots are blocked in the current WSL environment by missing Chromium runtime library `libnspr4.so`.
 - The prototype runs with `npm run dev` at:
 
@@ -73,6 +92,7 @@ git checkout main
 git pull origin
 npm install
 npm run build
+TMPDIR=/tmp npm test
 npm run dev
 ```
 
@@ -100,11 +120,17 @@ Human QA to run before choosing the next implementation slice:
 - Edit project, area, and priority from task detail for editable tasks.
 - Archive, restore, and delete trays, including risk-aware delete confirmation copy.
 - Export CSV from a tray and confirm exported local tasks move to `Exported` status.
+- Export and import a JSON backup, confirming secrets are excluded and restored
+  Jira links/audit history remain useful.
 - Visit `JQL`, `Categories`, and `Settings` and confirm navigation still works.
 - Save non-secret Jira settings and confirm they persist across app restart.
 - Save, delete, and re-save a Jira API token through the OS credential store.
+- Save, delete, and re-save an OpenAI API key through the OS credential store.
 - Test Jira connection from Settings after entering a real Jira site, email, and token.
+- Test OpenAI connection from Settings after entering a real provider key.
 - Run a direct JQL query from the JQL tab and confirm Jira results populate the table.
+- Save, rename, delete, and reuse a JQL favorite.
+- Use Ask AI in the JQL tab and confirm it drafts a query without running it automatically.
 - Open `Create in Jira` preflight and confirm missing credentials, missing creation project, and missing task fields produce blocking warnings.
 - Against `JTFTEST`, confirm preflight can create missing epics, create parent Story/Bug issues, persist Jira keys locally, and move failed tasks to a recovery tray without duplicating them.
 - Re-check that Settings token actions, Settings connection test, direct JQL,
@@ -120,7 +146,10 @@ Expected limitations right now:
 - Jira API token storage exists through the OS credential store.
 - Jira connection testing exists through `/rest/api/3/myself`.
 - Read-only JQL queries are wired through Jira Cloud REST API v3.
-- Categories, JQL favorites persistence, attachments, audit log UI, backup/import, AI, sub-task creation, and attachment upload are not fully implemented.
+- JQL favorites persistence, session JQL history, backup/import, sync progress,
+  task sync audit activity, OpenAI settings, and Ask AI JQL drafting are wired.
+- Categories persistence, per-task assisted descriptions, attachments, audit log
+  UI, sub-task creation, and attachment upload are not fully implemented.
 - Task detail `Details` supports editable project, area, and priority for editable non-archived tasks. Auto-generated epic and labels remain visible but muted/read-only.
 
 Near-term decided follow-ups:
@@ -132,9 +161,12 @@ Near-term decided follow-ups:
 
 Recommended next implementation:
 
-- Finish the `codex/post-jira-architecture-tests` stabilization branch before
-  adding more write surfaces. The goal is to make the now-proven Jira creation
-  flow safer, more testable, and easier for future AFK agents to navigate.
+- Re-check native QA after the stabilization, backup, audit, JQL, and Ask AI
+  changes.
+- Raise backend coverage above 80% by targeting `commands.rs` and
+  `integrations/jira.rs`.
+- Expand frontend workflow tests around JQL recent history, backup notices,
+  Settings state, and preflight/progress view models.
 - Next write slices should stay narrow: sub-task creation first, attachment upload later.
 - If QA reveals product/UI friction, do a small frontend-only fix branch before expanding integration writes.
 
