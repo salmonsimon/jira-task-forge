@@ -420,6 +420,7 @@ impl<'connection> TaskRepository<'connection> {
             issue_type: new_task.issue_type,
             sync_status: "Pending".to_string(),
             description_status: "Missing".to_string(),
+            description: None,
             content_language: new_task.content_language,
             jira_key: None,
             jira_url: None,
@@ -434,10 +435,10 @@ impl<'connection> TaskRepository<'connection> {
             "
             INSERT INTO tasks (
                 id, tray_id, project, area, title, priority, issue_type, sync_status,
-                description_status, content_language, jira_key, jira_url, epic_key,
+                description_status, description, content_language, jira_key, jira_url, epic_key,
                 parent_task_id, task_order, created_at, updated_at
             )
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)
             ",
             params![
                 task.id,
@@ -449,6 +450,7 @@ impl<'connection> TaskRepository<'connection> {
                 task.issue_type,
                 task.sync_status,
                 task.description_status,
+                task.description,
                 task.content_language,
                 task.jira_key,
                 task.jira_url,
@@ -493,6 +495,7 @@ impl<'connection> TaskRepository<'connection> {
             issue_type: "Sub-task".to_string(),
             sync_status: "Pending".to_string(),
             description_status: "Ready".to_string(),
+            description: None,
             content_language: parent.content_language.clone(),
             jira_key: None,
             jira_url: None,
@@ -507,10 +510,10 @@ impl<'connection> TaskRepository<'connection> {
             "
             INSERT INTO tasks (
                 id, tray_id, project, area, title, priority, issue_type, sync_status,
-                description_status, content_language, jira_key, jira_url, epic_key,
+                description_status, description, content_language, jira_key, jira_url, epic_key,
                 parent_task_id, task_order, created_at, updated_at
             )
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)
             ",
             params![
                 task.id,
@@ -522,6 +525,7 @@ impl<'connection> TaskRepository<'connection> {
                 task.issue_type,
                 task.sync_status,
                 task.description_status,
+                task.description,
                 task.content_language,
                 task.jira_key,
                 task.jira_url,
@@ -542,7 +546,7 @@ impl<'connection> TaskRepository<'connection> {
         let mut statement = self.connection.prepare(
             "
             SELECT id, tray_id, project, area, title, priority, issue_type, sync_status,
-                   description_status, content_language, jira_key, jira_url, epic_key,
+                   description_status, description, content_language, jira_key, jira_url, epic_key,
                    parent_task_id, task_order, created_at, updated_at
             FROM tasks
             WHERE id = ?1
@@ -561,7 +565,7 @@ impl<'connection> TaskRepository<'connection> {
         let mut statement = self.connection.prepare(
             "
             SELECT id, tray_id, project, area, title, priority, issue_type, sync_status,
-                   description_status, content_language, jira_key, jira_url, epic_key,
+                   description_status, description, content_language, jira_key, jira_url, epic_key,
                    parent_task_id, task_order, created_at, updated_at
             FROM tasks
             WHERE tray_id = ?1
@@ -580,7 +584,7 @@ impl<'connection> TaskRepository<'connection> {
         let mut statement = self.connection.prepare(
             "
             SELECT id, tray_id, project, area, title, priority, issue_type, sync_status,
-                   description_status, content_language, jira_key, jira_url, epic_key,
+                   description_status, description, content_language, jira_key, jira_url, epic_key,
                    parent_task_id, task_order, created_at, updated_at
             FROM tasks
             ORDER BY tray_id ASC, task_order ASC, created_at ASC
@@ -655,6 +659,52 @@ impl<'connection> TaskRepository<'connection> {
         self.touch_tray(&tray_id, &now)?;
 
         Ok(self.list_all()?.into_iter().find(|task| task.id == task_id))
+    }
+
+    pub fn update_description(
+        &self,
+        task_id: &str,
+        description: Option<&str>,
+        description_status: &str,
+    ) -> DbResult<Option<LocalTask>> {
+        let status = description_status.trim();
+        if !matches!(status, "Ready" | "Missing" | "Draft") {
+            return Err(DbError::InvalidData(format!(
+                "unknown description status: {status}"
+            )));
+        }
+
+        let trimmed_description = description.map(str::trim).filter(|value| !value.is_empty());
+        if status != "Missing" && trimmed_description.is_none() {
+            return Err(DbError::InvalidData(
+                "description is required before marking it ready or draft".to_string(),
+            ));
+        }
+
+        let now = utc_now_string()?;
+        let tray_id = self.connection.query_row(
+            "SELECT tray_id FROM tasks WHERE id = ?1 AND sync_status != 'Created'",
+            [task_id],
+            |row| row.get::<_, String>(0),
+        );
+
+        let Ok(tray_id) = tray_id else {
+            return Ok(None);
+        };
+
+        self.connection.execute(
+            "
+            UPDATE tasks
+            SET description = ?1,
+                description_status = ?2,
+                updated_at = ?3
+            WHERE id = ?4 AND sync_status != 'Created'
+            ",
+            (trimmed_description, status, now.as_str(), task_id),
+        )?;
+        self.touch_tray(&tray_id, &now)?;
+
+        self.find_by_id(task_id)
     }
 
     pub fn mark_csv_exported(&self, task_ids: &[String]) -> DbResult<Vec<LocalTask>> {
@@ -994,6 +1044,7 @@ fn map_task_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<LocalTask> {
         issue_type: row.get("issue_type")?,
         sync_status: row.get("sync_status")?,
         description_status: row.get("description_status")?,
+        description: row.get("description")?,
         content_language: row.get("content_language")?,
         jira_key: row.get("jira_key")?,
         jira_url: row.get("jira_url")?,

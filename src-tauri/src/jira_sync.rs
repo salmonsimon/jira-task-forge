@@ -273,6 +273,27 @@ where
                 );
             }
         };
+        let required_description_blockers =
+            required_parent_description_blockers(&plan, &parent_tasks);
+        if !required_description_blockers.is_empty() {
+            report_jira_create_progress(
+                &mut report_progress,
+                Some(&sync_attempt_id),
+                "metadata",
+                "Jira metadata requires descriptions",
+                required_description_blockers.first().map(String::as_str),
+                completed_steps,
+                total_steps,
+                "failed",
+            );
+            return self.finish_blocked(
+                sync_repository,
+                &sync_attempt_id,
+                tray_id,
+                required_description_blockers,
+                result,
+            );
+        }
 
         sync_repository
             .record_event(
@@ -1002,7 +1023,7 @@ impl IssueTypePlan {
                 self.role,
                 IssueTypeRole::Story | IssueTypeRole::Bug | IssueTypeRole::SubTask
             ),
-            "description" => false,
+            "description" => true,
             _ if matches!(self.role, IssueTypeRole::Epic) && is_epic_name_field(field) => true,
             _ if matches!(self.role, IssueTypeRole::Story | IssueTypeRole::Bug)
                 && self
@@ -1218,6 +1239,15 @@ fn build_parent_issue_payload(
     if let Some(account_id) = reporter_account_id {
         fields["reporter"] = json!({ "accountId": account_id });
     }
+    if let Some(description) = task
+        .description
+        .as_deref()
+        .map(str::trim)
+        .filter(|description| !description.is_empty())
+        .filter(|_| issue_type.field("description").is_some())
+    {
+        fields["description"] = jira_description_document(description);
+    }
 
     if let Some(epic_link_field) = &issue_type.epic_link_field {
         fields[&epic_link_field.key] = match epic_link_field.style {
@@ -1278,6 +1308,65 @@ fn build_subtask_issue_payload(
                 "kind": "subtask"
             }
         }]
+    })
+}
+
+fn required_parent_description_blockers(
+    plan: &ResolvedCreateMetadata,
+    parent_tasks: &[LocalTask],
+) -> Vec<String> {
+    parent_tasks
+        .iter()
+        .filter_map(|task| {
+            let issue_type = plan.issue_type_for_local(&task.issue_type)?;
+            let description_required = issue_type
+                .field("description")
+                .is_some_and(|field| field.required);
+            let has_description = task
+                .description
+                .as_deref()
+                .is_some_and(|description| !description.trim().is_empty());
+
+            if description_required && !has_description {
+                Some(format!(
+                    "{} is missing a description, and Jira requires Description for {}.",
+                    task.title, issue_type.name
+                ))
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+fn jira_description_document(markdown: &str) -> Value {
+    let mut content = Vec::new();
+    for line in markdown.lines().map(str::trim).filter(|line| !line.is_empty()) {
+        let node = if let Some(text) = line.strip_prefix("### ") {
+            json!({
+                "type": "heading",
+                "attrs": { "level": 3 },
+                "content": [{ "type": "text", "text": text }]
+            })
+        } else if let Some(text) = line.strip_prefix("## ") {
+            json!({
+                "type": "heading",
+                "attrs": { "level": 2 },
+                "content": [{ "type": "text", "text": text }]
+            })
+        } else {
+            json!({
+                "type": "paragraph",
+                "content": [{ "type": "text", "text": line }]
+            })
+        };
+        content.push(node);
+    }
+
+    json!({
+        "type": "doc",
+        "version": 1,
+        "content": content
     })
 }
 
@@ -1889,6 +1978,7 @@ mod tests {
             issue_type: "Bug".to_string(),
             sync_status: "Pending".to_string(),
             description_status: "Missing".to_string(),
+            description: None,
             content_language: "Spanish".to_string(),
             jira_key: None,
             jira_url: None,
@@ -2348,11 +2438,11 @@ mod tests {
                 "
                 INSERT INTO tasks (
                     id, tray_id, project, area, title, priority, issue_type, sync_status,
-                    description_status, content_language, jira_key, jira_url, epic_key,
+                    description_status, description, content_language, jira_key, jira_url, epic_key,
                     parent_task_id, task_order, created_at, updated_at
                 )
                 VALUES (?1, ?2, 'STT', 'Programacion', ?3, 'Medium', 'Sub-task', 'Pending',
-                    'Ready', 'Spanish', NULL, NULL, NULL, ?4, ?5, ?6, ?6)
+                    'Ready', NULL, 'Spanish', NULL, NULL, NULL, ?4, ?5, ?6, ?6)
                 ",
                 (id.as_str(), tray_id, title, parent_task_id, task_order, now),
             )

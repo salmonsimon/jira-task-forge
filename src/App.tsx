@@ -29,6 +29,7 @@ import {
   deletePersistedTask,
   draftPersistedJqlWithAi,
   exportPersistedBackup,
+  generatePersistedTaskDescription,
   getPersistedAppSettings,
   hasPersistedAiProviderApiKey,
   hasPersistedJiraApiToken,
@@ -54,6 +55,7 @@ import {
   updatePersistedAppSettings,
   updatePersistedCategory,
   updatePersistedJqlFavorite,
+  updatePersistedTaskDescription,
   updatePersistedTaskDetails
 } from "./lib/adapters/tauriPersistence";
 import {
@@ -78,6 +80,7 @@ import {
 } from "./lib/domain";
 import type {
   AppSettings,
+  AssistedDescriptionDraft,
   AiProvider,
   BackupOperationNotice,
   Category,
@@ -162,6 +165,7 @@ export default function App() {
   const [jqlQueryMessage, setJqlQueryMessage] = useState<string | null>(null);
   const [isRunningJqlQuery, setIsRunningJqlQuery] = useState(false);
   const [isDraftingJqlWithAi, setIsDraftingJqlWithAi] = useState(false);
+  const [generatingDescriptionTaskId, setGeneratingDescriptionTaskId] = useState<string | null>(null);
   const [appSettings, setAppSettings] = useState<AppSettings>(defaultAppSettings);
   const [systemPrefersDark, setSystemPrefersDark] = useState(false);
   const [usesTauriPersistence, setUsesTauriPersistence] = useState(false);
@@ -672,6 +676,68 @@ export default function App() {
         nextTasks.splice(insertIndex, 0, ...createdSubtasks);
         return updateTrayTasks(tray, nextTasks);
       })
+    );
+  }
+
+  async function generateTaskDescription(taskId: string, additionalContext: string): Promise<AssistedDescriptionDraft> {
+    const tray = trays.find((candidate) => candidate.tasks.some((task) => task.id === taskId));
+    const task = tray?.tasks.find((candidate) => candidate.id === taskId);
+    if (!tray || !task || tray.state === "Archived" || task.syncStatus === "Created") {
+      throw new Error("This task cannot be edited.");
+    }
+    if (usesTauriPersistence && appSettings.aiProvider === "None") {
+      throw new Error("Select an AI provider in Settings before generating a description.");
+    }
+    if (usesTauriPersistence && !hasAiProviderApiKey) {
+      throw new Error(`Save a ${appSettings.aiProvider} API key in Settings before generating a description.`);
+    }
+
+    setGeneratingDescriptionTaskId(taskId);
+    try {
+      const draft = usesTauriPersistence
+        ? await generatePersistedTaskDescription(taskId, additionalContext)
+        : createPreviewAssistedDescription(task, additionalContext);
+
+      return draft;
+    } finally {
+      setGeneratingDescriptionTaskId(null);
+    }
+  }
+
+  async function saveTaskDescription(taskId: string, description: string) {
+    const tray = trays.find((candidate) => candidate.tasks.some((task) => task.id === taskId));
+    const task = tray?.tasks.find((candidate) => candidate.id === taskId);
+    const nextDescription = description.trim();
+    if (!tray || !task || tray.state === "Archived" || task.syncStatus === "Created") {
+      throw new Error("This task cannot be edited.");
+    }
+    if (!nextDescription) {
+      throw new Error("Description cannot be empty.");
+    }
+
+    const nextTask = usesTauriPersistence
+      ? await updatePersistedTaskDescription(taskId, nextDescription, "Ready")
+      : {
+          ...task,
+          description: nextDescription,
+          descriptionStatus: "Ready" as const
+        };
+    if (!nextTask) {
+      throw new Error("Could not save the description.");
+    }
+    if (nextTask) replaceTask(nextTask);
+  }
+
+  function replaceTask(nextTask: LocalTask) {
+    setTrays((currentTrays) =>
+      currentTrays.map((candidate) =>
+        candidate.tasks.some((task) => task.id === nextTask.id)
+          ? updateTrayTasks(
+              candidate,
+              candidate.tasks.map((task) => (task.id === nextTask.id ? nextTask : task))
+            )
+          : candidate
+      )
     );
   }
 
@@ -1588,8 +1654,11 @@ export default function App() {
             onUpdateDetails={updateTaskDetails}
             onAddSubtask={addSubtaskToTask}
             onDeleteSubtask={deleteTask}
+            onGenerateDescription={generateTaskDescription}
+            onSaveDescription={saveTaskDescription}
             onOpenJiraIssue={openJiraIssue}
             onClose={() => setOpenPanel(null)}
+            isGeneratingDescription={generatingDescriptionTaskId === selectedTaskWithSyncLog.id}
           />
         ) : null}
         {openPanel === "categories" ? (
@@ -2034,6 +2103,63 @@ function dedupeSubtaskTitles(titles: string[]): string[] {
     normalizedTitles.push(normalizedTitle);
   }
   return normalizedTitles;
+}
+
+function createPreviewAssistedDescription(task: LocalTask, additionalContext: string): AssistedDescriptionDraft {
+  const context = additionalContext.trim();
+  if (!context && task.title.trim().split(/\s+/).filter(Boolean).length <= 4) {
+    return {
+      status: "needs_clarification",
+      clarificationQuestions: [
+        "Que usuario o persona se ve afectado, y que necesita lograr?",
+        "Que debe cambiar, incluyendo lo mas importante dentro y fuera de alcance?",
+        "Como debe validar el exito QA, Arte, Programacion u otro responsable?"
+      ]
+    };
+  }
+
+  return {
+    status: "drafted",
+    clarificationQuestions: [],
+    description: `## Historia de usuario
+
+Como usuario de ${task.project},
+quiero ${task.title},
+para obtener un resultado claro y validable.
+
+## Contexto
+
+${context || "Contexto pendiente de revisar con el responsable antes de crear la tarea en Jira."}
+
+## Alcance
+
+Incluye:
+- Preparar la tarea ${task.area} descrita en el titulo.
+- Validar el resultado esperado con el responsable del area.
+
+No incluye:
+- Cambios fuera del alcance confirmado para esta tarea.
+
+## Criterios de aceptación
+
+- La tarea queda implementada o preparada segun el alcance confirmado.
+- El responsable puede validar el resultado sin informacion adicional critica.
+
+## SRE Lite
+
+### Impacto esperado
+Impacto acotado a ${task.project} / ${task.area}.
+
+### Riesgos
+- Alcance incompleto si el titulo no captura restricciones o casos borde.
+
+### Observabilidad / señales
+QA/Arte/Programacion/etc. debe validar:
+- El resultado visible o funcional asociado a la tarea.
+
+### Rollback / mitigación
+Revertir el cambio puntual o retirar el artefacto/configuracion asociado si la validacion falla.`
+  };
 }
 
 function updateTrayTasks(tray: Tray, tasks: LocalTask[]): Tray {

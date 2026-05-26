@@ -10,9 +10,9 @@ use crate::integrations::ai::{ai_model_or_default, AiClient, AiCredentials, AiPr
 use crate::integrations::jira::{normalize_jira_site_url, JiraClient, JiraCredentials};
 use crate::jira_sync::JiraSyncRunner;
 use crate::models::{
-    AppSettings, Category, JiraConnectionTestResult, JiraCreateIssuesResult, JiraCreateProgress,
-    JqlAiDraft, JqlFavorite, JqlSearchResponse, LocalTask, NewSubtask, NewTask, NewTray,
-    SyncAuditEvent, Tray,
+    AppSettings, AssistedDescriptionDraft, Category, JiraConnectionTestResult,
+    JiraCreateIssuesResult, JiraCreateProgress, JqlAiDraft, JqlFavorite, JqlSearchResponse,
+    LocalTask, NewSubtask, NewTask, NewTray, SyncAuditEvent, Tray,
 };
 use crate::repositories::{
     CategoryRepository, JqlFavoriteRepository, SettingsRepository, SyncRepository, TaskRepository,
@@ -247,6 +247,28 @@ impl AppServices {
         client.draft_jql(&model, prompt, Some(&settings.jira_creation_project_key))
     }
 
+    pub fn generate_task_description(
+        &self,
+        task_id: &str,
+        additional_context: Option<&str>,
+    ) -> Result<AssistedDescriptionDraft, String> {
+        let settings = self
+            .get_app_settings()
+            .map_err(|error| format!("Could not load AI settings: {error}"))?;
+        let provider = AiProvider::from_settings_value(&settings.ai_provider)?;
+        let client = self.ai_client(provider)?;
+        let model = ai_model_or_default(provider, &settings.ai_model);
+        let task = {
+            let connection = self.connection.lock().expect("database lock poisoned");
+            TaskRepository::new(&connection)
+                .find_by_id(task_id)
+                .map_err(|error| format!("Could not load task: {error}"))?
+        }
+        .ok_or_else(|| "Task not found.".to_string())?;
+
+        client.draft_task_description(&model, &task, additional_context)
+    }
+
     pub fn test_ai_provider_connection(&self) -> Result<String, String> {
         let settings = self
             .get_app_settings()
@@ -349,6 +371,20 @@ impl AppServices {
         let connection = self.connection.lock().expect("database lock poisoned");
         TaskRepository::new(&connection)
             .update_details(task_id, project, area, title, priority, issue_type)
+    }
+
+    pub fn update_task_description(
+        &self,
+        task_id: &str,
+        description: Option<&str>,
+        description_status: &str,
+    ) -> DbResult<Option<LocalTask>> {
+        let connection = self.connection.lock().expect("database lock poisoned");
+        TaskRepository::new(&connection).update_description(
+            task_id,
+            description,
+            description_status,
+        )
     }
 
     pub fn mark_tasks_csv_exported(&self, task_ids: &[String]) -> DbResult<Vec<LocalTask>> {

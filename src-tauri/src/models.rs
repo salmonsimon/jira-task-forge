@@ -56,6 +56,8 @@ pub struct LocalTask {
     pub issue_type: String,
     pub sync_status: String,
     pub description_status: String,
+    #[serde(default)]
+    pub description: Option<String>,
     pub content_language: String,
     pub jira_key: Option<String>,
     pub jira_url: Option<String>,
@@ -150,6 +152,14 @@ pub struct JqlAiDraft {
     pub jql: String,
     pub explanation: String,
     pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AssistedDescriptionDraft {
+    pub status: String,
+    pub description: Option<String>,
+    pub clarification_questions: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -122,6 +122,12 @@ export type JqlAiDraft = {
   warnings: string[];
 };
 
+export type AssistedDescriptionDraft = {
+  status: "drafted" | "needs_clarification";
+  description?: string | null;
+  clarificationQuestions: string[];
+};
+
 export type PreflightWarning = {
   code: PreflightWarningCode;
   severity: PreflightWarningSeverity;

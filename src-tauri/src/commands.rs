@@ -3,8 +3,9 @@ use tauri::{AppHandle, Emitter, State};
 
 use crate::backup::{BackupExportResult, BackupImportResult};
 use crate::models::{
-    AppSettings, Category, JiraConnectionTestResult, JiraCreateIssuesResult, JqlAiDraft,
-    JqlFavorite, JqlSearchResponse, LocalTask, NewSubtask, NewTask, NewTray, SyncAuditEvent, Tray,
+    AppSettings, AssistedDescriptionDraft, Category, JiraConnectionTestResult,
+    JiraCreateIssuesResult, JqlAiDraft, JqlFavorite, JqlSearchResponse, LocalTask, NewTask,
+    NewSubtask, NewTray, SyncAuditEvent, Tray,
 };
 use crate::services::AppServices;
 
@@ -351,6 +352,19 @@ pub async fn draft_jql_with_ai(
 }
 
 #[tauri::command]
+pub async fn generate_task_description(
+    services: State<'_, AppServices>,
+    task_id: String,
+    additional_context: Option<String>,
+) -> Result<AssistedDescriptionDraft, String> {
+    let services = services.inner().clone();
+    run_blocking_result("Task description AI worker", move || {
+        services.generate_task_description(&task_id, additional_context.as_deref())
+    })
+    .await
+}
+
+#[tauri::command]
 pub async fn create_jira_parent_issues(
     app_handle: AppHandle,
     services: State<'_, AppServices>,
@@ -447,6 +461,18 @@ pub fn update_task_details(
             &priority,
             &normalized_issue_type,
         )
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn update_task_description(
+    services: State<'_, AppServices>,
+    task_id: String,
+    description: Option<String>,
+    description_status: String,
+) -> Result<Option<LocalTask>, String> {
+    services
+        .update_task_description(&task_id, description.as_deref(), &description_status)
         .map_err(|error| error.to_string())
 }
 

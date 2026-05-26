@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   AiProvider,
   AppSettings,
+  AssistedDescriptionDraft,
   Category,
   IssueType,
   JqlAiDraft,
@@ -36,6 +37,7 @@ type BackendTask = {
   issue_type: IssueType;
   sync_status: SyncStatus;
   description_status: "Ready" | "Missing" | "Draft";
+  description: string | null;
   content_language: "Spanish" | "English";
   jira_key: string | null;
   jira_url: string | null;
@@ -261,6 +263,16 @@ export async function draftPersistedJqlWithAi(prompt: string): Promise<JqlAiDraf
   return invoke<JqlAiDraft>("draft_jql_with_ai", { prompt });
 }
 
+export async function generatePersistedTaskDescription(
+  taskId: string,
+  additionalContext: string
+): Promise<AssistedDescriptionDraft> {
+  return invoke<AssistedDescriptionDraft>("generate_task_description", {
+    taskId,
+    additionalContext
+  });
+}
+
 export async function createPersistedJiraParentIssues(
   trayId: string,
   allowMissingDescriptions: boolean,
@@ -331,6 +343,20 @@ export async function updatePersistedTaskDetails(
   return updated ? mapTask(updated) : null;
 }
 
+export async function updatePersistedTaskDescription(
+  taskId: string,
+  description: string | null,
+  descriptionStatus: LocalTask["descriptionStatus"]
+): Promise<LocalTask | null> {
+  const updated = await invoke<BackendTask | null>("update_task_description", {
+    taskId,
+    description,
+    descriptionStatus
+  });
+
+  return updated ? mapTask(updated) : null;
+}
+
 export async function markPersistedTasksCsvExported(taskIds: string[]): Promise<LocalTask[]> {
   const tasks = await invoke<BackendTask[]>("mark_tasks_csv_exported", { taskIds });
   return tasks.map(mapTask);
@@ -368,6 +394,7 @@ function mapTask(task: BackendTask): LocalTask {
     issueType: task.issue_type,
     syncStatus: task.sync_status,
     descriptionStatus: task.description_status,
+    description: task.description ?? undefined,
     language: task.content_language,
     jiraKey: task.jira_key ?? undefined,
     jiraUrl: task.jira_url ?? undefined,
