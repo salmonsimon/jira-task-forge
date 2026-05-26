@@ -597,6 +597,21 @@ mod tests {
             "https://salmonsimondts.atlassian.net/browse/JTFTEST-1"
         );
         assert_eq!(
+            validate_jira_issue_url("http://salmonsimondts.atlassian.net/browse/JTFTEST-1")
+                .expect_err("non-https should fail"),
+            "Jira issue URL must start with https://."
+        );
+        assert_eq!(
+            validate_jira_issue_url("https://salmonsimondts.atlassian.net/browse/JTFTEST 1")
+                .expect_err("spaces should fail"),
+            "Jira issue URL must not include spaces."
+        );
+        assert_eq!(
+            validate_jira_issue_url("https://salmonsimondts.atlassian.net")
+                .expect_err("missing path should fail"),
+            "Jira issue URL must include a browse path."
+        );
+        assert_eq!(
             validate_jira_issue_url("https://example.com/browse/JTFTEST-1")
                 .expect_err("non-atlassian host should fail"),
             "Jira issue URL must use an Atlassian Cloud host."
@@ -609,6 +624,21 @@ mod tests {
         assert_eq!(
             validate_jira_issue_url("https://salmonsimondts.atlassian.net/browse/JTFTEST-1?x=1")
                 .expect_err("query string should fail"),
+            "Jira issue URL must end with a Jira issue key."
+        );
+        assert_eq!(
+            validate_jira_issue_url("https://salmonsimondts.atlassian.net/browse/")
+                .expect_err("empty issue key should fail"),
+            "Jira issue URL must end with a Jira issue key."
+        );
+        assert_eq!(
+            validate_jira_issue_url("https://salmonsimondts.atlassian.net/browse/JTFTEST")
+                .expect_err("issue keys need project and number"),
+            "Jira issue URL must end with a Jira issue key."
+        );
+        assert_eq!(
+            validate_jira_issue_url("https://salmonsimondts.atlassian.net/browse/JTFTEST-1/child")
+                .expect_err("nested path should fail"),
             "Jira issue URL must end with a Jira issue key."
         );
     }

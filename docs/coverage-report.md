@@ -30,18 +30,19 @@ ${CARGO:-$HOME/.cargo/bin/cargo} llvm-cov --summary-only
 
 ## Current Baseline
 
-Measured after the first Personal v1 stabilization coverage PRs:
+Measured after the command/Jira coverage target pass:
 
-- Rust tests: 82 passed
-- Rust line coverage: 78.26%
-- Rust region coverage: 77.56%
-- Rust function coverage: 64.93%
+- Rust tests: 91 passed
+- Rust line coverage: 80.23%
+- Rust region coverage: 79.72%
+- Rust function coverage: 67.52%
 - Frontend tests: 12 passed
 
 This is the baseline for the Personal v1 quality/security stabilization pass.
-The target remains bringing Rust/Tauri backend line coverage above 80% before
-continuing with larger Jira/AI feature expansion, while growing frontend tests
-around domain/workflow behavior before chasing broad UI coverage percentages.
+The Rust/Tauri backend is back above the 80% line-coverage target. Continue
+growing tests around product-risk seams rather than chasing broad percentages,
+and grow frontend tests around domain/workflow behavior before chasing UI
+coverage percentages.
 
 ## Historical Baselines
 
@@ -73,14 +74,21 @@ Post-Ask-AI/backup/audit/progress baseline:
 - Region coverage: 72.57%
 - Function coverage: 59.03%
 
+After the first Personal v1 stabilization coverage PRs:
+
+- Tests: 82 passed
+- Line coverage: 78.26%
+- Region coverage: 77.56%
+- Function coverage: 64.93%
+
 ## Current Rust Coverage By File
 
 | File | Line Coverage | Region Coverage | Function Coverage |
 | --- | ---: | ---: | ---: |
 | `src-tauri/src/backup.rs` | 84.16% | 79.91% | 85.71% |
-| `src-tauri/src/commands.rs` | 20.11% | 27.73% | 10.57% |
+| `src-tauri/src/commands.rs` | 23.24% | 31.66% | 11.38% |
 | `src-tauri/src/db.rs` | 89.39% | 82.95% | 83.33% |
-| `src-tauri/src/integrations/jira.rs` | 40.06% | 41.60% | 50.00% |
+| `src-tauri/src/integrations/jira.rs` | 75.06% | 79.12% | 86.05% |
 | `src-tauri/src/integrations/jira_mapping.rs` | 100.00% | 99.39% | 100.00% |
 | `src-tauri/src/integrations/openai.rs` | 65.19% | 62.14% | 71.05% |
 | `src-tauri/src/jira_sync.rs` | 86.53% | 85.25% | 85.29% |
@@ -89,25 +97,24 @@ Post-Ask-AI/backup/audit/progress baseline:
 | `src-tauri/src/repositories.rs` | 93.75% | 90.15% | 92.23% |
 | `src-tauri/src/services.rs` | 83.28% | 80.40% | 65.75% |
 | `src-tauri/src/sync_audit.rs` | 97.73% | 99.26% | 100.00% |
-| **TOTAL** | **78.26%** | **77.56%** | **64.93%** |
+| **TOTAL** | **80.23%** | **79.72%** | **67.52%** |
 
 ## What Changed Since The Previous Report
 
-- Added focused Rust tests for `integrations/openai.rs`, `backup.rs`, and
-  `services.rs`.
-- Added the first frontend Vitest harness with domain tests for task helpers,
-  tray state, CSV export, and preflight warning classification.
+- Added focused Rust tests for Jira client request construction, early input
+  validation, response parsing, REST error formatting, retry classification,
+  and Jira issue URL validation.
 - Core persistence and sync remain strong: `repositories.rs`, `jira_sync.rs`,
   `jira_mapping.rs`, `models.rs`, and `sync_audit.rs` are still well covered.
-- Rust line coverage recovered from the 73.60% post-feature baseline to 78.26%.
+- Rust line coverage moved from 78.26% to 80.23%.
 
 ## Next Coverage Targets
 
-Raise backend line coverage above 80% by focusing on:
+Keep backend line coverage above 80% by focusing on:
 
 - `commands.rs`: command boundary helpers where behavior can be tested without
   depending on Tauri runtime state.
-- `integrations/jira.rs`: pure URL, payload, retry/error, and mapping behavior
+- `integrations/jira.rs`: any remaining pure payload or retry/error behavior
   that can be tested without real Jira network calls.
 - Additional `services.rs` coverage only where it can avoid real keyring or
   provider network dependencies.

@@ -353,9 +353,10 @@ fn is_retryable_jira_read_error(message: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
-        encode_path_segment, is_retryable_jira_read_error, normalize_jira_site_url, JiraClient,
-        JiraCredentials,
+        encode_path_segment, is_retryable_jira_read_error, normalize_jira_site_url,
+        parse_empty_response, parse_response, JiraClient, JiraCredentials,
     };
+    use serde_json::{json, Value};
 
     #[test]
     fn normalizes_jira_cloud_urls_to_site_root() {
@@ -442,6 +443,45 @@ mod tests {
     }
 
     #[test]
+    fn builds_authenticated_json_requests_for_jira() {
+        let client = JiraClient::new(JiraCredentials {
+            site_url: "https://example.atlassian.net".to_string(),
+            account_email: "saimon@example.com".to_string(),
+            api_token: "secret-api-token".to_string(),
+        });
+
+        let get_request = client.get("/rest/api/3/myself");
+        assert_eq!(get_request.method(), "GET");
+        assert_eq!(
+            get_request.url(),
+            "https://example.atlassian.net/rest/api/3/myself"
+        );
+        assert_eq!(get_request.header("Accept"), Some("application/json"));
+        assert!(get_request
+            .header("Authorization")
+            .expect("authorization header")
+            .starts_with("Basic "));
+
+        let post_request = client.post("/rest/api/3/issue");
+        assert_eq!(post_request.method(), "POST");
+        assert_eq!(
+            post_request.header("Content-Type"),
+            Some("application/json")
+        );
+
+        let post_read_request = client.post_read("/rest/api/3/search/jql");
+        assert_eq!(post_read_request.method(), "POST");
+        assert_eq!(
+            post_read_request.url(),
+            "https://example.atlassian.net/rest/api/3/search/jql"
+        );
+
+        let put_request = client.put("/rest/api/3/issue/JTFTEST-1");
+        assert_eq!(put_request.method(), "PUT");
+        assert_eq!(put_request.header("Content-Type"), Some("application/json"));
+    }
+
+    #[test]
     fn builds_jira_browse_urls_with_encoded_issue_keys() {
         let client = JiraClient::new(JiraCredentials {
             site_url: "https://example.atlassian.net".to_string(),
@@ -456,9 +496,145 @@ mod tests {
     }
 
     #[test]
+    fn validates_required_inputs_before_jira_network_calls() {
+        let client = JiraClient::new(JiraCredentials {
+            site_url: "https://example.atlassian.net".to_string(),
+            account_email: "saimon@example.com".to_string(),
+            api_token: "secret-api-token".to_string(),
+        });
+
+        assert_eq!(
+            client
+                .search_jql("   ", 50)
+                .expect_err("empty JQL should fail before request"),
+            "JQL query is required."
+        );
+        assert_eq!(
+            client
+                .get_create_issue_metadata("  ")
+                .expect_err("empty project key should fail before request"),
+            "Jira creation project key is required."
+        );
+        assert_eq!(
+            client
+                .update_issue_fields("  ", json!({}))
+                .expect_err("empty issue key should fail before request"),
+            "Jira issue key is required."
+        );
+    }
+
+    #[test]
+    fn parses_successful_json_responses() {
+        let response =
+            ureq::Response::new(200, "OK", r#"{"name":"Jira"}"#).expect("response builds");
+
+        let parsed: Value =
+            parse_response(Ok(response), "Jira connection test", None).expect("json parses");
+
+        assert_eq!(parsed["name"], "Jira");
+    }
+
+    #[test]
+    fn reports_malformed_json_responses() {
+        let response = ureq::Response::new(200, "OK", "not json").expect("response builds");
+
+        let error = parse_response::<Value>(Ok(response), "Jira connection test", None)
+            .expect_err("malformed json should fail");
+
+        assert!(error.starts_with("Jira connection test returned an unexpected payload:"));
+    }
+
+    #[test]
+    fn maps_auth_status_responses_to_actionable_errors() {
+        let response =
+            ureq::Response::new(401, "Unauthorized", r#"{"errorMessages":["bad token"]}"#)
+                .expect("response builds");
+
+        let error = parse_response::<Value>(
+            Err(ureq::Error::Status(401, response)),
+            "Jira connection test",
+            Some("Jira rejected the email or API token."),
+        )
+        .expect_err("auth failure should use friendly message");
+
+        assert_eq!(error, "Jira rejected the email or API token.");
+    }
+
+    #[test]
+    fn includes_jira_error_messages_from_status_responses() {
+        let response = ureq::Response::new(
+            400,
+            "Bad Request",
+            r#"{"errorMessages":["The JQL query is invalid."]}"#,
+        )
+        .expect("response builds");
+
+        let error = parse_response::<Value>(
+            Err(ureq::Error::Status(400, response)),
+            "Jira JQL search",
+            None,
+        )
+        .expect_err("status failure should fail");
+
+        assert_eq!(
+            error,
+            "Jira JQL search failed with HTTP 400: The JQL query is invalid."
+        );
+    }
+
+    #[test]
+    fn reports_status_without_jira_error_body() {
+        let response = ureq::Response::new(500, "Server Error", "{}").expect("response builds");
+
+        let error = parse_response::<Value>(
+            Err(ureq::Error::Status(500, response)),
+            "Jira JQL search",
+            None,
+        )
+        .expect_err("status failure should fail");
+
+        assert_eq!(error, "Jira JQL search failed with HTTP 500.");
+    }
+
+    #[test]
+    fn parses_empty_update_responses() {
+        let response = ureq::Response::new(204, "No Content", "").expect("response builds");
+
+        parse_empty_response(Ok(response), "Jira issue update").expect("empty response is ok");
+    }
+
+    #[test]
+    fn includes_jira_error_messages_from_empty_response_failures() {
+        let response = ureq::Response::new(
+            400,
+            "Bad Request",
+            r#"{"errors":{"priority":"Priority is required"}}"#,
+        )
+        .expect("response builds");
+
+        let error =
+            parse_empty_response(Err(ureq::Error::Status(400, response)), "Jira issue update")
+                .expect_err("status failure should fail");
+
+        assert_eq!(
+            error,
+            "Jira issue update failed with HTTP 400: priority: Priority is required"
+        );
+    }
+
+    #[test]
     fn classifies_retryable_jira_read_errors() {
         assert!(is_retryable_jira_read_error(
             "Jira create field metadata could not reach Jira: Connection Failed: Connect error: connection timed out"
+        ));
+        assert!(is_retryable_jira_read_error(
+            "Jira JQL search could not reach Jira: operation timed out"
+        ));
+        assert!(is_retryable_jira_read_error(
+            "Jira JQL search could not reach Jira: connection reset by peer"
+        ));
+        assert!(is_retryable_jira_read_error(
+            "Jira JQL search could not reach Jira: connection closed before message completed"
         ));
         assert!(!is_retryable_jira_read_error(
             "Jira create metadata failed with HTTP 400: project is invalid"
