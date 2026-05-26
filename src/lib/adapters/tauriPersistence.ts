@@ -218,8 +218,16 @@ export async function testPersistedOpenAiConnection(): Promise<string> {
   return invoke<string>("test_openai_connection");
 }
 
+export async function testPersistedOpenAiApiKey(apiKey: string): Promise<string> {
+  return invoke<string>("test_openai_api_key", { apiKey });
+}
+
 export async function testPersistedJiraConnection(): Promise<JiraConnectionTestResult> {
   return invoke<JiraConnectionTestResult>("test_jira_connection");
+}
+
+export async function testPersistedJiraApiToken(token: string): Promise<JiraConnectionTestResult> {
+  return invoke<JiraConnectionTestResult>("test_jira_api_token", { token });
 }
 
 export async function runPersistedJqlQuery(jql: string, maxResults = 50): Promise<JqlQueryResult> {

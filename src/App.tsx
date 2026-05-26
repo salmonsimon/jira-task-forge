@@ -45,6 +45,8 @@ import {
   saveCsvFile,
   savePersistedJiraApiToken,
   savePersistedOpenAiApiKey,
+  testPersistedOpenAiApiKey,
+  testPersistedJiraApiToken,
   testPersistedJiraConnection,
   testPersistedOpenAiConnection,
   updatePersistedAppSettings,
@@ -73,6 +75,7 @@ import type {
   AppSettings,
   BackupOperationNotice,
   Category,
+  CredentialConnectionTestResult,
   JqlAiDraft,
   JqlFavorite,
   JqlRecentQuery,
@@ -103,6 +106,14 @@ const defaultAppSettings: AppSettings = {
 };
 const defaultJqlPrompt = "Show me high and highest open bugs for STT, sorted by priority";
 const atlassianApiTokensUrl = "https://id.atlassian.com/manage-profile/security/api-tokens";
+
+type ConnectionNotice = {
+  id: number;
+  kind: "success" | "error";
+  title: string;
+  message: string;
+  detail?: string | null;
+};
 
 export default function App() {
   const taskIdCounter = useRef(0);
@@ -136,7 +147,7 @@ export default function App() {
   const [hasOpenAiApiKey, setHasOpenAiApiKey] = useState(false);
   const [jiraCredentialMessage, setJiraCredentialMessage] = useState<string | null>(null);
   const [aiCredentialMessage, setAiCredentialMessage] = useState<string | null>(null);
-  const [jiraConnectionResult, setJiraConnectionResult] = useState<JiraConnectionTestResult | null>(null);
+  const [connectionNotice, setConnectionNotice] = useState<ConnectionNotice | null>(null);
   const [backupNotice, setBackupNotice] = useState<BackupOperationNotice | null>(null);
   const [isTestingJiraConnection, setIsTestingJiraConnection] = useState(false);
   const [isTestingOpenAiConnection, setIsTestingOpenAiConnection] = useState(false);
@@ -255,6 +266,13 @@ export default function App() {
       document.body.style.overflow = previousOverflow;
     };
   }, [backupNotice, openPanel]);
+
+  useEffect(() => {
+    if (!connectionNotice) return;
+
+    const timeoutId = window.setTimeout(() => setConnectionNotice(null), 7000);
+    return () => window.clearTimeout(timeoutId);
+  }, [connectionNotice]);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
@@ -630,17 +648,45 @@ export default function App() {
     window.open(atlassianApiTokensUrl, "_blank", "noopener,noreferrer");
   }
 
+  function showConnectionNotice(notice: Omit<ConnectionNotice, "id">) {
+    setConnectionNotice({
+      ...notice,
+      id: Date.now()
+    });
+  }
+
+  function showJiraConnectionNotice(result: JiraConnectionTestResult) {
+    showConnectionNotice({
+      kind: result.ok ? "success" : "error",
+      title: result.ok ? "Jira connection succeeded" : "Jira connection failed",
+      message: result.message,
+      detail:
+        result.ok && result.accountDisplayName
+          ? `Connected as ${result.accountDisplayName}${result.accountEmail ? ` (${result.accountEmail})` : ""}`
+          : null
+    });
+  }
+
+  function showAiConnectionNotice(result: CredentialConnectionTestResult) {
+    showConnectionNotice({
+      kind: result.ok ? "success" : "error",
+      title: result.ok ? "AI Provider connection succeeded" : "AI Provider connection failed",
+      message: result.message,
+      detail: result.detail
+    });
+  }
+
   async function saveJiraApiToken(token: string) {
-    if (!token.trim()) {
+    const trimmedToken = token.trim();
+    if (!trimmedToken) {
       setJiraCredentialMessage("Token cannot be empty.");
       return false;
     }
 
     try {
-      await savePersistedJiraApiToken(token);
+      await savePersistedJiraApiToken(trimmedToken);
       setHasJiraApiToken(true);
       setJiraCredentialMessage("Jira API token saved in the OS credential store.");
-      setJiraConnectionResult(null);
       return true;
     } catch {
       setJiraCredentialMessage("Could not save Jira API token in the OS credential store.");
@@ -653,7 +699,6 @@ export default function App() {
       await deletePersistedJiraApiToken();
       setHasJiraApiToken(false);
       setJiraCredentialMessage("Jira API token removed from the OS credential store.");
-      setJiraConnectionResult(null);
     } catch {
       setJiraCredentialMessage("Could not remove Jira API token.");
     }
@@ -687,7 +732,7 @@ export default function App() {
     }
   }
 
-  async function testOpenAiConnection() {
+  async function testOpenAiConnection(): Promise<CredentialConnectionTestResult> {
     flushSync(() => {
       setIsTestingOpenAiConnection(true);
       setAiCredentialMessage(null);
@@ -697,19 +742,51 @@ export default function App() {
 
     try {
       const message = await testPersistedOpenAiConnection();
-      setAiCredentialMessage(message);
+      const result: CredentialConnectionTestResult = { ok: true, message };
+      showAiConnectionNotice(result);
+      return result;
     } catch (error) {
-      setAiCredentialMessage(formatUnknownError(error, "Could not test OpenAI connection."));
+      const result: CredentialConnectionTestResult = {
+        ok: false,
+        message: formatUnknownError(error, "Could not test OpenAI connection.")
+      };
+      showAiConnectionNotice(result);
+      return result;
     } finally {
       await waitForMinimumElapsed(loadingStartedAt, 700);
       setIsTestingOpenAiConnection(false);
     }
   }
 
-  async function testJiraConnection() {
+  async function testOpenAiApiKey(apiKey: string): Promise<CredentialConnectionTestResult> {
+    flushSync(() => {
+      setIsTestingOpenAiConnection(true);
+      setAiCredentialMessage(null);
+    });
+    const loadingStartedAt = performance.now();
+    await waitForNextPaint();
+
+    try {
+      const message = await testPersistedOpenAiApiKey(apiKey);
+      const result: CredentialConnectionTestResult = { ok: true, message };
+      showAiConnectionNotice(result);
+      return result;
+    } catch (error) {
+      const result: CredentialConnectionTestResult = {
+        ok: false,
+        message: formatUnknownError(error, "Could not test OpenAI connection.")
+      };
+      showAiConnectionNotice(result);
+      return result;
+    } finally {
+      await waitForMinimumElapsed(loadingStartedAt, 700);
+      setIsTestingOpenAiConnection(false);
+    }
+  }
+
+  async function testJiraConnection(): Promise<JiraConnectionTestResult> {
     flushSync(() => {
       setIsTestingJiraConnection(true);
-      setJiraConnectionResult(null);
     });
     const loadingStartedAt = performance.now();
     await waitForNextPaint();
@@ -717,12 +794,41 @@ export default function App() {
 
     try {
       const result = await testPersistedJiraConnection();
-      setJiraConnectionResult(result);
+      showJiraConnectionNotice(result);
+      return result;
     } catch (error) {
-      setJiraConnectionResult({
+      const result = {
         ok: false,
         message: error instanceof Error ? error.message : "Could not test Jira connection."
-      });
+      };
+      showJiraConnectionNotice(result);
+      return result;
+    } finally {
+      await waitForMinimumElapsed(loadingStartedAt, 800);
+      setIsTestingJiraConnection(false);
+    }
+  }
+
+  async function testJiraApiToken(token: string): Promise<JiraConnectionTestResult> {
+    flushSync(() => {
+      setIsTestingJiraConnection(true);
+      setJiraCredentialMessage(null);
+    });
+    const loadingStartedAt = performance.now();
+    await waitForNextPaint();
+    await delay(500);
+
+    try {
+      const result = await testPersistedJiraApiToken(token);
+      showJiraConnectionNotice(result);
+      return result;
+    } catch (error) {
+      const result = {
+        ok: false,
+        message: error instanceof Error ? error.message : "Could not test Jira connection."
+      };
+      showJiraConnectionNotice(result);
+      return result;
     } finally {
       await waitForMinimumElapsed(loadingStartedAt, 800);
       setIsTestingJiraConnection(false);
@@ -1080,7 +1186,6 @@ export default function App() {
 
     try {
       const credentialResult = await testPersistedJiraConnection();
-      setJiraConnectionResult(credentialResult);
       setJiraCreatePreflight((currentPreflight) => {
         if (!currentPreflight || currentPreflight.tray.id !== tray.id) return currentPreflight;
 
@@ -1323,7 +1428,6 @@ export default function App() {
             hasOpenAiApiKey={hasOpenAiApiKey}
             jiraCredentialMessage={jiraCredentialMessage}
             aiCredentialMessage={aiCredentialMessage}
-            jiraConnectionResult={jiraConnectionResult}
             isTestingJiraConnection={isTestingJiraConnection}
             isTestingOpenAiConnection={isTestingOpenAiConnection}
             onChange={updateAppSettings}
@@ -1332,7 +1436,9 @@ export default function App() {
             onSaveOpenAiApiKey={saveOpenAiApiKey}
             onDeleteOpenAiApiKey={deleteOpenAiApiKey}
             onTestOpenAiConnection={testOpenAiConnection}
+            onTestOpenAiApiKey={testOpenAiApiKey}
             onTestJiraConnection={testJiraConnection}
+            onTestJiraApiToken={testJiraApiToken}
             onOpenJiraApiTokens={openJiraApiTokensPage}
             onExportBackup={exportBackup}
             onImportBackup={importBackup}
@@ -1362,8 +1468,50 @@ export default function App() {
             }}
           />
         ) : null}
+        {connectionNotice ? (
+          <ConnectionNoticeToast notice={connectionNotice} onClose={() => setConnectionNotice(null)} />
+        ) : null}
         {backupNotice ? <BackupNoticeDialog notice={backupNotice} onClose={() => setBackupNotice(null)} /> : null}
       </div>
+    </div>
+  );
+}
+
+function ConnectionNoticeToast({
+  notice,
+  onClose
+}: {
+  notice: ConnectionNotice;
+  onClose: () => void;
+}) {
+  const isSuccess = notice.kind === "success";
+
+  return (
+    <div className="pointer-events-none fixed left-1/2 top-4 z-[60] w-[min(520px,calc(100vw-32px))] -translate-x-1/2">
+      <section
+        className={`pointer-events-auto rounded border px-4 py-3 shadow-2xl ${
+          isSuccess
+            ? "border-[#abf5d1] bg-[#e3fcef] text-[#006644]"
+            : "border-[#ffbdad] bg-[#ffebe6] text-[#bf2600]"
+        }`}
+      >
+        <div className="flex items-start gap-3">
+          <div className="mt-0.5 shrink-0">{isSuccess ? <CheckCircle2 size={18} /> : <AlertTriangle size={18} />}</div>
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-semibold">{notice.title}</div>
+            <p className="mt-0.5 break-words text-sm leading-relaxed">{notice.message}</p>
+            {notice.detail ? <p className="mt-1 break-words text-xs leading-relaxed opacity-80">{notice.detail}</p> : null}
+          </div>
+          <button
+            className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded hover:bg-black/10"
+            onClick={onClose}
+            title="Close"
+            type="button"
+          >
+            <X size={15} />
+          </button>
+        </div>
+      </section>
     </div>
   );
 }

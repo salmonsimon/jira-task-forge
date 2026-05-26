@@ -256,12 +256,36 @@ pub async fn test_openai_connection(services: State<'_, AppServices>) -> Result<
 }
 
 #[tauri::command]
+pub async fn test_openai_api_key(
+    services: State<'_, AppServices>,
+    api_key: String,
+) -> Result<String, String> {
+    let services = services.inner().clone();
+    run_blocking_result("OpenAI connection worker", move || {
+        services.test_openai_connection_with_api_key(&api_key)
+    })
+    .await
+}
+
+#[tauri::command]
 pub async fn test_jira_connection(
     services: State<'_, AppServices>,
 ) -> Result<JiraConnectionTestResult, String> {
     let services = services.inner().clone();
     run_blocking_result("Jira connection worker", move || {
         Ok(services.test_jira_connection())
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn test_jira_api_token(
+    services: State<'_, AppServices>,
+    token: String,
+) -> Result<JiraConnectionTestResult, String> {
+    let services = services.inner().clone();
+    run_blocking_result("Jira connection worker", move || {
+        Ok(services.test_jira_connection_with_api_token(&token))
     })
     .await
 }

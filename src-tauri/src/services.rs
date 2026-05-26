@@ -179,6 +179,24 @@ impl AppServices {
             Err(message) => return failed_result(message),
         };
 
+        self.test_jira_client(client)
+    }
+
+    pub fn test_jira_connection_with_api_token(&self, token: &str) -> JiraConnectionTestResult {
+        let token = token.trim();
+        if token.is_empty() {
+            return failed_result("Jira API token cannot be empty.");
+        }
+
+        let client = match self.jira_client_with_api_token(token) {
+            Ok(client) => client,
+            Err(message) => return failed_result(message),
+        };
+
+        self.test_jira_client(client)
+    }
+
+    fn test_jira_client(&self, client: JiraClient) -> JiraConnectionTestResult {
         match client.get_myself() {
             Ok(body) => JiraConnectionTestResult {
                 ok: true,
@@ -225,6 +243,21 @@ impl AppServices {
         }
 
         self.openai_client()?.test_connection()?;
+        Ok("OpenAI connection succeeded.".to_string())
+    }
+
+    pub fn test_openai_connection_with_api_key(&self, api_key: &str) -> Result<String, String> {
+        let settings = self
+            .get_app_settings()
+            .map_err(|error| format!("Could not load AI settings: {error}"))?;
+        if settings.ai_provider != "OpenAI" {
+            return Err(
+                "OpenAI provider must be selected before testing the connection.".to_string(),
+            );
+        }
+
+        let client = self.openai_client_with_api_key(api_key)?;
+        client.test_connection()?;
         Ok("OpenAI connection succeeded.".to_string())
     }
 
@@ -370,6 +403,17 @@ impl AppServices {
     }
 
     fn jira_client(&self) -> Result<JiraClient, String> {
+        let (site_url, account_email) = self.jira_connection_settings()?;
+        let api_token = self.jira_api_token()?;
+        self.jira_client_from_parts(site_url, account_email, &api_token)
+    }
+
+    fn jira_client_with_api_token(&self, api_token: &str) -> Result<JiraClient, String> {
+        let (site_url, account_email) = self.jira_connection_settings()?;
+        self.jira_client_from_parts(site_url, account_email, api_token)
+    }
+
+    fn jira_connection_settings(&self) -> Result<(String, String), String> {
         let settings = self
             .get_app_settings()
             .map_err(|error| format!("Could not load Jira settings: {error}"))?;
@@ -380,26 +424,53 @@ impl AppServices {
             return Err("Jira account email is required.".to_string());
         }
 
+        Ok((site_url, account_email.to_string()))
+    }
+
+    fn jira_client_from_parts(
+        &self,
+        site_url: String,
+        account_email: String,
+        api_token: &str,
+    ) -> Result<JiraClient, String> {
+        let api_token = api_token.trim();
+        if api_token.is_empty() {
+            return Err("Jira API token cannot be empty.".to_string());
+        }
+
+        Ok(JiraClient::new(JiraCredentials {
+            site_url,
+            account_email,
+            api_token: api_token.to_string(),
+        }))
+    }
+
+    fn jira_api_token(&self) -> Result<String, String> {
         let entry = keyring::Entry::new(JIRA_CREDENTIAL_SERVICE, JIRA_API_TOKEN_ACCOUNT)
             .map_err(|error| format!("Could not open OS credential store: {error}"))?;
-        let api_token = match entry.get_password() {
-            Ok(token) => token,
+        match entry.get_password() {
+            Ok(token) => Ok(token),
             Err(keyring::Error::NoEntry) => {
                 return Err("Save a Jira API token before testing the connection.".to_string())
             }
             Err(error) => return Err(format!("Could not read Jira API token: {error}")),
-        };
-
-        Ok(JiraClient::new(JiraCredentials {
-            site_url,
-            account_email: account_email.to_string(),
-            api_token,
-        }))
+        }
     }
 
     fn openai_client(&self) -> Result<OpenAiClient, String> {
         let api_key = self.openai_api_key()?;
-        Ok(OpenAiClient::new(OpenAiCredentials { api_key }))
+        self.openai_client_with_api_key(&api_key)
+    }
+
+    fn openai_client_with_api_key(&self, api_key: &str) -> Result<OpenAiClient, String> {
+        let api_key = api_key.trim();
+        if api_key.is_empty() {
+            return Err("OpenAI API key cannot be empty.".to_string());
+        }
+
+        Ok(OpenAiClient::new(OpenAiCredentials {
+            api_key: api_key.to_string(),
+        }))
     }
 
     fn openai_api_key(&self) -> Result<String, String> {
@@ -774,9 +845,28 @@ mod tests {
         );
         assert_eq!(
             services
+                .test_openai_connection_with_api_key("unsaved-key")
+                .expect_err("provider must be OpenAI"),
+            "OpenAI provider must be selected before testing the connection."
+        );
+        assert_eq!(
+            services
                 .draft_jql_with_ai("show latest DTS issue")
                 .expect_err("provider must be OpenAI"),
             "OpenAI provider must be selected before using Ask AI."
+        );
+
+        services
+            .update_app_settings(AppSettings {
+                ai_provider: "OpenAI".to_string(),
+                ..AppSettings::default()
+            })
+            .expect("settings update");
+        assert_eq!(
+            services
+                .test_openai_connection_with_api_key("   ")
+                .expect_err("empty draft key rejected"),
+            "OpenAI API key cannot be empty."
         );
     }
 
@@ -805,6 +895,13 @@ mod tests {
                 .run_jql_query("project = JTFTEST", 50)
                 .expect_err("missing email should fail"),
             "Jira account email is required."
+        );
+
+        let draft_token_result = services.test_jira_connection_with_api_token("   ");
+        assert!(!draft_token_result.ok);
+        assert_eq!(
+            draft_token_result.message,
+            "Jira API token cannot be empty."
         );
 
         services
