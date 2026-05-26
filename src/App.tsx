@@ -45,6 +45,7 @@ import {
   saveCsvFile,
   savePersistedJiraApiToken,
   savePersistedOpenAiApiKey,
+  testPersistedJiraApiToken,
   testPersistedJiraConnection,
   testPersistedOpenAiConnection,
   updatePersistedAppSettings,
@@ -631,16 +632,16 @@ export default function App() {
   }
 
   async function saveJiraApiToken(token: string) {
-    if (!token.trim()) {
+    const trimmedToken = token.trim();
+    if (!trimmedToken) {
       setJiraCredentialMessage("Token cannot be empty.");
       return false;
     }
 
     try {
-      await savePersistedJiraApiToken(token);
+      await savePersistedJiraApiToken(trimmedToken);
       setHasJiraApiToken(true);
       setJiraCredentialMessage("Jira API token saved in the OS credential store.");
-      setJiraConnectionResult(null);
       return true;
     } catch {
       setJiraCredentialMessage("Could not save Jira API token in the OS credential store.");
@@ -723,6 +724,33 @@ export default function App() {
         ok: false,
         message: error instanceof Error ? error.message : "Could not test Jira connection."
       });
+    } finally {
+      await waitForMinimumElapsed(loadingStartedAt, 800);
+      setIsTestingJiraConnection(false);
+    }
+  }
+
+  async function testJiraApiToken(token: string): Promise<JiraConnectionTestResult> {
+    flushSync(() => {
+      setIsTestingJiraConnection(true);
+      setJiraConnectionResult(null);
+      setJiraCredentialMessage(null);
+    });
+    const loadingStartedAt = performance.now();
+    await waitForNextPaint();
+    await delay(500);
+
+    try {
+      const result = await testPersistedJiraApiToken(token);
+      setJiraConnectionResult(result);
+      return result;
+    } catch (error) {
+      const result = {
+        ok: false,
+        message: error instanceof Error ? error.message : "Could not test Jira connection."
+      };
+      setJiraConnectionResult(result);
+      return result;
     } finally {
       await waitForMinimumElapsed(loadingStartedAt, 800);
       setIsTestingJiraConnection(false);
@@ -1333,6 +1361,7 @@ export default function App() {
             onDeleteOpenAiApiKey={deleteOpenAiApiKey}
             onTestOpenAiConnection={testOpenAiConnection}
             onTestJiraConnection={testJiraConnection}
+            onTestJiraApiToken={testJiraApiToken}
             onOpenJiraApiTokens={openJiraApiTokensPage}
             onExportBackup={exportBackup}
             onImportBackup={importBackup}

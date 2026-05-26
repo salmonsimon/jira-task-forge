@@ -439,6 +439,8 @@ document such as `docs/jira-description-format.md`.
 - Jira API token auth is an acceptable personal fallback.
 - Secrets should be stored locally and excluded from backups.
 - Windows Credential Manager is preferred when the stack supports it.
+- A new Jira API token must pass a connection test before the Settings UI allows
+  saving it to the OS credential store.
 - Settings can be exported/imported without secrets.
 - The app should preserve data across app updates.
 - V1 should use an installer/version update path that keeps local data.

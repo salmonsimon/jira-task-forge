@@ -1,6 +1,7 @@
 import { Bot, Check, ChevronDown, Download, ExternalLink, KeyRound, Settings, UploadCloud } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button, DetailBlock, LoadingOrb, PanelHeader, SegmentedControl } from "../../components/ui";
+import { getJiraTokenDraftControls, type JiraTokenDraftTestStatus } from "../../lib/domain";
 import type { AppSettings, JiraConnectionTestResult, ThemeMode } from "../../lib/types";
 
 export function SettingsPanel({
@@ -19,6 +20,7 @@ export function SettingsPanel({
   onDeleteOpenAiApiKey,
   onTestOpenAiConnection,
   onTestJiraConnection,
+  onTestJiraApiToken,
   onOpenJiraApiTokens,
   onExportBackup,
   onImportBackup,
@@ -39,14 +41,24 @@ export function SettingsPanel({
   onDeleteOpenAiApiKey: () => void;
   onTestOpenAiConnection: () => void;
   onTestJiraConnection: () => void;
+  onTestJiraApiToken: (token: string) => Promise<JiraConnectionTestResult>;
   onOpenJiraApiTokens: () => void;
   onExportBackup: () => void;
   onImportBackup: () => void;
   onClose: () => void;
 }) {
   const panelRef = useRef<HTMLElement | null>(null);
+  const jiraApiTokenDraftRef = useRef("");
   const [jiraApiTokenDraft, setJiraApiTokenDraft] = useState("");
+  const [jiraTokenDraftTestStatus, setJiraTokenDraftTestStatus] = useState<JiraTokenDraftTestStatus>("idle");
   const [openAiApiKeyDraft, setOpenAiApiKeyDraft] = useState("");
+  const jiraTokenDraftControls = getJiraTokenDraftControls({
+    accountEmail: settings.jiraAccountEmail,
+    isTestingConnection: isTestingJiraConnection,
+    siteUrl: settings.jiraSiteUrl,
+    tokenDraft: jiraApiTokenDraft,
+    tokenTestStatus: jiraTokenDraftTestStatus
+  });
   const canTestJiraConnection =
     Boolean(settings.jiraSiteUrl.trim()) &&
     Boolean(settings.jiraAccountEmail.trim()) &&
@@ -57,9 +69,30 @@ export function SettingsPanel({
     hasOpenAiApiKey &&
     !isTestingOpenAiConnection;
 
+  function updateJiraApiTokenDraft(value: string) {
+    jiraApiTokenDraftRef.current = value;
+    setJiraApiTokenDraft(value);
+    setJiraTokenDraftTestStatus("idle");
+  }
+
+  async function testJiraTokenDraft() {
+    if (!jiraTokenDraftControls.canTestDraft) return;
+
+    const tokenUnderTest = jiraApiTokenDraft;
+    setJiraTokenDraftTestStatus("testing");
+    const result = await onTestJiraApiToken(tokenUnderTest);
+    if (jiraApiTokenDraftRef.current !== tokenUnderTest) return;
+    setJiraTokenDraftTestStatus(result.ok ? "success" : "failed");
+  }
+
   async function saveJiraToken() {
+    if (!jiraTokenDraftControls.canSaveDraft) return;
+
     const saved = await onSaveJiraApiToken(jiraApiTokenDraft);
-    if (saved) setJiraApiTokenDraft("");
+    if (saved) {
+      updateJiraApiTokenDraft("");
+      setJiraTokenDraftTestStatus("idle");
+    }
   }
 
   async function saveOpenAiKey() {
@@ -76,6 +109,11 @@ export function SettingsPanel({
     window.addEventListener("pointerdown", handlePointerDown);
     return () => window.removeEventListener("pointerdown", handlePointerDown);
   }, [onClose]);
+
+  useEffect(() => {
+    if (!jiraApiTokenDraft) return;
+    setJiraTokenDraftTestStatus("idle");
+  }, [settings.jiraAccountEmail, settings.jiraSiteUrl, jiraApiTokenDraft]);
 
   return (
     <aside ref={panelRef} className="fixed right-0 top-0 z-30 flex h-screen w-[420px] flex-col overscroll-contain border-l border-[#dfe1e6] bg-white shadow-xl">
@@ -145,16 +183,29 @@ export function SettingsPanel({
               masked
               placeholder={hasJiraApiToken ? "Enter a new token to replace it" : "Paste API token"}
               value={jiraApiTokenDraft}
-              onChange={setJiraApiTokenDraft}
+              onChange={updateJiraApiTokenDraft}
             />
-            <div className="flex gap-2">
-              <Button disabled={!jiraApiTokenDraft.trim()} variant="secondary" onClick={saveJiraToken}>
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                disabled={!jiraTokenDraftControls.canTestDraft}
+                icon={jiraTokenDraftTestStatus === "testing" ? <LoadingOrb size="xs" /> : undefined}
+                variant="secondary"
+                onClick={testJiraTokenDraft}
+              >
+                {jiraTokenDraftTestStatus === "testing" ? "Testing..." : "Test new token"}
+              </Button>
+              <Button disabled={!jiraTokenDraftControls.canSaveDraft} variant="secondary" onClick={saveJiraToken}>
                 Save token
               </Button>
-              <Button disabled={!hasJiraApiToken} variant="secondary" onClick={onDeleteJiraApiToken}>
+              <Button className="col-span-2" disabled={!hasJiraApiToken} variant="secondary" onClick={onDeleteJiraApiToken}>
                 Remove token
               </Button>
             </div>
+            {jiraApiTokenDraft ? (
+              <p className="mt-2 text-xs leading-relaxed text-[#6b778c]">
+                {jiraTokenDraftStatusMessage(jiraTokenDraftTestStatus, jiraTokenDraftControls.hasConnectionSettings)}
+              </p>
+            ) : null}
             {jiraCredentialMessage ? (
               <p className="mt-2 text-xs leading-relaxed text-[#6b778c]">{jiraCredentialMessage}</p>
             ) : null}
@@ -259,6 +310,14 @@ export function SettingsPanel({
       </div>
     </aside>
   );
+}
+
+function jiraTokenDraftStatusMessage(status: JiraTokenDraftTestStatus, hasConnectionSettings: boolean): string {
+  if (!hasConnectionSettings) return "Add a Jira site URL and account email before testing this token.";
+  if (status === "success") return "Connection succeeded. This token can be saved.";
+  if (status === "failed") return "Connection failed. Update the token or Jira settings, then test again.";
+  if (status === "testing") return "Testing this token without saving it.";
+  return "Test this new token before saving it.";
 }
 
 function SettingsInput({

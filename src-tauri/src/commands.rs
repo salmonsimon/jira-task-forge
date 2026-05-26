@@ -267,6 +267,18 @@ pub async fn test_jira_connection(
 }
 
 #[tauri::command]
+pub async fn test_jira_api_token(
+    services: State<'_, AppServices>,
+    token: String,
+) -> Result<JiraConnectionTestResult, String> {
+    let services = services.inner().clone();
+    run_blocking_result("Jira connection worker", move || {
+        Ok(services.test_jira_connection_with_api_token(&token))
+    })
+    .await
+}
+
+#[tauri::command]
 pub async fn run_jql_query(
     services: State<'_, AppServices>,
     jql: String,

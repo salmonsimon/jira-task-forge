@@ -222,6 +222,10 @@ export async function testPersistedJiraConnection(): Promise<JiraConnectionTestR
   return invoke<JiraConnectionTestResult>("test_jira_connection");
 }
 
+export async function testPersistedJiraApiToken(token: string): Promise<JiraConnectionTestResult> {
+  return invoke<JiraConnectionTestResult>("test_jira_api_token", { token });
+}
+
 export async function runPersistedJqlQuery(jql: string, maxResults = 50): Promise<JqlQueryResult> {
   return invoke<JqlQueryResult>("run_jql_query", { jql, maxResults });
 }
