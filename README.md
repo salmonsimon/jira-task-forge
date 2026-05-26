@@ -7,12 +7,14 @@ Local-first Windows desktop app for preparing Jira work before creating issues t
 This repo contains the product/architecture decisions and the first Tauri/React desktop app skeleton.
 
 The app now has SQLite-backed local trays/tasks, persisted non-secret settings,
-CSV export, Jira API token storage through the OS credential store, Jira
-connection testing, read-only JQL search, and a guarded `Create in Jira` flow
-that creates required epics plus parent Story/Bug issues.
+CSV export, JSON backup/restore without secrets, Jira API token storage through
+the OS credential store, Jira connection testing, read-only JQL search with
+favorites/recent history, AI-assisted JQL drafting through the Tauri backend,
+sync audit activity, and a guarded `Create in Jira` flow that creates required
+epics plus parent Story/Bug issues.
 
-It does not yet create sub-tasks, call AI providers, manage real attachments, or
-support backup/import.
+It does not yet create sub-tasks, upload real attachments, or validate the Jira
+CSV upload fallback after API creation.
 
 ## Stack
 

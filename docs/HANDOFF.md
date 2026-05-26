@@ -80,47 +80,57 @@ High-level shape:
 - Global chips: `Categories` and `Settings`.
 - Multiple named tray drafts.
 - Jira API is primary; CSV is minimal fallback.
-- AI is manually triggered and helps create per-task Jira descriptions.
+- AI is manually triggered. The current implemented AI slice drafts JQL from a
+  prompt; per-task assisted descriptions remain product scope for a later slice.
 - Epics follow `[{Project}] {Area}` and are synced from Jira to avoid duplicates.
 - Local SQLite persistence, backup/export without secrets, and sync audit logs are part of v1 scope.
 - Technical stack is Tauri + React + TypeScript + shadcn/ui + Tailwind + SQLite.
 - Jira and AI calls should run through the Rust/Tauri backend, not directly from React.
 - The first prototype has moved into the real app skeleton.
-- The shell includes `Trays`, `JQL`, `Categories`, `Settings`, task detail, CSV export, Jira settings, token storage, connection testing, create preflight, and the first guarded Jira write flow.
+- The shell includes `Trays`, `JQL`, `Categories`, `Settings`, task detail, CSV
+  export, backup/restore controls, Jira settings, Jira and AI token storage,
+  connection testing, create preflight, task sync audit activity, JQL favorites
+  and recent history, Ask AI JQL drafting, and the first guarded Jira write
+  flow.
 
 ## Current Engineering Checkpoint
 
-As of the merged PR #26 Jira parent issue creation slice, the app includes:
+As of the merged PR #47 stabilization coverage report, the app includes:
 
 - Tauri + React shell with Jira-like styling.
 - SQLite-backed local trays and local tasks.
 - Tray lifecycle actions: create, rename, archive, restore, delete, duplicate task, delete editable task, and edit task details.
 - CSV export through a native save dialog, including marking eligible tasks as `Exported`.
+- JSON backup export/import through native dialogs, excluding stored secrets.
 - Persisted non-secret settings.
 - Jira API token storage through the OS credential store.
 - Jira connection test using the configured site, account email, and saved token.
 - `Create in Jira` preflight, including credential/project/task validation and a configurable Jira creation project key.
 - First Jira write slice behind preflight: creation metadata validation, epic search/create by `[{Project}] {Area}`, parent Story/Bug creation, local Jira key/link persistence, remote correlation markers through Jira issue properties, sync audit events, and partial recovery via moving failed tasks to a recovery tray.
 - A reusable backend Jira client and read-only JQL query command wired to the JQL panel.
+- Persisted JQL favorites, session recent JQL history, and honest empty/error/loading states in the JQL panel.
+- OpenAI key storage, connection testing, and AI-assisted JQL draft generation through the Rust/Tauri backend.
+- Visible sync progress steps and per-task sync audit activity.
+- Stabilization coverage work for backup, OpenAI, services, and frontend domain helpers.
 - Jira QA boundary: `JTFTEST` is the writable test project. Agents may freely
   mutate `JTFTEST` for implementation and QA. `DTS` is read-only reference data
   and must not be mutated by agents.
-- The active post-PR stabilization branch is
-  `codex/post-jira-architecture-tests`. It currently tightens Jira credential
-  debug redaction, audit-log error redaction/capping, and command-worker
-  responsiveness for JQL/keyring operations before the next write slice.
+- The post-PR #26 stabilization work has landed: Jira credential diagnostics,
+  audit-log error redaction/capping, command-worker responsiveness, Jira
+  response mapping helpers, and coverage-focused tests are now on `main`.
 
 Still pending:
 
-- Re-check native QA after the post-PR command-worker changes.
-- Categories/JQL favorites persistence in the UI.
-- Attachments, backup/import, audit log UI, and AI integrations.
+- Re-check native QA after the post-PR command-worker, backup, audit, JQL, and
+  Ask AI changes.
+- Categories persistence in the UI.
+- Per-task assisted descriptions, attachments, sub-task creation, attachment
+  upload, and audit log UI.
 - Full native QA in an environment with the Linux system dependencies needed by Tauri/keyring.
 - CSV upload-to-Jira fallback validation after the API create flow works.
-- Finish the `improve-codebase-architecture` stabilization pass before
-  expanding into sub-task creation, attachment upload, or AI writes. Current
-  automated test coverage is strongest in Rust persistence/Jira sync behavior
-  and weakest in frontend interaction behavior.
+- Bring Rust backend line coverage back above 80%; it is currently 78.26% in
+  `docs/coverage-report.md`.
+- Grow frontend workflow tests beyond the first Vitest domain helper harness.
 
 ## Open Grill Area
 
@@ -133,15 +143,18 @@ grill areas:
 
 ## Likely Implementation Path
 
-Recommended stack to discuss next:
+Recommended stack to work next:
 
-- Run native QA for tray lifecycle, CSV export, settings, token storage, Jira connection test, and create preflight.
-- Run native QA for direct JQL queries from the JQL tab.
-- Run live QA for Jira issue creation against `JTFTEST`: missing description confirmation, metadata preflight, epic reuse/create, parent Story/Bug creation, partial failure, and recovery tray movement.
-- Finish the active post-PR #26 architecture/test/security stabilization branch
-  to make the proven Jira creation flow more testable and AI-navigable before
-  adding more integration surface.
-- Keep sub-tasks and attachments for later slices.
+- Run native QA for tray lifecycle, CSV export, backup/restore, settings, token
+  storage, Jira/OpenAI connection tests, direct JQL, Ask AI drafting, create
+  preflight, and visible sync/audit behavior.
+- Run live QA for Jira issue creation against `JTFTEST`: missing description
+  confirmation, metadata preflight, epic reuse/create, parent Story/Bug
+  creation, partial failure, and recovery tray movement.
+- Raise backend coverage above 80% by targeting `commands.rs` and
+  `integrations/jira.rs`, then add useful frontend workflow tests.
+- Keep sub-task creation as the next narrow Jira write slice; keep attachment
+  upload for a later slice.
 - After API creation works, verify that Jira CSV upload still works from exported files.
 
 ## Suggested Skills For Next Session
