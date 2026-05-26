@@ -70,7 +70,7 @@ Current validation:
   workflows, backup behavior, and OpenAI integration helpers.
 - Rust coverage is measured with `cargo llvm-cov --summary-only`. The current
   Rust line coverage is 78.26%; see `docs/coverage-report.md`.
-- `npm test` passes in WSL with 12 frontend domain tests. The script pins
+- `npm test` passes in WSL with 20 frontend domain/workflow tests. The script pins
   `TMPDIR` to `/tmp` by default so Vitest does not inherit a Windows temp path
   that is not creatable from WSL.
 - The React frontend has a test runner but no coverage reporting or component/

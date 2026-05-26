@@ -55,12 +55,18 @@ import {
 import {
   canDeleteTask,
   canDuplicateTask,
+  addJqlRecentQuery,
   classifyTrayPreflightWarnings,
   countCsvExportableTasks,
   deriveIssueTypeFromArea,
   deriveTrayStateFromTasks,
   duplicateLocalTask,
   exportLocalTasksToCsv,
+  formatBackupTimestamp,
+  formatJqlAiDraftMessage,
+  formatJqlQueryError,
+  formatJqlQueryMessage,
+  getVisibleBackupCounts,
   isEligibleForCsvExport
 } from "./lib/domain";
 import type {
@@ -748,20 +754,7 @@ export default function App() {
     query: string,
     result: Pick<JqlRecentQuery, "status" | "resultCount">
   ) {
-    const normalizedQuery = query.trim();
-    if (!normalizedQuery) return;
-
-    setJqlRecentQueries((currentQueries) => {
-      const nextQuery: JqlRecentQuery = {
-        id: `recent-${Date.now().toString(36)}`,
-        jql: normalizedQuery,
-        ranAt: new Date().toISOString(),
-        status: result.status,
-        resultCount: result.status === "success" ? result.resultCount : undefined
-      };
-      const dedupedQueries = currentQueries.filter((recentQuery) => recentQuery.jql.trim() !== normalizedQuery);
-      return [nextQuery, ...dedupedQueries].slice(0, 5);
-    });
+    setJqlRecentQueries((currentQueries) => addJqlRecentQuery(currentQueries, query, result));
   }
 
   async function saveJqlFavorite() {
@@ -1637,69 +1630,10 @@ function summarizeTrayTasks(tasks: LocalTask[]): string {
     .join(" · ");
 }
 
-function formatJqlQueryMessage(resultCount: number, isLast: boolean, warningMessages: string[]): string {
-  if (resultCount === 0) {
-    const warningText = warningMessages.length ? ` ${warningMessages.join(" ")}` : "";
-    return `No issues matched this JQL query.${warningText}`;
-  }
-
-  const resultText = `${resultCount} ${resultCount === 1 ? "issue" : "issues"} returned.`;
-  const pageText = isLast ? null : "More results are available in Jira.";
-  const warningText = warningMessages.length ? warningMessages.join(" ") : null;
-
-  return [resultText, pageText, warningText].filter(Boolean).join(" ");
-}
-
-function formatJqlQueryError(error: unknown): string {
-  const message = formatUnknownError(error, "Could not run JQL query.");
-  return `JQL query failed. ${message}`;
-}
-
-function formatJqlAiDraftMessage(draft: JqlAiDraft): string {
-  const warningText = draft.warnings.length ? ` ${draft.warnings.join(" ")}` : "";
-  return `${draft.explanation}${warningText}`;
-}
-
 function formatUnknownError(error: unknown, fallback: string): string {
   if (typeof error === "string" && error.trim()) return error;
   if (error instanceof Error && error.message.trim()) return error.message;
   return fallback;
-}
-
-function formatBackupTimestamp(date: Date): string {
-  const pad = (value: number) => value.toString().padStart(2, "0");
-  return [
-    date.getFullYear(),
-    pad(date.getMonth() + 1),
-    pad(date.getDate()),
-    "-",
-    pad(date.getHours()),
-    pad(date.getMinutes()),
-    pad(date.getSeconds())
-  ].join("");
-}
-
-function getVisibleBackupCounts(counts?: Record<string, number>) {
-  if (!counts) return [];
-  return Object.entries(counts)
-    .filter(([, count]) => count > 0)
-    .map(([key, count]) => ({ label: formatBackupCountLabel(key, count), count }));
-}
-
-function formatBackupCountLabel(key: string, count: number) {
-  const labels: Record<string, [string, string]> = {
-    trays: ["tray", "trays"],
-    tasks: ["task", "tasks"],
-    categories: ["category", "categories"],
-    epicMappings: ["epic mapping", "epic mappings"],
-    jqlFavorites: ["JQL favorite", "JQL favorites"],
-    settings: ["setting", "settings"],
-    attachmentMetadata: ["attachment metadata", "attachment metadata"],
-    attachmentVariants: ["attachment variant", "attachment variants"],
-    auditSummaries: ["audit summary", "audit summaries"]
-  };
-  const [singular, plural] = labels[key] ?? [key, key];
-  return count === 1 ? singular : plural;
 }
 
 async function waitForNextPaint(): Promise<void> {
