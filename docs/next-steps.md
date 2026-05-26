@@ -70,9 +70,9 @@ Current validation:
   workflows, backup behavior, and OpenAI integration helpers.
 - Rust coverage is measured with `cargo llvm-cov --summary-only`. The current
   Rust line coverage is 78.26%; see `docs/coverage-report.md`.
-- `TMPDIR=/tmp npm test` passes in WSL with 12 frontend domain tests. Plain
-  `npm test` can fail in this environment when Vitest inherits a Windows temp
-  path that is not creatable from WSL.
+- `npm test` passes in WSL with 12 frontend domain tests. The script pins
+  `TMPDIR` to `/tmp` by default so Vitest does not inherit a Windows temp path
+  that is not creatable from WSL.
 - The React frontend has a test runner but no coverage reporting or component/
   DOM test strategy yet.
 - Playwright screenshots are blocked in the current WSL environment by missing Chromium runtime library `libnspr4.so`.
@@ -92,7 +92,7 @@ git checkout main
 git pull origin
 npm install
 npm run build
-TMPDIR=/tmp npm test
+npm test
 npm run dev
 ```
 
@@ -108,7 +108,8 @@ If Rust/Cargo is available in the WSL environment, also run:
 npm run tauri dev
 ```
 
-Human QA to run before choosing the next implementation slice:
+Human QA to run before choosing the next implementation slice is captured in
+`docs/live-qa.md`. Summary:
 
 - Open `Trays`.
 - Create and rename a tray.
