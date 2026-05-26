@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { countCsvExportableTasks, exportLocalTasksToCsv, isEligibleForCsvExport } from "./csvExport";
+import { canExportTrayCsv, countCsvExportableTasks, exportLocalTasksToCsv, isEligibleForCsvExport } from "./csvExport";
 import type { LocalTask } from "../types";
 
 function task(overrides: Partial<LocalTask>): LocalTask {
@@ -62,5 +62,20 @@ describe("CSV export domain helpers", () => {
     expect(exportLocalTasksToCsv([task({ issueType: "Bug" })])).toBe(
       ["Summary,Issue Type,Labels,Description", "Fix timer,Error,Bug,Line one"].join("\n")
     );
+  });
+
+  it("does not offer CSV export for completed Jira trays", () => {
+    expect(
+      canExportTrayCsv({
+        state: "Completed",
+        tasks: [{ syncStatus: "Created" }]
+      })
+    ).toBe(false);
+    expect(
+      canExportTrayCsv({
+        state: "Active",
+        tasks: [{ syncStatus: "Pending" }]
+      })
+    ).toBe(true);
   });
 });

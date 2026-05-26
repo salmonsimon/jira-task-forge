@@ -58,6 +58,7 @@ import {
   canDeleteTask,
   canDuplicateTask,
   addJqlRecentQuery,
+  canExportTrayCsv,
   classifyTrayPreflightWarnings,
   countCsvExportableTasks,
   deriveIssueTypeFromArea,
@@ -1076,12 +1077,16 @@ export default function App() {
 
   async function exportTrayCsv(tray: Tray) {
     const csvExportOptions = { includeExported: true };
-    const exportableTasks = tray.tasks.filter((task) => isEligibleForCsvExport(task, csvExportOptions));
-    const exportableCount = countCsvExportableTasks(tray.tasks, csvExportOptions);
-    if (exportableCount === 0) {
-      setCsvExportMessage("No pending, failed, or exported tasks to export.");
+    if (!canExportTrayCsv(tray, csvExportOptions)) {
+      setCsvExportMessage(
+        tray.state === "Completed"
+          ? "Completed Jira trays cannot be exported to CSV."
+          : "No pending, failed, or exported tasks to export."
+      );
       return;
     }
+    const exportableTasks = tray.tasks.filter((task) => isEligibleForCsvExport(task, csvExportOptions));
+    const exportableCount = countCsvExportableTasks(tray.tasks, csvExportOptions);
 
     const csv = exportLocalTasksToCsv(tray.tasks, { includeExported: true });
     const defaultFilename = `${toFileSlug(tray.name)}-${new Date().toISOString().slice(0, 10)}.csv`;

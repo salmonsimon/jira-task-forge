@@ -1,7 +1,7 @@
 import { Archive, Check, Download, Filter, Loader2, Pencil, RotateCcw, UploadCloud, X } from "lucide-react";
 import { useState } from "react";
 import { Button, IconButton, TrayStateBadge } from "../../components/ui";
-import { deriveTrayStatusTag } from "../../lib/domain";
+import { canExportTrayCsv, deriveTrayStatusTag } from "../../lib/domain";
 import type { LocalTask, Priority, Tray } from "../../lib/types";
 import { groupTasksByProject } from "./groupTasksByProject";
 import { ProjectTaskGroup } from "./ProjectTaskGroup";
@@ -79,6 +79,7 @@ export function TraysView({
   const isArchived = selectedTray.state === "Archived";
   const createableTaskCount = selectedTray.tasks.filter((task) => task.syncStatus !== "Created" && task.issueType !== "Sub-task").length;
   const canCreateInJira = !isArchived && createableTaskCount > 0 && !isRunningJiraPreflight;
+  const canExportCsv = canExportTrayCsv(selectedTray, { includeExported: true });
 
   return (
     <section className="flex-1 px-5 py-4">
@@ -90,7 +91,7 @@ export function TraysView({
           <TrayHeaderName tray={selectedTray} onRenameTray={onRenameTray} />
           {isArchived ? (
             <p className="mt-2 max-w-[560px] text-xs text-[#6b778c]">
-              This tray is archived. You can inspect its tasks, export it, or restore it before editing.
+              This tray is archived. You can inspect its tasks{canExportCsv ? ", export it," : ""} or restore it before editing.
             </p>
           ) : null}
         </div>
@@ -100,9 +101,11 @@ export function TraysView({
               {csvExportMessage}
             </span>
           ) : null}
-          <Button variant="secondary" icon={<Download size={14} />} onClick={() => onExportCsv(selectedTray)}>
-            Export CSV
-          </Button>
+          {canExportCsv ? (
+            <Button variant="secondary" icon={<Download size={14} />} onClick={() => onExportCsv(selectedTray)}>
+              Export CSV
+            </Button>
+          ) : null}
           {isArchived ? (
             <Button icon={<RotateCcw size={14} />} onClick={() => onRestoreTray(selectedTray.id)}>
               Restore
