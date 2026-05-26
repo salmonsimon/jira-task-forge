@@ -83,52 +83,54 @@ export function TraysView({
 
   return (
     <section className="flex-1 px-5 py-4">
-      <div className="mb-4 flex items-center justify-between">
-        <div className="min-w-0">
-          <button className="mb-1 text-xs font-medium text-[#0052cc] hover:underline" onClick={onBackToSelector}>
-            Back to tray selector
-          </button>
-          <TrayHeaderName tray={selectedTray} onRenameTray={onRenameTray} />
-          {isArchived ? (
-            <p className="mt-2 max-w-[560px] text-xs text-[#6b778c]">
-              This tray is archived. You can inspect its tasks{canExportCsv ? ", export it," : ""} or restore it before editing.
-            </p>
-          ) : null}
-        </div>
-        <div className="flex items-center gap-2">
-          {csvExportMessage ? (
-            <span className="text-xs text-[#6b778c]" role="status">
-              {csvExportMessage}
-            </span>
-          ) : null}
-          {canExportCsv ? (
-            <Button variant="secondary" icon={<Download size={14} />} onClick={() => onExportCsv(selectedTray)}>
-              Export CSV
-            </Button>
-          ) : null}
-          {isArchived ? (
-            <Button icon={<RotateCcw size={14} />} onClick={() => onRestoreTray(selectedTray.id)}>
-              Restore
-            </Button>
-          ) : (
-            <>
-              <Button variant="secondary" icon={<Archive size={14} />} onClick={() => onArchiveTray(selectedTray.id)}>
-                Archive
+      <div className="mb-4 space-y-3">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <button className="mb-1 text-xs font-medium text-[#0052cc] hover:underline" onClick={onBackToSelector}>
+              Back to tray selector
+            </button>
+            <TrayHeaderName tray={selectedTray} onRenameTray={onRenameTray} />
+            {isArchived ? (
+              <p className="mt-2 max-w-[560px] text-xs text-[#6b778c]">
+                This tray is archived. You can inspect its tasks{canExportCsv ? ", export it," : ""} or restore it before editing.
+              </p>
+            ) : null}
+          </div>
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+            {canExportCsv ? (
+              <Button variant="secondary" icon={<Download size={14} />} onClick={() => onExportCsv(selectedTray)}>
+                Export CSV
               </Button>
-              <Button
-                disabled={!canCreateInJira}
-                icon={isRunningJiraPreflight ? <Loader2 className="animate-spin" size={14} /> : <UploadCloud size={14} />}
-                onClick={() => onCreateInJira(selectedTray)}
-              >
-                {isRunningJiraPreflight
-                  ? "Preparing preflight"
-                  : selectedTray.tasks.length > 0 && createableTaskCount === 0
-                    ? "Created in Jira"
-                    : "Create in Jira"}
+            ) : null}
+            {isArchived ? (
+              <Button icon={<RotateCcw size={14} />} onClick={() => onRestoreTray(selectedTray.id)}>
+                Restore
               </Button>
-            </>
-          )}
+            ) : (
+              <>
+                <Button variant="secondary" icon={<Archive size={14} />} onClick={() => onArchiveTray(selectedTray.id)}>
+                  Archive
+                </Button>
+                <Button
+                  disabled={!canCreateInJira}
+                  icon={isRunningJiraPreflight ? <Loader2 className="animate-spin" size={14} /> : <UploadCloud size={14} />}
+                  onClick={() => onCreateInJira(selectedTray)}
+                >
+                  {isRunningJiraPreflight
+                    ? "Preparing preflight"
+                    : selectedTray.tasks.length > 0 && createableTaskCount === 0
+                      ? "Created in Jira"
+                      : "Create in Jira"}
+                </Button>
+              </>
+            )}
+          </div>
         </div>
+        {csvExportMessage ? (
+          <p className="max-w-[720px] text-xs leading-relaxed text-[#6b778c]" role="status">
+            {csvExportMessage}
+          </p>
+        ) : null}
       </div>
 
       <QuickCapture disabled={isArchived} projects={projects} areas={areas} onAddTask={onAddTask} />
