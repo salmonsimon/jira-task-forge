@@ -1086,15 +1086,20 @@ export default function App() {
     const csv = exportLocalTasksToCsv(tray.tasks, { includeExported: true });
     const defaultFilename = `${toFileSlug(tray.name)}-${new Date().toISOString().slice(0, 10)}.csv`;
     const defaultPath = await getDefaultCsvExportPath(defaultFilename);
-    const path = await save({
-      defaultPath,
+    const saveOptions: {
+      defaultPath?: string;
+      filters: Array<{ name: string; extensions: string[] }>;
+    } = {
       filters: [
         {
           name: "CSV",
           extensions: ["csv"]
         }
       ]
-    });
+    };
+    if (defaultPath) saveOptions.defaultPath = defaultPath;
+
+    const path = await save(saveOptions);
 
     if (!path) {
       setCsvExportMessage("CSV export cancelled.");
@@ -1103,8 +1108,8 @@ export default function App() {
 
     try {
       await saveCsvFile(path, `\uFEFF${csv}`);
-    } catch {
-      setCsvExportMessage("CSV could not be saved.");
+    } catch (error) {
+      setCsvExportMessage(formatUnknownError(error, "CSV could not be saved."));
       return;
     }
 
@@ -1833,12 +1838,17 @@ function toFileSlug(value: string): string {
   return slug || "tray";
 }
 
-async function getDefaultCsvExportPath(filename: string): Promise<string> {
+async function getDefaultCsvExportPath(filename: string): Promise<string | undefined> {
   try {
-    return await join(await downloadDir(), filename);
+    const defaultPath = await join(await downloadDir(), filename);
+    return isAbsoluteFilePath(defaultPath) ? defaultPath : undefined;
   } catch {
-    return filename;
+    return undefined;
   }
+}
+
+function isAbsoluteFilePath(path: string): boolean {
+  return path.startsWith("/") || /^[A-Za-z]:[\\/]/.test(path) || path.startsWith("\\\\");
 }
 
 function delay(milliseconds: number): Promise<void> {
