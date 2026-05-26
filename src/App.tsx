@@ -1228,9 +1228,13 @@ export default function App() {
     }
   }
 
-  async function createJiraParentIssues(options: { allowMissingDescriptions: boolean }) {
+  async function createJiraParentIssues(options: { allowMissingDescriptions: boolean; includeExportedTasks: boolean }) {
     if (!jiraCreatePreflight || !usesTauriPersistence) return;
 
+    const selectedCreateableTaskCount = countJiraApiCreateableTasks(
+      jiraCreatePreflight.tray.tasks,
+      options.includeExportedTasks
+    );
     flushSync(() => {
       setIsCreatingJiraIssues(true);
       setJiraCreateResult(null);
@@ -1239,8 +1243,8 @@ export default function App() {
         syncAttemptId: null,
         step: "starting",
         label: "Starting Jira creation",
-        detail: `${jiraCreatePreflight.createableTaskCount} createable ${
-          jiraCreatePreflight.createableTaskCount === 1 ? "parent issue" : "parent issues"
+        detail: `${selectedCreateableTaskCount} createable ${
+          selectedCreateableTaskCount === 1 ? "parent issue" : "parent issues"
         }`,
         completedSteps: 0,
         totalSteps: 1,
@@ -1256,7 +1260,8 @@ export default function App() {
     try {
       const result = await createPersistedJiraParentIssues(
         jiraCreatePreflight.tray.id,
-        options.allowMissingDescriptions
+        options.allowMissingDescriptions,
+        options.includeExportedTasks
       );
       const persistedTrays = await listPersistedTrays();
       setTrays(persistedTrays);
@@ -1807,6 +1812,15 @@ function countTasksBySyncStatus(tasks: LocalTask[]): Record<LocalTask["syncStatu
     },
     { Pending: 0, Failed: 0, Exported: 0, Created: 0 } satisfies Record<LocalTask["syncStatus"], number>
   );
+}
+
+function countJiraApiCreateableTasks(tasks: LocalTask[], includeExportedTasks: boolean): number {
+  return tasks.filter(
+    (task) =>
+      task.syncStatus !== "Created" &&
+      task.issueType !== "Sub-task" &&
+      (includeExportedTasks || task.syncStatus !== "Exported")
+  ).length;
 }
 
 function toFileSlug(value: string): string {

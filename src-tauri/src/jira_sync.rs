@@ -85,6 +85,7 @@ where
         self.create_parent_issues_from_tray_with_progress(
             tray_id,
             allow_missing_descriptions,
+            true,
             |_| {},
         )
     }
@@ -93,6 +94,7 @@ where
         &mut self,
         tray_id: &str,
         allow_missing_descriptions: bool,
+        include_exported_tasks: bool,
         mut report_progress: F,
     ) -> Result<JiraCreateIssuesResult, String>
     where
@@ -144,18 +146,27 @@ where
                     "trayId": tray.id,
                     "trayName": tray.name,
                     "jiraProjectKey": self.creation_project_key,
+                    "includeExportedTasks": include_exported_tasks,
                 }),
             )
             .map_err(db_error_message)?;
 
         let parent_tasks = tasks
             .iter()
-            .filter(|task| task.sync_status != "Created" && task.issue_type != "Sub-task")
+            .filter(|task| {
+                task.sync_status != "Created"
+                    && task.issue_type != "Sub-task"
+                    && (include_exported_tasks || task.sync_status != "Exported")
+            })
             .cloned()
             .collect::<Vec<_>>();
         let subtask_tasks = tasks
             .iter()
-            .filter(|task| task.sync_status != "Created" && task.issue_type == "Sub-task")
+            .filter(|task| {
+                task.sync_status != "Created"
+                    && task.issue_type == "Sub-task"
+                    && (include_exported_tasks || task.sync_status != "Exported")
+            })
             .cloned()
             .collect::<Vec<_>>();
         let createable_task_count = parent_tasks.len() + subtask_tasks.len();
@@ -1610,6 +1621,73 @@ mod tests {
             gateway.created_payloads[1]["properties"][0]["value"]["localTaskId"],
             json!(task.id)
         );
+    }
+
+    #[test]
+    fn skips_exported_tasks_unless_api_creation_includes_them() {
+        let connection = open_in_memory_database().expect("database opens");
+        let tray_repository = TrayRepository::new(&connection);
+        let task_repository = TaskRepository::new(&connection);
+        let tray = tray_repository
+            .create(NewTray {
+                name: "Exported mix".to_string(),
+            })
+            .expect("tray creates");
+        let exported_task = task_repository
+            .create(NewTask {
+                tray_id: tray.id.clone(),
+                project: "STT".to_string(),
+                area: "Bug".to_string(),
+                title: "Already exported".to_string(),
+                priority: "High".to_string(),
+                issue_type: "Story".to_string(),
+                content_language: "Spanish".to_string(),
+            })
+            .expect("exported task creates");
+        let pending_task = task_repository
+            .create(NewTask {
+                tray_id: tray.id.clone(),
+                project: "STT".to_string(),
+                area: "Bug".to_string(),
+                title: "Fresh API task".to_string(),
+                priority: "Medium".to_string(),
+                issue_type: "Story".to_string(),
+                content_language: "Spanish".to_string(),
+            })
+            .expect("pending task creates");
+        task_repository
+            .mark_csv_exported(&[exported_task.id.clone()])
+            .expect("task marks exported");
+        let mut gateway = FakeJiraGateway::new();
+        gateway.created_keys = vec!["JTFTEST-10".to_string(), "JTFTEST-11".to_string()];
+
+        let mut runner = JiraSyncRunner::new(&connection, &mut gateway, "JTFTEST".to_string());
+        let result = runner
+            .create_parent_issues_from_tray_with_progress(&tray.id, true, false, |_| {})
+            .expect("sync succeeds");
+
+        assert_eq!(result.status, "succeeded");
+        assert_eq!(result.created_issue_count, 1);
+        assert_eq!(result.skipped_issue_count, 1);
+        assert_eq!(gateway.created_payloads.len(), 2);
+        assert_eq!(
+            gateway.created_payloads[1]["fields"]["summary"],
+            json!("[Bug] Fresh API task")
+        );
+        let persisted_tasks = TaskRepository::new(&connection)
+            .list_for_tray(&tray.id)
+            .expect("tasks list");
+        let persisted_exported = persisted_tasks
+            .iter()
+            .find(|task| task.id == exported_task.id)
+            .expect("exported task remains");
+        let persisted_pending = persisted_tasks
+            .iter()
+            .find(|task| task.id == pending_task.id)
+            .expect("pending task remains");
+        assert_eq!(persisted_exported.sync_status, "Exported");
+        assert_eq!(persisted_exported.jira_key, None);
+        assert_eq!(persisted_pending.sync_status, "Created");
     }
 
     #[test]

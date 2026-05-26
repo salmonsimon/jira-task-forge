@@ -17,7 +17,8 @@ describe("tray domain helpers", () => {
 
   it("shows exported as a tray status tag for active trays with exported tasks", () => {
     expect(deriveTrayStatusTag([{ syncStatus: "Exported" }])).toBe("Exported");
-    expect(deriveTrayStatusTag([{ syncStatus: "Pending" }, { syncStatus: "Exported" }])).toBe("Exported");
+    expect(deriveTrayStatusTag([{ syncStatus: "Created" }, { syncStatus: "Exported" }])).toBe("Exported");
+    expect(deriveTrayStatusTag([{ syncStatus: "Pending" }, { syncStatus: "Exported" }])).toBe("Active");
     expect(deriveTrayStatusTag([{ syncStatus: "Created" }])).toBe("Completed");
     expect(deriveTrayStatusTag([{ syncStatus: "Failed" }, { syncStatus: "Exported" }])).toBe("Needs attention");
     expect(deriveTrayStatusTag([{ syncStatus: "Exported" }], "Archived")).toBe("Archived");

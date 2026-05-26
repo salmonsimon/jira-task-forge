@@ -82,8 +82,10 @@ This document captures the product scope decisions from the grill session. UI co
   - `Completed`
   - `Archived`
 - A tray becomes `Completed` automatically when all tasks in it are created in Jira.
-- The tray list may show an `Exported` presentation tag for active trays that
-  contain exported tasks; this does not add a persisted tray state.
+- The tray list may show an `Exported` presentation tag for active trays where
+  every uncreated parent task has already been exported. Adding a new `Pending`
+  task makes the tray present as `Active` again; this does not add a persisted
+  tray state.
 - Completed trays stay visible until the user manually archives them.
 - Archived trays are hidden from the main flow and shown only in an explicit archived view.
 - Trays can be archived regardless of task state.
@@ -175,7 +177,8 @@ This document captures the product scope decisions from the grill session. UI co
 - Jira workflow status such as `To Do`, `In Progress`, or `Done` is out of scope for v1.
 - Created task links are preserved in backups/restores.
 - Failed tasks can be edited and retried with the same local id.
-- Exported tasks remain editable and may later become `Created` if uploaded through the API.
+- Exported tasks remain editable and may later become `Created` if explicitly
+  included in a Jira API creation run.
 
 ## Jira Sync
 
@@ -640,7 +643,10 @@ document such as `docs/jira-description-format.md`.
 - Descriptions may be exported as text.
 - Attached files are not included in CSV export.
 - CSV export should strip attachments rather than attempting to reference local files.
-- Exported tasks can later become `Created` if uploaded through the API.
+- Exported tasks can later become `Created` if uploaded through the API, but the
+  `Create in Jira` preflight must default to excluding them and require an
+  explicit checkbox confirmation that summarizes how many exported tasks could
+  duplicate CSV-imported work.
 
 ## Out of Scope For V1
 

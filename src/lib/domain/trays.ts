@@ -22,6 +22,8 @@ export function deriveTrayStatusTag(
 ): TrayStatusTag {
   const state = deriveTrayStateFromTasks(tasks, currentState);
   if (state !== "Active") return state;
-  if (tasks.some((task) => task.syncStatus === "Exported")) return "Exported";
+  const hasExportedTasks = tasks.some((task) => task.syncStatus === "Exported");
+  const hasPendingTasks = tasks.some((task) => task.syncStatus === "Pending");
+  if (hasExportedTasks && !hasPendingTasks) return "Exported";
   return state;
 }
