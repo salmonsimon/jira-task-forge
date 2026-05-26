@@ -1341,7 +1341,11 @@ fn required_parent_description_blockers(
 
 fn jira_description_document(markdown: &str) -> Value {
     let mut content = Vec::new();
-    for line in markdown.lines().map(str::trim).filter(|line| !line.is_empty()) {
+    for line in markdown
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+    {
         let node = if let Some(text) = line.strip_prefix("### ") {
             json!({
                 "type": "heading",

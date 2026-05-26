@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { deriveTrayStateFromTasks, deriveTrayStatusTag, isTrayComplete } from "./trays";
+import { deriveTrayStateFromTasks, deriveTrayStatusTag, isTrayComplete, summarizeTrayTasks } from "./trays";
 
 describe("tray domain helpers", () => {
   it("requires at least one created task to be complete", () => {
@@ -22,5 +22,16 @@ describe("tray domain helpers", () => {
     expect(deriveTrayStatusTag([{ syncStatus: "Created" }])).toBe("Completed");
     expect(deriveTrayStatusTag([{ syncStatus: "Failed" }, { syncStatus: "Exported" }])).toBe("Needs attention");
     expect(deriveTrayStatusTag([{ syncStatus: "Exported" }], "Archived")).toBe("Archived");
+  });
+
+  it("summarizes parent tasks and sub-tasks consistently", () => {
+    expect(summarizeTrayTasks([])).toBe("No tasks");
+    expect(
+      summarizeTrayTasks([
+        { issueType: "Story", parentTaskId: undefined, syncStatus: "Pending" },
+        { issueType: "Bug", parentTaskId: undefined, syncStatus: "Created" },
+        { issueType: "Sub-task", parentTaskId: "parent-1", syncStatus: "Pending" }
+      ])
+    ).toBe("2 tasks · 1 sub-task · 1 pending · 1 created");
   });
 });

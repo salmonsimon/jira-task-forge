@@ -1,6 +1,7 @@
 import { Bot, Check, ChevronDown, Download, ExternalLink, KeyRound, Settings, UploadCloud } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button, DetailBlock, LoadingOrb, PanelHeader, SegmentedControl } from "../../components/ui";
+import { appOverlayLayers, useAppOverlay } from "../../lib/app-overlays";
 import { getCredentialDraftControls, type CredentialDraftTestStatus } from "../../lib/domain";
 import type { AiProvider, AppSettings, CredentialConnectionTestResult, JiraConnectionTestResult, ThemeMode } from "../../lib/types";
 
@@ -104,6 +105,14 @@ export function SettingsPanel({
     keyTestStatus: aiProviderKeyDraftTestStatus
   });
 
+  useAppOverlay({
+    layer: appOverlayLayers.sidePanel,
+    onDismiss: onClose,
+    dismissOnOutsidePointer: true,
+    lockScroll: true,
+    surfaceRef: panelRef
+  });
+
   function updateJiraApiTokenDraft(value: string) {
     jiraApiTokenDraftRef.current = value;
     setJiraApiTokenDraft(value);
@@ -164,16 +173,6 @@ export function SettingsPanel({
       setAiProviderKeyDraftTestStatus("idle");
     }
   }
-
-  useEffect(() => {
-    function handlePointerDown(event: PointerEvent) {
-      if (!panelRef.current || panelRef.current.contains(event.target as Node)) return;
-      onClose();
-    }
-
-    window.addEventListener("pointerdown", handlePointerDown);
-    return () => window.removeEventListener("pointerdown", handlePointerDown);
-  }, [onClose]);
 
   useEffect(() => {
     if (!jiraApiTokenDraft) return;

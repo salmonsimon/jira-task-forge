@@ -1,6 +1,7 @@
 import { AlertTriangle, Check, CheckCircle2, Info, Loader2, ShieldCheck, XCircle } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { Button, LoadingOrb } from "../../components/ui";
+import { appOverlayLayers, useAppOverlay } from "../../lib/app-overlays";
 import type {
   JiraConnectionTestResult,
   JiraCreateIssuesResult,
@@ -73,44 +74,27 @@ export function JiraPreflightDialog({
       : preflight.credentialResult
         ? preflight.credentialResult.message
         : "Using saved Jira connection settings for this preflight.";
+  const overlay = useAppOverlay({
+    layer: appOverlayLayers.modal,
+    onDismiss: onClose,
+    dismissOnEscape: !isBusy,
+    dismissOnBackdrop: !isBusy,
+    lockScroll: true
+  });
 
   useEffect(() => {
     setMissingDescriptionsConfirmed(false);
     setExportedTasksIncluded(false);
   }, [preflight.tray.id]);
 
-  useEffect(() => {
-    const previousBodyOverflow = document.body.style.overflow;
-    const previousHtmlOverflow = document.documentElement.style.overflow;
-    document.body.style.overflow = "hidden";
-    document.documentElement.style.overflow = "hidden";
-
-    return () => {
-      document.body.style.overflow = previousBodyOverflow;
-      document.documentElement.style.overflow = previousHtmlOverflow;
-    };
-  }, []);
-
-  useEffect(() => {
-    function handleEscape(event: KeyboardEvent) {
-      if (event.key === "Escape" && !isBusy) onClose();
-    }
-
-    window.addEventListener("keydown", handleEscape);
-    return () => window.removeEventListener("keydown", handleEscape);
-  }, [isBusy, onClose]);
-
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-[#091e42]/60 px-4 backdrop-blur-[1px]"
-      onPointerDown={(event) => {
-        event.stopPropagation();
-        if (!isBusy && event.target === event.currentTarget) onClose();
-      }}
+      {...overlay.backdropProps}
     >
       <section
         className="relative flex max-h-[calc(100vh-72px)] w-full max-w-[620px] flex-col overflow-hidden rounded border border-[#3b4454] bg-[#202328] text-[#dfe1e6] shadow-2xl"
-        onPointerDown={(event) => event.stopPropagation()}
+        {...overlay.surfaceProps}
       >
         {isCreating ? (
           <div className="absolute inset-0 z-20 flex items-center justify-center bg-[#202328]/95 px-5 backdrop-blur-[2px]">
