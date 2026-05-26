@@ -38,7 +38,7 @@ describe("CSV export domain helpers", () => {
     expect(countCsvExportableTasks(tasks, { includeExported: true })).toBe(3);
   });
 
-  it("escapes CSV cells and keeps created tasks out", () => {
+  it("exports the Jira admin importer fields and keeps created tasks out", () => {
     const csv = exportLocalTasksToCsv([
       task({
         project: " PilotLab ",
@@ -52,9 +52,15 @@ describe("CSV export domain helpers", () => {
 
     expect(csv).toBe(
       [
-        "Project,Summary,Issue Type,Priority,Labels,Description",
-        'PilotLab,"Panel, signs and ""metro"" map",Story,High,3D,"Line one\nLine two"'
+        "Summary,Issue Type,Labels,Description",
+        '"Panel, signs and ""metro"" map",Historia,3D,"Line one\nLine two"'
       ].join("\n")
+    );
+  });
+
+  it("maps local bug issue type to the JTFTEST importer value", () => {
+    expect(exportLocalTasksToCsv([task({ issueType: "Bug" })])).toBe(
+      ["Summary,Issue Type,Labels,Description", "Fix timer,Error,Bug,Line one"].join("\n")
     );
   });
 });

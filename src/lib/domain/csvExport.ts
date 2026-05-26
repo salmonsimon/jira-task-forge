@@ -4,7 +4,7 @@ export type LocalTaskCsvExportOptions = {
   includeExported?: boolean;
 };
 
-const CSV_HEADERS = ["Project", "Summary", "Issue Type", "Priority", "Labels", "Description"] as const;
+const CSV_HEADERS = ["Summary", "Issue Type", "Labels", "Description"] as const;
 
 export function isEligibleForCsvExport(
   task: Pick<LocalTask, "syncStatus">,
@@ -22,12 +22,16 @@ function escapeCsvCell(value: string): string {
   return `"${value.replace(/"/g, '""')}"`;
 }
 
+function issueTypeForCsvImport(issueType: LocalTask["issueType"]): string {
+  if (issueType === "Bug") return "Error";
+  if (issueType === "Story") return "Historia";
+  return issueType;
+}
+
 function taskToCsvRow(task: LocalTask): string[] {
   return [
-    task.project.trim(),
     task.title.trim(),
-    task.issueType,
-    task.priority,
+    issueTypeForCsvImport(task.issueType),
     task.area.trim(),
     task.description ?? ""
   ];

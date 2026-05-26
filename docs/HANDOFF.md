@@ -141,7 +141,8 @@ grill areas:
 - Any change to the accepted persistence, secret-storage, sync, backup/import,
   attachment, or audit-log contracts should go through HITL review.
 - CSV export fallback should remain available as a manual/admin Jira import
-  artifact, but it is now lower priority than API issue creation.
+  artifact. The tested fallback shape omits local `Project` and `Priority`,
+  and maps `Bug`/`Story` issue type values to `Error`/`Historia`.
 
 ## Likely Implementation Path
 

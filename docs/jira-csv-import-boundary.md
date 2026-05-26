@@ -7,6 +7,12 @@ automated Jira API upload feature.
 
 - The app may export Jira-importable CSV files for pending, failed, or exported
   local tasks.
+- The current fallback export shape is intentionally small: `Summary`,
+  `Issue Type`, `Labels`, and `Description`.
+- The CSV export omits local `Project` and local `Priority` because Saimon's
+  tested Jira admin import mapping does not assign those fields.
+- The CSV export writes local `Bug` and `Story` issue type values as Jira import
+  values `Error` and `Historia`.
 - The app should not try to upload a CSV file into Jira Cloud through REST API.
 - If Saimon needs the fallback, the validation path is Jira's admin CSV importer
   UI, not an app-owned API call.
