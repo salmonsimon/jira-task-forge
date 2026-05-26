@@ -16,6 +16,7 @@ export type PreflightWarningCode =
   | "missing-project"
   | "missing-area"
   | "missing-title"
+  | "missing-parent-task"
   | "missing-description"
   | "missing-epic"
   | "retry-failed-task"
@@ -48,6 +49,7 @@ export type LocalTask = {
   jiraKey?: string;
   jiraUrl?: string;
   epic?: string;
+  parentTaskId?: string;
   description?: string;
   notes?: string;
   subtasks?: string[];

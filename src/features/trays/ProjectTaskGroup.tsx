@@ -6,7 +6,7 @@ import type { IssueType, LocalTask, Priority } from "../../lib/types";
 import { cn } from "../../lib/utils";
 
 const priorities: Priority[] = ["Highest", "High", "Medium", "Low", "Lowest"];
-const issueTypes: IssueType[] = ["Story", "Bug"];
+const issueTypes: IssueType[] = ["Story", "Bug", "Sub-task"];
 
 export function ProjectTaskGroup({
   project,

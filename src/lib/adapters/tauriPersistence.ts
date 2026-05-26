@@ -40,6 +40,7 @@ type BackendTask = {
   jira_key: string | null;
   jira_url: string | null;
   epic_key: string | null;
+  parent_task_id: string | null;
   task_order: number;
   created_at: string;
   updated_at: string;
@@ -301,6 +302,15 @@ export async function createPersistedTask(
   return mapTask(persisted);
 }
 
+export async function createPersistedSubtask(parentTaskId: string, title: string): Promise<LocalTask> {
+  const persisted = await invoke<BackendTask>("create_subtask", {
+    parentTaskId,
+    title
+  });
+
+  return mapTask(persisted);
+}
+
 export async function deletePersistedTask(taskId: string): Promise<boolean> {
   return invoke<boolean>("delete_task", { taskId });
 }
@@ -361,7 +371,8 @@ function mapTask(task: BackendTask): LocalTask {
     language: task.content_language,
     jiraKey: task.jira_key ?? undefined,
     jiraUrl: task.jira_url ?? undefined,
-    epic: task.epic_key ?? undefined
+    epic: task.epic_key ?? undefined,
+    parentTaskId: task.parent_task_id ?? undefined
   };
 }
 

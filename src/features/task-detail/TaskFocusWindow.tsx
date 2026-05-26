@@ -8,22 +8,38 @@ const priorities: Priority[] = ["Highest", "High", "Medium", "Low", "Lowest"];
 
 export function TaskFocusWindow({
   task,
+  childTasks,
   projects,
   areas,
   readOnly: forceReadOnly = false,
   onUpdateDetails,
+  onAcceptSubtasks,
+  onDiscardSubtasks,
   onOpenJiraIssue,
   onClose
 }: {
   task: LocalTask;
+  childTasks: LocalTask[];
   projects: string[];
   areas: string[];
   readOnly?: boolean;
   onUpdateDetails: (taskId: string, task: { project: string; area: string; priority: Priority }) => void | Promise<void>;
+  onAcceptSubtasks: (taskId: string, selectedTitles: string[]) => void | Promise<void>;
+  onDiscardSubtasks: (taskId: string) => void | Promise<void>;
   onOpenJiraIssue: (url: string) => void | Promise<void>;
   onClose: () => void;
 }) {
   const readOnly = forceReadOnly || isTaskReadOnly(task);
+  const proposalTitles = task.subtasks ?? [];
+  const [selectedSubtaskProposals, setSelectedSubtaskProposals] = useState<Set<string>>(
+    () => new Set(proposalTitles)
+  );
+
+  useEffect(() => {
+    setSelectedSubtaskProposals(new Set(proposalTitles));
+  }, [task.id, proposalTitles.join("\n")]);
+
+  const selectedProposalTitles = proposalTitles.filter((title) => selectedSubtaskProposals.has(title));
 
   useEffect(() => {
     function closeOnEscape(event: KeyboardEvent) {
@@ -138,21 +154,80 @@ export function TaskFocusWindow({
               )}
             </FocusSection>
 
-            <FocusSection title="Sub-tasks">
-              {task.subtasks?.length ? (
-                <div className="space-y-2">
-                  {task.subtasks.map((subtask) => (
-                    <label className="flex items-center gap-2 text-sm text-[#dfe1e6]" key={subtask}>
-                      <input defaultChecked type="checkbox" />
-                      {subtask}
-                    </label>
+            <FocusSection title="Sub-tasks" count={childTasks.length + proposalTitles.length}>
+              {childTasks.length ? (
+                <div className="mb-4 space-y-2">
+                  {childTasks.map((subtask) => (
+                    <div className="flex items-center justify-between gap-3 rounded border border-[#454852] bg-[#22252a] px-3 py-2 text-sm" key={subtask.id}>
+                      <div className="min-w-0">
+                        <div className="truncate font-medium text-[#f4f5f7]">{subtask.title}</div>
+                        <div className="mt-1 flex items-center gap-2">
+                          <SyncBadge status={subtask.syncStatus} dark />
+                          {subtask.jiraKey ? <span className="text-xs text-[#85b8ff]">{subtask.jiraKey}</span> : null}
+                        </div>
+                      </div>
+                      <IssueTypeBadge type="Sub-task" dark />
+                    </div>
                   ))}
-                  <div className="mt-3 flex gap-2">
-                    <Button variant="darkSecondary">Add selected</Button>
-                    <Button variant="darkGhost">Discard</Button>
-                  </div>
                 </div>
-              ) : (
+              ) : null}
+
+              {proposalTitles.length ? (
+                <div className="space-y-2">
+                  {proposalTitles.map((subtask) => {
+                    const checked = selectedSubtaskProposals.has(subtask);
+                    return (
+                      <button
+                        aria-checked={checked}
+                        className="flex w-full min-w-0 items-center gap-2 rounded px-2 py-1 text-left text-sm text-[#dfe1e6] hover:bg-[#3a3d43] focus:outline-none focus:ring-2 focus:ring-[#579dff]"
+                        disabled={readOnly}
+                        key={subtask}
+                        onClick={() =>
+                          setSelectedSubtaskProposals((current) => {
+                            const next = new Set(current);
+                            if (next.has(subtask)) next.delete(subtask);
+                            else next.add(subtask);
+                            return next;
+                          })
+                        }
+                        role="checkbox"
+                        type="button"
+                      >
+                        <span
+                          aria-hidden="true"
+                          className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
+                            checked ? "border-[#579dff] bg-[#0c66e4] text-white" : "border-[#6b7280] text-transparent"
+                          }`}
+                        >
+                          <Check size={11} strokeWidth={3} />
+                        </span>
+                        <span className="min-w-0 truncate">{subtask}</span>
+                      </button>
+                    );
+                  })}
+                  {!readOnly ? (
+                    <div className="mt-3 flex gap-2">
+                      <Button
+                        disabled={selectedProposalTitles.length === 0}
+                        variant="darkSecondary"
+                        onClick={() => {
+                          void onAcceptSubtasks(task.id, selectedProposalTitles);
+                        }}
+                      >
+                        Add selected
+                      </Button>
+                      <Button
+                        variant="darkGhost"
+                        onClick={() => {
+                          void onDiscardSubtasks(task.id);
+                        }}
+                      >
+                        Discard
+                      </Button>
+                    </div>
+                  ) : null}
+                </div>
+              ) : childTasks.length ? null : (
                 <div className="text-sm text-[#aeb3bd]">No sub-tasks proposed yet.</div>
               )}
             </FocusSection>

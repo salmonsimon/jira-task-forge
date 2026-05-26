@@ -47,7 +47,7 @@ export function JiraPreflightDialog({
   const reviewWarnings = preflight.warnings.filter((warning) => warning.severity !== "blocking");
   const exportedTaskIds = new Set(
     preflight.tray.tasks
-      .filter((task) => task.syncStatus === "Exported" && task.issueType !== "Sub-task")
+      .filter((task) => task.syncStatus === "Exported")
       .map((task) => task.id)
   );
   const exportedDuplicateRiskCount = exportedTaskIds.size;
@@ -487,6 +487,7 @@ function getWarningTitle(code: PreflightWarningCode): string {
     "missing-project": "Missing project",
     "missing-area": "Missing area",
     "missing-title": "Missing title",
+    "missing-parent-task": "Missing sub-task parent",
     "missing-description": "Missing description",
     "missing-epic": "Epic resolution",
     "retry-failed-task": "Failed tasks will retry",
@@ -505,6 +506,7 @@ function getWarningSummary(code: PreflightWarningCode, warning: PreflightWarning
     "missing-project": "These tasks need a Jira project before they can be created.",
     "missing-area": "These tasks need an area before Jira issue type and labels can be derived.",
     "missing-title": "These tasks need a title before they can be created.",
+    "missing-parent-task": warning.message,
     "missing-description": "These tasks can still be created, but should be reviewed because their description is missing.",
     "missing-epic": "Jira creation will search for each target epic by name and create it only if Jira has no match.",
     "retry-failed-task": "These failed tasks will be retried with their existing local identity.",

@@ -18,6 +18,7 @@ import {
   createPersistedJiraParentIssues,
   createPersistedJqlFavorite,
   createPersistedRecoveryTrayFromTasks,
+  createPersistedSubtask,
   createPersistedTask,
   createPersistedTray,
   deletePersistedCategory,
@@ -590,6 +591,71 @@ export default function App() {
               candidate.tasks.map((candidateTask) => (candidateTask.id === taskId ? persistedTask : candidateTask))
             )
           : candidate
+      )
+    );
+  }
+
+  async function acceptSubtaskProposals(parentTaskId: string, selectedTitles: string[]) {
+    const parentTray = trays.find((tray) => tray.tasks.some((task) => task.id === parentTaskId));
+    const parentTask = parentTray?.tasks.find((task) => task.id === parentTaskId);
+    if (!parentTray || !parentTask || parentTray.state === "Archived" || parentTask.syncStatus === "Created") return;
+
+    const normalizedTitles = selectedTitles.map((title) => title.trim()).filter(Boolean);
+    if (normalizedTitles.length === 0) return;
+
+    const createdSubtasks: LocalTask[] = [];
+    for (const title of normalizedTitles) {
+      const draftSubtask: LocalTask = {
+        id: nextTaskId(),
+        project: parentTask.project,
+        area: parentTask.area,
+        title,
+        priority: parentTask.priority,
+        issueType: "Sub-task",
+        syncStatus: "Pending",
+        descriptionStatus: "Ready",
+        language: parentTask.language,
+        parentTaskId: parentTask.id
+      };
+      const nextSubtask = usesTauriPersistence ? await createPersistedSubtask(parentTask.id, title) : draftSubtask;
+      createdSubtasks.push(nextSubtask);
+    }
+
+    setTrays((currentTrays) =>
+      currentTrays.map((tray) => {
+        if (tray.id !== parentTray.id) return tray;
+
+        const parentIndex = tray.tasks.findIndex((task) => task.id === parentTask.id);
+        if (parentIndex === -1) return tray;
+
+        const accepted = new Set(normalizedTitles);
+        const nextParent = {
+          ...tray.tasks[parentIndex],
+          subtasks: tray.tasks[parentIndex].subtasks?.filter((subtask) => !accepted.has(subtask.trim()))
+        };
+        if (nextParent.subtasks?.length === 0) nextParent.subtasks = undefined;
+
+        const nextTasks = [...tray.tasks];
+        nextTasks[parentIndex] = nextParent;
+        nextTasks.splice(parentIndex + 1, 0, ...createdSubtasks);
+        return updateTrayTasks(tray, nextTasks);
+      })
+    );
+  }
+
+  function discardSubtaskProposals(parentTaskId: string) {
+    const parentTray = trays.find((tray) => tray.tasks.some((task) => task.id === parentTaskId));
+    const parentTask = parentTray?.tasks.find((task) => task.id === parentTaskId);
+    if (!parentTray || !parentTask || parentTray.state === "Archived" || parentTask.syncStatus === "Created") return;
+
+    setTrays((currentTrays) =>
+      currentTrays.map((tray) =>
+        tray.id === parentTray.id
+          ? updateTrayTasks(
+              tray,
+              tray.tasks.map((task) => (task.id === parentTaskId ? { ...task, subtasks: undefined } : task))
+            )
+          : tray
       )
     );
   }
@@ -1238,7 +1304,7 @@ export default function App() {
     await waitForNextPaint();
 
     const warnings = classifyTrayPreflightWarnings(tray.tasks);
-    const createableTaskCount = tray.tasks.filter((task) => task.syncStatus !== "Created" && task.issueType !== "Sub-task").length;
+    const createableTaskCount = tray.tasks.filter((task) => task.syncStatus !== "Created").length;
     const creationProjectKey = appSettings.jiraCreationProjectKey.trim().toUpperCase();
     const creationTarget = `Jira project ${creationProjectKey || "not set"}`;
 
@@ -1336,7 +1402,7 @@ export default function App() {
         step: "starting",
         label: "Starting Jira creation",
         detail: `${selectedCreateableTaskCount} createable ${
-          selectedCreateableTaskCount === 1 ? "parent issue" : "parent issues"
+          selectedCreateableTaskCount === 1 ? "Jira issue" : "Jira issues"
         }`,
         completedSteps: 0,
         totalSteps: 1,
@@ -1500,10 +1566,13 @@ export default function App() {
         {openPanel === "detail" && selectedTaskWithSyncLog ? (
           <TaskFocusWindow
             task={selectedTaskWithSyncLog}
+            childTasks={selectedTaskTray?.tasks.filter((task) => task.parentTaskId === selectedTaskWithSyncLog.id) ?? []}
             projects={projectOptions}
             areas={areaOptions}
             readOnly={selectedTaskTray?.state === "Archived"}
             onUpdateDetails={updateTaskDetails}
+            onAcceptSubtasks={acceptSubtaskProposals}
+            onDiscardSubtasks={discardSubtaskProposals}
             onOpenJiraIssue={openJiraIssue}
             onClose={() => setOpenPanel(null)}
           />
@@ -1994,7 +2063,6 @@ function countJiraApiCreateableTasks(tasks: LocalTask[], includeExportedTasks: b
   return tasks.filter(
     (task) =>
       task.syncStatus !== "Created" &&
-      task.issueType !== "Sub-task" &&
       (includeExportedTasks || task.syncStatus !== "Exported")
   ).length;
 }

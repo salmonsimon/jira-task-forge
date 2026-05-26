@@ -4,7 +4,7 @@ use tauri::{AppHandle, Emitter, State};
 use crate::backup::{BackupExportResult, BackupImportResult};
 use crate::models::{
     AppSettings, Category, JiraConnectionTestResult, JiraCreateIssuesResult, JqlAiDraft,
-    JqlFavorite, JqlSearchResponse, LocalTask, NewTask, NewTray, SyncAuditEvent, Tray,
+    JqlFavorite, JqlSearchResponse, LocalTask, NewSubtask, NewTask, NewTray, SyncAuditEvent, Tray,
 };
 use crate::services::AppServices;
 
@@ -392,6 +392,20 @@ pub fn create_task(
             priority,
             issue_type,
             content_language,
+        })
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn create_subtask(
+    services: State<'_, AppServices>,
+    parent_task_id: String,
+    title: String,
+) -> Result<LocalTask, String> {
+    services
+        .create_subtask(NewSubtask {
+            parent_task_id,
+            title,
         })
         .map_err(|error| error.to_string())
 }

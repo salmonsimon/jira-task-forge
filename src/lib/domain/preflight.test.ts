@@ -62,4 +62,31 @@ describe("preflight domain helpers", () => {
 
     expect(warnings.some((warning) => warning.code === "exported-duplicate-risk")).toBe(true);
   });
+
+  it("does not require descriptions or direct epic mappings for sub-tasks", () => {
+    const warnings = classifyTaskPreflightWarnings(
+      task({
+        issueType: "Sub-task",
+        descriptionStatus: "Missing",
+        epic: undefined,
+        parentTaskId: "parent-1"
+      })
+    );
+
+    expect(warnings).toEqual([]);
+  });
+
+  it("blocks sub-tasks without a usable parent", () => {
+    const warnings = classifyTrayPreflightWarnings([
+      task({ id: "parent-1", syncStatus: "Created", jiraKey: undefined }),
+      task({ id: "subtask-1", issueType: "Sub-task", parentTaskId: "parent-1" })
+    ]);
+
+    expect(warnings).toContainEqual({
+      code: "missing-parent-task",
+      severity: "blocking",
+      taskId: "subtask-1",
+      message: "Sub-task parent is marked Created but has no Jira key to attach to."
+    });
+  });
 });

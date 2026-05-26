@@ -11,7 +11,8 @@ use crate::integrations::jira::{normalize_jira_site_url, JiraClient, JiraCredent
 use crate::jira_sync::JiraSyncRunner;
 use crate::models::{
     AppSettings, Category, JiraConnectionTestResult, JiraCreateIssuesResult, JiraCreateProgress,
-    JqlAiDraft, JqlFavorite, JqlSearchResponse, LocalTask, NewTask, NewTray, SyncAuditEvent, Tray,
+    JqlAiDraft, JqlFavorite, JqlSearchResponse, LocalTask, NewSubtask, NewTask, NewTray,
+    SyncAuditEvent, Tray,
 };
 use crate::repositories::{
     CategoryRepository, JqlFavoriteRepository, SettingsRepository, SyncRepository, TaskRepository,
@@ -319,6 +320,11 @@ impl AppServices {
     pub fn create_task(&self, new_task: NewTask) -> DbResult<LocalTask> {
         let connection = self.connection.lock().expect("database lock poisoned");
         TaskRepository::new(&connection).create(new_task)
+    }
+
+    pub fn create_subtask(&self, new_subtask: NewSubtask) -> DbResult<LocalTask> {
+        let connection = self.connection.lock().expect("database lock poisoned");
+        TaskRepository::new(&connection).create_subtask(new_subtask)
     }
 
     pub fn list_tasks(&self) -> DbResult<Vec<LocalTask>> {
