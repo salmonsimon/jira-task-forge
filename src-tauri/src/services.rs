@@ -6,8 +6,8 @@ use crate::backup::{
     export_backup, import_backup, BackupExportResult, BackupFile, BackupImportResult,
 };
 use crate::db::DbResult;
+use crate::integrations::ai::{ai_model_or_default, AiClient, AiCredentials, AiProvider};
 use crate::integrations::jira::{normalize_jira_site_url, JiraClient, JiraCredentials};
-use crate::integrations::openai::{OpenAiClient, OpenAiCredentials};
 use crate::jira_sync::JiraSyncRunner;
 use crate::models::{
     AppSettings, Category, JiraConnectionTestResult, JiraCreateIssuesResult, JiraCreateProgress,
@@ -25,8 +25,7 @@ pub struct AppServices {
 
 const JIRA_CREDENTIAL_SERVICE: &str = "jira-task-forge:jira";
 const JIRA_API_TOKEN_ACCOUNT: &str = "api-token";
-const OPENAI_CREDENTIAL_SERVICE: &str = "jira-task-forge:openai";
-const OPENAI_API_KEY_ACCOUNT: &str = "api-key";
+const AI_API_KEY_ACCOUNT: &str = "api-key";
 
 impl AppServices {
     pub fn new(connection: Connection) -> Self {
@@ -149,27 +148,48 @@ impl AppServices {
         }
     }
 
-    pub fn has_openai_api_key(&self) -> Result<bool, keyring::Error> {
-        let entry = keyring::Entry::new(OPENAI_CREDENTIAL_SERVICE, OPENAI_API_KEY_ACCOUNT)?;
+    pub fn has_ai_provider_api_key(&self, ai_provider: &str) -> Result<bool, String> {
+        let provider = AiProvider::from_settings_value(ai_provider)?;
+        let entry = keyring::Entry::new(provider.credential_service(), AI_API_KEY_ACCOUNT)
+            .map_err(|error| format!("Could not open OS credential store: {error}"))?;
         match entry.get_password() {
             Ok(_) => Ok(true),
             Err(keyring::Error::NoEntry) => Ok(false),
-            Err(error) => Err(error),
+            Err(error) => Err(format!(
+                "Could not read {} API key status: {error}",
+                provider.label()
+            )),
         }
     }
 
-    pub fn save_openai_api_key(&self, api_key: &str) -> Result<(), keyring::Error> {
-        let entry = keyring::Entry::new(OPENAI_CREDENTIAL_SERVICE, OPENAI_API_KEY_ACCOUNT)?;
-        entry.set_password(api_key.trim())?;
-        entry.get_password()?;
+    pub fn save_ai_provider_api_key(&self, ai_provider: &str, api_key: &str) -> Result<(), String> {
+        let provider = AiProvider::from_settings_value(ai_provider)?;
+        let api_key = api_key.trim();
+        if api_key.is_empty() {
+            return Err(format!("{} API key cannot be empty.", provider.label()));
+        }
+
+        let entry = keyring::Entry::new(provider.credential_service(), AI_API_KEY_ACCOUNT)
+            .map_err(|error| format!("Could not open OS credential store: {error}"))?;
+        entry
+            .set_password(api_key)
+            .map_err(|error| format!("Could not save {} API key: {error}", provider.label()))?;
+        entry
+            .get_password()
+            .map_err(|error| format!("Could not verify {} API key: {error}", provider.label()))?;
         Ok(())
     }
 
-    pub fn delete_openai_api_key(&self) -> Result<(), keyring::Error> {
-        let entry = keyring::Entry::new(OPENAI_CREDENTIAL_SERVICE, OPENAI_API_KEY_ACCOUNT)?;
+    pub fn delete_ai_provider_api_key(&self, ai_provider: &str) -> Result<(), String> {
+        let provider = AiProvider::from_settings_value(ai_provider)?;
+        let entry = keyring::Entry::new(provider.credential_service(), AI_API_KEY_ACCOUNT)
+            .map_err(|error| format!("Could not open OS credential store: {error}"))?;
         match entry.delete_credential() {
             Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-            Err(error) => Err(error),
+            Err(error) => Err(format!(
+                "Could not remove {} API key: {error}",
+                provider.label()
+            )),
         }
     }
 
@@ -220,45 +240,34 @@ impl AppServices {
         let settings = self
             .get_app_settings()
             .map_err(|error| format!("Could not load AI settings: {error}"))?;
-        if settings.ai_provider != "OpenAI" {
-            return Err("OpenAI provider must be selected before using Ask AI.".to_string());
-        }
-
-        let client = self.openai_client()?;
-        client.draft_jql(
-            openai_model_or_default(&settings.ai_model),
-            prompt,
-            Some(&settings.jira_creation_project_key),
-        )
+        let provider = AiProvider::from_settings_value(&settings.ai_provider)?;
+        let client = self.ai_client(provider)?;
+        let model = ai_model_or_default(provider, &settings.ai_model);
+        client.draft_jql(&model, prompt, Some(&settings.jira_creation_project_key))
     }
 
-    pub fn test_openai_connection(&self) -> Result<String, String> {
+    pub fn test_ai_provider_connection(&self) -> Result<String, String> {
         let settings = self
             .get_app_settings()
             .map_err(|error| format!("Could not load AI settings: {error}"))?;
-        if settings.ai_provider != "OpenAI" {
-            return Err(
-                "OpenAI provider must be selected before testing the connection.".to_string(),
-            );
-        }
+        let provider = AiProvider::from_settings_value(&settings.ai_provider)?;
+        let model = ai_model_or_default(provider, &settings.ai_model);
 
-        self.openai_client()?.test_connection()?;
-        Ok("OpenAI connection succeeded.".to_string())
+        self.ai_client(provider)?.test_connection(&model)?;
+        Ok(format!("{} connection succeeded.", provider.label()))
     }
 
-    pub fn test_openai_connection_with_api_key(&self, api_key: &str) -> Result<String, String> {
-        let settings = self
-            .get_app_settings()
-            .map_err(|error| format!("Could not load AI settings: {error}"))?;
-        if settings.ai_provider != "OpenAI" {
-            return Err(
-                "OpenAI provider must be selected before testing the connection.".to_string(),
-            );
-        }
+    pub fn test_ai_provider_connection_with_api_key(
+        &self,
+        ai_provider: &str,
+        api_key: &str,
+    ) -> Result<String, String> {
+        let provider = AiProvider::from_settings_value(ai_provider)?;
+        let model = self.model_for_ai_provider(provider)?;
 
-        let client = self.openai_client_with_api_key(api_key)?;
-        client.test_connection()?;
-        Ok("OpenAI connection succeeded.".to_string())
+        self.ai_client_with_api_key(provider, api_key)?
+            .test_connection(&model)?;
+        Ok(format!("{} connection succeeded.", provider.label()))
     }
 
     pub fn create_jira_parent_issues(
@@ -465,32 +474,55 @@ impl AppServices {
         }
     }
 
-    fn openai_client(&self) -> Result<OpenAiClient, String> {
-        let api_key = self.openai_api_key()?;
-        self.openai_client_with_api_key(&api_key)
+    fn ai_client(&self, provider: AiProvider) -> Result<AiClient, String> {
+        let api_key = self.ai_provider_api_key(provider)?;
+        self.ai_client_with_api_key(provider, &api_key)
     }
 
-    fn openai_client_with_api_key(&self, api_key: &str) -> Result<OpenAiClient, String> {
+    fn ai_client_with_api_key(
+        &self,
+        provider: AiProvider,
+        api_key: &str,
+    ) -> Result<AiClient, String> {
         let api_key = api_key.trim();
         if api_key.is_empty() {
-            return Err("OpenAI API key cannot be empty.".to_string());
+            return Err(format!("{} API key cannot be empty.", provider.label()));
         }
 
-        Ok(OpenAiClient::new(OpenAiCredentials {
+        Ok(AiClient::new(AiCredentials {
+            provider,
             api_key: api_key.to_string(),
         }))
     }
 
-    fn openai_api_key(&self) -> Result<String, String> {
-        let entry = keyring::Entry::new(OPENAI_CREDENTIAL_SERVICE, OPENAI_API_KEY_ACCOUNT)
+    fn ai_provider_api_key(&self, provider: AiProvider) -> Result<String, String> {
+        let entry = keyring::Entry::new(provider.credential_service(), AI_API_KEY_ACCOUNT)
             .map_err(|error| format!("Could not open OS credential store: {error}"))?;
         match entry.get_password() {
-            Ok(api_key) if api_key.trim().is_empty() => {
-                Err("OpenAI API key is empty. Save a new API key in Settings.".to_string())
-            }
+            Ok(api_key) if api_key.trim().is_empty() => Err(format!(
+                "{} API key is empty. Save a new API key in Settings.",
+                provider.label()
+            )),
             Ok(api_key) => Ok(api_key.trim().to_string()),
-            Err(keyring::Error::NoEntry) => Err("OpenAI API key is required.".to_string()),
-            Err(error) => Err(format!("Could not read OpenAI API key: {error}")),
+            Err(keyring::Error::NoEntry) => {
+                Err(format!("{} API key is required.", provider.label()))
+            }
+            Err(error) => Err(format!(
+                "Could not read {} API key: {error}",
+                provider.label()
+            )),
+        }
+    }
+
+    fn model_for_ai_provider(&self, provider: AiProvider) -> Result<String, String> {
+        let settings = self
+            .get_app_settings()
+            .map_err(|error| format!("Could not load AI settings: {error}"))?;
+        let selected_provider = AiProvider::from_settings_value(&settings.ai_provider).ok();
+        if selected_provider == Some(provider) {
+            Ok(ai_model_or_default(provider, &settings.ai_model))
+        } else {
+            Ok(provider.default_model().to_string())
         }
     }
 }
@@ -504,19 +536,11 @@ fn failed_result(message: impl Into<String>) -> JiraConnectionTestResult {
     }
 }
 
-fn openai_model_or_default(model: &str) -> &str {
-    let model = model.trim();
-    if model.is_empty() {
-        "gpt-4.1"
-    } else {
-        model
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{failed_result, openai_model_or_default, AppServices};
+    use super::{failed_result, AppServices};
     use crate::db::open_in_memory_database;
+    use crate::integrations::ai::{ai_model_or_default, AiProvider};
     use crate::models::{AppSettings, NewTask, NewTray, TrayState};
 
     #[test]
@@ -828,15 +852,24 @@ mod tests {
     }
 
     #[test]
-    fn defaults_openai_model_when_blank() {
-        assert_eq!(openai_model_or_default(""), "gpt-4.1");
-        assert_eq!(openai_model_or_default("   "), "gpt-4.1");
-        assert_eq!(openai_model_or_default("gpt-4.1-mini"), "gpt-4.1-mini");
-        assert_eq!(openai_model_or_default("  gpt-4.1  "), "gpt-4.1");
+    fn defaults_ai_models_by_provider_when_blank() {
+        assert_eq!(ai_model_or_default(AiProvider::OpenAi, ""), "gpt-4.1");
+        assert_eq!(
+            ai_model_or_default(AiProvider::Claude, "   "),
+            "claude-sonnet-4-20250514"
+        );
+        assert_eq!(
+            ai_model_or_default(AiProvider::Gemini, ""),
+            "gemini-2.5-flash"
+        );
+        assert_eq!(
+            ai_model_or_default(AiProvider::OpenAi, "  gpt-4.1-mini  "),
+            "gpt-4.1-mini"
+        );
     }
 
     #[test]
-    fn returns_early_openai_errors_before_keyring_or_network_work() {
+    fn returns_early_ai_provider_errors_before_keyring_or_network_work() {
         let services = AppServices::new(open_in_memory_database().expect("database opens"));
         services
             .update_app_settings(AppSettings {
@@ -847,21 +880,21 @@ mod tests {
 
         assert_eq!(
             services
-                .test_openai_connection()
-                .expect_err("provider must be OpenAI"),
-            "OpenAI provider must be selected before testing the connection."
+                .test_ai_provider_connection()
+                .expect_err("provider must be selected"),
+            "Select an AI provider before using AI."
         );
         assert_eq!(
             services
-                .test_openai_connection_with_api_key("unsaved-key")
-                .expect_err("provider must be OpenAI"),
-            "OpenAI provider must be selected before testing the connection."
+                .test_ai_provider_connection_with_api_key("None", "unsaved-key")
+                .expect_err("provider must be selected"),
+            "Select an AI provider before using AI."
         );
         assert_eq!(
             services
                 .draft_jql_with_ai("show latest DTS issue")
-                .expect_err("provider must be OpenAI"),
-            "OpenAI provider must be selected before using Ask AI."
+                .expect_err("provider must be selected"),
+            "Select an AI provider before using AI."
         );
 
         services
@@ -872,9 +905,15 @@ mod tests {
             .expect("settings update");
         assert_eq!(
             services
-                .test_openai_connection_with_api_key("   ")
+                .test_ai_provider_connection_with_api_key("OpenAI", "   ")
                 .expect_err("empty draft key rejected"),
             "OpenAI API key cannot be empty."
+        );
+        assert_eq!(
+            services
+                .test_ai_provider_connection_with_api_key("Claude", "   ")
+                .expect_err("empty draft key rejected"),
+            "Claude API key cannot be empty."
         );
     }
 

@@ -210,11 +210,17 @@ pub async fn delete_jira_api_token(services: State<'_, AppServices>) -> Result<(
 
 #[tauri::command]
 pub async fn has_openai_api_key(services: State<'_, AppServices>) -> Result<bool, String> {
+    has_ai_provider_api_key(services, "OpenAI".to_string()).await
+}
+
+#[tauri::command]
+pub async fn has_ai_provider_api_key(
+    services: State<'_, AppServices>,
+    ai_provider: String,
+) -> Result<bool, String> {
     let services = services.inner().clone();
     run_blocking_result("Credential worker", move || {
-        services
-            .has_openai_api_key()
-            .map_err(|error| error.to_string())
+        services.has_ai_provider_api_key(&ai_provider)
     })
     .await
 }
@@ -224,36 +230,56 @@ pub async fn save_openai_api_key(
     services: State<'_, AppServices>,
     api_key: String,
 ) -> Result<(), String> {
+    save_ai_provider_api_key(services, "OpenAI".to_string(), api_key).await
+}
+
+#[tauri::command]
+pub async fn save_ai_provider_api_key(
+    services: State<'_, AppServices>,
+    ai_provider: String,
+    api_key: String,
+) -> Result<(), String> {
     let api_key = api_key.trim().to_string();
     if api_key.is_empty() {
-        return Err("OpenAI API key cannot be empty".to_string());
+        return Err("AI provider API key cannot be empty".to_string());
     }
 
     let services = services.inner().clone();
     run_blocking_result("Credential worker", move || {
-        services
-            .save_openai_api_key(&api_key)
-            .map_err(|error| error.to_string())
+        services.save_ai_provider_api_key(&ai_provider, &api_key)
     })
     .await
 }
 
 #[tauri::command]
 pub async fn delete_openai_api_key(services: State<'_, AppServices>) -> Result<(), String> {
+    delete_ai_provider_api_key(services, "OpenAI".to_string()).await
+}
+
+#[tauri::command]
+pub async fn delete_ai_provider_api_key(
+    services: State<'_, AppServices>,
+    ai_provider: String,
+) -> Result<(), String> {
     let services = services.inner().clone();
     run_blocking_result("Credential worker", move || {
-        services
-            .delete_openai_api_key()
-            .map_err(|error| error.to_string())
+        services.delete_ai_provider_api_key(&ai_provider)
     })
     .await
 }
 
 #[tauri::command]
 pub async fn test_openai_connection(services: State<'_, AppServices>) -> Result<String, String> {
+    test_ai_provider_connection(services).await
+}
+
+#[tauri::command]
+pub async fn test_ai_provider_connection(
+    services: State<'_, AppServices>,
+) -> Result<String, String> {
     let services = services.inner().clone();
-    run_blocking_result("OpenAI connection worker", move || {
-        services.test_openai_connection()
+    run_blocking_result("AI provider connection worker", move || {
+        services.test_ai_provider_connection()
     })
     .await
 }
@@ -263,9 +289,18 @@ pub async fn test_openai_api_key(
     services: State<'_, AppServices>,
     api_key: String,
 ) -> Result<String, String> {
+    test_ai_provider_api_key(services, "OpenAI".to_string(), api_key).await
+}
+
+#[tauri::command]
+pub async fn test_ai_provider_api_key(
+    services: State<'_, AppServices>,
+    ai_provider: String,
+    api_key: String,
+) -> Result<String, String> {
     let services = services.inner().clone();
-    run_blocking_result("OpenAI connection worker", move || {
-        services.test_openai_connection_with_api_key(&api_key)
+    run_blocking_result("AI provider connection worker", move || {
+        services.test_ai_provider_connection_with_api_key(&ai_provider, &api_key)
     })
     .await
 }
@@ -478,7 +513,7 @@ fn ai_provider_api_keys_url(ai_provider: &str) -> Result<&'static str, String> {
     match normalized_provider.as_str() {
         "openai" => Ok(OPENAI_API_KEYS_URL),
         "claude" | "anthropic" | "anthropic claude" => Ok(CLAUDE_API_KEYS_URL),
-        "gemini" | "google gemini" | "google" => Ok(GEMINI_API_KEYS_URL),
+        "gemini" | "google gemini" | "google" | "google ai studio" => Ok(GEMINI_API_KEYS_URL),
         "none" | "" => Err("Select an AI provider before opening its API key page.".to_string()),
         _ => Err(format!(
             "API key page is not configured for AI provider '{}'.",

@@ -21,16 +21,16 @@ import {
   createPersistedTask,
   createPersistedTray,
   deletePersistedCategory,
+  deletePersistedAiProviderApiKey,
   deletePersistedJqlFavorite,
   deletePersistedJiraApiToken,
-  deletePersistedOpenAiApiKey,
   deletePersistedTray,
   deletePersistedTask,
   draftPersistedJqlWithAi,
   exportPersistedBackup,
   getPersistedAppSettings,
+  hasPersistedAiProviderApiKey,
   hasPersistedJiraApiToken,
-  hasPersistedOpenAiApiKey,
   importPersistedBackup,
   listPersistedCategories,
   listPersistedJqlFavorites,
@@ -44,12 +44,12 @@ import {
   restorePersistedTray,
   runPersistedJqlQuery,
   saveCsvFile,
+  savePersistedAiProviderApiKey,
   savePersistedJiraApiToken,
-  savePersistedOpenAiApiKey,
-  testPersistedOpenAiApiKey,
+  testPersistedAiProviderApiKey,
+  testPersistedAiProviderConnection,
   testPersistedJiraApiToken,
   testPersistedJiraConnection,
-  testPersistedOpenAiConnection,
   updatePersistedAppSettings,
   updatePersistedCategory,
   updatePersistedJqlFavorite,
@@ -162,13 +162,13 @@ export default function App() {
   const [csvExportMessage, setCsvExportMessage] = useState<string | null>(null);
   const [csvExportNotice, setCsvExportNotice] = useState<CsvExportNotice | null>(null);
   const [hasJiraApiToken, setHasJiraApiToken] = useState(false);
-  const [hasOpenAiApiKey, setHasOpenAiApiKey] = useState(false);
+  const [hasAiProviderApiKey, setHasAiProviderApiKey] = useState(false);
   const [jiraCredentialMessage, setJiraCredentialMessage] = useState<string | null>(null);
   const [aiCredentialMessage, setAiCredentialMessage] = useState<string | null>(null);
   const [connectionNotice, setConnectionNotice] = useState<ConnectionNotice | null>(null);
   const [backupNotice, setBackupNotice] = useState<BackupOperationNotice | null>(null);
   const [isTestingJiraConnection, setIsTestingJiraConnection] = useState(false);
-  const [isTestingOpenAiConnection, setIsTestingOpenAiConnection] = useState(false);
+  const [isTestingAiProviderConnection, setIsTestingAiProviderConnection] = useState(false);
   const [isRunningJiraPreflight, setIsRunningJiraPreflight] = useState(false);
   const [jiraCreatePreflight, setJiraCreatePreflight] = useState<JiraCreatePreflight | null>(null);
   const [isCreatingJiraIssues, setIsCreatingJiraIssues] = useState(false);
@@ -216,11 +216,10 @@ export default function App() {
       listPersistedTrays(),
       getPersistedAppSettings(),
       hasPersistedJiraApiToken(),
-      hasPersistedOpenAiApiKey(),
       listPersistedCategories(),
       listPersistedJqlFavorites()
     ])
-      .then(([persistedTrays, persistedSettings, hasPersistedToken, hasPersistedAiKey, persistedCategories, persistedJqlFavorites]) => {
+      .then(([persistedTrays, persistedSettings, hasPersistedToken, persistedCategories, persistedJqlFavorites]) => {
         if (!isCurrent) return;
         const nextCategories = persistedCategories.length ? persistedCategories : [...appData.listProjects(), ...appData.listAreas()];
         const nextJqlFavorites = persistedJqlFavorites.length ? persistedJqlFavorites : appData.listJqlFavorites();
@@ -229,7 +228,6 @@ export default function App() {
         setTrays(persistedTrays);
         setAppSettings(persistedSettings);
         setHasJiraApiToken(hasPersistedToken);
-        setHasOpenAiApiKey(hasPersistedAiKey);
         setCategories(nextCategories);
         setJqlFavorites(nextJqlFavorites);
         setSelectedFavoriteId((currentFavoriteId) =>
@@ -255,6 +253,28 @@ export default function App() {
       isCurrent = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!usesTauriPersistence || appSettings.aiProvider === "None") {
+      setHasAiProviderApiKey(false);
+      return;
+    }
+
+    let isCurrent = true;
+    hasPersistedAiProviderApiKey(appSettings.aiProvider)
+      .then((hasCredential) => {
+        if (!isCurrent) return;
+        setHasAiProviderApiKey(hasCredential);
+      })
+      .catch(() => {
+        if (!isCurrent) return;
+        setHasAiProviderApiKey(false);
+      });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [appSettings.aiProvider, usesTauriPersistence]);
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
@@ -746,83 +766,92 @@ export default function App() {
     }
   }
 
-  async function saveOpenAiApiKey(apiKey: string) {
+  async function saveAiProviderApiKey(apiKey: string) {
     const trimmedApiKey = apiKey.trim();
     if (!trimmedApiKey) {
       setAiCredentialMessage("API key cannot be empty.");
       return false;
     }
+    if (appSettings.aiProvider === "None") {
+      setAiCredentialMessage("Select an AI provider before saving an API key.");
+      return false;
+    }
 
     try {
-      await savePersistedOpenAiApiKey(trimmedApiKey);
-      setHasOpenAiApiKey(true);
-      setAiCredentialMessage("OpenAI API key saved in the OS credential store.");
+      await savePersistedAiProviderApiKey(appSettings.aiProvider, trimmedApiKey);
+      setHasAiProviderApiKey(true);
+      setAiCredentialMessage(`${appSettings.aiProvider} API key saved in the OS credential store.`);
       return true;
     } catch {
-      setAiCredentialMessage("Could not save OpenAI API key in the OS credential store.");
+      setAiCredentialMessage(`Could not save ${appSettings.aiProvider} API key in the OS credential store.`);
       return false;
     }
   }
 
-  async function deleteOpenAiApiKey() {
+  async function deleteAiProviderApiKey() {
+    if (appSettings.aiProvider === "None") {
+      setAiCredentialMessage("Select an AI provider before removing an API key.");
+      return;
+    }
+
     try {
-      await deletePersistedOpenAiApiKey();
-      setHasOpenAiApiKey(false);
-      setAiCredentialMessage("OpenAI API key removed from the OS credential store.");
+      await deletePersistedAiProviderApiKey(appSettings.aiProvider);
+      setHasAiProviderApiKey(false);
+      setAiCredentialMessage(`${appSettings.aiProvider} API key removed from the OS credential store.`);
     } catch {
-      setAiCredentialMessage("Could not remove OpenAI API key.");
+      setAiCredentialMessage(`Could not remove ${appSettings.aiProvider} API key.`);
     }
   }
 
-  async function testOpenAiConnection(): Promise<CredentialConnectionTestResult> {
+  async function testAiProviderConnection(): Promise<CredentialConnectionTestResult> {
     flushSync(() => {
-      setIsTestingOpenAiConnection(true);
+      setIsTestingAiProviderConnection(true);
       setAiCredentialMessage(null);
     });
     const loadingStartedAt = performance.now();
     await waitForNextPaint();
 
     try {
-      const message = await testPersistedOpenAiConnection();
+      const message = await testPersistedAiProviderConnection();
       const result: CredentialConnectionTestResult = { ok: true, message };
       showAiConnectionNotice(result);
       return result;
     } catch (error) {
       const result: CredentialConnectionTestResult = {
         ok: false,
-        message: formatUnknownError(error, "Could not test OpenAI connection.")
+        message: formatUnknownError(error, "Could not test AI provider connection.")
       };
       showAiConnectionNotice(result);
       return result;
     } finally {
       await waitForMinimumElapsed(loadingStartedAt, 700);
-      setIsTestingOpenAiConnection(false);
+      setIsTestingAiProviderConnection(false);
     }
   }
 
-  async function testOpenAiApiKey(apiKey: string): Promise<CredentialConnectionTestResult> {
+  async function testAiProviderApiKey(apiKey: string): Promise<CredentialConnectionTestResult> {
     flushSync(() => {
-      setIsTestingOpenAiConnection(true);
+      setIsTestingAiProviderConnection(true);
       setAiCredentialMessage(null);
     });
     const loadingStartedAt = performance.now();
     await waitForNextPaint();
 
     try {
-      const message = await testPersistedOpenAiApiKey(apiKey);
+      const message = await testPersistedAiProviderApiKey(appSettings.aiProvider, apiKey);
       const result: CredentialConnectionTestResult = { ok: true, message };
       showAiConnectionNotice(result);
       return result;
     } catch (error) {
       const result: CredentialConnectionTestResult = {
         ok: false,
-        message: formatUnknownError(error, "Could not test OpenAI connection.")
+        message: formatUnknownError(error, "Could not test AI provider connection.")
       };
       showAiConnectionNotice(result);
       return result;
     } finally {
       await waitForMinimumElapsed(loadingStartedAt, 700);
-      setIsTestingOpenAiConnection(false);
+      setIsTestingAiProviderConnection(false);
     }
   }
 
@@ -1007,12 +1036,12 @@ export default function App() {
       setJqlAiMessage("Describe the Jira issues you want to find.");
       return;
     }
-    if (usesTauriPersistence && appSettings.aiProvider !== "OpenAI") {
-      setJqlAiMessage("Claude and Gemini support is planned for V2. Select OpenAI to use Ask AI now.");
+    if (usesTauriPersistence && appSettings.aiProvider === "None") {
+      setJqlAiMessage("Select an AI provider in Settings before using Ask AI.");
       return;
     }
-    if (!hasOpenAiApiKey && usesTauriPersistence) {
-      setJqlAiMessage("Save an OpenAI API key in Settings before using Ask AI.");
+    if (!hasAiProviderApiKey && usesTauriPersistence) {
+      setJqlAiMessage(`Save a ${appSettings.aiProvider} API key in Settings before using Ask AI.`);
       return;
     }
 
@@ -1493,18 +1522,18 @@ export default function App() {
           <SettingsPanel
             settings={appSettings}
             hasJiraApiToken={hasJiraApiToken}
-            hasOpenAiApiKey={hasOpenAiApiKey}
+            hasAiProviderApiKey={hasAiProviderApiKey}
             jiraCredentialMessage={jiraCredentialMessage}
             aiCredentialMessage={aiCredentialMessage}
             isTestingJiraConnection={isTestingJiraConnection}
-            isTestingOpenAiConnection={isTestingOpenAiConnection}
+            isTestingAiProviderConnection={isTestingAiProviderConnection}
             onChange={updateAppSettings}
             onSaveJiraApiToken={saveJiraApiToken}
             onDeleteJiraApiToken={deleteJiraApiToken}
-            onSaveOpenAiApiKey={saveOpenAiApiKey}
-            onDeleteOpenAiApiKey={deleteOpenAiApiKey}
-            onTestOpenAiConnection={testOpenAiConnection}
-            onTestOpenAiApiKey={testOpenAiApiKey}
+            onSaveAiProviderApiKey={saveAiProviderApiKey}
+            onDeleteAiProviderApiKey={deleteAiProviderApiKey}
+            onTestAiProviderConnection={testAiProviderConnection}
+            onTestAiProviderApiKey={testAiProviderApiKey}
             onTestJiraConnection={testJiraConnection}
             onTestJiraApiToken={testJiraApiToken}
             onOpenJiraApiTokens={openJiraApiTokensPage}

@@ -12,5 +12,5 @@ export function redactSensitiveText(value: string): string {
       /((?:api[_ -]?key|api[_ -]?token|token)(?:\s+provided)?\s*[:=]\s*)([^\s"',;}]+)/gi,
       "$1<redacted>"
     )
-    .replace(/\b(?:sk-(?:proj-)?[A-Za-z0-9_-]{6,}|svcac[A-Za-z0-9_*.-]{6,}|[A-Za-z0-9_-]{3,}\*{6,}[A-Za-z0-9_.-]*)\b/g, "<redacted>");
+    .replace(/\b(?:sk-(?:proj-)?[A-Za-z0-9_-]{6,}|svcac[A-Za-z0-9_*.-]{6,}|AIza[A-Za-z0-9_-]{12,}|[A-Za-z0-9_-]{3,}\*{6,}[A-Za-z0-9_.-]*)\b/g, "<redacted>");
 }

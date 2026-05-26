@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
+  AiProvider,
   AppSettings,
   Category,
   IssueType,
@@ -203,23 +204,44 @@ export async function deletePersistedJiraApiToken(): Promise<void> {
 }
 
 export async function hasPersistedOpenAiApiKey(): Promise<boolean> {
-  return invoke<boolean>("has_openai_api_key");
+  return hasPersistedAiProviderApiKey("OpenAI");
+}
+
+export async function hasPersistedAiProviderApiKey(aiProvider: AiProvider): Promise<boolean> {
+  if (aiProvider === "None") return false;
+  return invoke<boolean>("has_ai_provider_api_key", { aiProvider });
 }
 
 export async function savePersistedOpenAiApiKey(apiKey: string): Promise<void> {
-  await invoke("save_openai_api_key", { apiKey });
+  await savePersistedAiProviderApiKey("OpenAI", apiKey);
+}
+
+export async function savePersistedAiProviderApiKey(aiProvider: AiProvider, apiKey: string): Promise<void> {
+  await invoke("save_ai_provider_api_key", { aiProvider, apiKey });
 }
 
 export async function deletePersistedOpenAiApiKey(): Promise<void> {
-  await invoke("delete_openai_api_key");
+  await deletePersistedAiProviderApiKey("OpenAI");
+}
+
+export async function deletePersistedAiProviderApiKey(aiProvider: AiProvider): Promise<void> {
+  await invoke("delete_ai_provider_api_key", { aiProvider });
 }
 
 export async function testPersistedOpenAiConnection(): Promise<string> {
-  return invoke<string>("test_openai_connection");
+  return testPersistedAiProviderConnection();
+}
+
+export async function testPersistedAiProviderConnection(): Promise<string> {
+  return invoke<string>("test_ai_provider_connection");
 }
 
 export async function testPersistedOpenAiApiKey(apiKey: string): Promise<string> {
-  return invoke<string>("test_openai_api_key", { apiKey });
+  return testPersistedAiProviderApiKey("OpenAI", apiKey);
+}
+
+export async function testPersistedAiProviderApiKey(aiProvider: AiProvider, apiKey: string): Promise<string> {
+  return invoke<string>("test_ai_provider_api_key", { aiProvider, apiKey });
 }
 
 export async function testPersistedJiraConnection(): Promise<JiraConnectionTestResult> {
