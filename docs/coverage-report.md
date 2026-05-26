@@ -36,7 +36,7 @@ Measured after the command/Jira coverage target pass:
 - Rust line coverage: 80.23%
 - Rust region coverage: 79.72%
 - Rust function coverage: 67.52%
-- Frontend tests: 12 passed
+- Frontend tests: 20 passed
 
 This is the baseline for the Personal v1 quality/security stabilization pass.
 The Rust/Tauri backend is back above the 80% line-coverage target. Continue
@@ -104,6 +104,8 @@ After the first Personal v1 stabilization coverage PRs:
 - Added focused Rust tests for Jira client request construction, early input
   validation, response parsing, REST error formatting, retry classification,
   and Jira issue URL validation.
+- Added frontend workflow tests for JQL recent history, JQL messages, AI draft
+  messages, backup timestamps, and backup count labels.
 - Core persistence and sync remain strong: `repositories.rs`, `jira_sync.rs`,
   `jira_mapping.rs`, `models.rs`, and `sync_audit.rs` are still well covered.
 - Rust line coverage moved from 78.26% to 80.23%.

@@ -130,7 +130,8 @@ Still pending:
 - CSV upload-to-Jira fallback validation after the API create flow works.
 - Bring Rust backend line coverage back above 80%; it is currently 78.26% in
   `docs/coverage-report.md`.
-- Grow frontend workflow tests beyond the first Vitest domain helper harness.
+- Continue growing frontend workflow tests beyond the current JQL and backup
+  helper coverage.
 
 ## Open Grill Area
 
