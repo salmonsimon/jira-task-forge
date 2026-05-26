@@ -1,21 +1,25 @@
-export type JiraTokenDraftTestStatus = "idle" | "testing" | "success" | "failed";
+export type CredentialDraftTestStatus = "idle" | "testing" | "success" | "failed";
 
-export type JiraTokenDraftControlInput = {
-  accountEmail: string;
+export type CredentialDraftControlInput = {
+  hasConnectionSettings: boolean;
+  hasSavedCredential: boolean;
   isTestingConnection: boolean;
-  siteUrl: string;
-  tokenDraft: string;
-  tokenTestStatus: JiraTokenDraftTestStatus;
+  keyDraft: string;
+  keyTestStatus: CredentialDraftTestStatus;
 };
 
-export function getJiraTokenDraftControls(input: JiraTokenDraftControlInput) {
-  const hasDraft = Boolean(input.tokenDraft.trim());
-  const hasConnectionSettings = Boolean(input.siteUrl.trim() && input.accountEmail.trim());
+export function getCredentialDraftControls(input: CredentialDraftControlInput) {
+  const hasDraft = Boolean(input.keyDraft.trim());
 
   return {
-    canSaveDraft: hasDraft && input.tokenTestStatus === "success" && !input.isTestingConnection,
-    canTestDraft: hasDraft && hasConnectionSettings && !input.isTestingConnection,
-    hasConnectionSettings,
+    canSaveDraft: hasDraft && input.keyTestStatus === "success" && !input.isTestingConnection,
+    canTestConnection:
+      input.hasConnectionSettings &&
+      !input.isTestingConnection &&
+      (hasDraft || input.hasSavedCredential),
+    hasConnectionSettings: input.hasConnectionSettings,
     hasDraft
   };
 }
+
+export type JiraTokenDraftTestStatus = CredentialDraftTestStatus;

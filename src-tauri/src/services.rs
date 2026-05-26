@@ -246,6 +246,21 @@ impl AppServices {
         Ok("OpenAI connection succeeded.".to_string())
     }
 
+    pub fn test_openai_connection_with_api_key(&self, api_key: &str) -> Result<String, String> {
+        let settings = self
+            .get_app_settings()
+            .map_err(|error| format!("Could not load AI settings: {error}"))?;
+        if settings.ai_provider != "OpenAI" {
+            return Err(
+                "OpenAI provider must be selected before testing the connection.".to_string(),
+            );
+        }
+
+        let client = self.openai_client_with_api_key(api_key)?;
+        client.test_connection()?;
+        Ok("OpenAI connection succeeded.".to_string())
+    }
+
     pub fn create_jira_parent_issues(
         &self,
         tray_id: &str,
@@ -444,7 +459,18 @@ impl AppServices {
 
     fn openai_client(&self) -> Result<OpenAiClient, String> {
         let api_key = self.openai_api_key()?;
-        Ok(OpenAiClient::new(OpenAiCredentials { api_key }))
+        self.openai_client_with_api_key(&api_key)
+    }
+
+    fn openai_client_with_api_key(&self, api_key: &str) -> Result<OpenAiClient, String> {
+        let api_key = api_key.trim();
+        if api_key.is_empty() {
+            return Err("OpenAI API key cannot be empty.".to_string());
+        }
+
+        Ok(OpenAiClient::new(OpenAiCredentials {
+            api_key: api_key.to_string(),
+        }))
     }
 
     fn openai_api_key(&self) -> Result<String, String> {
@@ -819,9 +845,28 @@ mod tests {
         );
         assert_eq!(
             services
+                .test_openai_connection_with_api_key("unsaved-key")
+                .expect_err("provider must be OpenAI"),
+            "OpenAI provider must be selected before testing the connection."
+        );
+        assert_eq!(
+            services
                 .draft_jql_with_ai("show latest DTS issue")
                 .expect_err("provider must be OpenAI"),
             "OpenAI provider must be selected before using Ask AI."
+        );
+
+        services
+            .update_app_settings(AppSettings {
+                ai_provider: "OpenAI".to_string(),
+                ..AppSettings::default()
+            })
+            .expect("settings update");
+        assert_eq!(
+            services
+                .test_openai_connection_with_api_key("   ")
+                .expect_err("empty draft key rejected"),
+            "OpenAI API key cannot be empty."
         );
     }
 

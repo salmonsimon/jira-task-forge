@@ -1,8 +1,8 @@
 import { Bot, Check, ChevronDown, Download, ExternalLink, KeyRound, Settings, UploadCloud } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button, DetailBlock, LoadingOrb, PanelHeader, SegmentedControl } from "../../components/ui";
-import { getJiraTokenDraftControls, type JiraTokenDraftTestStatus } from "../../lib/domain";
-import type { AppSettings, JiraConnectionTestResult, ThemeMode } from "../../lib/types";
+import { getCredentialDraftControls, type CredentialDraftTestStatus } from "../../lib/domain";
+import type { AppSettings, CredentialConnectionTestResult, JiraConnectionTestResult, ThemeMode } from "../../lib/types";
 
 export function SettingsPanel({
   settings,
@@ -10,7 +10,6 @@ export function SettingsPanel({
   hasOpenAiApiKey,
   jiraCredentialMessage,
   aiCredentialMessage,
-  jiraConnectionResult,
   isTestingJiraConnection,
   isTestingOpenAiConnection,
   onChange,
@@ -19,6 +18,7 @@ export function SettingsPanel({
   onSaveOpenAiApiKey,
   onDeleteOpenAiApiKey,
   onTestOpenAiConnection,
+  onTestOpenAiApiKey,
   onTestJiraConnection,
   onTestJiraApiToken,
   onOpenJiraApiTokens,
@@ -31,7 +31,6 @@ export function SettingsPanel({
   hasOpenAiApiKey: boolean;
   jiraCredentialMessage: string | null;
   aiCredentialMessage: string | null;
-  jiraConnectionResult: JiraConnectionTestResult | null;
   isTestingJiraConnection: boolean;
   isTestingOpenAiConnection: boolean;
   onChange: (settings: Partial<AppSettings>) => void;
@@ -39,8 +38,9 @@ export function SettingsPanel({
   onDeleteJiraApiToken: () => void;
   onSaveOpenAiApiKey: (apiKey: string) => Promise<boolean>;
   onDeleteOpenAiApiKey: () => void;
-  onTestOpenAiConnection: () => void;
-  onTestJiraConnection: () => void;
+  onTestOpenAiConnection: () => Promise<CredentialConnectionTestResult>;
+  onTestOpenAiApiKey: (apiKey: string) => Promise<CredentialConnectionTestResult>;
+  onTestJiraConnection: () => Promise<JiraConnectionTestResult>;
   onTestJiraApiToken: (token: string) => Promise<JiraConnectionTestResult>;
   onOpenJiraApiTokens: () => void;
   onExportBackup: () => void;
@@ -49,25 +49,25 @@ export function SettingsPanel({
 }) {
   const panelRef = useRef<HTMLElement | null>(null);
   const jiraApiTokenDraftRef = useRef("");
+  const openAiApiKeyDraftRef = useRef("");
   const [jiraApiTokenDraft, setJiraApiTokenDraft] = useState("");
-  const [jiraTokenDraftTestStatus, setJiraTokenDraftTestStatus] = useState<JiraTokenDraftTestStatus>("idle");
+  const [jiraTokenDraftTestStatus, setJiraTokenDraftTestStatus] = useState<CredentialDraftTestStatus>("idle");
   const [openAiApiKeyDraft, setOpenAiApiKeyDraft] = useState("");
-  const jiraTokenDraftControls = getJiraTokenDraftControls({
-    accountEmail: settings.jiraAccountEmail,
+  const [openAiKeyDraftTestStatus, setOpenAiKeyDraftTestStatus] = useState<CredentialDraftTestStatus>("idle");
+  const jiraTokenDraftControls = getCredentialDraftControls({
+    hasConnectionSettings: Boolean(settings.jiraSiteUrl.trim() && settings.jiraAccountEmail.trim()),
+    hasSavedCredential: hasJiraApiToken,
     isTestingConnection: isTestingJiraConnection,
-    siteUrl: settings.jiraSiteUrl,
-    tokenDraft: jiraApiTokenDraft,
-    tokenTestStatus: jiraTokenDraftTestStatus
+    keyDraft: jiraApiTokenDraft,
+    keyTestStatus: jiraTokenDraftTestStatus
   });
-  const canTestJiraConnection =
-    Boolean(settings.jiraSiteUrl.trim()) &&
-    Boolean(settings.jiraAccountEmail.trim()) &&
-    hasJiraApiToken &&
-    !isTestingJiraConnection;
-  const canTestOpenAiConnection =
-    settings.aiProvider === "OpenAI" &&
-    hasOpenAiApiKey &&
-    !isTestingOpenAiConnection;
+  const openAiKeyDraftControls = getCredentialDraftControls({
+    hasConnectionSettings: settings.aiProvider === "OpenAI",
+    hasSavedCredential: hasOpenAiApiKey,
+    isTestingConnection: isTestingOpenAiConnection,
+    keyDraft: openAiApiKeyDraft,
+    keyTestStatus: openAiKeyDraftTestStatus
+  });
 
   function updateJiraApiTokenDraft(value: string) {
     jiraApiTokenDraftRef.current = value;
@@ -75,14 +75,30 @@ export function SettingsPanel({
     setJiraTokenDraftTestStatus("idle");
   }
 
-  async function testJiraTokenDraft() {
-    if (!jiraTokenDraftControls.canTestDraft) return;
+  function updateOpenAiApiKeyDraft(value: string) {
+    openAiApiKeyDraftRef.current = value;
+    setOpenAiApiKeyDraft(value);
+    setOpenAiKeyDraftTestStatus("idle");
+  }
+
+  async function testJiraTokenConnection() {
+    if (!jiraTokenDraftControls.canTestConnection) return;
 
     const tokenUnderTest = jiraApiTokenDraft;
     setJiraTokenDraftTestStatus("testing");
-    const result = await onTestJiraApiToken(tokenUnderTest);
+    const result = tokenUnderTest ? await onTestJiraApiToken(tokenUnderTest) : await onTestJiraConnection();
     if (jiraApiTokenDraftRef.current !== tokenUnderTest) return;
     setJiraTokenDraftTestStatus(result.ok ? "success" : "failed");
+  }
+
+  async function testOpenAiKeyConnection() {
+    if (!openAiKeyDraftControls.canTestConnection) return;
+
+    const apiKeyUnderTest = openAiApiKeyDraft;
+    setOpenAiKeyDraftTestStatus("testing");
+    const result = apiKeyUnderTest ? await onTestOpenAiApiKey(apiKeyUnderTest) : await onTestOpenAiConnection();
+    if (openAiApiKeyDraftRef.current !== apiKeyUnderTest) return;
+    setOpenAiKeyDraftTestStatus(result.ok ? "success" : "failed");
   }
 
   async function saveJiraToken() {
@@ -96,8 +112,13 @@ export function SettingsPanel({
   }
 
   async function saveOpenAiKey() {
+    if (!openAiKeyDraftControls.canSaveDraft) return;
+
     const saved = await onSaveOpenAiApiKey(openAiApiKeyDraft);
-    if (saved) setOpenAiApiKeyDraft("");
+    if (saved) {
+      updateOpenAiApiKeyDraft("");
+      setOpenAiKeyDraftTestStatus("idle");
+    }
   }
 
   useEffect(() => {
@@ -114,6 +135,11 @@ export function SettingsPanel({
     if (!jiraApiTokenDraft) return;
     setJiraTokenDraftTestStatus("idle");
   }, [settings.jiraAccountEmail, settings.jiraSiteUrl, jiraApiTokenDraft]);
+
+  useEffect(() => {
+    if (!openAiApiKeyDraft) return;
+    setOpenAiKeyDraftTestStatus("idle");
+  }, [settings.aiProvider, openAiApiKeyDraft]);
 
   return (
     <aside ref={panelRef} className="fixed right-0 top-0 z-30 flex h-screen w-[420px] flex-col overscroll-contain border-l border-[#dfe1e6] bg-white shadow-xl">
@@ -186,19 +212,20 @@ export function SettingsPanel({
               onChange={updateJiraApiTokenDraft}
             />
             <div className="grid grid-cols-2 gap-2">
+              <Button disabled={!jiraTokenDraftControls.canSaveDraft} variant="secondary" onClick={saveJiraToken}>
+                Save key
+              </Button>
+              <Button disabled={!hasJiraApiToken} variant="secondary" onClick={onDeleteJiraApiToken}>
+                Remove key
+              </Button>
               <Button
-                disabled={!jiraTokenDraftControls.canTestDraft}
+                className="col-span-2 min-w-0 whitespace-nowrap"
+                disabled={!jiraTokenDraftControls.canTestConnection}
                 icon={jiraTokenDraftTestStatus === "testing" ? <LoadingOrb size="xs" /> : undefined}
                 variant="secondary"
-                onClick={testJiraTokenDraft}
+                onClick={testJiraTokenConnection}
               >
-                {jiraTokenDraftTestStatus === "testing" ? "Testing..." : "Test new token"}
-              </Button>
-              <Button disabled={!jiraTokenDraftControls.canSaveDraft} variant="secondary" onClick={saveJiraToken}>
-                Save token
-              </Button>
-              <Button className="col-span-2" disabled={!hasJiraApiToken} variant="secondary" onClick={onDeleteJiraApiToken}>
-                Remove token
+                {jiraTokenDraftTestStatus === "testing" ? "Testing..." : "Test connection"}
               </Button>
             </div>
             {jiraApiTokenDraft ? (
@@ -210,33 +237,6 @@ export function SettingsPanel({
               <p className="mt-2 text-xs leading-relaxed text-[#6b778c]">{jiraCredentialMessage}</p>
             ) : null}
           </div>
-          <div className="mt-3">
-            <Button
-              disabled={!canTestJiraConnection}
-              icon={isTestingJiraConnection ? <LoadingOrb size="xs" /> : undefined}
-              variant="secondary"
-              onClick={onTestJiraConnection}
-            >
-              {isTestingJiraConnection ? "Testing..." : "Test connection"}
-            </Button>
-          </div>
-          {jiraConnectionResult ? (
-            <div
-              className={`mt-3 rounded border px-3 py-2 text-sm ${
-                jiraConnectionResult.ok
-                  ? "border-[#abf5d1] bg-[#e3fcef] text-[#006644]"
-                  : "border-[#ffbdad] bg-[#ffebe6] text-[#bf2600]"
-              }`}
-            >
-              <div className="font-medium">{jiraConnectionResult.message}</div>
-              {jiraConnectionResult.ok && jiraConnectionResult.accountDisplayName ? (
-                <div className="mt-1 text-xs">
-                  Connected as {jiraConnectionResult.accountDisplayName}
-                  {jiraConnectionResult.accountEmail ? ` (${jiraConnectionResult.accountEmail})` : ""}
-                </div>
-              ) : null}
-            </div>
-          ) : null}
         </DetailBlock>
 
         <DetailBlock icon={<Bot size={15} />} title="AI provider">
@@ -266,10 +266,10 @@ export function SettingsPanel({
               masked
               placeholder={hasOpenAiApiKey ? "Enter a new key to replace it" : "Paste OpenAI API key"}
               value={openAiApiKeyDraft}
-              onChange={setOpenAiApiKeyDraft}
+              onChange={updateOpenAiApiKeyDraft}
             />
             <div className="grid grid-cols-2 gap-2">
-              <Button className="min-w-0 whitespace-nowrap" disabled={!openAiApiKeyDraft.trim()} variant="secondary" onClick={saveOpenAiKey}>
+              <Button className="min-w-0 whitespace-nowrap" disabled={!openAiKeyDraftControls.canSaveDraft} variant="secondary" onClick={saveOpenAiKey}>
                 Save key
               </Button>
               <Button className="min-w-0 whitespace-nowrap" disabled={!hasOpenAiApiKey} variant="secondary" onClick={onDeleteOpenAiApiKey}>
@@ -277,14 +277,19 @@ export function SettingsPanel({
               </Button>
               <Button
                 className="col-span-2 min-w-0 whitespace-nowrap"
-                disabled={!canTestOpenAiConnection}
+                disabled={!openAiKeyDraftControls.canTestConnection}
                 icon={isTestingOpenAiConnection ? <LoadingOrb size="xs" /> : undefined}
                 variant="secondary"
-                onClick={onTestOpenAiConnection}
+                onClick={testOpenAiKeyConnection}
               >
                 {isTestingOpenAiConnection ? "Testing..." : "Test connection"}
               </Button>
             </div>
+            {openAiApiKeyDraft ? (
+              <p className="mt-2 break-words text-xs leading-relaxed text-[#6b778c]">
+                {openAiKeyDraftStatusMessage(openAiKeyDraftTestStatus, openAiKeyDraftControls.hasConnectionSettings)}
+              </p>
+            ) : null}
             {aiCredentialMessage ? (
               <p className="mt-2 break-words text-xs leading-relaxed text-[#6b778c]">{aiCredentialMessage}</p>
             ) : null}
@@ -312,12 +317,20 @@ export function SettingsPanel({
   );
 }
 
-function jiraTokenDraftStatusMessage(status: JiraTokenDraftTestStatus, hasConnectionSettings: boolean): string {
+function jiraTokenDraftStatusMessage(status: CredentialDraftTestStatus, hasConnectionSettings: boolean): string {
   if (!hasConnectionSettings) return "Add a Jira site URL and account email before testing this token.";
-  if (status === "success") return "Connection succeeded. This token can be saved.";
-  if (status === "failed") return "Connection failed. Update the token or Jira settings, then test again.";
+  if (status === "success") return "This key passed Test connection and can be saved.";
+  if (status === "failed") return "Update this key or Jira settings, then test again before saving.";
   if (status === "testing") return "Testing this token without saving it.";
-  return "Test this new token before saving it.";
+  return "Test this key before saving it.";
+}
+
+function openAiKeyDraftStatusMessage(status: CredentialDraftTestStatus, hasConnectionSettings: boolean): string {
+  if (!hasConnectionSettings) return "Select OpenAI before testing this key.";
+  if (status === "success") return "This key passed Test connection and can be saved.";
+  if (status === "failed") return "Update this key, then test again before saving.";
+  if (status === "testing") return "Testing this key without saving it.";
+  return "Test this key before saving it.";
 }
 
 function SettingsInput({

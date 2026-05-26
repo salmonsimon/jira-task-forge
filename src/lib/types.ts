@@ -144,6 +144,12 @@ export type JiraConnectionTestResult = {
   accountEmail?: string | null;
 };
 
+export type CredentialConnectionTestResult = {
+  ok: boolean;
+  message: string;
+  detail?: string | null;
+};
+
 export type JiraCreatedIssueResult = {
   taskId?: string | null;
   key: string;

@@ -37,6 +37,11 @@ This document captures the product scope decisions from the grill session. UI co
 - V2 should research Jira OAuth 2.0 and AI provider authentication options. If
   OAuth is practical, prefer it for distribution. If not, keep BYOK with stronger
   onboarding, documentation, redaction, and local secret-handling practices.
+- V2 should add optional AI provider support for Anthropic Claude, Google
+  Gemini, and OpenRouter after the OpenAI Personal v1 flow is stable. These
+  providers should reuse the same provider/model/key pattern validated for
+  OpenAI: local OS credential storage, backups without secrets, redacted logs,
+  and a successful `Test connection` before saving a new API key.
 
 ## Prototype Scope
 
@@ -439,8 +444,12 @@ document such as `docs/jira-description-format.md`.
 - Jira API token auth is an acceptable personal fallback.
 - Secrets should be stored locally and excluded from backups.
 - Windows Credential Manager is preferred when the stack supports it.
-- A new Jira API token must pass a connection test before the Settings UI allows
-  saving it to the OS credential store.
+- A new Jira API token or AI provider API key must pass a connection test before
+  the Settings UI allows saving it to the OS credential store.
+- Jira and AI provider credential controls should use the same action shape:
+  `Save key`, `Remove key`, and `Test connection`.
+- Connection success and failure should appear as clear app-level notifications,
+  not as result panels inserted into the Settings column.
 - Settings can be exported/imported without secrets.
 - The app should preserve data across app updates.
 - V1 should use an installer/version update path that keeps local data.
@@ -448,6 +457,9 @@ document such as `docs/jira-description-format.md`.
 ## AI Configuration
 
 - V1 includes a provider/model selector.
+- Personal v1 AI provider implementation is OpenAI-first. Claude, Gemini, and
+  OpenRouter belong to V2/provider expansion, not the Personal v1 completion
+  bar.
 - AI runs only through explicit user actions.
 - No silent background AI calls.
 - AI actions include:
