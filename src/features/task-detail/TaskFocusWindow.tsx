@@ -1,4 +1,4 @@
-import { Check, ChevronDown, CircleAlert, Image, Link2, Settings, Sparkles, X } from "lucide-react";
+import { Check, ChevronDown, Image, Link2, Settings, Sparkles, X } from "lucide-react";
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { Button, DescriptionBadge, IconButton, IssueTypeBadge, PriorityBadge, SyncBadge } from "../../components/ui";
 import { isTaskReadOnly } from "../../lib/domain";
@@ -13,7 +13,7 @@ export function TaskFocusWindow({
   readOnly: forceReadOnly = false,
   onUpdateDetails,
   onGenerateDescription,
-  onMarkDescriptionReady,
+  onApplyDescriptionProposal,
   onOpenJiraIssue,
   onClose,
   isGeneratingDescription = false
@@ -24,7 +24,7 @@ export function TaskFocusWindow({
   readOnly?: boolean;
   onUpdateDetails: (taskId: string, task: { project: string; area: string; priority: Priority }) => void | Promise<void>;
   onGenerateDescription: (taskId: string, additionalContext: string) => Promise<AssistedDescriptionDraft>;
-  onMarkDescriptionReady: (taskId: string) => void | Promise<void>;
+  onApplyDescriptionProposal: (taskId: string, description: string) => void | Promise<void>;
   onOpenJiraIssue: (url: string) => void | Promise<void>;
   onClose: () => void;
   isGeneratingDescription?: boolean;
@@ -33,20 +33,21 @@ export function TaskFocusWindow({
   const [descriptionContext, setDescriptionContext] = useState("");
   const [descriptionMessage, setDescriptionMessage] = useState<string | null>(null);
   const [clarificationQuestions, setClarificationQuestions] = useState<string[]>([]);
+  const [descriptionProposal, setDescriptionProposal] = useState<string | null>(null);
+  const [isApplyingDescriptionProposal, setIsApplyingDescriptionProposal] = useState(false);
 
   useEffect(() => {
     setDescriptionContext("");
     setDescriptionMessage(null);
     setClarificationQuestions([]);
+    setDescriptionProposal(null);
+    setIsApplyingDescriptionProposal(false);
   }, [task.id]);
 
-  function reviewMissingInfo() {
-    setDescriptionMessage("Add the missing context, then generate again.");
-    setClarificationQuestions([
-      "Que usuario o persona se ve afectado, y que necesita lograr?",
-      "Que debe cambiar, incluyendo lo mas importante dentro y fuera de alcance?",
-      "Como debe validar el exito QA, Arte, Programacion u otro responsable?"
-    ]);
+  function cancelDescriptionContext() {
+    setDescriptionContext("");
+    setDescriptionMessage(null);
+    setClarificationQuestions([]);
   }
 
   async function generateDescription() {
@@ -61,23 +62,46 @@ export function TaskFocusWindow({
         setClarificationQuestions(draft.clarificationQuestions);
         return;
       }
-      setDescriptionMessage("Generated description saved to the task.");
+      if (!draft.description?.trim()) {
+        setDescriptionMessage("The AI provider returned an empty description.");
+        return;
+      }
+      setDescriptionProposal(draft.description);
+      setDescriptionMessage(null);
       setClarificationQuestions([]);
     } catch (error) {
       setDescriptionMessage(error instanceof Error ? error.message : "Could not generate a description.");
     }
   }
 
+  async function acceptDescriptionProposal() {
+    if (!descriptionProposal || isApplyingDescriptionProposal) return;
+
+    setIsApplyingDescriptionProposal(true);
+    try {
+      await onApplyDescriptionProposal(task.id, descriptionProposal);
+      setDescriptionProposal(null);
+      setDescriptionContext("");
+      setDescriptionMessage(null);
+      setClarificationQuestions([]);
+    } catch (error) {
+      setDescriptionProposal(null);
+      setDescriptionMessage(error instanceof Error ? error.message : "Could not apply the proposed description.");
+    } finally {
+      setIsApplyingDescriptionProposal(false);
+    }
+  }
+
   useEffect(() => {
     function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") {
+      if (event.key === "Escape" && !descriptionProposal) {
         onClose();
       }
     }
 
     window.addEventListener("keydown", closeOnEscape);
     return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [onClose]);
+  }, [descriptionProposal, onClose]);
 
   return (
     <div
@@ -149,41 +173,51 @@ export function TaskFocusWindow({
                   {task.notes ? <div className="mt-2 text-[#dfe1e6]">{task.notes}</div> : null}
                 </div>
               )}
-              <div className="mt-4 flex gap-2">
-                <Button disabled={readOnly} variant="darkSecondary" icon={<CircleAlert size={14} />} onClick={reviewMissingInfo}>
-                  Review missing info
-                </Button>
-                <Button
-                  disabled={readOnly || isGeneratingDescription}
-                  variant="darkSecondary"
-                  icon={<Sparkles size={14} />}
-                  onClick={() => {
-                    void generateDescription();
-                  }}
-                >
-                  {isGeneratingDescription ? "Generating" : "Generate description"}
-                </Button>
-              </div>
               {!readOnly ? (
-                <label className="mt-4 block">
-                  <span className="mb-2 block text-xs font-semibold text-[#aeb3bd]">AI context</span>
+                <div className="mt-4 overflow-hidden rounded border border-[#454852] bg-[#25272c]">
+                  <div className="flex items-center justify-between border-b border-[#454852] px-3 py-2">
+                    <div className="inline-flex items-center gap-2 text-sm font-semibold text-[#f4f5f7]">
+                      <Sparkles size={14} className="text-[#85b8ff]" />
+                      AI context
+                    </div>
+                  </div>
                   <textarea
-                    className="h-24 w-full resize-none rounded border border-[#5c606a] bg-[#22252a] p-3 text-sm text-[#dfe1e6] outline-none placeholder:text-[#8f96a3] focus:border-[#579dff] focus:ring-2 focus:ring-[#1d355c]"
+                    className="min-h-[150px] w-full resize-y border-0 bg-[#1f2126] p-3 text-sm leading-relaxed text-[#dfe1e6] outline-none placeholder:text-[#7f858f] focus:ring-2 focus:ring-inset focus:ring-[#85b8ff]"
                     value={descriptionContext}
                     onChange={(event) => setDescriptionContext(event.target.value)}
                     placeholder="Add behavior, constraints, expected validation, or answers to the questions below."
                   />
-                </label>
-              ) : null}
-              {descriptionMessage ? <div className="mt-3 text-xs leading-relaxed text-[#aeb3bd]">{descriptionMessage}</div> : null}
-              {clarificationQuestions.length ? (
-                <div className="mt-3 rounded border border-[#5c606a] bg-[#22252a] px-3 py-2 text-sm text-[#dfe1e6]">
-                  <div className="mb-2 text-xs font-semibold text-[#aeb3bd]">Clarification questions</div>
-                  <ul className="space-y-1">
-                    {clarificationQuestions.map((question) => (
-                      <li key={question}>- {question}</li>
-                    ))}
-                  </ul>
+                  {descriptionMessage ? (
+                    <div className="border-t border-[#454852] px-3 py-2 text-xs leading-relaxed text-[#aeb3bd]">{descriptionMessage}</div>
+                  ) : null}
+                  {clarificationQuestions.length ? (
+                    <div className="border-t border-[#454852] bg-[#22252a] px-3 py-2 text-sm text-[#dfe1e6]">
+                      <div className="mb-2 text-xs font-semibold text-[#aeb3bd]">Clarification questions</div>
+                      <ul className="space-y-1">
+                        {clarificationQuestions.map((question) => (
+                          <li className="flex gap-2" key={question}>
+                            <span className="text-[#85b8ff]">-</span>
+                            <span>{question}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+                  <div className="flex justify-end gap-2 border-t border-[#454852] px-3 py-3">
+                    <Button disabled={isGeneratingDescription} variant="darkSecondary" onClick={cancelDescriptionContext}>
+                      Cancel
+                    </Button>
+                    <Button
+                      disabled={isGeneratingDescription}
+                      variant="darkPrimary"
+                      icon={<Sparkles size={14} />}
+                      onClick={() => {
+                        void generateDescription();
+                      }}
+                    >
+                      {isGeneratingDescription ? "Generating" : "Generate"}
+                    </Button>
+                  </div>
                 </div>
               ) : null}
             </FocusSection>
@@ -248,20 +282,6 @@ export function TaskFocusWindow({
         </div>
 
         <aside className="w-[360px] overflow-y-auto border-l border-[#454852] bg-[#303238] p-5">
-          <div className="mb-5 flex items-center gap-2">
-            <Button
-              disabled={readOnly || !task.description?.trim() || task.descriptionStatus === "Ready"}
-              variant="darkPrimary"
-              onClick={() => {
-                void onMarkDescriptionReady(task.id);
-              }}
-            >
-              Ready for Jira
-            </Button>
-            <Button variant="darkSecondary" icon={<Sparkles size={14} />}>
-              AI
-            </Button>
-          </div>
           <FocusDetails
             task={task}
             projects={projects}
@@ -272,8 +292,181 @@ export function TaskFocusWindow({
           />
         </aside>
       </section>
+      {descriptionProposal ? (
+        <DescriptionProposalDialog
+          currentDescription={task.description ?? ""}
+          isApplying={isApplyingDescriptionProposal}
+          onAccept={() => {
+            void acceptDescriptionProposal();
+          }}
+          onClose={() => setDescriptionProposal(null)}
+          proposedDescription={descriptionProposal}
+          taskTitle={`[${task.area}] ${task.title}`}
+        />
+      ) : null}
     </div>
   );
+}
+
+function DescriptionProposalDialog({
+  currentDescription,
+  isApplying,
+  onAccept,
+  onClose,
+  proposedDescription,
+  taskTitle
+}: {
+  currentDescription: string;
+  isApplying: boolean;
+  onAccept: () => void;
+  onClose: () => void;
+  proposedDescription: string;
+  taskTitle: string;
+}) {
+  useEffect(() => {
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        onClose();
+      }
+    }
+
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-[#091e42]/70 px-4 py-6 backdrop-blur-sm"
+      onPointerDown={(event) => {
+        event.stopPropagation();
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <section
+        className="mx-auto flex h-full max-h-[840px] w-full max-w-[980px] flex-col overflow-hidden rounded border border-[#5d6470] bg-[#25272c] text-[#dfe1e6] shadow-2xl"
+        onPointerDown={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-4 border-b border-[#454852] px-5 py-4">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-[#f4f5f7]">
+              <Sparkles size={16} className="text-[#85b8ff]" />
+              AI proposal review
+              <span className="rounded bg-[#1d3b66] px-2 py-1 text-xs font-medium text-[#85b8ff]">Proposal Ready</span>
+            </div>
+            <p className="mt-1 truncate text-sm text-[#aeb3bd]">{taskTitle}</p>
+          </div>
+          <IconButton title="Close" onClick={onClose}>
+            <X size={18} />
+          </IconButton>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-5">
+          <div className="overflow-hidden rounded border border-[#454852] bg-[#25272c]">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#454852] px-3 py-2">
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <span className="font-medium text-[#f4f5f7]">Description</span>
+                <span className="rounded bg-[#1d3b66] px-2 py-1 text-xs font-medium text-[#85b8ff]">Pending</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  className="inline-flex h-7 w-7 items-center justify-center rounded text-[#7ee2a8] transition hover:bg-[#183f2e] disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={isApplying}
+                  onClick={onAccept}
+                  title="Accept proposal"
+                  type="button"
+                >
+                  <Check size={14} />
+                </button>
+                <button
+                  className="inline-flex h-7 w-7 items-center justify-center rounded text-[#ffb4a8] transition hover:bg-[#5d1f1a] disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={isApplying}
+                  onClick={onClose}
+                  title="Reject proposal"
+                  type="button"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            </div>
+            <div className="bg-[#1f2126] font-mono text-xs leading-5">
+              <div className="md:hidden">
+                <InlineDescriptionDiffSection title="Current" tone="removed" lines={trimDiffLines(currentDescription)} />
+                <InlineDescriptionDiffSection title="Proposed" tone="added" lines={trimDiffLines(proposedDescription)} />
+              </div>
+              <div className="hidden md:grid md:grid-cols-2">
+                <DescriptionDiffSide title="Current" tone="removed" lines={trimDiffLines(currentDescription)} />
+                <DescriptionDiffSide title="Proposed" tone="added" lines={trimDiffLines(proposedDescription)} />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-end gap-2 border-t border-[#454852] bg-[#22252a] p-4">
+          <Button disabled={isApplying} icon={<X size={14} />} onClick={onClose} variant="darkSecondary">
+            Reject
+          </Button>
+          <Button disabled={isApplying} icon={<Check size={14} />} onClick={onAccept} variant="darkPrimary">
+            {isApplying ? "Applying" : "Accept proposal"}
+          </Button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function InlineDescriptionDiffSection({
+  lines,
+  title,
+  tone
+}: {
+  lines: string[];
+  title: string;
+  tone: "added" | "removed";
+}) {
+  const isRemoved = tone === "removed";
+
+  return (
+    <section className={`border-b border-[#454852] last:border-b-0 ${isRemoved ? "bg-[#2b1616]/70 text-[#ffb4a8]" : "bg-[#14251b]/70 text-[#a6e3b8]"}`}>
+      <div className={`sticky top-0 z-10 border-b border-[#454852] px-3 py-2 font-sans text-xs font-semibold ${isRemoved ? "bg-[#2b1616] text-[#ffb4a8]" : "bg-[#14251b] text-[#a6e3b8]"}`}>
+        {title}
+      </div>
+      {lines.map((line, index) => (
+        <div className="grid grid-cols-[28px_1fr] gap-2 px-3 py-0.5" key={`${tone}-inline-${index}`}>
+          <span className="select-none text-[#9aa0aa]">{isRemoved ? "-" : "+"}</span>
+          <span className="whitespace-pre-wrap break-words">{line}</span>
+        </div>
+      ))}
+    </section>
+  );
+}
+
+function DescriptionDiffSide({ lines, title, tone }: { lines: string[]; title: string; tone: "added" | "removed" }) {
+  const isRemoved = tone === "removed";
+
+  return (
+    <div className={`min-w-0 ${isRemoved ? "md:border-r md:border-[#454852]" : ""}`}>
+      <div className={`sticky top-0 z-10 border-b border-[#454852] px-3 py-2 font-sans text-xs font-semibold ${isRemoved ? "bg-[#2b1616] text-[#ffb4a8]" : "bg-[#14251b] text-[#a6e3b8]"}`}>
+        {title}
+      </div>
+      <div className={isRemoved ? "bg-[#2b1616]/70 text-[#ffb4a8]" : "bg-[#14251b]/70 text-[#a6e3b8]"}>
+        {lines.map((line, index) => (
+          <div className="grid grid-cols-[28px_1fr] gap-2 px-3 py-0.5" key={`${tone}-${index}`}>
+            <span className="select-none text-[#9aa0aa]">{isRemoved ? "-" : "+"}</span>
+            <span className="whitespace-pre-wrap break-words">{line}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function trimDiffLines(value: string) {
+  const lines = (value.trimEnd() || "(empty)").split("\n");
+  const maxLines = 40;
+  if (lines.length <= maxLines) return lines.map((line) => line || " ");
+  return [...lines.slice(0, maxLines).map((line) => line || " "), `... ${lines.length - maxLines} more lines`];
 }
 
 function FocusSection({ title, count, children }: { title: string; count?: number; children: ReactNode }) {

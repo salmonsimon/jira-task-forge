@@ -617,34 +617,33 @@ export default function App() {
         ? await generatePersistedTaskDescription(taskId, additionalContext)
         : createPreviewAssistedDescription(task, additionalContext);
 
-      if (draft.status === "drafted" && draft.description) {
-        const nextTask = usesTauriPersistence
-          ? await updatePersistedTaskDescription(taskId, draft.description, "Ready")
-          : {
-              ...task,
-              description: draft.description,
-              descriptionStatus: "Ready" as const
-            };
-        if (nextTask) replaceTask(nextTask);
-      }
-
       return draft;
     } finally {
       setGeneratingDescriptionTaskId(null);
     }
   }
 
-  async function markTaskDescriptionReady(taskId: string) {
+  async function applyTaskDescriptionProposal(taskId: string, description: string) {
     const tray = trays.find((candidate) => candidate.tasks.some((task) => task.id === taskId));
     const task = tray?.tasks.find((candidate) => candidate.id === taskId);
-    if (!tray || !task || tray.state === "Archived" || task.syncStatus === "Created" || !task.description?.trim()) return;
+    const nextDescription = description.trim();
+    if (!tray || !task || tray.state === "Archived" || task.syncStatus === "Created") {
+      throw new Error("This task cannot be edited.");
+    }
+    if (!nextDescription) {
+      throw new Error("The proposed description is empty.");
+    }
 
     const nextTask = usesTauriPersistence
-      ? await updatePersistedTaskDescription(taskId, task.description, "Ready")
+      ? await updatePersistedTaskDescription(taskId, nextDescription, "Ready")
       : {
           ...task,
+          description: nextDescription,
           descriptionStatus: "Ready" as const
         };
+    if (!nextTask) {
+      throw new Error("Could not apply the proposed description.");
+    }
     if (nextTask) replaceTask(nextTask);
   }
 
@@ -1572,7 +1571,7 @@ export default function App() {
             readOnly={selectedTaskTray?.state === "Archived"}
             onUpdateDetails={updateTaskDetails}
             onGenerateDescription={generateTaskDescription}
-            onMarkDescriptionReady={markTaskDescriptionReady}
+            onApplyDescriptionProposal={applyTaskDescriptionProposal}
             onOpenJiraIssue={openJiraIssue}
             onClose={() => setOpenPanel(null)}
             isGeneratingDescription={generatingDescriptionTaskId === selectedTaskWithSyncLog.id}
