@@ -1,4 +1,5 @@
 import type { JqlAiDraft, JqlRecentQuery } from "../types";
+import { formatUnknownError } from "./errors";
 
 export function addJqlRecentQuery(
   currentQueries: JqlRecentQuery[],
@@ -41,10 +42,4 @@ export function formatJqlQueryError(error: unknown): string {
 export function formatJqlAiDraftMessage(draft: JqlAiDraft): string {
   const warningText = draft.warnings.length ? ` ${draft.warnings.join(" ")}` : "";
   return `${draft.explanation}${warningText}`;
-}
-
-export function formatUnknownError(error: unknown, fallback: string): string {
-  if (typeof error === "string" && error.trim()) return error;
-  if (error instanceof Error && error.message.trim()) return error.message;
-  return fallback;
 }

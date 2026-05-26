@@ -1,5 +1,7 @@
 use serde_json::{json, Value};
 
+use crate::redaction::redact_secret_fragments;
+
 const AUDIT_MESSAGE_MAX_CHARS: usize = 500;
 
 pub(crate) fn audit_error_detail(message: &str) -> Value {
@@ -16,55 +18,8 @@ pub(crate) fn audit_error_messages_detail(messages: &[String]) -> Value {
 }
 
 pub(crate) fn audit_error_message(message: &str) -> String {
-    let redacted = redact_audit_secret_fragments(message);
+    let redacted = redact_secret_fragments(message);
     cap_audit_message(&redacted)
-}
-
-fn redact_audit_secret_fragments(message: &str) -> String {
-    [
-        "api_token=",
-        "apiToken=",
-        "apiToken: ",
-        "api token: ",
-        "token=",
-        "token: ",
-        "Basic ",
-        "Bearer ",
-        "\"api_token\":\"",
-        "\"apiToken\":\"",
-        "\"token\":\"",
-    ]
-    .into_iter()
-    .fold(message.to_string(), redact_value_after_marker)
-}
-
-fn redact_value_after_marker(message: String, marker: &str) -> String {
-    let mut redacted = message;
-    let mut search_start = 0;
-
-    while let Some(relative_index) = redacted[search_start..].find(marker) {
-        let value_start = search_start + relative_index + marker.len();
-        let value_end = redacted[value_start..]
-            .find(is_audit_secret_delimiter)
-            .map(|index| value_start + index)
-            .unwrap_or(redacted.len());
-
-        if value_end > value_start {
-            redacted.replace_range(value_start..value_end, "<redacted>");
-            search_start = value_start + "<redacted>".len();
-        } else {
-            search_start = value_start;
-        }
-    }
-
-    redacted
-}
-
-fn is_audit_secret_delimiter(character: char) -> bool {
-    matches!(
-        character,
-        ' ' | '\n' | '\r' | '\t' | '"' | '\'' | ',' | ';' | '&' | '}' | ']'
-    )
 }
 
 fn cap_audit_message(message: &str) -> String {

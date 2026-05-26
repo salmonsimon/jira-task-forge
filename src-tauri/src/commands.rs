@@ -604,8 +604,11 @@ mod tests {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join(format!("jira-task-forge-csv-{}.csv", uuid::Uuid::new_v4()));
 
-        save_csv_file(path.to_string_lossy().to_string(), "Summary\nTask\n".to_string())
-            .expect("source-tree csv saves");
+        save_csv_file(
+            path.to_string_lossy().to_string(),
+            "Summary\nTask\n".to_string(),
+        )
+        .expect("source-tree csv saves");
 
         assert_eq!(
             std::fs::read_to_string(&path).expect("csv reads"),

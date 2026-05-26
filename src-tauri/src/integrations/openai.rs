@@ -3,6 +3,7 @@ use std::time::Duration;
 use serde_json::{json, Value};
 
 use crate::models::JqlAiDraft;
+use crate::redaction::redact_secret_fragments;
 
 const OPENAI_RESPONSES_URL: &str = "https://api.openai.com/v1/responses";
 const OPENAI_MODELS_URL: &str = "https://api.openai.com/v1/models";
@@ -207,7 +208,9 @@ fn parse_openai_response(
         Ok(response) => response
             .into_json::<Value>()
             .map_err(|error| OpenAiRequestError {
-                message: format!("OpenAI returned an unexpected payload: {error}"),
+                message: redact_secret_fragments(&format!(
+                    "OpenAI returned an unexpected payload: {error}"
+                )),
                 retryable: false,
             }),
         Err(ureq::Error::Status(status, response)) => {
@@ -221,13 +224,17 @@ fn parse_openai_response(
                 })
             } else {
                 Err(OpenAiRequestError {
-                    message: format!("OpenAI request failed with HTTP {status}: {message}"),
+                    message: redact_secret_fragments(&format!(
+                        "OpenAI request failed with HTTP {status}: {message}"
+                    )),
                     retryable,
                 })
             }
         }
         Err(error) => Err(OpenAiRequestError {
-            message: format!("OpenAI request could not reach the API: {error}"),
+            message: redact_secret_fragments(&format!(
+                "OpenAI request could not reach the API: {error}"
+            )),
             retryable: true,
         }),
     }
@@ -241,7 +248,7 @@ fn openai_error_message(body_text: &str) -> String {
                 .get("error")
                 .and_then(|error| error.get("message"))
                 .and_then(Value::as_str)
-                .map(str::to_string)
+                .map(redact_secret_fragments)
         })
         .unwrap_or_default()
 }
@@ -418,6 +425,19 @@ mod tests {
     fn reads_openai_error_messages() {
         let body = r#"{"error":{"message":"Invalid API key"}}"#;
         assert_eq!(openai_error_message(body), "Invalid API key");
+    }
+
+    #[test]
+    fn redacts_openai_keys_from_error_messages() {
+        let body = r#"{"error":{"message":"Incorrect API key provided: sk-proj-secretValue123456. You can find your API key at https://platform.openai.com/account/api-keys."}}"#;
+
+        let message = openai_error_message(body);
+
+        assert_eq!(
+            message,
+            "Incorrect API key provided: <redacted> You can find your API key at https://platform.openai.com/account/api-keys."
+        );
+        assert!(!message.contains("sk-proj-secretValue123456"));
     }
 
     #[test]
