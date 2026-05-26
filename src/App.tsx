@@ -66,6 +66,8 @@ import {
   duplicateLocalTask,
   exportLocalTasksToCsv,
   formatBackupTimestamp,
+  redactSensitiveText,
+  formatUnknownError,
   formatJqlAiDraftMessage,
   formatJqlQueryError,
   formatJqlQueryMessage,
@@ -116,6 +118,13 @@ type ConnectionNotice = {
   detail?: string | null;
 };
 
+type CsvExportNotice = {
+  id: number;
+  taskCount: number;
+  trayName: string;
+  fileName: string;
+};
+
 export default function App() {
   const taskIdCounter = useRef(0);
   const [trays, setTrays] = useState<Tray[]>(() => cloneTrays(appData.listTrays()));
@@ -144,6 +153,7 @@ export default function App() {
   const [showArchivedTrays, setShowArchivedTrays] = useState(false);
   const [trayPendingDelete, setTrayPendingDelete] = useState<Tray | null>(null);
   const [csvExportMessage, setCsvExportMessage] = useState<string | null>(null);
+  const [csvExportNotice, setCsvExportNotice] = useState<CsvExportNotice | null>(null);
   const [hasJiraApiToken, setHasJiraApiToken] = useState(false);
   const [hasOpenAiApiKey, setHasOpenAiApiKey] = useState(false);
   const [jiraCredentialMessage, setJiraCredentialMessage] = useState<string | null>(null);
@@ -343,6 +353,7 @@ export default function App() {
 
   useEffect(() => {
     setCsvExportMessage(null);
+    setCsvExportNotice(null);
   }, [selectedTrayId]);
 
   function openTask(task: LocalTask) {
@@ -652,6 +663,8 @@ export default function App() {
   function showConnectionNotice(notice: Omit<ConnectionNotice, "id">) {
     setConnectionNotice({
       ...notice,
+      message: redactSensitiveText(notice.message),
+      detail: notice.detail ? redactSensitiveText(notice.detail) : notice.detail,
       id: Date.now()
     });
   }
@@ -800,7 +813,7 @@ export default function App() {
     } catch (error) {
       const result = {
         ok: false,
-        message: error instanceof Error ? error.message : "Could not test Jira connection."
+        message: formatUnknownError(error, "Could not test Jira connection.")
       };
       showJiraConnectionNotice(result);
       return result;
@@ -826,7 +839,7 @@ export default function App() {
     } catch (error) {
       const result = {
         ok: false,
-        message: error instanceof Error ? error.message : "Could not test Jira connection."
+        message: formatUnknownError(error, "Could not test Jira connection.")
       };
       showJiraConnectionNotice(result);
       return result;
@@ -1076,6 +1089,9 @@ export default function App() {
   }
 
   async function exportTrayCsv(tray: Tray) {
+    setCsvExportMessage(null);
+    setCsvExportNotice(null);
+
     const csvExportOptions = { includeExported: true };
     if (!canExportTrayCsv(tray, csvExportOptions)) {
       setCsvExportMessage(
@@ -1144,7 +1160,12 @@ export default function App() {
       return;
     }
 
-    setCsvExportMessage(`${exportableCount} ${exportableCount === 1 ? "task" : "tasks"} exported to CSV.`);
+    setCsvExportNotice({
+      id: Date.now(),
+      taskCount: exportableCount,
+      trayName: tray.name,
+      fileName: getFileNameFromPath(path)
+    });
   }
 
   async function createInJiraPreflight(tray: Tray) {
@@ -1487,6 +1508,9 @@ export default function App() {
           <ConnectionNoticeToast notice={connectionNotice} onClose={() => setConnectionNotice(null)} />
         ) : null}
         {backupNotice ? <BackupNoticeDialog notice={backupNotice} onClose={() => setBackupNotice(null)} /> : null}
+        {csvExportNotice ? (
+          <CsvExportNoticeToast key={csvExportNotice.id} notice={csvExportNotice} onClose={() => setCsvExportNotice(null)} />
+        ) : null}
       </div>
     </div>
   );
@@ -1500,15 +1524,20 @@ function ConnectionNoticeToast({
   onClose: () => void;
 }) {
   const isSuccess = notice.kind === "success";
+  useNoticeDismiss(onClose);
 
   return (
-    <div className="pointer-events-none fixed left-1/2 top-4 z-[60] w-[min(520px,calc(100vw-32px))] -translate-x-1/2">
+    <div
+      className="fixed inset-0 z-[60] flex items-start justify-center px-4 pt-4"
+      onMouseDown={onClose}
+    >
       <section
         className={`pointer-events-auto rounded border px-4 py-3 shadow-2xl ${
           isSuccess
             ? "border-[#abf5d1] bg-[#e3fcef] text-[#006644]"
             : "border-[#ffbdad] bg-[#ffebe6] text-[#bf2600]"
         }`}
+        onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="flex items-start gap-3">
           <div className="mt-0.5 shrink-0">{isSuccess ? <CheckCircle2 size={18} /> : <AlertTriangle size={18} />}</div>
@@ -1529,6 +1558,69 @@ function ConnectionNoticeToast({
       </section>
     </div>
   );
+}
+
+function CsvExportNoticeToast({
+  notice,
+  onClose
+}: {
+  notice: CsvExportNotice;
+  onClose: () => void;
+}) {
+  const taskLabel = notice.taskCount === 1 ? "task" : "tasks";
+  useNoticeDismiss(onClose);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(onClose, 6000);
+    return () => window.clearTimeout(timeoutId);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-[65] flex items-center justify-center px-4"
+      onMouseDown={onClose}
+      role="status"
+      aria-live="polite"
+    >
+      <section
+        className="pointer-events-auto w-full max-w-[580px] rounded border border-[#216e4e] bg-[#143c2b] text-[#dffcf0] shadow-2xl"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-4 px-6 py-5">
+          <div className="flex min-w-0 gap-4">
+            <CheckCircle2 className="mt-0.5 shrink-0 text-[#7ee2a8]" size={30} />
+            <div className="min-w-0">
+              <h2 className="text-lg font-semibold text-[#f4fff9]">CSV export complete</h2>
+              <p className="mt-2 break-words text-base leading-relaxed text-[#baf3d2]">
+                {notice.taskCount} {taskLabel} from <span className="font-medium text-[#f4fff9]">"{notice.trayName}"</span> saved to{" "}
+                <span className="break-all font-medium text-[#f4fff9]">{notice.fileName}</span>.
+              </p>
+              <p className="mt-2 text-sm text-[#9ddfbc]">Exportable tasks are marked Exported.</p>
+            </div>
+          </div>
+          <button
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded text-[#dffcf0] hover:bg-[#216e4e]"
+            onClick={onClose}
+            title="Close"
+            type="button"
+          >
+            <X size={15} />
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function useNoticeDismiss(onClose: () => void) {
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") onClose();
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
 }
 
 function BackupNoticeDialog({
@@ -1793,12 +1885,6 @@ function summarizeTrayTasks(tasks: LocalTask[]): string {
     .join(" · ");
 }
 
-function formatUnknownError(error: unknown, fallback: string): string {
-  if (typeof error === "string" && error.trim()) return error;
-  if (error instanceof Error && error.message.trim()) return error.message;
-  return fallback;
-}
-
 async function waitForNextPaint(): Promise<void> {
   await new Promise<void>((resolve) => {
     requestAnimationFrame(() => {
@@ -1854,6 +1940,10 @@ async function getDefaultCsvExportPath(filename: string): Promise<string | undef
 
 function isAbsoluteFilePath(path: string): boolean {
   return path.startsWith("/") || /^[A-Za-z]:[\\/]/.test(path) || path.startsWith("\\\\");
+}
+
+function getFileNameFromPath(path: string): string {
+  return path.split(/[\\/]/).pop() || path;
 }
 
 function delay(milliseconds: number): Promise<void> {

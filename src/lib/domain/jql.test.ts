@@ -3,9 +3,9 @@ import {
   addJqlRecentQuery,
   formatJqlAiDraftMessage,
   formatJqlQueryError,
-  formatJqlQueryMessage,
-  formatUnknownError
+  formatJqlQueryMessage
 } from "./jql";
+import { formatUnknownError, redactSensitiveText } from "./errors";
 import type { JqlRecentQuery } from "../types";
 
 const existingRecentQueries: JqlRecentQuery[] = [
@@ -92,6 +92,17 @@ describe("JQL workflow domain helpers", () => {
       "JQL query failed. Jira rejected the JQL."
     );
     expect(formatUnknownError("", "Fallback message.")).toBe("Fallback message.");
+    expect(
+      formatUnknownError(
+        "OpenAI request failed with HTTP 401: Incorrect API key provided: sk-proj-secretValue123456. You can find your API key at https://platform.openai.com/account/api-keys.",
+        "Fallback message."
+      )
+    ).toBe(
+      "OpenAI request failed with HTTP 401: Incorrect API key provided: <redacted> You can find your API key at https://platform.openai.com/account/api-keys."
+    );
+    expect(redactSensitiveText("Authorization: Bearer jira-secret-token")).toBe(
+      "Authorization: Bearer <redacted>"
+    );
     expect(
       formatJqlAiDraftMessage({
         jql: "project = DTS",

@@ -12,6 +12,7 @@ use crate::models::{
     JiraCreateIssueResponse, JiraCreateIssueTypeMetadata, JiraCreateMetadata, JiraMyself,
     JqlSearchResponse,
 };
+use crate::redaction::redact_secret_fragments;
 
 const READ_REQUEST_TIMEOUT: Duration = Duration::from_secs(45);
 const WRITE_REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
@@ -284,9 +285,9 @@ fn parse_response<T: DeserializeOwned>(
     auth_error_message: Option<&str>,
 ) -> Result<T, String> {
     match response {
-        Ok(response) => response
-            .into_json::<T>()
-            .map_err(|error| format!("{action} returned an unexpected payload: {error}")),
+        Ok(response) => response.into_json::<T>().map_err(|error| {
+            redact_secret_fragments(&format!("{action} returned an unexpected payload: {error}"))
+        }),
         Err(ureq::Error::Status(status, response)) => {
             if matches!(status, 401 | 403) {
                 if let Some(message) = auth_error_message {
@@ -299,12 +300,14 @@ fn parse_response<T: DeserializeOwned>(
             if jira_message.is_empty() {
                 Err(format!("{action} failed with HTTP {status}."))
             } else {
-                Err(format!(
+                Err(redact_secret_fragments(&format!(
                     "{action} failed with HTTP {status}: {jira_message}"
-                ))
+                )))
             }
         }
-        Err(error) => Err(format!("{action} could not reach Jira: {error}")),
+        Err(error) => Err(redact_secret_fragments(&format!(
+            "{action} could not reach Jira: {error}"
+        ))),
     }
 }
 
@@ -320,12 +323,14 @@ fn parse_empty_response(
             if jira_message.is_empty() {
                 Err(format!("{action} failed with HTTP {status}."))
             } else {
-                Err(format!(
+                Err(redact_secret_fragments(&format!(
                     "{action} failed with HTTP {status}: {jira_message}"
-                ))
+                )))
             }
         }
-        Err(error) => Err(format!("{action} could not reach Jira: {error}")),
+        Err(error) => Err(redact_secret_fragments(&format!(
+            "{action} could not reach Jira: {error}"
+        ))),
     }
 }
 
@@ -580,6 +585,29 @@ mod tests {
             error,
             "Jira JQL search failed with HTTP 400: The JQL query is invalid."
         );
+    }
+
+    #[test]
+    fn redacts_secret_fragments_from_status_error_messages() {
+        let response = ureq::Response::new(
+            400,
+            "Bad Request",
+            r#"{"errorMessages":["Proxy leaked Authorization: Bearer jira-secret-token"]}"#,
+        )
+        .expect("response builds");
+
+        let error = parse_response::<Value>(
+            Err(ureq::Error::Status(400, response)),
+            "Jira JQL search",
+            None,
+        )
+        .expect_err("status failure should fail");
+
+        assert_eq!(
+            error,
+            "Jira JQL search failed with HTTP 400: Proxy leaked Authorization: Bearer <redacted>"
+        );
+        assert!(!error.contains("jira-secret-token"));
     }
 
     #[test]

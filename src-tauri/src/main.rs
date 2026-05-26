@@ -4,6 +4,7 @@ mod db;
 mod integrations;
 mod jira_sync;
 mod models;
+mod redaction;
 mod repositories;
 mod services;
 mod sync_audit;

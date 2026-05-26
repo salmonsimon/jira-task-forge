@@ -226,6 +226,8 @@ This document captures the product scope decisions from the grill session. UI co
 - If a decision is required during sync, pause only that part and show an actionable warning.
 - Jira sync should continue with healthy `Project + Area` groups when another
   group is paused by epic lookup/creation failure.
+- Successful tray CSV exports should show a prominent centered confirmation
+  notification with the exported task count and saved filename.
 - Partial sync results should clearly show which groups and tasks were created,
   paused, or failed.
 - When partial sync leaves failed or paused tasks, the app should offer to create
