@@ -608,10 +608,19 @@ document such as `docs/jira-description-format.md`.
 ## CSV Export
 
 - CSV export is a minimal technical fallback.
+- CSV export is a manual/admin fallback artifact. Jira Cloud documents CSV
+  import through Jira administration, not through a supported CSV file upload
+  REST endpoint for this app.
 - CSV export should support selecting pending and/or failed tasks.
 - Created tasks are not exported to avoid duplicates.
 - CSV export marks exported tasks as `Exported`.
-- CSV export includes only basic Jira-importable fields.
+- CSV export includes only basic Jira-importable fields that are assigned in
+  the tested Jira admin import flow: `Summary`, `Issue Type`, `Labels`, and
+  `Description`.
+- CSV export should not include local `Project` or `Priority` in the fallback
+  file, because those are not assigned during the tested import mapping.
+- CSV export maps local issue types to the tested `JTFTEST` importer values:
+  `Bug` -> `Error` and `Story` -> `Historia`.
 - Descriptions may be exported as text.
 - Attached files are not included in CSV export.
 - CSV export should strip attachments rather than attempting to reference local files.

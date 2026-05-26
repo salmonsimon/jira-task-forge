@@ -137,7 +137,9 @@ Human QA to run before choosing the next implementation slice is captured in
 - Re-check that Settings token actions, Settings connection test, direct JQL,
   and Create in Jira show loading before blocking work and remain responsive
   enough after the command worker split.
-- After the API create path has live QA, test that uploading tasks from the exported CSV still works as a fallback. This is intentionally lower priority than API creation.
+- After the API create path has live QA, test that Jira's admin CSV importer can
+  still use exported CSV files manually. This is intentionally lower priority
+  than API creation.
 
 Expected limitations right now:
 
@@ -155,8 +157,9 @@ Expected limitations right now:
 
 Near-term decided follow-ups:
 
-- Keep Jira API creation ahead of CSV upload fallback validation.
-- Preserve CSV export as a fallback, then verify Jira CSV upload after the API path is working.
+- Keep Jira API creation ahead of manual CSV import fallback validation.
+- Preserve CSV export as a fallback, then verify Jira admin CSV import manually
+  after the API path is working.
 - Use `JTFTEST` as the real Jira write sandbox. Agents may mutate `JTFTEST`
   without asking; `DTS` is read-only reference data only.
 
@@ -297,7 +300,9 @@ Goal:
 - Add JSON/zip backup without secrets.
 - Add import that merges without wiping current data.
 - Keep minimal Jira-importable CSV export working for pending/failed/exported tasks.
-- Test Jira CSV upload after API creation is proven, since API creation has priority.
+- Test manual Jira admin CSV import after API creation is proven, since API
+  creation has priority and Jira Cloud does not expose a supported CSV import
+  REST endpoint.
 
 HITL:
 
@@ -320,7 +325,7 @@ Goal:
 - Implement Jira REST API integration on top of the current settings and token storage.
 - Reuse the backend Jira client added in PR #21.
 - Continue from read-only JQL into write operations behind preflight checks.
-- Keep API issue creation ahead of CSV upload fallback validation.
+- Keep API issue creation ahead of manual CSV import fallback validation.
 
 HITL:
 
@@ -374,7 +379,7 @@ HITL:
    redaction, credential debug safety, and architecture/test candidates.
 3. Re-check native QA for settings, credential storage, connection test, JQL
    query, preflight, and Jira creation after the worker split.
-4. Test that Jira CSV upload still works from exported files.
+4. Test that Jira's admin CSV importer still works from exported files.
 5. Add sub-task creation as the next narrow Jira write slice.
 6. Add backup/import and attachment filesystem behavior as later slices under the accepted ADR contracts.
 7. Add categories/JQL favorites persistence if needed to support Jira read-only workflows.
@@ -448,7 +453,7 @@ Deliverables:
 
 - Add sub-task creation behind the existing preflight and metadata model.
 - Preserve the existing epic/parent issue safety model and recovery behavior.
-- Keep attachment upload, AI-generated descriptions, and CSV upload fallback
+- Keep attachment upload, AI-generated descriptions, and manual CSV import
   validation out of this slice unless separately approved.
 
 Reason:

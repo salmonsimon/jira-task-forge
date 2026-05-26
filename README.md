@@ -10,11 +10,10 @@ The app now has SQLite-backed local trays/tasks, persisted non-secret settings,
 CSV export, JSON backup/restore without secrets, Jira API token storage through
 the OS credential store, Jira connection testing, read-only JQL search with
 favorites/recent history, AI-assisted JQL drafting through the Tauri backend,
-sync audit activity, and a guarded `Create in Jira` flow that creates required
-epics plus parent Story/Bug issues.
+sync audit activity, Jira-admin-import-friendly CSV export, and a guarded
+`Create in Jira` flow that creates required epics plus parent Story/Bug issues.
 
-It does not yet create sub-tasks, upload real attachments, or validate the Jira
-CSV upload fallback after API creation.
+It does not yet create sub-tasks or upload real attachments.
 
 ## Stack
 

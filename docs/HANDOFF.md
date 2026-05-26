@@ -127,7 +127,7 @@ Still pending:
 - Per-task assisted descriptions, attachments, sub-task creation, attachment
   upload, and audit log UI.
 - Full native QA in an environment with the Linux system dependencies needed by Tauri/keyring.
-- CSV upload-to-Jira fallback validation after the API create flow works.
+- Manual Jira admin CSV import fallback validation after the API create flow works.
 - Bring Rust backend line coverage back above 80%; it is currently 78.26% in
   `docs/coverage-report.md`.
 - Continue growing frontend workflow tests beyond the current JQL and backup
@@ -140,7 +140,9 @@ grill areas:
 
 - Any change to the accepted persistence, secret-storage, sync, backup/import,
   attachment, or audit-log contracts should go through HITL review.
-- CSV upload fallback should remain available, but it is now lower priority than API issue creation.
+- CSV export fallback should remain available as a manual/admin Jira import
+  artifact. The tested fallback shape omits local `Project` and `Priority`,
+  and maps `Bug`/`Story` issue type values to `Error`/`Historia`.
 
 ## Likely Implementation Path
 
@@ -156,7 +158,8 @@ Recommended stack to work next:
   `integrations/jira.rs`, then add useful frontend workflow tests.
 - Keep sub-task creation as the next narrow Jira write slice; keep attachment
   upload for a later slice.
-- After API creation works, verify that Jira CSV upload still works from exported files.
+- After API creation works, verify that Jira's admin CSV importer can still use
+  exported files manually.
 
 ## Suggested Skills For Next Session
 
