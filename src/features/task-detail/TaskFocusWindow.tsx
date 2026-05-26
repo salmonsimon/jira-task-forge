@@ -262,12 +262,6 @@ export function TaskFocusWindow({
         </div>
 
         <aside className="w-[360px] overflow-y-auto border-l border-[#454852] bg-[#303238] p-5">
-          <div className="mb-5 flex items-center gap-2">
-            <Button variant="darkPrimary">Ready for Jira</Button>
-            <Button variant="darkSecondary" icon={<Sparkles size={14} />}>
-              AI
-            </Button>
-          </div>
           <FocusDetails
             task={task}
             projects={projects}
