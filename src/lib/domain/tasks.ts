@@ -1,3 +1,4 @@
+import { duplicateTaskForGraph } from "./taskGraph";
 import type { IssueType, LocalTask } from "../types";
 
 export function deriveIssueTypeFromArea(area: string): IssueType {
@@ -17,20 +18,5 @@ export function canDuplicateTask(task: Pick<LocalTask, "syncStatus">): boolean {
 }
 
 export function duplicateLocalTask(task: LocalTask, nextId: string): LocalTask {
-  return {
-    id: nextId,
-    project: task.project,
-    area: task.area,
-    title: `${task.title} (copy)`,
-    priority: task.priority,
-    issueType: deriveIssueTypeFromArea(task.area),
-    syncStatus: "Pending",
-    descriptionStatus: task.descriptionStatus,
-    language: task.language,
-    epic: task.epic,
-    description: task.description,
-    notes: task.notes,
-    subtasks: task.subtasks ? [...task.subtasks] : undefined,
-    attachments: task.attachments?.map((attachment) => ({ ...attachment }))
-  };
+  return duplicateTaskForGraph(task, nextId);
 }

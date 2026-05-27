@@ -1,4 +1,6 @@
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+mod planning;
+
+use std::collections::HashMap;
 
 use rusqlite::Connection;
 use serde_json::{json, Value};
@@ -7,11 +9,16 @@ use crate::db::DbError;
 use crate::integrations::jira::JiraClient;
 use crate::models::{
     JiraCreateAllowedValue, JiraCreateFieldMetadata, JiraCreateIssueResponse,
-    JiraCreateIssueTypeMetadata, JiraCreateIssuesResult, JiraCreateMetadata, JiraCreateProgress,
-    JiraCreatedIssueResult, JiraFailedTaskResult, JiraMyself, JqlSearchResponse, LocalTask,
+    JiraCreateIssuesResult, JiraCreateMetadata, JiraCreateProgress, JiraCreatedIssueResult,
+    JiraFailedTaskResult, JiraMyself, JqlSearchResponse, LocalTask,
 };
 use crate::repositories::{SyncRepository, TaskRepository, TrayRepository};
 use crate::sync_audit::{audit_error_detail, audit_error_message, audit_error_messages_detail};
+
+use planning::{
+    issue_type_name_matches, EpicLinkStyle, IssueTypePlan, IssueTypeRole, JiraCreationPlan,
+    JiraCreationPlanningOptions, JiraCreationTaskScope,
+};
 
 const JIRA_TASK_FORGE_LABEL: &str = "jira-task-forge";
 const JIRA_TASK_FORGE_PROPERTY_KEY: &str = "jira-task-forge-sync";
@@ -151,28 +158,17 @@ where
             )
             .map_err(db_error_message)?;
 
-        let parent_tasks = tasks
-            .iter()
-            .filter(|task| {
-                task.sync_status != "Created"
-                    && task.issue_type != "Sub-task"
-                    && (include_exported_tasks || task.sync_status != "Exported")
-            })
-            .cloned()
-            .collect::<Vec<_>>();
-        let subtask_tasks = tasks
-            .iter()
-            .filter(|task| {
-                task.sync_status != "Created"
-                    && task.issue_type == "Sub-task"
-                    && (include_exported_tasks || task.sync_status != "Exported")
-            })
-            .cloned()
-            .collect::<Vec<_>>();
-        let createable_task_count = parent_tasks.len() + subtask_tasks.len();
-        result.skipped_issue_count = tasks.len().saturating_sub(createable_task_count);
-        let epic_group_count = count_project_area_groups(&parent_tasks);
-        total_steps = 4 + epic_group_count + parent_tasks.len() + subtask_tasks.len();
+        let task_scope = JiraCreationTaskScope::from_tasks(
+            &tasks,
+            JiraCreationPlanningOptions {
+                creation_project_key: &self.creation_project_key,
+                allow_missing_descriptions,
+                include_exported_tasks,
+            },
+        );
+        let createable_task_count = task_scope.createable_task_count;
+        result.skipped_issue_count = task_scope.skipped_issue_count;
+        total_steps = task_scope.progress_total_steps;
         report_jira_create_progress(
             &mut report_progress,
             Some(&sync_attempt_id),
@@ -192,18 +188,13 @@ where
             "running",
         );
 
-        let local_blockers = self.validate_local_preflight(
-            &parent_tasks,
-            &subtask_tasks,
-            allow_missing_descriptions,
-        );
-        if !local_blockers.is_empty() {
+        if !task_scope.local_blockers.is_empty() {
             report_jira_create_progress(
                 &mut report_progress,
                 Some(&sync_attempt_id),
                 "blocked",
                 "Jira creation blocked",
-                local_blockers.first().map(String::as_str),
+                task_scope.local_blockers.first().map(String::as_str),
                 completed_steps,
                 total_steps,
                 "failed",
@@ -212,7 +203,7 @@ where
                 sync_repository,
                 &sync_attempt_id,
                 tray_id,
-                local_blockers,
+                task_scope.local_blockers,
                 result,
             );
         }
@@ -251,7 +242,7 @@ where
             }
         };
         completed_steps += 1;
-        let plan = match ResolvedCreateMetadata::resolve(&metadata, &parent_tasks, &subtask_tasks) {
+        let plan = match task_scope.with_metadata(&metadata) {
             Ok(plan) => plan,
             Err(messages) => {
                 report_jira_create_progress(
@@ -273,15 +264,15 @@ where
                 );
             }
         };
-        let required_description_blockers =
-            required_parent_description_blockers(&plan, &parent_tasks);
-        if !required_description_blockers.is_empty() {
+        if !plan.missing_description_blockers.is_empty() {
             report_jira_create_progress(
                 &mut report_progress,
                 Some(&sync_attempt_id),
                 "metadata",
                 "Jira metadata requires descriptions",
-                required_description_blockers.first().map(String::as_str),
+                plan.missing_description_blockers
+                    .first()
+                    .map(String::as_str),
                 completed_steps,
                 total_steps,
                 "failed",
@@ -290,7 +281,7 @@ where
                 sync_repository,
                 &sync_attempt_id,
                 tray_id,
-                required_description_blockers,
+                plan.missing_description_blockers,
                 result,
             );
         }
@@ -389,8 +380,7 @@ where
                     .map(|key| (task.id.clone(), key.clone()))
             })
             .collect::<HashMap<_, _>>();
-        let groups = group_tasks_by_project_area(parent_tasks);
-        for ((local_project, area), group_tasks) in groups {
+        for ((local_project, area), group_tasks) in &plan.project_area_groups {
             let epic_summary = format!("[{local_project}] {area}");
             report_jira_create_progress(
                 &mut report_progress,
@@ -409,8 +399,8 @@ where
                 tray_id,
                 &plan,
                 &self.creation_project_key,
-                &local_project,
-                &area,
+                local_project,
+                area,
                 &epic_summary,
                 reporter_account_id.as_deref(),
             ) {
@@ -568,8 +558,8 @@ where
             }
         }
 
-        if let Some(subtask_issue_type) = plan.subtask.as_ref() {
-            for subtask in subtask_tasks {
+        if let Some(subtask_issue_type) = plan.issue_types.subtask.as_ref() {
+            for subtask in &plan.subtask_tasks {
                 report_jira_create_progress(
                     &mut report_progress,
                     Some(&sync_attempt_id),
@@ -748,47 +738,6 @@ where
         Ok(result)
     }
 
-    fn validate_local_preflight(
-        &self,
-        parent_tasks: &[LocalTask],
-        subtask_tasks: &[LocalTask],
-        allow_missing_descriptions: bool,
-    ) -> Vec<String> {
-        let mut messages = Vec::new();
-        if self.creation_project_key.is_empty() {
-            messages.push("Jira creation project key is required.".to_string());
-        }
-        if parent_tasks.is_empty() && subtask_tasks.is_empty() {
-            messages.push("There are no pending Jira tasks to create.".to_string());
-        }
-
-        for task in parent_tasks.iter().chain(subtask_tasks.iter()) {
-            if task.project.trim().is_empty() {
-                messages.push(format!("{} is missing a local project.", task.title));
-            }
-            if task.area.trim().is_empty() {
-                messages.push(format!("{} is missing an area.", task.title));
-            }
-            if task.title.trim().is_empty() {
-                messages.push("A task is missing a title.".to_string());
-            }
-            if task.description_status == "Missing" && !allow_missing_descriptions {
-                messages.push(format!(
-                    "{} is missing a description. Confirm missing descriptions before creating it in Jira.",
-                    task.title
-                ));
-            }
-            if !matches!(task.issue_type.as_str(), "Story" | "Bug" | "Sub-task") {
-                messages.push(format!(
-                    "{} has unsupported issue type {} for this Jira write slice.",
-                    task.title, task.issue_type
-                ));
-            }
-        }
-
-        messages
-    }
-
     fn finish_blocked(
         &self,
         sync_repository: SyncRepository<'_>,
@@ -817,304 +766,12 @@ where
     }
 }
 
-#[derive(Debug, Clone)]
-struct ResolvedCreateMetadata {
-    epic: IssueTypePlan,
-    story: Option<IssueTypePlan>,
-    bug: Option<IssueTypePlan>,
-    subtask: Option<IssueTypePlan>,
-}
-
-impl ResolvedCreateMetadata {
-    fn resolve(
-        metadata: &JiraCreateMetadata,
-        parent_tasks: &[LocalTask],
-        subtask_tasks: &[LocalTask],
-    ) -> Result<Self, Vec<String>> {
-        let mut messages = Vec::new();
-        let epic = find_issue_type(&metadata.issue_types, IssueTypeRole::Epic)
-            .map(|issue_type| IssueTypePlan::resolve(issue_type, IssueTypeRole::Epic));
-        let story = if parent_tasks.iter().any(|task| task.issue_type == "Story") {
-            find_issue_type(&metadata.issue_types, IssueTypeRole::Story)
-                .map(|issue_type| IssueTypePlan::resolve(issue_type, IssueTypeRole::Story))
-        } else {
-            None
-        };
-        let bug = if parent_tasks.iter().any(|task| task.issue_type == "Bug") {
-            find_issue_type(&metadata.issue_types, IssueTypeRole::Bug)
-                .map(|issue_type| IssueTypePlan::resolve(issue_type, IssueTypeRole::Bug))
-        } else {
-            None
-        };
-        let subtask = if !subtask_tasks.is_empty() {
-            find_issue_type(&metadata.issue_types, IssueTypeRole::SubTask)
-                .map(|issue_type| IssueTypePlan::resolve(issue_type, IssueTypeRole::SubTask))
-        } else {
-            None
-        };
-
-        let Some(epic) = epic else {
-            messages.push("Jira create metadata does not include an Epic issue type.".to_string());
-            return Err(messages);
-        };
-        if parent_tasks.iter().any(|task| task.issue_type == "Story") && story.is_none() {
-            messages.push("Jira create metadata does not include a Story issue type.".to_string());
-        }
-        if parent_tasks.iter().any(|task| task.issue_type == "Bug") && bug.is_none() {
-            messages.push("Jira create metadata does not include a Bug issue type.".to_string());
-        }
-        if !subtask_tasks.is_empty() && subtask.is_none() {
-            messages
-                .push("Jira create metadata does not include a Sub-task issue type.".to_string());
-        }
-
-        let mut plans = vec![epic.clone()];
-        if let Some(story) = story.clone() {
-            plans.push(story);
-        }
-        if let Some(bug) = bug.clone() {
-            plans.push(bug);
-        }
-        if let Some(subtask) = subtask.clone() {
-            plans.push(subtask);
-        }
-        for plan in &plans {
-            messages.extend(plan.validation_messages());
-        }
-
-        if messages.is_empty() {
-            Ok(Self {
-                epic,
-                story,
-                bug,
-                subtask,
-            })
-        } else {
-            Err(messages)
-        }
-    }
-
-    fn issue_type_for_local(&self, local_issue_type: &str) -> Option<&IssueTypePlan> {
-        match local_issue_type {
-            "Story" => self.story.as_ref(),
-            "Bug" => self.bug.as_ref(),
-            "Sub-task" => self.subtask.as_ref(),
-            _ => None,
-        }
-    }
-
-    fn issue_type_names(&self) -> Vec<String> {
-        let mut names = vec![self.epic.name.clone()];
-        if let Some(story) = &self.story {
-            names.push(story.name.clone());
-        }
-        if let Some(bug) = &self.bug {
-            names.push(bug.name.clone());
-        }
-        if let Some(subtask) = &self.subtask {
-            names.push(subtask.name.clone());
-        }
-        names
-    }
-
-    fn requires_reporter(&self) -> bool {
-        self.epic.requires_field("reporter")
-            || self
-                .story
-                .as_ref()
-                .is_some_and(|story| story.requires_field("reporter"))
-            || self
-                .bug
-                .as_ref()
-                .is_some_and(|bug| bug.requires_field("reporter"))
-            || self
-                .subtask
-                .as_ref()
-                .is_some_and(|subtask| subtask.requires_field("reporter"))
-    }
-}
-
-#[derive(Debug, Clone)]
-struct IssueTypePlan {
-    id: String,
-    name: String,
-    role: IssueTypeRole,
-    fields: HashMap<String, JiraCreateFieldMetadata>,
-    epic_link_field: Option<EpicLinkFieldPlan>,
-    epic_name_field: Option<String>,
-}
-
-impl IssueTypePlan {
-    fn resolve(metadata: &JiraCreateIssueTypeMetadata, role: IssueTypeRole) -> Self {
-        let mut fields = HashMap::new();
-        for field in &metadata.fields {
-            fields.insert(field.key.clone(), field.clone());
-        }
-
-        let epic_link_field = if matches!(role, IssueTypeRole::Story | IssueTypeRole::Bug) {
-            find_epic_link_field(&metadata.fields)
-        } else {
-            None
-        };
-        let epic_name_field = if matches!(role, IssueTypeRole::Epic) {
-            metadata
-                .fields
-                .iter()
-                .find(|field| is_epic_name_field(field))
-                .map(|field| field.key.clone())
-        } else {
-            None
-        };
-
-        Self {
-            id: metadata.id.clone(),
-            name: metadata.name.clone(),
-            role,
-            fields,
-            epic_link_field,
-            epic_name_field,
-        }
-    }
-
-    fn field(&self, key: &str) -> Option<&JiraCreateFieldMetadata> {
-        self.fields.get(key)
-    }
-
-    fn requires_field(&self, key: &str) -> bool {
-        self.fields.get(key).is_some_and(|field| field.required)
-    }
-
-    fn validation_messages(&self) -> Vec<String> {
-        let mut messages = Vec::new();
-        for key in ["summary", "issuetype", "project", "labels"] {
-            if !self.fields.contains_key(key) {
-                messages.push(format!(
-                    "Jira issue type {} is missing create field {key}.",
-                    self.name
-                ));
-            }
-        }
-        if matches!(self.role, IssueTypeRole::Story | IssueTypeRole::Bug)
-            && self.epic_link_field.is_none()
-        {
-            messages.push(format!(
-                "Jira issue type {} does not expose parent or Epic Link metadata.",
-                self.name
-            ));
-        }
-
-        for field in self.fields.values().filter(|field| field.required) {
-            if self.can_populate_required_field(field) {
-                continue;
-            }
-            messages.push(format!(
-                "Jira issue type {} requires field {} that Jira Task Forge cannot populate yet.",
-                self.name, field.name
-            ));
-        }
-
-        messages
-    }
-
-    fn can_populate_required_field(&self, field: &JiraCreateFieldMetadata) -> bool {
-        match field.key.as_str() {
-            "summary" | "issuetype" | "project" | "priority" | "labels" | "reporter" => true,
-            "parent" => matches!(
-                self.role,
-                IssueTypeRole::Story | IssueTypeRole::Bug | IssueTypeRole::SubTask
-            ),
-            "description" => true,
-            _ if matches!(self.role, IssueTypeRole::Epic) && is_epic_name_field(field) => true,
-            _ if matches!(self.role, IssueTypeRole::Story | IssueTypeRole::Bug)
-                && self
-                    .epic_link_field
-                    .as_ref()
-                    .is_some_and(|epic_field| epic_field.key == field.key) =>
-            {
-                true
-            }
-            _ => false,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum IssueTypeRole {
-    Epic,
-    Story,
-    Bug,
-    SubTask,
-}
-
-#[derive(Debug, Clone)]
-struct EpicLinkFieldPlan {
-    key: String,
-    style: EpicLinkStyle,
-}
-
-#[derive(Debug, Clone)]
-enum EpicLinkStyle {
-    Parent,
-    EpicLink,
-}
-
-fn find_issue_type(
-    issue_types: &[JiraCreateIssueTypeMetadata],
-    role: IssueTypeRole,
-) -> Option<&JiraCreateIssueTypeMetadata> {
-    issue_types
-        .iter()
-        .filter(|issue_type| matches!(role, IssueTypeRole::SubTask) == issue_type.subtask)
-        .find(|issue_type| issue_type_name_matches(&issue_type.name, role))
-}
-
-fn issue_type_name_matches(name: &str, role: IssueTypeRole) -> bool {
-    let normalized = normalize_for_matching(name);
-    match role {
-        IssueTypeRole::Epic => matches!(normalized.as_str(), "epic" | "epica"),
-        IssueTypeRole::Story => matches!(normalized.as_str(), "story" | "historia" | "user story"),
-        IssueTypeRole::Bug => matches!(
-            normalized.as_str(),
-            "bug" | "error" | "defecto" | "incidencia"
-        ),
-        IssueTypeRole::SubTask => matches!(
-            normalized.as_str(),
-            "sub-task" | "subtask" | "sub tarea" | "subtarea"
-        ),
-    }
-}
-
-fn find_epic_link_field(fields: &[JiraCreateFieldMetadata]) -> Option<EpicLinkFieldPlan> {
-    if fields.iter().any(|field| field.key == "parent") {
-        return Some(EpicLinkFieldPlan {
-            key: "parent".to_string(),
-            style: EpicLinkStyle::Parent,
-        });
-    }
-
-    fields
-        .iter()
-        .find(|field| {
-            let normalized = normalize_for_matching(&field.name);
-            normalized == "epic link" || normalized == "epic" || normalized == "parent"
-        })
-        .map(|field| EpicLinkFieldPlan {
-            key: field.key.clone(),
-            style: EpicLinkStyle::EpicLink,
-        })
-}
-
-fn is_epic_name_field(field: &JiraCreateFieldMetadata) -> bool {
-    let normalized = normalize_for_matching(&field.name);
-    normalized == "epic name" || normalized == "nombre de epica"
-}
-
 fn resolve_or_create_epic<Gateway>(
     gateway: &mut Gateway,
     sync_repository: &SyncRepository<'_>,
     sync_attempt_id: &str,
     tray_id: &str,
-    plan: &ResolvedCreateMetadata,
+    plan: &JiraCreationPlan,
     jira_project_key: &str,
     local_project: &str,
     area: &str,
@@ -1180,7 +837,7 @@ where
 }
 
 fn build_epic_payload(
-    plan: &ResolvedCreateMetadata,
+    plan: &JiraCreationPlan,
     jira_project_key: &str,
     local_project: &str,
     area: &str,
@@ -1190,17 +847,17 @@ fn build_epic_payload(
 ) -> Value {
     let mut fields = json!({
         "project": { "key": jira_project_key },
-        "issuetype": { "id": plan.epic.id },
+        "issuetype": { "id": plan.issue_types.epic.id },
         "summary": summary,
         "labels": labels_for(local_project, area),
     });
-    if plan.epic.field("priority").is_some() {
-        fields["priority"] = priority_value(plan.epic.field("priority"), "Medium");
+    if plan.issue_types.epic.field("priority").is_some() {
+        fields["priority"] = priority_value(plan.issue_types.epic.field("priority"), "Medium");
     }
     if let Some(account_id) = reporter_account_id {
         fields["reporter"] = json!({ "accountId": account_id });
     }
-    if let Some(epic_name_field) = &plan.epic.epic_name_field {
+    if let Some(epic_name_field) = &plan.issue_types.epic.epic_name_field {
         fields[epic_name_field] = json!(summary);
     }
 
@@ -1309,34 +966,6 @@ fn build_subtask_issue_payload(
             }
         }]
     })
-}
-
-fn required_parent_description_blockers(
-    plan: &ResolvedCreateMetadata,
-    parent_tasks: &[LocalTask],
-) -> Vec<String> {
-    parent_tasks
-        .iter()
-        .filter_map(|task| {
-            let issue_type = plan.issue_type_for_local(&task.issue_type)?;
-            let description_required = issue_type
-                .field("description")
-                .is_some_and(|field| field.required);
-            let has_description = task
-                .description
-                .as_deref()
-                .is_some_and(|description| !description.trim().is_empty());
-
-            if description_required && !has_description {
-                Some(format!(
-                    "{} is missing a description, and Jira requires Description for {}.",
-                    task.title, issue_type.name
-                ))
-            } else {
-                None
-            }
-        })
-        .collect()
 }
 
 fn jira_description_document(markdown: &str) -> Value {
@@ -1521,35 +1150,6 @@ fn sanitize_jira_label(value: &str) -> Option<String> {
     }
 }
 
-fn group_tasks_by_project_area(
-    tasks: Vec<LocalTask>,
-) -> BTreeMap<(String, String), Vec<LocalTask>> {
-    let mut groups = BTreeMap::new();
-    for task in tasks {
-        groups
-            .entry((
-                task.project.trim().to_string(),
-                task.area.trim().to_string(),
-            ))
-            .or_insert_with(Vec::new)
-            .push(task);
-    }
-    groups
-}
-
-fn count_project_area_groups(tasks: &[LocalTask]) -> usize {
-    tasks
-        .iter()
-        .map(|task| {
-            (
-                task.project.trim().to_string(),
-                task.area.trim().to_string(),
-            )
-        })
-        .collect::<BTreeSet<_>>()
-        .len()
-}
-
 fn report_jira_create_progress<F>(
     report_progress: &mut F,
     sync_attempt_id: Option<&str>,
@@ -1623,22 +1223,6 @@ fn escape_jql_string(value: &str) -> String {
     value.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
-fn normalize_for_matching(value: &str) -> String {
-    value
-        .trim()
-        .to_lowercase()
-        .chars()
-        .map(|character| match character {
-            'á' | 'à' | 'ä' | 'â' => 'a',
-            'é' | 'è' | 'ë' | 'ê' => 'e',
-            'í' | 'ì' | 'ï' | 'î' => 'i',
-            'ó' | 'ò' | 'ö' | 'ô' => 'o',
-            'ú' | 'ù' | 'ü' | 'û' => 'u',
-            other => other,
-        })
-        .collect()
-}
-
 fn db_error_message(error: DbError) -> String {
     error.to_string()
 }
@@ -1647,7 +1231,7 @@ fn db_error_message(error: DbError) -> String {
 mod tests {
     use super::*;
     use crate::db::open_in_memory_database;
-    use crate::models::{JqlResult, NewTask, NewTray};
+    use crate::models::{JiraCreateIssueTypeMetadata, JqlResult, NewTask, NewTray};
     use crate::repositories::{TaskRepository, TrayRepository};
 
     #[test]

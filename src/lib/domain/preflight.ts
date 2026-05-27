@@ -1,3 +1,4 @@
+import { isSubtask } from "./taskGraph";
 import type { LocalTask, PreflightWarning } from "../types";
 
 export function classifyTaskPreflightWarnings(task: LocalTask): PreflightWarning[] {
@@ -30,7 +31,7 @@ export function classifyTaskPreflightWarnings(task: LocalTask): PreflightWarning
     });
   }
 
-  if (task.issueType === "Sub-task" && !task.parentTaskId) {
+  if (isSubtask(task) && !task.parentTaskId) {
     warnings.push({
       code: "missing-parent-task",
       severity: "blocking",
@@ -39,7 +40,7 @@ export function classifyTaskPreflightWarnings(task: LocalTask): PreflightWarning
     });
   }
 
-  if (task.issueType !== "Sub-task" && task.descriptionStatus === "Missing") {
+  if (!isSubtask(task) && task.descriptionStatus === "Missing") {
     warnings.push({
       code: "missing-description",
       severity: "resolvable",
@@ -48,7 +49,7 @@ export function classifyTaskPreflightWarnings(task: LocalTask): PreflightWarning
     });
   }
 
-  if (task.issueType !== "Sub-task" && !task.epic) {
+  if (!isSubtask(task) && !task.epic) {
     warnings.push({
       code: "missing-epic",
       severity: "resolvable",
@@ -83,7 +84,7 @@ export function classifyTrayPreflightWarnings(tasks: LocalTask[]): PreflightWarn
   }
 
   for (const task of createableTasks) {
-    if (task.issueType === "Sub-task" && task.parentTaskId) {
+    if (isSubtask(task) && task.parentTaskId) {
       const parentTask = tasksById.get(task.parentTaskId);
       if (!parentTask) {
         warnings.push({
