@@ -1,3 +1,4 @@
+mod attempt_recorder;
 mod planning;
 
 use std::collections::HashMap;
@@ -10,11 +11,12 @@ use crate::integrations::jira::JiraClient;
 use crate::models::{
     JiraCreateAllowedValue, JiraCreateFieldMetadata, JiraCreateIssueResponse,
     JiraCreateIssuesResult, JiraCreateMetadata, JiraCreateProgress, JiraCreatedIssueResult,
-    JiraFailedTaskResult, JiraMyself, JqlSearchResponse, LocalTask,
+    JiraMyself, JqlSearchResponse, LocalTask,
 };
-use crate::repositories::{SyncRepository, TaskRepository, TrayRepository};
-use crate::sync_audit::{audit_error_detail, audit_error_message, audit_error_messages_detail};
+use crate::repositories::{TaskRepository, TrayRepository};
+use crate::sync_audit::audit_error_message;
 
+use attempt_recorder::SyncAttemptRecorder;
 use planning::{
     issue_type_name_matches, EpicLinkStyle, IssueTypePlan, IssueTypeRole, JiraCreationPlan,
     JiraCreationPlanningOptions, JiraCreationTaskScope,
@@ -22,7 +24,6 @@ use planning::{
 
 const JIRA_TASK_FORGE_LABEL: &str = "jira-task-forge";
 const JIRA_TASK_FORGE_PROPERTY_KEY: &str = "jira-task-forge-sync";
-const JIRA_PROVIDER_OPERATION: &str = "create-parent-issues";
 
 pub trait JiraIssueGateway {
     fn create_metadata(&mut self, project_key: &str) -> Result<JiraCreateMetadata, String>;
@@ -114,49 +115,15 @@ where
         let tasks = TaskRepository::new(self.connection)
             .list_for_tray(tray_id)
             .map_err(db_error_message)?;
-        let sync_repository = SyncRepository::new(self.connection);
-        let sync_attempt_id = sync_repository
-            .start_attempt(tray_id, "create-in-jira")
-            .map_err(db_error_message)?;
-        let mut completed_steps = 0;
-        let mut total_steps = 1;
-        let mut result = JiraCreateIssuesResult {
-            sync_attempt_id: sync_attempt_id.clone(),
-            status: "running".to_string(),
-            created_issue_count: 0,
-            skipped_issue_count: 0,
-            failed_issue_count: 0,
-            created_issues: Vec::new(),
-            failed_tasks: Vec::new(),
-            messages: Vec::new(),
-        };
-        report_jira_create_progress(
+        let mut recorder = SyncAttemptRecorder::start(
+            self.connection,
+            tray_id,
+            &tray.name,
+            &self.creation_project_key,
+            include_exported_tasks,
             &mut report_progress,
-            Some(&sync_attempt_id),
-            "starting",
-            "Starting Jira creation",
-            Some(&tray.name),
-            completed_steps,
-            total_steps,
-            "running",
-        );
-
-        sync_repository
-            .record_event(
-                &sync_attempt_id,
-                tray_id,
-                None,
-                "jira.sync.started",
-                "succeeded",
-                JIRA_PROVIDER_OPERATION,
-                json!({
-                    "trayId": tray.id,
-                    "trayName": tray.name,
-                    "jiraProjectKey": self.creation_project_key,
-                    "includeExportedTasks": include_exported_tasks,
-                }),
-            )
-            .map_err(db_error_message)?;
+        )?;
+        let mut result = recorder.running_result();
 
         let task_scope = JiraCreationTaskScope::from_tasks(
             &tasks,
@@ -168,10 +135,8 @@ where
         );
         let createable_task_count = task_scope.createable_task_count;
         result.skipped_issue_count = task_scope.skipped_issue_count;
-        total_steps = task_scope.progress_total_steps;
-        report_jira_create_progress(
-            &mut report_progress,
-            Some(&sync_attempt_id),
+        recorder.set_total_steps(task_scope.progress_total_steps);
+        recorder.progress(
             "validating",
             "Validating local tasks",
             Some(&format!(
@@ -183,128 +148,73 @@ where
                     "Jira issues"
                 }
             )),
-            completed_steps,
-            total_steps,
             "running",
         );
 
         if !task_scope.local_blockers.is_empty() {
-            report_jira_create_progress(
-                &mut report_progress,
-                Some(&sync_attempt_id),
+            recorder.progress(
                 "blocked",
                 "Jira creation blocked",
                 task_scope.local_blockers.first().map(String::as_str),
-                completed_steps,
-                total_steps,
                 "failed",
             );
-            return self.finish_blocked(
-                sync_repository,
-                &sync_attempt_id,
-                tray_id,
-                task_scope.local_blockers,
-                result,
-            );
+            return recorder.finish_blocked(task_scope.local_blockers, result);
         }
-        completed_steps += 1;
+        recorder.advance();
 
-        report_jira_create_progress(
-            &mut report_progress,
-            Some(&sync_attempt_id),
+        recorder.progress(
             "metadata",
             "Reading Jira create metadata",
             Some(&self.creation_project_key),
-            completed_steps,
-            total_steps,
             "running",
         );
         let metadata = match self.gateway.create_metadata(&self.creation_project_key) {
             Ok(metadata) => metadata,
             Err(message) => {
-                report_jira_create_progress(
-                    &mut report_progress,
-                    Some(&sync_attempt_id),
+                recorder.progress(
                     "metadata",
                     "Could not read Jira metadata",
                     Some(&message),
-                    completed_steps,
-                    total_steps,
                     "failed",
                 );
-                return self.finish_blocked(
-                    sync_repository,
-                    &sync_attempt_id,
-                    tray_id,
+                return recorder.finish_blocked(
                     vec![format!("Could not read Jira create metadata: {message}")],
                     result,
                 );
             }
         };
-        completed_steps += 1;
+        recorder.advance();
         let plan = match task_scope.with_metadata(&metadata) {
             Ok(plan) => plan,
             Err(messages) => {
-                report_jira_create_progress(
-                    &mut report_progress,
-                    Some(&sync_attempt_id),
+                recorder.progress(
                     "metadata",
                     "Jira metadata cannot create these tasks",
                     messages.first().map(String::as_str),
-                    completed_steps,
-                    total_steps,
                     "failed",
                 );
-                return self.finish_blocked(
-                    sync_repository,
-                    &sync_attempt_id,
-                    tray_id,
-                    messages,
-                    result,
-                );
+                return recorder.finish_blocked(messages, result);
             }
         };
         if !plan.missing_description_blockers.is_empty() {
-            report_jira_create_progress(
-                &mut report_progress,
-                Some(&sync_attempt_id),
+            recorder.progress(
                 "metadata",
                 "Jira metadata requires descriptions",
                 plan.missing_description_blockers
                     .first()
                     .map(String::as_str),
-                completed_steps,
-                total_steps,
                 "failed",
             );
-            return self.finish_blocked(
-                sync_repository,
-                &sync_attempt_id,
-                tray_id,
-                plan.missing_description_blockers,
-                result,
-            );
+            return recorder.finish_blocked(plan.missing_description_blockers, result);
         }
 
-        sync_repository
-            .record_event(
-                &sync_attempt_id,
-                tray_id,
-                None,
-                "jira.metadata.preflight",
-                "succeeded",
-                JIRA_PROVIDER_OPERATION,
-                json!({
-                    "jiraProjectKey": self.creation_project_key,
-                    "issueTypes": plan.issue_type_names(),
-                    "taskCount": createable_task_count,
-                }),
-            )
-            .map_err(db_error_message)?;
+        recorder.record_metadata_preflight(
+            &self.creation_project_key,
+            plan.issue_type_names(),
+            createable_task_count,
+        )?;
 
-        report_jira_create_progress(
-            &mut report_progress,
-            Some(&sync_attempt_id),
+        recorder.progress(
             "account",
             if plan.requires_reporter() {
                 "Reading Jira account"
@@ -312,8 +222,6 @@ where
                 "Preparing Jira creation plan"
             },
             Some("Checking required Jira fields"),
-            completed_steps,
-            total_steps,
             "running",
         );
         let reporter_account_id = if plan.requires_reporter() {
@@ -321,20 +229,13 @@ where
                 Ok(user) => match user.account_id {
                     Some(account_id) if !account_id.trim().is_empty() => Some(account_id),
                     _ => {
-                        report_jira_create_progress(
-                            &mut report_progress,
-                            Some(&sync_attempt_id),
+                        recorder.progress(
                             "account",
                             "Could not resolve Jira reporter",
                             Some("The current Jira account id was empty."),
-                            completed_steps,
-                            total_steps,
                             "failed",
                         );
-                        return self.finish_blocked(
-                            sync_repository,
-                            &sync_attempt_id,
-                            tray_id,
+                        return recorder.finish_blocked(
                             vec![
                                 "Jira create metadata requires Reporter, but the current Jira account id could not be resolved."
                                     .to_string(),
@@ -344,20 +245,13 @@ where
                     }
                 },
                 Err(message) => {
-                    report_jira_create_progress(
-                        &mut report_progress,
-                        Some(&sync_attempt_id),
+                    recorder.progress(
                         "account",
                         "Could not read Jira account",
                         Some(&message),
-                        completed_steps,
-                        total_steps,
                         "failed",
                     );
-                    return self.finish_blocked(
-                        sync_repository,
-                        &sync_attempt_id,
-                        tray_id,
+                    return recorder.finish_blocked(
                         vec![format!(
                             "Jira create metadata requires Reporter, but the current Jira user could not be read: {message}"
                         )],
@@ -368,7 +262,7 @@ where
         } else {
             None
         };
-        completed_steps += 1;
+        recorder.advance();
 
         let mut had_non_blocking_warning = false;
         let mut parent_jira_keys = tasks
@@ -382,21 +276,15 @@ where
             .collect::<HashMap<_, _>>();
         for ((local_project, area), group_tasks) in &plan.project_area_groups {
             let epic_summary = format!("[{local_project}] {area}");
-            report_jira_create_progress(
-                &mut report_progress,
-                Some(&sync_attempt_id),
+            recorder.progress(
                 "epic",
                 "Resolving Jira epic",
                 Some(&epic_summary),
-                completed_steps,
-                total_steps,
                 "running",
             );
             let epic_key = match resolve_or_create_epic(
                 self.gateway,
-                &sync_repository,
-                &sync_attempt_id,
-                tray_id,
+                &recorder,
                 &plan,
                 &self.creation_project_key,
                 local_project,
@@ -405,57 +293,41 @@ where
                 reporter_account_id.as_deref(),
             ) {
                 Ok(key) => {
-                    completed_steps += 1;
-                    report_jira_create_progress(
-                        &mut report_progress,
-                        Some(&sync_attempt_id),
+                    recorder.advance();
+                    recorder.progress(
                         "epic",
                         "Jira epic ready",
                         Some(&format!("{epic_summary} -> {key}")),
-                        completed_steps,
-                        total_steps,
                         "running",
                     );
                     key
                 }
                 Err(message) => {
-                    completed_steps += 1;
-                    report_jira_create_progress(
-                        &mut report_progress,
-                        Some(&sync_attempt_id),
+                    recorder.advance();
+                    recorder.progress(
                         "epic",
                         "Could not resolve Jira epic",
                         Some(&message),
-                        completed_steps,
-                        total_steps,
                         "running",
                     );
                     for task in group_tasks {
-                        record_task_failure(
-                            self.connection,
-                            &sync_repository,
-                            &sync_attempt_id,
-                            tray_id,
+                        recorder.record_task_failure(
                             &task,
                             &message,
                             &mut result,
                             "jira.epic.resolve",
                         )?;
-                        completed_steps += 1;
+                        recorder.advance();
                     }
                     continue;
                 }
             };
 
             for task in group_tasks {
-                report_jira_create_progress(
-                    &mut report_progress,
-                    Some(&sync_attempt_id),
+                recorder.progress(
                     "issue",
                     "Creating Jira issue",
                     Some(&jira_parent_summary(&task)),
-                    completed_steps,
-                    total_steps,
                     "running",
                 );
                 if let Some(existing_key) = task.jira_key.as_deref().filter(|key| !key.is_empty()) {
@@ -472,7 +344,7 @@ where
                         task.title
                     ));
                     parent_jira_keys.insert(task.id.clone(), existing_key.to_string());
-                    completed_steps += 1;
+                    recorder.advance();
                     continue;
                 }
 
@@ -484,7 +356,7 @@ where
                     &self.creation_project_key,
                     &task,
                     &epic_key,
-                    &sync_attempt_id,
+                    recorder.sync_attempt_id(),
                     reporter_account_id.as_deref(),
                 );
 
@@ -495,27 +367,20 @@ where
                         TaskRepository::new(self.connection)
                             .mark_jira_created(&task.id, &created_issue.key, &issue_url, &epic_key)
                             .map_err(db_error_message)?;
-                        sync_repository
-                            .record_event(
-                                &sync_attempt_id,
-                                tray_id,
-                                Some(&task.id),
-                                "jira.issue.created",
-                                "succeeded",
-                                JIRA_PROVIDER_OPERATION,
-                                json!({
-                                    "jiraKey": created_issue.key,
-                                    "epicKey": epic_key,
-                                    "issueType": task.issue_type,
-                                }),
-                            )
-                            .map_err(db_error_message)?;
+                        recorder.record_event(
+                            Some(&task.id),
+                            "jira.issue.created",
+                            "succeeded",
+                            json!({
+                                "jiraKey": created_issue.key,
+                                "epicKey": epic_key,
+                                "issueType": task.issue_type,
+                            }),
+                        )?;
                         if issue_type.field("priority").is_none() {
                             match update_issue_priority_after_create(
                                 self.gateway,
-                                &sync_repository,
-                                &sync_attempt_id,
-                                tray_id,
+                                &recorder,
                                 &task,
                                 &created_issue.key,
                             ) {
@@ -539,20 +404,16 @@ where
                             epic_key: Some(epic_key.clone()),
                         });
                         parent_jira_keys.insert(task.id.clone(), created_key);
-                        completed_steps += 1;
+                        recorder.advance();
                     }
                     Err(message) => {
-                        record_task_failure(
-                            self.connection,
-                            &sync_repository,
-                            &sync_attempt_id,
-                            tray_id,
+                        recorder.record_task_failure(
                             &task,
                             &message,
                             &mut result,
                             "jira.issue.create",
                         )?;
-                        completed_steps += 1;
+                        recorder.advance();
                     }
                 }
             }
@@ -560,43 +421,31 @@ where
 
         if let Some(subtask_issue_type) = plan.issue_types.subtask.as_ref() {
             for subtask in &plan.subtask_tasks {
-                report_jira_create_progress(
-                    &mut report_progress,
-                    Some(&sync_attempt_id),
+                recorder.progress(
                     "subtask",
                     "Creating Jira sub-task",
                     Some(&subtask.title),
-                    completed_steps,
-                    total_steps,
                     "running",
                 );
 
                 let Some(parent_task_id) = subtask.parent_task_id.as_deref() else {
-                    record_task_failure(
-                        self.connection,
-                        &sync_repository,
-                        &sync_attempt_id,
-                        tray_id,
+                    recorder.record_task_failure(
                         &subtask,
                         "Sub-task is missing a parent local task.",
                         &mut result,
                         "jira.subtask.parent_missing",
                     )?;
-                    completed_steps += 1;
+                    recorder.advance();
                     continue;
                 };
                 let Some(parent_jira_key) = parent_jira_keys.get(parent_task_id) else {
-                    record_task_failure(
-                        self.connection,
-                        &sync_repository,
-                        &sync_attempt_id,
-                        tray_id,
+                    recorder.record_task_failure(
                         &subtask,
                         "Sub-task parent has no Jira key yet.",
                         &mut result,
                         "jira.subtask.parent_missing",
                     )?;
-                    completed_steps += 1;
+                    recorder.advance();
                     continue;
                 };
 
@@ -615,7 +464,7 @@ where
                         "{} already had Jira key {existing_key}; local sub-task status was repaired.",
                         subtask.title
                     ));
-                    completed_steps += 1;
+                    recorder.advance();
                     continue;
                 }
 
@@ -624,7 +473,7 @@ where
                     &self.creation_project_key,
                     &subtask,
                     parent_jira_key,
-                    &sync_attempt_id,
+                    recorder.sync_attempt_id(),
                     reporter_account_id.as_deref(),
                 );
 
@@ -634,21 +483,16 @@ where
                         TaskRepository::new(self.connection)
                             .mark_jira_subtask_created(&subtask.id, &created_issue.key, &issue_url)
                             .map_err(db_error_message)?;
-                        sync_repository
-                            .record_event(
-                                &sync_attempt_id,
-                                tray_id,
-                                Some(&subtask.id),
-                                "jira.subtask.created",
-                                "succeeded",
-                                JIRA_PROVIDER_OPERATION,
-                                json!({
-                                    "jiraKey": created_issue.key,
-                                    "parentJiraKey": parent_jira_key,
-                                    "issueType": subtask.issue_type,
-                                }),
-                            )
-                            .map_err(db_error_message)?;
+                        recorder.record_event(
+                            Some(&subtask.id),
+                            "jira.subtask.created",
+                            "succeeded",
+                            json!({
+                                "jiraKey": created_issue.key,
+                                "parentJiraKey": parent_jira_key,
+                                "issueType": subtask.issue_type,
+                            }),
+                        )?;
                         result.created_issue_count += 1;
                         result.created_issues.push(JiraCreatedIssueResult {
                             task_id: Some(subtask.id.clone()),
@@ -658,119 +502,28 @@ where
                             summary: jira_subtask_summary(&subtask),
                             epic_key: None,
                         });
-                        completed_steps += 1;
+                        recorder.advance();
                     }
                     Err(message) => {
-                        record_task_failure(
-                            self.connection,
-                            &sync_repository,
-                            &sync_attempt_id,
-                            tray_id,
+                        recorder.record_task_failure(
                             &subtask,
                             &message,
                             &mut result,
                             "jira.subtask.create",
                         )?;
-                        completed_steps += 1;
+                        recorder.advance();
                     }
                 }
             }
         }
 
-        report_jira_create_progress(
-            &mut report_progress,
-            Some(&sync_attempt_id),
-            "finalizing",
-            "Finalizing Jira creation",
-            None,
-            completed_steps,
-            total_steps,
-            "running",
-        );
-        let final_status = if result.failed_issue_count == 0 && !had_non_blocking_warning {
-            "succeeded"
-        } else if result.created_issue_count == 0 {
-            "failed"
-        } else {
-            "partial"
-        };
-        result.status = final_status.to_string();
-        if result.created_issue_count > 0 {
-            result.messages.push(format!(
-                "{} Jira {} created.",
-                result.created_issue_count,
-                if result.created_issue_count == 1 {
-                    "issue"
-                } else {
-                    "issues"
-                }
-            ));
-        }
-        if result.failed_issue_count > 0 {
-            result.messages.push(format!(
-                "{} local {} need recovery before retry.",
-                result.failed_issue_count,
-                if result.failed_issue_count == 1 {
-                    "task"
-                } else {
-                    "tasks"
-                }
-            ));
-        }
-
-        sync_repository
-            .finish_attempt(&sync_attempt_id, final_status)
-            .map_err(db_error_message)?;
-        completed_steps = total_steps;
-        report_jira_create_progress(
-            &mut report_progress,
-            Some(&sync_attempt_id),
-            "complete",
-            "Jira creation finished",
-            Some(&format!(
-                "{} created, {} failed, {} skipped",
-                result.created_issue_count, result.failed_issue_count, result.skipped_issue_count
-            )),
-            completed_steps,
-            total_steps,
-            final_status,
-        );
-        Ok(result)
-    }
-
-    fn finish_blocked(
-        &self,
-        sync_repository: SyncRepository<'_>,
-        sync_attempt_id: &str,
-        tray_id: &str,
-        messages: Vec<String>,
-        mut result: JiraCreateIssuesResult,
-    ) -> Result<JiraCreateIssuesResult, String> {
-        result.status = "blocked".to_string();
-        result.messages = messages;
-        sync_repository
-            .record_event(
-                sync_attempt_id,
-                tray_id,
-                None,
-                "jira.sync.blocked",
-                "failed",
-                JIRA_PROVIDER_OPERATION,
-                audit_error_messages_detail(&result.messages),
-            )
-            .map_err(db_error_message)?;
-        sync_repository
-            .finish_attempt(sync_attempt_id, "failed")
-            .map_err(db_error_message)?;
-        Ok(result)
+        recorder.finish(result, had_non_blocking_warning)
     }
 }
 
-fn resolve_or_create_epic<Gateway>(
+fn resolve_or_create_epic<Gateway, F>(
     gateway: &mut Gateway,
-    sync_repository: &SyncRepository<'_>,
-    sync_attempt_id: &str,
-    tray_id: &str,
+    recorder: &SyncAttemptRecorder<'_, '_, F>,
     plan: &JiraCreationPlan,
     jira_project_key: &str,
     local_project: &str,
@@ -780,6 +533,7 @@ fn resolve_or_create_epic<Gateway>(
 ) -> Result<String, String>
 where
     Gateway: JiraIssueGateway,
+    F: FnMut(JiraCreateProgress),
 {
     let jql = format!(
         "project = {} AND summary ~ \"{}\" ORDER BY created DESC",
@@ -791,21 +545,16 @@ where
         issue.summary == epic_summary
             && issue_type_name_matches(&issue.issue_type, IssueTypeRole::Epic)
     }) {
-        sync_repository
-            .record_event(
-                sync_attempt_id,
-                tray_id,
-                None,
-                "jira.epic.resolved",
-                "succeeded",
-                JIRA_PROVIDER_OPERATION,
-                json!({
-                    "jiraKey": existing_epic.key,
-                    "summary": epic_summary,
-                    "source": "search",
-                }),
-            )
-            .map_err(db_error_message)?;
+        recorder.record_event(
+            None,
+            "jira.epic.resolved",
+            "succeeded",
+            json!({
+                "jiraKey": existing_epic.key,
+                "summary": epic_summary,
+                "source": "search",
+            }),
+        )?;
         return Ok(existing_epic.key);
     }
 
@@ -815,24 +564,19 @@ where
         local_project,
         area,
         epic_summary,
-        sync_attempt_id,
+        recorder.sync_attempt_id(),
         reporter_account_id,
     );
     let created_epic = gateway.create_issue(payload)?;
-    sync_repository
-        .record_event(
-            sync_attempt_id,
-            tray_id,
-            None,
-            "jira.epic.created",
-            "succeeded",
-            JIRA_PROVIDER_OPERATION,
-            json!({
-                "jiraKey": created_epic.key,
-                "summary": epic_summary,
-            }),
-        )
-        .map_err(db_error_message)?;
+    recorder.record_event(
+        None,
+        "jira.epic.created",
+        "succeeded",
+        json!({
+            "jiraKey": created_epic.key,
+            "summary": epic_summary,
+        }),
+    )?;
     Ok(created_epic.key)
 }
 
@@ -1003,16 +747,15 @@ fn jira_description_document(markdown: &str) -> Value {
     })
 }
 
-fn update_issue_priority_after_create<Gateway>(
+fn update_issue_priority_after_create<Gateway, F>(
     gateway: &mut Gateway,
-    sync_repository: &SyncRepository<'_>,
-    sync_attempt_id: &str,
-    tray_id: &str,
+    recorder: &SyncAttemptRecorder<'_, '_, F>,
     task: &LocalTask,
     jira_key: &str,
 ) -> Result<(), String>
 where
     Gateway: JiraIssueGateway,
+    F: FnMut(JiraCreateProgress),
 {
     let payload = json!({
         "fields": {
@@ -1022,39 +765,29 @@ where
 
     match gateway.update_issue_fields(jira_key, payload) {
         Ok(()) => {
-            sync_repository
-                .record_event(
-                    sync_attempt_id,
-                    tray_id,
-                    Some(&task.id),
-                    "jira.issue.priority.updated",
-                    "succeeded",
-                    JIRA_PROVIDER_OPERATION,
-                    json!({
-                        "jiraKey": jira_key,
-                        "priority": task.priority,
-                        "source": "post-create",
-                    }),
-                )
-                .map_err(db_error_message)?;
+            recorder.record_event(
+                Some(&task.id),
+                "jira.issue.priority.updated",
+                "succeeded",
+                json!({
+                    "jiraKey": jira_key,
+                    "priority": task.priority,
+                    "source": "post-create",
+                }),
+            )?;
             Ok(())
         }
         Err(message) => {
-            sync_repository
-                .record_event(
-                    sync_attempt_id,
-                    tray_id,
-                    Some(&task.id),
-                    "jira.issue.priority.update_failed",
-                    "failed",
-                    JIRA_PROVIDER_OPERATION,
-                    json!({
-                        "jiraKey": jira_key,
-                        "priority": task.priority,
-                        "message": audit_error_message(&message),
-                    }),
-                )
-                .map_err(db_error_message)?;
+            recorder.record_event(
+                Some(&task.id),
+                "jira.issue.priority.update_failed",
+                "failed",
+                json!({
+                    "jiraKey": jira_key,
+                    "priority": task.priority,
+                    "message": audit_error_message(&message),
+                }),
+            )?;
             Err(message)
         }
     }
@@ -1148,64 +881,6 @@ fn sanitize_jira_label(value: &str) -> Option<String> {
     } else {
         Some(label)
     }
-}
-
-fn report_jira_create_progress<F>(
-    report_progress: &mut F,
-    sync_attempt_id: Option<&str>,
-    step: &str,
-    label: &str,
-    detail: Option<&str>,
-    completed_steps: usize,
-    total_steps: usize,
-    status: &str,
-) where
-    F: FnMut(JiraCreateProgress),
-{
-    report_progress(JiraCreateProgress {
-        sync_attempt_id: sync_attempt_id.map(str::to_string),
-        step: step.to_string(),
-        label: label.to_string(),
-        detail: detail.map(str::to_string),
-        completed_steps,
-        total_steps,
-        status: status.to_string(),
-    });
-}
-
-fn record_task_failure(
-    connection: &Connection,
-    sync_repository: &SyncRepository<'_>,
-    sync_attempt_id: &str,
-    tray_id: &str,
-    task: &LocalTask,
-    message: &str,
-    result: &mut JiraCreateIssuesResult,
-    event_type: &str,
-) -> Result<(), String> {
-    TaskRepository::new(connection)
-        .mark_jira_failed(&task.id)
-        .map_err(db_error_message)?;
-    sync_repository
-        .record_event(
-            sync_attempt_id,
-            tray_id,
-            Some(&task.id),
-            event_type,
-            "failed",
-            JIRA_PROVIDER_OPERATION,
-            audit_error_detail(message),
-        )
-        .map_err(db_error_message)?;
-    result.failed_issue_count += 1;
-    result.failed_tasks.push(JiraFailedTaskResult {
-        task_id: task.id.clone(),
-        title: task.title.clone(),
-        project: task.project.clone(),
-        area: task.area.clone(),
-        message: message.to_string(),
-    });
-    Ok(())
 }
 
 fn escape_jql_identifier(value: &str) -> String {
