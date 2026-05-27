@@ -1,4 +1,4 @@
-import type { LocalTask, TrayState } from "../types";
+import type { LocalTask, Tray, TrayState } from "../types";
 
 export type TrayStatusTag = TrayState | "Exported";
 export type TaskSummaryInput = Pick<LocalTask, "issueType" | "parentTaskId" | "syncStatus">;
@@ -58,4 +58,14 @@ export function summarizeTrayTasks(tasks: TaskSummaryInput[]): string {
   ]
     .filter(Boolean)
     .join(" · ");
+}
+
+export function updateTrayTasks(tray: Tray, tasks: LocalTask[]): Tray {
+  return {
+    ...tray,
+    tasks,
+    state: deriveTrayStateFromTasks(tasks, tray.state),
+    summary: summarizeTrayTasks(tasks),
+    updatedAt: "Just now"
+  };
 }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { deriveTrayStateFromTasks, deriveTrayStatusTag, isTrayComplete, summarizeTrayTasks } from "./trays";
+import type { Tray } from "../types";
+import { deriveTrayStateFromTasks, deriveTrayStatusTag, isTrayComplete, summarizeTrayTasks, updateTrayTasks } from "./trays";
 
 describe("tray domain helpers", () => {
   it("requires at least one created task to be complete", () => {
@@ -33,5 +34,36 @@ describe("tray domain helpers", () => {
         { issueType: "Sub-task", parentTaskId: "parent-1", syncStatus: "Pending" }
       ])
     ).toBe("2 tasks · 1 sub-task · 1 pending · 1 created");
+  });
+
+  it("refreshes tray status fields when tasks change", () => {
+    const tray: Tray = {
+      id: "tray-1",
+      name: "Prep tray",
+      state: "Active",
+      summary: "No tasks",
+      updatedAt: "Yesterday",
+      tasks: []
+    };
+
+    expect(
+      updateTrayTasks(tray, [
+        {
+          id: "task-1",
+          project: "DTS",
+          area: "Bug",
+          title: "Fix timer",
+          priority: "High",
+          issueType: "Bug",
+          syncStatus: "Failed",
+          descriptionStatus: "Missing",
+          language: "Spanish"
+        }
+      ])
+    ).toMatchObject({
+      state: "Needs attention",
+      summary: "1 task · 1 failed",
+      updatedAt: "Just now"
+    });
   });
 });
