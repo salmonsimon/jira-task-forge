@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { flushSync } from "react-dom";
 import { listen } from "@tauri-apps/api/event";
 import { downloadDir, join } from "@tauri-apps/api/path";
@@ -10,24 +10,18 @@ import { JiraPreflightDialog, type JiraCreatePreflight } from "./features/jira-p
 import { JqlView } from "./features/jql";
 import { SettingsPanel } from "./features/settings";
 import { TaskFocusWindow } from "./features/task-detail";
-import { TraysView } from "./features/trays";
+import { TraysView, useTrayWorkspace } from "./features/trays";
 import { mockAppDataAdapter } from "./lib/adapters";
 import { appOverlayLayers, useAppOverlay } from "./lib/app-overlays";
 import {
-  archivePersistedTray,
   createPersistedCategory,
   createPersistedJiraParentIssues,
   createPersistedJqlFavorite,
   createPersistedRecoveryTrayFromTasks,
-  createPersistedSubtask,
-  createPersistedTask,
-  createPersistedTray,
   deletePersistedCategory,
   deletePersistedAiProviderApiKey,
   deletePersistedJqlFavorite,
   deletePersistedJiraApiToken,
-  deletePersistedTray,
-  deletePersistedTask,
   draftPersistedJqlWithAi,
   exportPersistedBackup,
   generatePersistedTaskDescription,
@@ -43,8 +37,6 @@ import {
   openPersistedAiProviderApiKeysPage,
   openPersistedAtlassianApiTokensPage,
   openPersistedJiraIssueUrl,
-  renamePersistedTray,
-  restorePersistedTray,
   runPersistedJqlQuery,
   saveCsvFile,
   savePersistedAiProviderApiKey,
@@ -55,23 +47,14 @@ import {
   testPersistedJiraConnection,
   updatePersistedAppSettings,
   updatePersistedCategory,
-  updatePersistedJqlFavorite,
-  updatePersistedTaskDescription,
-  updatePersistedTaskDetails
+  updatePersistedJqlFavorite
 } from "./lib/adapters/tauriPersistence";
 import {
-  canDeleteTask,
-  canDuplicateTask,
   addJqlRecentQuery,
   canExportTrayCsv,
   classifyTrayPreflightWarnings,
   countCsvExportableTasks,
   countTasksBySyncStatus,
-  buildDraftSubtask,
-  dedupeSubtaskTitles,
-  deriveIssueTypeFromArea,
-  deriveTrayStateFromTasks,
-  duplicateLocalTask,
   exportLocalTasksToCsv,
   formatBackupTimestamp,
   redactSensitiveText,
@@ -79,14 +62,8 @@ import {
   formatJqlAiDraftMessage,
   formatJqlQueryError,
   formatJqlQueryMessage,
-  getDefaultSubtaskTitles,
   getVisibleBackupCounts,
-  hasChildTaskTitle,
-  insertChildrenAfterExistingChildren,
-  isEligibleForCsvExport,
-  removeTaskGraph,
-  summarizeTrayTasks,
-  taskGraphDeleteIds
+  isEligibleForCsvExport
 } from "./lib/domain";
 import type {
   AppSettings,
@@ -106,7 +83,6 @@ import type {
   LocalTask,
   MainTab,
   Panel,
-  Priority,
   SyncLogEntry,
   Tray
 } from "./lib/types";
@@ -147,12 +123,8 @@ type CsvExportNotice = {
 };
 
 export default function App() {
-  const taskIdCounter = useRef(0);
-  const [trays, setTrays] = useState<Tray[]>(() => cloneTrays(appData.listTrays()));
   const [activeTab, setActiveTab] = useState<MainTab>("trays");
   const [openPanel, setOpenPanel] = useState<Panel>(null);
-  const [selectedTrayId, setSelectedTrayId] = useState<string | null>(null);
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>("ltask-timer");
   const [categories, setCategories] = useState<Category[]>(() => [...appData.listProjects(), ...appData.listAreas()]);
   const [jqlFavorites, setJqlFavorites] = useState<JqlFavorite[]>(() => appData.listJqlFavorites());
   const [taskSyncLogs, setTaskSyncLogs] = useState<Record<string, SyncLogEntry[]>>({});
@@ -172,8 +144,6 @@ export default function App() {
   const [appSettings, setAppSettings] = useState<AppSettings>(defaultAppSettings);
   const [systemPrefersDark, setSystemPrefersDark] = useState(false);
   const [usesTauriPersistence, setUsesTauriPersistence] = useState(false);
-  const [showArchivedTrays, setShowArchivedTrays] = useState(false);
-  const [trayPendingDelete, setTrayPendingDelete] = useState<Tray | null>(null);
   const [csvExportMessage, setCsvExportMessage] = useState<string | null>(null);
   const [csvExportNotice, setCsvExportNotice] = useState<CsvExportNotice | null>(null);
   const [hasJiraApiToken, setHasJiraApiToken] = useState(false);
@@ -191,16 +161,21 @@ export default function App() {
   const [jiraCreateResult, setJiraCreateResult] = useState<JiraCreateIssuesResult | null>(null);
   const [jiraCreateError, setJiraCreateError] = useState<string | null>(null);
   const [jiraCreateProgress, setJiraCreateProgress] = useState<JiraCreateProgress | null>(null);
-  const lastSelectedTrayId = useRef<string | null>(null);
-
-  const selectedTray = useMemo(
-    () => trays.find((tray) => tray.id === selectedTrayId) ?? null,
-    [selectedTrayId, trays]
-  );
-
-  const selectedTask = useMemo(() => {
-    return trays.flatMap((tray) => tray.tasks).find((task) => task.id === selectedTaskId) ?? null;
-  }, [selectedTaskId, trays]);
+  const trayWorkspace = useTrayWorkspace({
+    initialTrays: appData.listTrays(),
+    usesTauriPersistence
+  });
+  const {
+    trays,
+    visibleTrays,
+    selectedTray,
+    selectedTrayId,
+    selectedTask,
+    selectedTaskId,
+    selectedTaskTray,
+    showArchivedTrays,
+    trayPendingDelete
+  } = trayWorkspace;
 
   const selectedTaskWithSyncLog = useMemo(() => {
     if (!selectedTask) return null;
@@ -210,15 +185,6 @@ export default function App() {
     };
   }, [selectedTask, taskSyncLogs]);
 
-  const selectedTaskTray = useMemo(() => {
-    if (!selectedTaskId) return null;
-    return trays.find((tray) => tray.tasks.some((task) => task.id === selectedTaskId)) ?? null;
-  }, [selectedTaskId, trays]);
-
-  const visibleTrays = useMemo(
-    () => trays.filter((tray) => (showArchivedTrays ? tray.state === "Archived" : tray.state !== "Archived")),
-    [showArchivedTrays, trays]
-  );
   const projectCategories = useMemo(() => categories.filter((category) => category.categoryType === "project"), [categories]);
   const areaCategories = useMemo(() => categories.filter((category) => category.categoryType === "area"), [categories]);
   const projectOptions = useMemo(() => projectCategories.filter((project) => !project.hidden).map((project) => project.name), [projectCategories]);
@@ -240,7 +206,7 @@ export default function App() {
         const nextJqlFavorites = persistedJqlFavorites.length ? persistedJqlFavorites : appData.listJqlFavorites();
 
         setUsesTauriPersistence(true);
-        setTrays(persistedTrays);
+        trayWorkspace.replaceTrays(persistedTrays);
         setAppSettings(persistedSettings);
         setHasJiraApiToken(hasPersistedToken);
         setCategories(nextCategories);
@@ -249,14 +215,6 @@ export default function App() {
           currentFavoriteId && nextJqlFavorites.some((favorite) => favorite.id === currentFavoriteId)
             ? currentFavoriteId
             : nextJqlFavorites[0]?.id
-        );
-        setSelectedTrayId((currentTrayId) =>
-          currentTrayId && persistedTrays.some((tray) => tray.id === currentTrayId) ? currentTrayId : null
-        );
-        setSelectedTaskId((currentTaskId) =>
-          currentTaskId && persistedTrays.some((tray) => tray.tasks.some((task) => task.id === currentTaskId))
-            ? currentTaskId
-            : null
         );
       })
       .catch(() => {
@@ -344,7 +302,7 @@ export default function App() {
     const nextCategories = persistedCategories.length ? persistedCategories : [...appData.listProjects(), ...appData.listAreas()];
     const nextJqlFavorites = persistedJqlFavorites.length ? persistedJqlFavorites : appData.listJqlFavorites();
 
-    setTrays(persistedTrays);
+    trayWorkspace.replaceTrays(persistedTrays);
     setAppSettings(persistedSettings);
     setCategories(nextCategories);
     setJqlFavorites(nextJqlFavorites);
@@ -352,14 +310,6 @@ export default function App() {
       currentFavoriteId && nextJqlFavorites.some((favorite) => favorite.id === currentFavoriteId)
         ? currentFavoriteId
         : nextJqlFavorites[0]?.id
-    );
-    setSelectedTrayId((currentTrayId) =>
-      currentTrayId && persistedTrays.some((tray) => tray.id === currentTrayId) ? currentTrayId : null
-    );
-    setSelectedTaskId((currentTaskId) =>
-      currentTaskId && persistedTrays.some((tray) => tray.tasks.some((task) => task.id === currentTaskId))
-        ? currentTaskId
-        : null
     );
   }
 
@@ -394,255 +344,14 @@ export default function App() {
   }, [selectedTrayId]);
 
   function openTask(task: LocalTask) {
-    setSelectedTaskId(task.id);
+    trayWorkspace.openTask(task);
     setOpenPanel("detail");
   }
 
   function openTray(tray: Tray) {
-    lastSelectedTrayId.current = tray.id;
-    setSelectedTrayId(tray.id);
+    trayWorkspace.openTray(tray);
     setActiveTab("trays");
-    const firstTask = tray.tasks[0];
-    if (firstTask) setSelectedTaskId(firstTask.id);
     requestAnimationFrame(() => window.scrollTo({ top: 0, left: 0 }));
-  }
-
-  function nextTaskId() {
-    taskIdCounter.current += 1;
-    return `ltask-local-${Date.now().toString(36)}-${taskIdCounter.current}`;
-  }
-
-  async function createSubtasksForParent(parentTask: LocalTask, titles: string[]): Promise<LocalTask[]> {
-    const normalizedTitles = dedupeSubtaskTitles(titles);
-    const createdSubtasks: LocalTask[] = [];
-
-    for (const title of normalizedTitles) {
-      const draftSubtask = buildDraftSubtask(parentTask, title, nextTaskId());
-      const nextSubtask = usesTauriPersistence ? await createPersistedSubtask(parentTask.id, title) : draftSubtask;
-      createdSubtasks.push(nextSubtask);
-    }
-
-    return createdSubtasks;
-  }
-
-  async function createTray() {
-    const trayName = "New tray";
-    const nextTray = usesTauriPersistence
-      ? await createPersistedTray(trayName)
-      : {
-          id: `tray-local-${Date.now().toString(36)}`,
-          name: trayName,
-          state: "Active" as const,
-          summary: "No tasks",
-          updatedAt: "Just now",
-          tasks: []
-        };
-
-    setTrays((currentTrays) => [nextTray, ...currentTrays]);
-    lastSelectedTrayId.current = nextTray.id;
-    setSelectedTrayId(nextTray.id);
-    setSelectedTaskId(null);
-  }
-
-  async function renameTray(trayId: string, name: string) {
-    const persistedTray = usesTauriPersistence ? await renamePersistedTray(trayId, name) : null;
-    setTrays((currentTrays) =>
-      currentTrays.map((tray) =>
-        tray.id === trayId
-          ? {
-              ...tray,
-              name: persistedTray?.name ?? name,
-              state: persistedTray?.state ?? tray.state,
-              updatedAt: persistedTray?.updatedAt ?? "Just now"
-            }
-          : tray
-      )
-    );
-  }
-
-  async function archiveTray(trayId: string) {
-    const persistedTray = usesTauriPersistence ? await archivePersistedTray(trayId) : null;
-    setTrays((currentTrays) =>
-      currentTrays.map((tray) =>
-        tray.id === trayId
-          ? {
-              ...tray,
-              state: persistedTray?.state ?? "Archived",
-              updatedAt: persistedTray?.updatedAt ?? "Just now"
-            }
-          : tray
-      )
-    );
-  }
-
-  async function restoreTray(trayId: string) {
-    const persistedTray = usesTauriPersistence ? await restorePersistedTray(trayId) : null;
-    setTrays((currentTrays) =>
-      currentTrays.map((tray) =>
-        tray.id === trayId
-          ? {
-              ...tray,
-              state: persistedTray?.state ?? "Active",
-              updatedAt: persistedTray?.updatedAt ?? "Just now"
-            }
-          : tray
-      )
-    );
-  }
-
-  async function deleteTray(trayId: string) {
-    const tray = trays.find((candidate) => candidate.id === trayId);
-    if (!tray) return;
-    setTrayPendingDelete(tray);
-  }
-
-  async function confirmDeleteTray() {
-    if (!trayPendingDelete) return;
-    const trayId = trayPendingDelete.id;
-    if (usesTauriPersistence) {
-      const deleted = await deletePersistedTray(trayId);
-      if (!deleted) return;
-    }
-
-    setTrays((currentTrays) => currentTrays.filter((candidate) => candidate.id !== trayId));
-    if (selectedTrayId === trayId) setSelectedTrayId(null);
-    if (lastSelectedTrayId.current === trayId) lastSelectedTrayId.current = null;
-    setTrayPendingDelete(null);
-  }
-
-  async function addTaskToSelectedTray(taskInput: { project: string; area: string; title: string; priority: Priority }) {
-    if (!selectedTrayId) return;
-
-    const draftTask: LocalTask = {
-      id: nextTaskId(),
-      project: taskInput.project,
-      area: taskInput.area,
-      title: taskInput.title,
-      priority: taskInput.priority,
-      issueType: deriveIssueTypeFromArea(taskInput.area),
-      syncStatus: "Pending",
-      descriptionStatus: "Missing",
-      language: "Spanish"
-    };
-    const nextTask = usesTauriPersistence ? await createPersistedTask(draftTask, selectedTrayId) : draftTask;
-    const defaultSubtasks = await createSubtasksForParent(nextTask, getDefaultSubtaskTitles(nextTask));
-
-    setTrays((currentTrays) =>
-      currentTrays.map((tray) =>
-        tray.id === selectedTrayId ? updateTrayTasks(tray, [...tray.tasks, nextTask, ...defaultSubtasks]) : tray
-      )
-    );
-    setSelectedTaskId(nextTask.id);
-  }
-
-  async function duplicateTask(taskId: string) {
-    const sourceTray = trays.find((tray) => tray.tasks.some((task) => task.id === taskId));
-    const sourceTask = sourceTray?.tasks.find((task) => task.id === taskId);
-    if (!sourceTray || !sourceTask || !canDuplicateTask(sourceTask)) return;
-
-    const duplicate = duplicateLocalTask(sourceTask, nextTaskId());
-    const persistedDuplicate = usesTauriPersistence ? await createPersistedTask(duplicate, sourceTray.id) : duplicate;
-
-    setTrays((currentTrays) =>
-      currentTrays.map((tray) => {
-        const taskIndex = tray.tasks.findIndex((task) => task.id === taskId);
-        if (taskIndex === -1) return tray;
-
-        const nextTasks = [...tray.tasks];
-        nextTasks.splice(taskIndex + 1, 0, persistedDuplicate);
-        return updateTrayTasks(tray, nextTasks);
-      })
-    );
-    setSelectedTaskId(persistedDuplicate.id);
-  }
-
-  async function deleteTask(taskId: string) {
-    const tray = trays.find((candidate) => candidate.tasks.some((task) => task.id === taskId));
-    const task = tray?.tasks.find((candidate) => candidate.id === taskId);
-    if (!tray || !task || !canDeleteTask(task)) return;
-    const deletedTaskIds = taskGraphDeleteIds(tray.tasks, taskId);
-    if (usesTauriPersistence) {
-      const deleted = await deletePersistedTask(taskId);
-      if (!deleted) return;
-    }
-
-    if (selectedTaskId && deletedTaskIds.has(selectedTaskId)) {
-      const taskIndex = tray.tasks.findIndex((candidate) => candidate.id === taskId);
-      const replacementTask =
-        tray.tasks.slice(taskIndex + 1).find((candidate) => !deletedTaskIds.has(candidate.id)) ??
-        [...tray.tasks.slice(0, taskIndex)].reverse().find((candidate) => !deletedTaskIds.has(candidate.id)) ??
-        null;
-      setSelectedTaskId(replacementTask?.id ?? null);
-      if (!replacementTask) setOpenPanel(null);
-    }
-
-    setTrays((currentTrays) =>
-      currentTrays.map((candidate) =>
-        candidate.id === tray.id ? updateTrayTasks(candidate, removeTaskGraph(candidate.tasks, taskId)) : candidate
-      )
-    );
-  }
-
-  async function updateTaskDetails(
-    taskId: string,
-    taskInput: Partial<Pick<LocalTask, "area" | "issueType" | "priority" | "project" | "title">>
-  ) {
-    const tray = trays.find((candidate) => candidate.tasks.some((task) => task.id === taskId));
-    const task = tray?.tasks.find((candidate) => candidate.id === taskId);
-    if (!tray || !task || tray.state === "Archived" || task.syncStatus === "Created") return;
-
-    const nextTitle = taskInput.title !== undefined ? taskInput.title.trim() : task.title;
-    if (!nextTitle) return;
-
-    const nextArea = taskInput.area ?? task.area;
-    const shouldDeriveIssueType = taskInput.area !== undefined && taskInput.issueType === undefined;
-    const nextTask: LocalTask = {
-      ...task,
-      project: taskInput.project ?? task.project,
-      area: nextArea,
-      title: nextTitle,
-      priority: taskInput.priority ?? task.priority,
-      issueType: shouldDeriveIssueType ? deriveIssueTypeFromArea(nextArea) : (taskInput.issueType ?? task.issueType)
-    };
-    const persistedTask = usesTauriPersistence
-      ? await updatePersistedTaskDetails(taskId, nextTask)
-      : nextTask;
-
-    if (!persistedTask) return;
-    const defaultSubtaskTitles = getDefaultSubtaskTitles(persistedTask).filter(
-      (title) => !hasChildTaskTitle(tray.tasks, taskId, title)
-    );
-    const createdDefaultSubtasks = defaultSubtaskTitles.length
-      ? await createSubtasksForParent(persistedTask, defaultSubtaskTitles)
-      : [];
-
-    setTrays((currentTrays) =>
-      currentTrays.map((candidate) => {
-        if (candidate.id !== tray.id) return candidate;
-
-        const nextTasks = candidate.tasks.map((candidateTask) => (candidateTask.id === taskId ? persistedTask : candidateTask));
-        return updateTrayTasks(candidate, insertChildrenAfterExistingChildren(nextTasks, taskId, createdDefaultSubtasks));
-      })
-    );
-  }
-
-  async function addSubtaskToTask(parentTaskId: string, title: string) {
-    const parentTray = trays.find((tray) => tray.tasks.some((task) => task.id === parentTaskId));
-    const parentTask = parentTray?.tasks.find((task) => task.id === parentTaskId);
-    if (!parentTray || !parentTask || parentTray.state === "Archived" || parentTask.syncStatus === "Created" || parentTask.issueType === "Sub-task") return;
-
-    const normalizedTitle = title.trim();
-    if (!normalizedTitle) return;
-    if (hasChildTaskTitle(parentTray.tasks, parentTaskId, normalizedTitle)) return;
-
-    const createdSubtasks = await createSubtasksForParent(parentTask, [normalizedTitle]);
-
-    setTrays((currentTrays) =>
-      currentTrays.map((tray) => {
-        if (tray.id !== parentTray.id) return tray;
-        return updateTrayTasks(tray, insertChildrenAfterExistingChildren(tray.tasks, parentTask.id, createdSubtasks));
-      })
-    );
   }
 
   async function generateTaskDescription(taskId: string, additionalContext: string): Promise<AssistedDescriptionDraft> {
@@ -668,43 +377,6 @@ export default function App() {
     } finally {
       setGeneratingDescriptionTaskId(null);
     }
-  }
-
-  async function saveTaskDescription(taskId: string, description: string) {
-    const tray = trays.find((candidate) => candidate.tasks.some((task) => task.id === taskId));
-    const task = tray?.tasks.find((candidate) => candidate.id === taskId);
-    const nextDescription = description.trim();
-    if (!tray || !task || tray.state === "Archived" || task.syncStatus === "Created") {
-      throw new Error("This task cannot be edited.");
-    }
-    if (!nextDescription) {
-      throw new Error("Description cannot be empty.");
-    }
-
-    const nextTask = usesTauriPersistence
-      ? await updatePersistedTaskDescription(taskId, nextDescription, "Ready")
-      : {
-          ...task,
-          description: nextDescription,
-          descriptionStatus: "Ready" as const
-        };
-    if (!nextTask) {
-      throw new Error("Could not save the description.");
-    }
-    if (nextTask) replaceTask(nextTask);
-  }
-
-  function replaceTask(nextTask: LocalTask) {
-    setTrays((currentTrays) =>
-      currentTrays.map((candidate) =>
-        candidate.tasks.some((task) => task.id === nextTask.id)
-          ? updateTrayTasks(
-              candidate,
-              candidate.tasks.map((task) => (task.id === nextTask.id ? nextTask : task))
-            )
-          : candidate
-      )
-    );
   }
 
   async function updateAppSettings(settingsPatch: Partial<AppSettings>) {
@@ -1321,13 +993,8 @@ export default function App() {
           );
       const exportedTasksById = new Map(exportedTasks.map((task) => [task.id, task]));
 
-      setTrays((currentTrays) =>
-        currentTrays.map((currentTray) => {
-          if (currentTray.id !== tray.id) return currentTray;
-
-          const nextTasks = currentTray.tasks.map((task) => exportedTasksById.get(task.id) ?? task);
-          return updateTrayTasks(currentTray, nextTasks);
-        })
+      trayWorkspace.updateTrayTaskList(tray.id, (currentTray) =>
+        currentTray.tasks.map((task) => exportedTasksById.get(task.id) ?? task)
       );
     } catch {
       setCsvExportMessage("CSV downloaded, but task status could not be updated.");
@@ -1469,17 +1136,9 @@ export default function App() {
         options.includeExportedTasks
       );
       const persistedTrays = await listPersistedTrays();
-      setTrays(persistedTrays);
-      setSelectedTrayId((currentTrayId) =>
-        currentTrayId && persistedTrays.some((tray) => tray.id === currentTrayId)
-          ? currentTrayId
-          : jiraCreatePreflight.tray.id
-      );
-      setSelectedTaskId((currentTaskId) =>
-        currentTaskId && persistedTrays.some((tray) => tray.tasks.some((task) => task.id === currentTaskId))
-          ? currentTaskId
-          : null
-      );
+      trayWorkspace.replaceTrays(persistedTrays, {
+        fallbackSelectedTrayId: jiraCreatePreflight.tray.id
+      });
       if (result.status === "succeeded" && result.failedIssueCount === 0) {
         shouldClosePreflight = true;
       } else {
@@ -1512,9 +1171,10 @@ export default function App() {
         jiraCreateResult.failedTasks.map((task) => task.taskId)
       );
       const persistedTrays = await listPersistedTrays();
-      setTrays(persistedTrays);
-      setSelectedTrayId(recoveryTray.id);
-      setSelectedTaskId(persistedTrays.find((tray) => tray.id === recoveryTray.id)?.tasks[0]?.id ?? null);
+      trayWorkspace.replaceTraysAndSelect(persistedTrays, {
+        selectedTrayId: recoveryTray.id,
+        selectedTaskId: persistedTrays.find((tray) => tray.id === recoveryTray.id)?.tasks[0]?.id ?? null
+      });
       setJiraCreatePreflight(null);
     } catch (error) {
       setJiraCreateError(error instanceof Error ? error.message : String(error || "Could not create recovery tray."));
@@ -1531,20 +1191,22 @@ export default function App() {
           return;
         }
         if (selectedTrayId) {
-          lastSelectedTrayId.current = selectedTrayId;
-          setSelectedTrayId(null);
+          trayWorkspace.closeSelectedTray();
         }
       }
 
-      if (event.button === 4 && !selectedTrayId && lastSelectedTrayId.current) {
-        const tray = trays.find((candidate) => candidate.id === lastSelectedTrayId.current);
-        if (tray) openTray(tray);
+      if (event.button === 4 && !selectedTrayId) {
+        const tray = trayWorkspace.restoreLastSelectedTray();
+        if (tray) {
+          setActiveTab("trays");
+          requestAnimationFrame(() => window.scrollTo({ top: 0, left: 0 }));
+        }
       }
     }
 
     window.addEventListener("mouseup", handleSecondaryMouseNavigation);
     return () => window.removeEventListener("mouseup", handleSecondaryMouseNavigation);
-  }, [openPanel, selectedTrayId, trays]);
+  }, [openPanel, selectedTrayId, trayWorkspace]);
 
   return (
     <div className={cn("min-h-screen bg-[#f7f8fa] text-[#172b4d]", resolvedTheme === "dark" && "theme-dark")}>
@@ -1556,26 +1218,23 @@ export default function App() {
               trays={visibleTrays}
               selectedTray={selectedTray}
               onOpenTray={openTray}
-              onCreateTray={createTray}
-              onRenameTray={renameTray}
-              onArchiveTray={archiveTray}
-              onRestoreTray={restoreTray}
-              onDeleteTray={deleteTray}
+              onCreateTray={trayWorkspace.createTray}
+              onRenameTray={trayWorkspace.renameTray}
+              onArchiveTray={trayWorkspace.archiveTray}
+              onRestoreTray={trayWorkspace.restoreTray}
+              onDeleteTray={trayWorkspace.requestDeleteTray}
               onExportCsv={exportTrayCsv}
               onCreateInJira={createInJiraPreflight}
               csvExportMessage={csvExportMessage}
               isRunningJiraPreflight={isRunningJiraPreflight}
               showArchived={showArchivedTrays}
-              onToggleArchived={() => setShowArchivedTrays((current) => !current)}
-              onBackToSelector={() => {
-                setShowArchivedTrays(false);
-                setSelectedTrayId(null);
-              }}
+              onToggleArchived={trayWorkspace.toggleArchivedTrays}
+              onBackToSelector={trayWorkspace.backToTraySelector}
               onOpenTask={openTask}
-              onAddTask={addTaskToSelectedTray}
-              onUpdateTask={updateTaskDetails}
-              onDuplicateTask={duplicateTask}
-              onDeleteTask={deleteTask}
+              onAddTask={trayWorkspace.addTaskToSelectedTray}
+              onUpdateTask={trayWorkspace.updateTaskDetails}
+              onDuplicateTask={trayWorkspace.duplicateTask}
+              onDeleteTask={trayWorkspace.deleteTask}
               onOpenJiraIssue={openJiraIssue}
               selectedTaskId={selectedTaskId}
               projects={projectOptions}
@@ -1617,11 +1276,11 @@ export default function App() {
             projects={projectOptions}
             areas={areaOptions}
             readOnly={selectedTaskTray?.state === "Archived"}
-            onUpdateDetails={updateTaskDetails}
-            onAddSubtask={addSubtaskToTask}
-            onDeleteSubtask={deleteTask}
+            onUpdateDetails={trayWorkspace.updateTaskDetails}
+            onAddSubtask={trayWorkspace.addSubtaskToTask}
+            onDeleteSubtask={trayWorkspace.deleteTask}
             onGenerateDescription={generateTaskDescription}
-            onSaveDescription={saveTaskDescription}
+            onSaveDescription={trayWorkspace.saveTaskDescription}
             onOpenJiraIssue={openJiraIssue}
             onClose={() => setOpenPanel(null)}
             isGeneratingDescription={generatingDescriptionTaskId === selectedTaskWithSyncLog.id}
@@ -1665,8 +1324,8 @@ export default function App() {
         {trayPendingDelete ? (
           <ConfirmDialog
             {...getTrayDeleteConfirmation(trayPendingDelete)}
-            onCancel={() => setTrayPendingDelete(null)}
-            onConfirm={confirmDeleteTray}
+            onCancel={trayWorkspace.cancelDeleteTray}
+            onConfirm={trayWorkspace.confirmDeleteTray}
           />
         ) : null}
         {jiraCreatePreflight ? (
@@ -2029,17 +1688,6 @@ function getTrayDeleteConfirmation(tray: Tray): {
   };
 }
 
-function cloneTrays(trays: Tray[]): Tray[] {
-  return trays.map((tray) => ({
-    ...tray,
-    tasks: tray.tasks.map((task) => ({
-      ...task,
-      attachments: task.attachments?.map((attachment) => ({ ...attachment })),
-      syncLog: task.syncLog?.map((entry) => ({ ...entry }))
-    }))
-  }));
-}
-
 function createPreviewAssistedDescription(task: LocalTask, additionalContext: string): AssistedDescriptionDraft {
   const context = additionalContext.trim();
   if (!context && task.title.trim().split(/\s+/).filter(Boolean).length <= 4) {
@@ -2094,16 +1742,6 @@ QA/Arte/Programacion/etc. debe validar:
 
 ### Rollback / mitigación
 Revertir el cambio puntual o retirar el artefacto/configuracion asociado si la validacion falla.`
-  };
-}
-
-function updateTrayTasks(tray: Tray, tasks: LocalTask[]): Tray {
-  return {
-    ...tray,
-    tasks,
-    state: deriveTrayStateFromTasks(tasks, tray.state),
-    summary: summarizeTrayTasks(tasks),
-    updatedAt: "Just now"
   };
 }
 
