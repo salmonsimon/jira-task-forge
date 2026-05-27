@@ -67,6 +67,8 @@ import {
   classifyTrayPreflightWarnings,
   countCsvExportableTasks,
   countTasksBySyncStatus,
+  buildDraftSubtask,
+  dedupeSubtaskTitles,
   deriveIssueTypeFromArea,
   deriveTrayStateFromTasks,
   duplicateLocalTask,
@@ -77,9 +79,14 @@ import {
   formatJqlAiDraftMessage,
   formatJqlQueryError,
   formatJqlQueryMessage,
+  getDefaultSubtaskTitles,
   getVisibleBackupCounts,
+  hasChildTaskTitle,
+  insertChildrenAfterExistingChildren,
   isEligibleForCsvExport,
-  summarizeTrayTasks
+  removeTaskGraph,
+  summarizeTrayTasks,
+  taskGraphDeleteIds
 } from "./lib/domain";
 import type {
   AppSettings,
@@ -117,13 +124,6 @@ const defaultAppSettings: AppSettings = {
   defaultContentLanguage: "Spanish"
 };
 const defaultJqlPrompt = "Show me high and highest open bugs for STT, sorted by priority";
-const default3dSubtaskTitles = [
-  "Recolectar referencias",
-  "Definir escala y restricciones",
-  "Modelar base del asset",
-  "Texturizar",
-  "Revisar en contexto"
-];
 const atlassianApiTokensUrl = "https://id.atlassian.com/manage-profile/security/api-tokens";
 const aiProviderApiKeysUrls: Partial<Record<AiProvider, string>> = {
   OpenAI: "https://platform.openai.com/home",
@@ -412,28 +412,12 @@ export default function App() {
     return `ltask-local-${Date.now().toString(36)}-${taskIdCounter.current}`;
   }
 
-  function getDefaultSubtaskTitles(task: Pick<LocalTask, "area" | "issueType">) {
-    if (task.issueType === "Sub-task") return [];
-    return task.area.trim().toLowerCase() === "3d" ? default3dSubtaskTitles : [];
-  }
-
   async function createSubtasksForParent(parentTask: LocalTask, titles: string[]): Promise<LocalTask[]> {
     const normalizedTitles = dedupeSubtaskTitles(titles);
     const createdSubtasks: LocalTask[] = [];
 
     for (const title of normalizedTitles) {
-      const draftSubtask: LocalTask = {
-        id: nextTaskId(),
-        project: parentTask.project,
-        area: parentTask.area,
-        title,
-        priority: parentTask.priority,
-        issueType: "Sub-task",
-        syncStatus: "Pending",
-        descriptionStatus: "Ready",
-        language: parentTask.language,
-        parentTaskId: parentTask.id
-      };
+      const draftSubtask = buildDraftSubtask(parentTask, title, nextTaskId());
       const nextSubtask = usesTauriPersistence ? await createPersistedSubtask(parentTask.id, title) : draftSubtask;
       createdSubtasks.push(nextSubtask);
     }
@@ -576,21 +560,25 @@ export default function App() {
     const tray = trays.find((candidate) => candidate.tasks.some((task) => task.id === taskId));
     const task = tray?.tasks.find((candidate) => candidate.id === taskId);
     if (!tray || !task || !canDeleteTask(task)) return;
+    const deletedTaskIds = taskGraphDeleteIds(tray.tasks, taskId);
     if (usesTauriPersistence) {
       const deleted = await deletePersistedTask(taskId);
       if (!deleted) return;
     }
 
-    if (selectedTaskId === taskId) {
+    if (selectedTaskId && deletedTaskIds.has(selectedTaskId)) {
       const taskIndex = tray.tasks.findIndex((candidate) => candidate.id === taskId);
-      const replacementTask = tray.tasks[taskIndex + 1] ?? tray.tasks[taskIndex - 1] ?? null;
+      const replacementTask =
+        tray.tasks.slice(taskIndex + 1).find((candidate) => !deletedTaskIds.has(candidate.id)) ??
+        [...tray.tasks.slice(0, taskIndex)].reverse().find((candidate) => !deletedTaskIds.has(candidate.id)) ??
+        null;
       setSelectedTaskId(replacementTask?.id ?? null);
       if (!replacementTask) setOpenPanel(null);
     }
 
     setTrays((currentTrays) =>
       currentTrays.map((candidate) =>
-        candidate.id === tray.id ? updateTrayTasks(candidate, candidate.tasks.filter((candidateTask) => candidateTask.id !== taskId)) : candidate
+        candidate.id === tray.id ? updateTrayTasks(candidate, removeTaskGraph(candidate.tasks, taskId)) : candidate
       )
     );
   }
@@ -621,11 +609,8 @@ export default function App() {
       : nextTask;
 
     if (!persistedTask) return;
-    const existingChildTitles = tray.tasks
-      .filter((candidateTask) => candidateTask.parentTaskId === taskId)
-      .map((childTask) => childTask.title);
     const defaultSubtaskTitles = getDefaultSubtaskTitles(persistedTask).filter(
-      (title) => !existingChildTitles.some((existingTitle) => existingTitle.trim().toLowerCase() === title.trim().toLowerCase())
+      (title) => !hasChildTaskTitle(tray.tasks, taskId, title)
     );
     const createdDefaultSubtasks = defaultSubtaskTitles.length
       ? await createSubtasksForParent(persistedTask, defaultSubtaskTitles)
@@ -636,13 +621,7 @@ export default function App() {
         if (candidate.id !== tray.id) return candidate;
 
         const nextTasks = candidate.tasks.map((candidateTask) => (candidateTask.id === taskId ? persistedTask : candidateTask));
-        if (createdDefaultSubtasks.length) {
-          const parentIndex = nextTasks.findIndex((candidateTask) => candidateTask.id === taskId);
-          let insertIndex = parentIndex + 1;
-          while (nextTasks[insertIndex]?.parentTaskId === taskId) insertIndex += 1;
-          nextTasks.splice(insertIndex, 0, ...createdDefaultSubtasks);
-        }
-        return updateTrayTasks(candidate, nextTasks);
+        return updateTrayTasks(candidate, insertChildrenAfterExistingChildren(nextTasks, taskId, createdDefaultSubtasks));
       })
     );
   }
@@ -654,25 +633,14 @@ export default function App() {
 
     const normalizedTitle = title.trim();
     if (!normalizedTitle) return;
-    const existingChildTitle = parentTray.tasks.some(
-      (task) => task.parentTaskId === parentTaskId && task.title.trim().toLowerCase() === normalizedTitle.toLowerCase()
-    );
-    if (existingChildTitle) return;
+    if (hasChildTaskTitle(parentTray.tasks, parentTaskId, normalizedTitle)) return;
 
     const createdSubtasks = await createSubtasksForParent(parentTask, [normalizedTitle]);
 
     setTrays((currentTrays) =>
       currentTrays.map((tray) => {
         if (tray.id !== parentTray.id) return tray;
-
-        const parentIndex = tray.tasks.findIndex((task) => task.id === parentTask.id);
-        if (parentIndex === -1) return tray;
-
-        const nextTasks = [...tray.tasks];
-        let insertIndex = parentIndex + 1;
-        while (nextTasks[insertIndex]?.parentTaskId === parentTask.id) insertIndex += 1;
-        nextTasks.splice(insertIndex, 0, ...createdSubtasks);
-        return updateTrayTasks(tray, nextTasks);
+        return updateTrayTasks(tray, insertChildrenAfterExistingChildren(tray.tasks, parentTask.id, createdSubtasks));
       })
     );
   }
@@ -2067,23 +2035,9 @@ function cloneTrays(trays: Tray[]): Tray[] {
     tasks: tray.tasks.map((task) => ({
       ...task,
       attachments: task.attachments?.map((attachment) => ({ ...attachment })),
-      syncLog: task.syncLog?.map((entry) => ({ ...entry })),
-      subtasks: task.subtasks ? [...task.subtasks] : undefined
+      syncLog: task.syncLog?.map((entry) => ({ ...entry }))
     }))
   }));
-}
-
-function dedupeSubtaskTitles(titles: string[]): string[] {
-  const seen = new Set<string>();
-  const normalizedTitles: string[] = [];
-  for (const title of titles) {
-    const normalizedTitle = title.trim();
-    const key = normalizedTitle.toLowerCase();
-    if (!normalizedTitle || seen.has(key)) continue;
-    seen.add(key);
-    normalizedTitles.push(normalizedTitle);
-  }
-  return normalizedTitles;
 }
 
 function createPreviewAssistedDescription(task: LocalTask, additionalContext: string): AssistedDescriptionDraft {

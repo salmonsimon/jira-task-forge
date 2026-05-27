@@ -609,8 +609,21 @@ impl<'connection> TaskRepository<'connection> {
             return Ok(false);
         };
 
+        let created_child_count: i64 = self.connection.query_row(
+            "SELECT COUNT(*) FROM tasks WHERE parent_task_id = ?1 AND sync_status = 'Created'",
+            [task_id],
+            |row| row.get(0),
+        )?;
+        if created_child_count > 0 {
+            return Ok(false);
+        }
+
         let changed = self.connection.execute(
-            "DELETE FROM tasks WHERE id = ?1 AND sync_status != 'Created'",
+            "
+            DELETE FROM tasks
+            WHERE (id = ?1 OR parent_task_id = ?1)
+              AND sync_status != 'Created'
+            ",
             [task_id],
         )?;
         if changed > 0 {
@@ -1476,6 +1489,101 @@ mod tests {
         assert_eq!(subtask.description_status, "Ready");
         assert_eq!(subtask.parent_task_id.as_deref(), Some(parent.id.as_str()));
         assert_eq!(subtask.task_order, 1);
+    }
+
+    #[test]
+    fn deletes_parent_task_graph_without_orphaning_subtasks() {
+        let connection = open_in_memory_database().expect("database opens");
+        let tray_repository = TrayRepository::new(&connection);
+        let task_repository = TaskRepository::new(&connection);
+        let tray = tray_repository
+            .create(NewTray {
+                name: "Delete graph tray".to_string(),
+            })
+            .expect("tray creates");
+        let parent = task_repository
+            .create(NewTask {
+                tray_id: tray.id.clone(),
+                project: "STT".to_string(),
+                area: "3D".to_string(),
+                title: "Model vending machine".to_string(),
+                priority: "High".to_string(),
+                issue_type: "Story".to_string(),
+                content_language: "Spanish".to_string(),
+            })
+            .expect("parent task creates");
+        let sibling = task_repository
+            .create(NewTask {
+                tray_id: tray.id.clone(),
+                project: "STT".to_string(),
+                area: "Bug".to_string(),
+                title: "Keep sibling".to_string(),
+                priority: "Medium".to_string(),
+                issue_type: "Bug".to_string(),
+                content_language: "Spanish".to_string(),
+            })
+            .expect("sibling task creates");
+        task_repository
+            .create_subtask(NewSubtask {
+                parent_task_id: parent.id.clone(),
+                title: "Reference pass".to_string(),
+            })
+            .expect("sub-task creates");
+
+        assert!(task_repository
+            .delete(&parent.id)
+            .expect("parent task graph deletes"));
+
+        assert_eq!(
+            task_repository.list_for_tray(&tray.id).expect("tasks list"),
+            vec![sibling]
+        );
+    }
+
+    #[test]
+    fn refuses_to_orphan_created_subtasks_when_deleting_parent() {
+        let connection = open_in_memory_database().expect("database opens");
+        let tray_repository = TrayRepository::new(&connection);
+        let task_repository = TaskRepository::new(&connection);
+        let tray = tray_repository
+            .create(NewTray {
+                name: "Created child tray".to_string(),
+            })
+            .expect("tray creates");
+        let parent = task_repository
+            .create(NewTask {
+                tray_id: tray.id.clone(),
+                project: "STT".to_string(),
+                area: "3D".to_string(),
+                title: "Model vending machine".to_string(),
+                priority: "High".to_string(),
+                issue_type: "Story".to_string(),
+                content_language: "Spanish".to_string(),
+            })
+            .expect("parent task creates");
+        let subtask = task_repository
+            .create_subtask(NewSubtask {
+                parent_task_id: parent.id.clone(),
+                title: "Reference pass".to_string(),
+            })
+            .expect("sub-task creates");
+        connection
+            .execute(
+                "UPDATE tasks SET sync_status = 'Created' WHERE id = ?1",
+                [subtask.id.as_str()],
+            )
+            .expect("subtask status updates");
+
+        assert!(!task_repository
+            .delete(&parent.id)
+            .expect("parent delete is blocked"));
+        assert_eq!(
+            task_repository
+                .list_for_tray(&tray.id)
+                .expect("tasks list")
+                .len(),
+            2
+        );
     }
 
     #[test]

@@ -52,7 +52,6 @@ export type LocalTask = {
   parentTaskId?: string;
   description?: string;
   notes?: string;
-  subtasks?: string[];
   attachments?: Attachment[];
   syncLog?: SyncLogEntry[];
 };

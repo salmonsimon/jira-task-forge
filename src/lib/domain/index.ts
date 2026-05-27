@@ -4,5 +4,6 @@ export * from "./errors";
 export * from "./jql";
 export * from "./preflight";
 export * from "./settings";
+export * from "./taskGraph";
 export * from "./tasks";
 export * from "./trays";

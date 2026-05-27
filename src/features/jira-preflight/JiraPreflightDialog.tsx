@@ -2,6 +2,7 @@ import { AlertTriangle, Check, CheckCircle2, Info, Loader2, ShieldCheck, XCircle
 import { useEffect, useState, type ReactNode } from "react";
 import { Button, LoadingOrb } from "../../components/ui";
 import { appOverlayLayers, useAppOverlay } from "../../lib/app-overlays";
+import { groupSubtasksByParent, isSubtask } from "../../lib/domain";
 import type {
   JiraConnectionTestResult,
   JiraCreateIssuesResult,
@@ -316,26 +317,16 @@ function SubtaskCreationSummary({
   tray: Tray;
   includeExportedTasks: boolean;
 }) {
-  const tasksById = new Map(tray.tasks.map((task) => [task.id, task]));
-  const subtaskGroups = tray.tasks
+  const subtaskGroups = groupSubtasksByParent(
+    tray.tasks
     .filter(
       (task) =>
-        task.issueType === "Sub-task" &&
+        isSubtask(task) &&
         task.parentTaskId &&
         task.syncStatus !== "Created" &&
         (includeExportedTasks || task.syncStatus !== "Exported")
     )
-    .reduce<Array<{ parentTask: Tray["tasks"][number] | undefined; subtasks: Tray["tasks"] }>>((groups, subtask) => {
-      const parentTask = subtask.parentTaskId ? tasksById.get(subtask.parentTaskId) : undefined;
-      const existingGroup = groups.find((group) => group.parentTask?.id === parentTask?.id);
-      if (existingGroup) {
-        existingGroup.subtasks.push(subtask);
-        return groups;
-      }
-
-      groups.push({ parentTask, subtasks: [subtask] });
-      return groups;
-    }, []);
+  );
 
   if (!subtaskGroups.length) return null;
 

@@ -15,7 +15,6 @@ const baseTask: LocalTask = {
   epic: "DTS-1",
   description: "Description",
   notes: "Notes",
-  subtasks: ["Reference pass"],
   attachments: [{ id: "att-1", filename: "reference.png", purpose: "AI + Jira attachment", size: "42 KB" }]
 };
 
@@ -52,7 +51,6 @@ describe("task domain helpers", () => {
       description: "Description",
       notes: "Notes"
     });
-    expect(duplicate.subtasks).toEqual(["Reference pass"]);
     expect(duplicate.attachments).toEqual(baseTask.attachments);
     expect(duplicate.attachments).not.toBe(baseTask.attachments);
   });
