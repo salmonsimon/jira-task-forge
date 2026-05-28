@@ -27,8 +27,8 @@ export function TaskRelationshipsSection({
 }) {
   const relationships = task.issueRelationships ?? [];
   const availableTargets = useMemo(
-    () => getAvailableIssueRelationshipTargets(trayTasks, task.id),
-    [task.id, trayTasks]
+    () => getAvailableIssueRelationshipTargets(trayTasks, task.id, relationships),
+    [relationships, task.id, trayTasks]
   );
   const relationshipGroups = useMemo(
     () =>

@@ -6,8 +6,13 @@ export function formatIssueRelationshipTypeLabel(type: IssueRelationshipType): s
   return type === "blocks" ? "Blocks" : "Blocked by";
 }
 
-export function getAvailableIssueRelationshipTargets(tasks: LocalTask[] | null | undefined, sourceTaskId: string): LocalTask[] {
-  return (tasks ?? []).filter((task) => task.id !== sourceTaskId);
+export function getAvailableIssueRelationshipTargets(
+  tasks: LocalTask[] | null | undefined,
+  sourceTaskId: string,
+  relationships: LocalIssueRelationship[] | null | undefined = []
+): LocalTask[] {
+  const usedTargetTaskIds = new Set((relationships ?? []).map((relationship) => relationship.targetTaskId));
+  return (tasks ?? []).filter((task) => task.id !== sourceTaskId && !usedTargetTaskIds.has(task.id));
 }
 
 export function findIssueRelationshipTarget(
@@ -31,7 +36,7 @@ export function addLocalIssueRelationship(
 ): LocalIssueRelationship[] {
   const relationships = task.issueRelationships ?? [];
   if (targetTaskId === task.id) return relationships;
-  if (relationships.some((relationship) => relationship.type === type && relationship.targetTaskId === targetTaskId)) {
+  if (relationships.some((relationship) => relationship.targetTaskId === targetTaskId)) {
     return relationships;
   }
 

@@ -44,6 +44,22 @@ describe("issue relationships", () => {
     expect(getAvailableIssueRelationshipTargets([baseTask, targetTask], baseTask.id)).toEqual([targetTask]);
   });
 
+  it("omits targets that already have any local relationship from the same source", () => {
+    const relationships = addLocalIssueRelationship(baseTask, "blocks", targetTask.id);
+    const anotherTarget: LocalTask = {
+      ...targetTask,
+      id: "task-other",
+      title: "Validar otra dependencia"
+    };
+
+    expect(getAvailableIssueRelationshipTargets([baseTask, targetTask, anotherTarget], baseTask.id, relationships)).toEqual([
+      anotherTarget
+    ]);
+    expect(addLocalIssueRelationship({ ...baseTask, issueRelationships: relationships }, "blocked_by", targetTask.id)).toBe(
+      relationships
+    );
+  });
+
   it("keeps relationship helpers safe when tray tasks have not loaded", () => {
     const relationships = addLocalIssueRelationship(baseTask, "blocks", targetTask.id);
 
