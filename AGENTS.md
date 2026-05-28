@@ -57,6 +57,22 @@ The Matt Pocock-style skills are global workflow tools for this project:
 `to-prd`, `to-issues`, `triage`, `grill-with-docs`, `tdd`, `diagnose`,
 `improve-codebase-architecture`, and `zoom-out`.
 
+## Manual PR Testing Guidance
+
+When Saimon needs to manually test a PR, choose the shortest safe command path:
+
+- If the PR is already checked out in a dedicated worktree, tell Saimon to use
+  that worktree directly, for example `cd ~/Development/jira-task-forge-attachments`
+  followed by `npm run tauri dev`. Do not recommend `gh pr checkout <number>`
+  from another worktree for the same branch, because Git will reject branches
+  already checked out elsewhere.
+- If there is no existing worktree for that PR and the current checkout is
+  clean, prefer the simple command path: `gh pr checkout <number>` followed by
+  `npm run tauri dev`.
+- When multiple draft PRs are being tested, remind Saimon to stop the running
+  dev server before switching PRs, especially because Tauri/Vite uses port
+  `1420`.
+
 ## Framework Inbox
 
 Use the global `framework-inbox` skill when reusable UI, architecture, testing,
