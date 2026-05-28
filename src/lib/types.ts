@@ -5,6 +5,7 @@ export type Priority = "Lowest" | "Low" | "Medium" | "High" | "Highest";
 export type SyncStatus = "Pending" | "Failed" | "Exported" | "Created";
 export type TrayState = "Active" | "Needs attention" | "Completed" | "Archived";
 export type IssueType = "Story" | "Bug" | "Sub-task";
+export type IssueRelationshipType = "blocks" | "blocked_by";
 export type AttachmentPurpose = "AI only" | "Jira attachment" | "AI + Jira attachment";
 export type AiProvider = "OpenAI" | "Claude" | "Gemini" | "None";
 export type DescriptionSectionStatus = "Raw" | "Polished";
@@ -50,6 +51,12 @@ export type SyncLogEntry = {
   detail: string;
 };
 
+export type LocalIssueRelationship = {
+  id: string;
+  type: IssueRelationshipType;
+  targetTaskId: string;
+};
+
 export type LocalTask = {
   id: string;
   project: string;
@@ -66,6 +73,7 @@ export type LocalTask = {
   parentTaskId?: string;
   description?: string;
   notes?: string;
+  issueRelationships?: LocalIssueRelationship[];
   attachments?: Attachment[];
   syncLog?: SyncLogEntry[];
 };

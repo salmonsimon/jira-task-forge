@@ -1308,11 +1308,13 @@ export default function App() {
         {openPanel === "detail" && selectedTaskWithSyncLog ? (
           <TaskFocusWindow
             task={selectedTaskWithSyncLog}
+            trayTasks={selectedTaskTray?.tasks ?? []}
             childTasks={selectedTaskTray?.tasks.filter((task) => task.parentTaskId === selectedTaskWithSyncLog.id) ?? []}
             projects={projectOptions}
             areas={areaOptions}
             readOnly={selectedTaskTray?.state === "Archived"}
             onUpdateDetails={trayWorkspace.updateTaskDetails}
+            onUpdateRelationships={trayWorkspace.updateTaskRelationships}
             onAddSubtask={trayWorkspace.addSubtaskToTask}
             onDeleteSubtask={trayWorkspace.deleteTask}
             onGenerateDescription={generateTaskDescription}

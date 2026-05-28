@@ -6,8 +6,8 @@ use crate::db::{utc_now_string, DbError, DbResult};
 use crate::models::{
     AppSettings, AssistedDescriptionProposal, AssistedDescriptionProposalSection,
     AssistedDescriptionProposalStatus, Category, DescriptionProposalLogEntry,
-    DescriptionSectionStatus, JqlFavorite, LocalTask, NewAssistedDescriptionProposal, NewSubtask,
-    NewTask, NewTray, SyncAuditEvent, Tray, TrayState,
+    DescriptionSectionStatus, JqlFavorite, LocalIssueRelationship, LocalTask,
+    NewAssistedDescriptionProposal, NewSubtask, NewTask, NewTray, SyncAuditEvent, Tray, TrayState,
 };
 
 const APP_SETTINGS_KEY: &str = "app_settings";
@@ -454,6 +454,7 @@ impl<'connection> TaskRepository<'connection> {
             jira_url: None,
             epic_key: None,
             parent_task_id: None,
+            issue_relationships: Vec::new(),
             task_order,
             created_at: now.clone(),
             updated_at: now,
@@ -529,6 +530,7 @@ impl<'connection> TaskRepository<'connection> {
             jira_url: None,
             epic_key: None,
             parent_task_id: Some(parent.id.clone()),
+            issue_relationships: Vec::new(),
             task_order,
             created_at: now.clone(),
             updated_at: now,
@@ -583,7 +585,10 @@ impl<'connection> TaskRepository<'connection> {
 
         let result = statement.query_row([task_id], map_task_row);
         match result {
-            Ok(task) => Ok(Some(task)),
+            Ok(task) => {
+                let mut tasks = self.attach_issue_relationships(vec![task])?;
+                Ok(tasks.pop())
+            }
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
             Err(error) => Err(error.into()),
         }
@@ -605,7 +610,7 @@ impl<'connection> TaskRepository<'connection> {
             .query_map([tray_id], map_task_row)?
             .collect::<Result<Vec<_>, _>>()?;
 
-        Ok(tasks)
+        self.attach_issue_relationships(tasks)
     }
 
     pub fn list_all(&self) -> DbResult<Vec<LocalTask>> {
@@ -623,7 +628,82 @@ impl<'connection> TaskRepository<'connection> {
             .query_map([], map_task_row)?
             .collect::<Result<Vec<_>, _>>()?;
 
-        Ok(tasks)
+        self.attach_issue_relationships(tasks)
+    }
+
+    pub fn update_issue_relationships(
+        &self,
+        task_id: &str,
+        relationships: &[LocalIssueRelationship],
+    ) -> DbResult<Option<LocalTask>> {
+        let now = utc_now_string()?;
+        let tray_id = self.connection.query_row(
+            "SELECT tray_id FROM tasks WHERE id = ?1 AND sync_status != 'Created'",
+            [task_id],
+            |row| row.get::<_, String>(0),
+        );
+
+        let Ok(tray_id) = tray_id else {
+            return Ok(None);
+        };
+
+        let mut normalized_relationships = Vec::with_capacity(relationships.len());
+        for relationship in relationships {
+            validate_issue_relationship_type(&relationship.relationship_type)?;
+            if relationship.target_task_id == task_id {
+                return Err(DbError::InvalidData(
+                    "Tasks cannot link a Jira relationship to themselves.".to_string(),
+                ));
+            }
+
+            let target_tray_id = self.connection.query_row(
+                "SELECT tray_id FROM tasks WHERE id = ?1",
+                [relationship.target_task_id.as_str()],
+                |row| row.get::<_, String>(0),
+            );
+            let Ok(target_tray_id) = target_tray_id else {
+                return Err(DbError::InvalidData(
+                    "Relationship target task was not found.".to_string(),
+                ));
+            };
+            if target_tray_id != tray_id {
+                return Err(DbError::InvalidData(
+                    "Relationship target must belong to the same tray.".to_string(),
+                ));
+            }
+
+            normalized_relationships.push(LocalIssueRelationship {
+                id: normalize_relationship_id(&relationship.id),
+                relationship_type: relationship.relationship_type.clone(),
+                target_task_id: relationship.target_task_id.clone(),
+            });
+        }
+
+        self.connection.execute(
+            "DELETE FROM task_issue_relationships WHERE source_task_id = ?1",
+            [task_id],
+        )?;
+
+        for relationship in &normalized_relationships {
+            self.connection.execute(
+                "
+                INSERT INTO task_issue_relationships (
+                    id, source_task_id, relationship_type, target_task_id, created_at, updated_at
+                )
+                VALUES (?1, ?2, ?3, ?4, ?5, ?5)
+                ",
+                (
+                    relationship.id.as_str(),
+                    task_id,
+                    relationship.relationship_type.as_str(),
+                    relationship.target_task_id.as_str(),
+                    now.as_str(),
+                ),
+            )?;
+        }
+
+        self.touch_tray(&tray_id, &now)?;
+        self.find_by_id(task_id)
     }
 
     pub fn delete(&self, task_id: &str) -> DbResult<bool> {
@@ -950,6 +1030,32 @@ impl<'connection> TaskRepository<'connection> {
             (updated_at, tray_id),
         )?;
         Ok(())
+    }
+
+    fn attach_issue_relationships(&self, mut tasks: Vec<LocalTask>) -> DbResult<Vec<LocalTask>> {
+        for task in &mut tasks {
+            task.issue_relationships = self.list_issue_relationships_for_task(&task.id)?;
+        }
+        Ok(tasks)
+    }
+
+    fn list_issue_relationships_for_task(
+        &self,
+        task_id: &str,
+    ) -> DbResult<Vec<LocalIssueRelationship>> {
+        let mut statement = self.connection.prepare(
+            "
+            SELECT id, relationship_type, target_task_id
+            FROM task_issue_relationships
+            WHERE source_task_id = ?1
+            ORDER BY created_at ASC, id ASC
+            ",
+        )?;
+
+        let relationships = statement
+            .query_map([task_id], map_issue_relationship_row)?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(relationships)
     }
 }
 
@@ -1527,9 +1633,18 @@ fn map_task_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<LocalTask> {
         jira_url: row.get("jira_url")?,
         epic_key: row.get("epic_key")?,
         parent_task_id: row.get("parent_task_id")?,
+        issue_relationships: Vec::new(),
         task_order: row.get("task_order")?,
         created_at: row.get("created_at")?,
         updated_at: row.get("updated_at")?,
+    })
+}
+
+fn map_issue_relationship_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<LocalIssueRelationship> {
+    Ok(LocalIssueRelationship {
+        id: row.get("id")?,
+        relationship_type: row.get("relationship_type")?,
+        target_task_id: row.get("target_task_id")?,
     })
 }
 
@@ -1562,6 +1677,24 @@ fn validate_category_type(category_type: &str) -> DbResult<()> {
         _ => Err(DbError::InvalidData(format!(
             "unknown category type: {category_type}"
         ))),
+    }
+}
+
+fn validate_issue_relationship_type(relationship_type: &str) -> DbResult<()> {
+    match relationship_type {
+        "blocks" | "blocked_by" => Ok(()),
+        _ => Err(DbError::InvalidData(format!(
+            "unknown issue relationship type: {relationship_type}"
+        ))),
+    }
+}
+
+fn normalize_relationship_id(id: &str) -> String {
+    let trimmed_id = id.trim();
+    if trimmed_id.is_empty() {
+        Uuid::new_v4().to_string()
+    } else {
+        trimmed_id.to_string()
     }
 }
 
@@ -2042,6 +2175,76 @@ mod tests {
             task_repository.list_for_tray(&tray.id).expect("tasks list"),
             vec![second]
         );
+    }
+
+    #[test]
+    fn updates_and_persists_task_issue_relationships() {
+        let connection = open_in_memory_database().expect("database opens");
+        let tray_repository = TrayRepository::new(&connection);
+        let task_repository = TaskRepository::new(&connection);
+        let tray = tray_repository
+            .create(NewTray {
+                name: "Relationship tray".to_string(),
+            })
+            .expect("tray creates");
+        let blocker = task_repository
+            .create(NewTask {
+                tray_id: tray.id.clone(),
+                project: "STT".to_string(),
+                area: "Bug".to_string(),
+                title: "Resolver problema timer".to_string(),
+                priority: "Highest".to_string(),
+                issue_type: "Bug".to_string(),
+                content_language: "Spanish".to_string(),
+            })
+            .expect("blocker creates");
+        let blocked = task_repository
+            .create(NewTask {
+                tray_id: tray.id.clone(),
+                project: "STT".to_string(),
+                area: "Programacion".to_string(),
+                title: "Persistir avance local".to_string(),
+                priority: "High".to_string(),
+                issue_type: "Story".to_string(),
+                content_language: "Spanish".to_string(),
+            })
+            .expect("blocked task creates");
+
+        let updated = task_repository
+            .update_issue_relationships(
+                &blocked.id,
+                &[LocalIssueRelationship {
+                    id: "rel-blocked-blocked_by-blocker".to_string(),
+                    relationship_type: "blocked_by".to_string(),
+                    target_task_id: blocker.id.clone(),
+                }],
+            )
+            .expect("relationship updates")
+            .expect("task exists");
+
+        assert_eq!(
+            updated.issue_relationships,
+            vec![LocalIssueRelationship {
+                id: "rel-blocked-blocked_by-blocker".to_string(),
+                relationship_type: "blocked_by".to_string(),
+                target_task_id: blocker.id.clone(),
+            }]
+        );
+        assert_eq!(
+            task_repository
+                .find_by_id(&blocked.id)
+                .expect("task loads")
+                .expect("task exists")
+                .issue_relationships
+                .len(),
+            1
+        );
+
+        let cleared = task_repository
+            .update_issue_relationships(&blocked.id, &[])
+            .expect("relationship clears")
+            .expect("task exists");
+        assert!(cleared.issue_relationships.is_empty());
     }
 
     #[test]

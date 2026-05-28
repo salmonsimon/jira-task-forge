@@ -32,6 +32,13 @@ describe("Tauri command contract mappers", () => {
       jira_url: "https://dts.atlassian.net/browse/JTFTEST-123",
       epic_key: null,
       parent_task_id: "parent-1",
+      issue_relationships: [
+        {
+          id: "rel-1",
+          relationship_type: "blocked_by",
+          target_task_id: "task-2"
+        }
+      ],
       task_order: 2,
       created_at: "2026-05-26T12:00:00Z",
       updated_at: "2026-05-26T12:00:00Z"
@@ -51,7 +58,14 @@ describe("Tauri command contract mappers", () => {
       jiraKey: "JTFTEST-123",
       jiraUrl: "https://dts.atlassian.net/browse/JTFTEST-123",
       epic: undefined,
-      parentTaskId: "parent-1"
+      parentTaskId: "parent-1",
+      issueRelationships: [
+        {
+          id: "rel-1",
+          type: "blocked_by",
+          targetTaskId: "task-2"
+        }
+      ]
     });
   });
 

@@ -75,6 +75,7 @@ pub fn run() {
             commands::tasks::delete_task,
             commands::tasks::update_task_details,
             commands::tasks::update_task_description,
+            commands::tasks::update_task_issue_relationships,
             commands::tasks::mark_tasks_csv_exported,
             commands::tasks::create_recovery_tray_from_tasks,
             commands::tasks::list_task_sync_audit_events,

@@ -14,6 +14,7 @@ import type {
   JqlFavorite,
   JqlQueryResult,
   LocalTask,
+  LocalIssueRelationship,
   NewAssistedDescriptionProposal,
   SyncLogEntry,
   Tray
@@ -378,6 +379,22 @@ export async function updatePersistedTaskDescription(
     taskId,
     description,
     descriptionStatus
+  });
+
+  return updated ? mapTask(updated) : null;
+}
+
+export async function updatePersistedTaskIssueRelationships(
+  taskId: string,
+  issueRelationships: LocalIssueRelationship[]
+): Promise<LocalTask | null> {
+  const updated = await invoke<BackendTask | null>("update_task_issue_relationships", {
+    taskId,
+    issueRelationships: issueRelationships.map((relationship) => ({
+      id: relationship.id,
+      relationship_type: relationship.type,
+      target_task_id: relationship.targetTaskId
+    }))
   });
 
   return updated ? mapTask(updated) : null;

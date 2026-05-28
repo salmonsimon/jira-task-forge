@@ -63,9 +63,18 @@ pub struct LocalTask {
     pub jira_url: Option<String>,
     pub epic_key: Option<String>,
     pub parent_task_id: Option<String>,
+    #[serde(default)]
+    pub issue_relationships: Vec<LocalIssueRelationship>,
     pub task_order: i64,
     pub created_at: String,
     pub updated_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LocalIssueRelationship {
+    pub id: String,
+    pub relationship_type: String,
+    pub target_task_id: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

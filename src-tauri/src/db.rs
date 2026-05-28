@@ -17,6 +17,10 @@ const MIGRATIONS: &[(&str, &str)] = &[
         "0003_assisted_description_proposals",
         include_str!("migrations/0003_assisted_description_proposals.sql"),
     ),
+    (
+        "0004_task_issue_relationships",
+        include_str!("migrations/0004_task_issue_relationships.sql"),
+    ),
 ];
 
 pub type DbResult<T> = Result<T, DbError>;
@@ -167,6 +171,7 @@ mod tests {
             "sync_attempts",
             "sync_audit_events",
             "tasks",
+            "task_issue_relationships",
             "trays",
         ] {
             assert!(
@@ -198,7 +203,7 @@ mod tests {
                     row.get(0)
                 })
                 .expect("migration count reads");
-            assert_eq!(migration_count, 3);
+            assert_eq!(migration_count, MIGRATIONS.len() as i64);
         }
 
         assert!(path.exists());
@@ -210,7 +215,7 @@ mod tests {
                     row.get(0)
                 })
                 .expect("migration count reads");
-            assert_eq!(migration_count, 3);
+            assert_eq!(migration_count, MIGRATIONS.len() as i64);
         }
 
         fs::remove_dir_all(app_data_dir).expect("database cleanup");

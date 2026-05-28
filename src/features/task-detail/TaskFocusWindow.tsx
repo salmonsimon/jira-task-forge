@@ -10,6 +10,7 @@ import type {
   AssistedDescriptionSectionId,
   DescriptionProposalLogEntry,
   DescriptionSectionStatus,
+  LocalIssueRelationship,
   LocalTask,
   NewAssistedDescriptionProposal,
   Priority
@@ -18,15 +19,18 @@ import { AssistedDescriptionSection, assistedDescriptionEditorSelector } from ".
 import { TaskActivitySection } from "./TaskActivitySection";
 import { TaskAttachmentsSection } from "./TaskAttachmentsSection";
 import { TaskDetailsPanel } from "./TaskDetailsPanel";
+import { TaskRelationshipsSection } from "./TaskRelationshipsSection";
 import { TaskSubtasksSection } from "./TaskSubtasksSection";
 
 export function TaskFocusWindow({
   task,
+  trayTasks,
   childTasks,
   projects,
   areas,
   readOnly: forceReadOnly = false,
   onUpdateDetails,
+  onUpdateRelationships,
   onAddSubtask,
   onDeleteSubtask,
   onGenerateDescription,
@@ -44,11 +48,13 @@ export function TaskFocusWindow({
   proposalProvider
 }: {
   task: LocalTask;
+  trayTasks: LocalTask[];
   childTasks: LocalTask[];
   projects: string[];
   areas: string[];
   readOnly?: boolean;
   onUpdateDetails: (taskId: string, task: Partial<Pick<LocalTask, "project" | "area" | "priority" | "title">>) => void | Promise<void>;
+  onUpdateRelationships: (taskId: string, relationships: LocalIssueRelationship[]) => void | Promise<void>;
   onAddSubtask: (taskId: string, title: string) => void | Promise<void>;
   onDeleteSubtask: (taskId: string) => void | Promise<void>;
   onGenerateDescription: (taskId: string, additionalContext: string) => Promise<AssistedDescriptionDraft>;
@@ -170,6 +176,12 @@ export function TaskFocusWindow({
               proposalProvider={proposalProvider}
             />
             <TaskAttachmentsSection task={task} />
+            <TaskRelationshipsSection
+              task={task}
+              trayTasks={trayTasks}
+              readOnly={readOnly}
+              onUpdateRelationships={onUpdateRelationships}
+            />
             <TaskSubtasksSection
               task={task}
               childTasks={childTasks}

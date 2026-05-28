@@ -9,7 +9,8 @@ import {
   renamePersistedTray,
   restorePersistedTray,
   updatePersistedTaskDescription,
-  updatePersistedTaskDetails
+  updatePersistedTaskDetails,
+  updatePersistedTaskIssueRelationships
 } from "../../lib/adapters/tauriPersistence";
 import {
   buildDraftSubtask,
@@ -25,7 +26,7 @@ import {
   taskGraphDeleteIds,
   updateTrayTasks
 } from "../../lib/domain";
-import type { LocalTask, Priority, Tray } from "../../lib/types";
+import type { LocalIssueRelationship, LocalTask, Priority, Tray } from "../../lib/types";
 import { cloneTrays, findTask, findTaskTray, repairTrayWorkspaceSelection } from "./trayWorkspace";
 
 type ReplaceTraysOptions = {
@@ -313,6 +314,30 @@ export function useTrayWorkspace({
     );
   }
 
+  async function updateTaskRelationships(taskId: string, relationships: LocalIssueRelationship[]) {
+    const tray = trays.find((candidate) => candidate.tasks.some((task) => task.id === taskId));
+    const task = tray?.tasks.find((candidate) => candidate.id === taskId);
+    if (!tray || !task || tray.state === "Archived" || task.syncStatus === "Created") return;
+    const persistedTask = usesTauriPersistence
+      ? await updatePersistedTaskIssueRelationships(taskId, relationships)
+      : { ...task, issueRelationships: relationships };
+
+    if (!persistedTask) return;
+
+    setTrays((currentTrays) =>
+      currentTrays.map((candidate) => {
+        if (candidate.id !== tray.id) return candidate;
+
+        return updateTrayTasks(
+          candidate,
+          candidate.tasks.map((candidateTask) =>
+            candidateTask.id === taskId ? persistedTask : candidateTask
+          )
+        );
+      })
+    );
+  }
+
   async function addSubtaskToTask(parentTaskId: string, title: string) {
     const parentTray = trays.find((tray) => tray.tasks.some((task) => task.id === parentTaskId));
     const parentTask = parentTray?.tasks.find((task) => task.id === parentTaskId);
@@ -462,6 +487,7 @@ export function useTrayWorkspace({
     setSelectedTaskId,
     toggleArchivedTrays: () => setShowArchivedTrays((current) => !current),
     updateTaskDetails,
+    updateTaskRelationships,
     updateTrayTaskList
   };
 }

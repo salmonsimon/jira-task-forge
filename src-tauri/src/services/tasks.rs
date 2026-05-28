@@ -1,6 +1,6 @@
 use super::AppServices;
 use crate::db::DbResult;
-use crate::models::{LocalTask, NewSubtask, NewTask, NewTray, Tray};
+use crate::models::{LocalIssueRelationship, LocalTask, NewSubtask, NewTask, NewTray, Tray};
 use crate::repositories::{TaskRepository, TrayRepository};
 
 impl AppServices {
@@ -50,6 +50,15 @@ impl AppServices {
             description,
             description_status,
         )
+    }
+
+    pub fn update_task_issue_relationships(
+        &self,
+        task_id: &str,
+        relationships: &[LocalIssueRelationship],
+    ) -> DbResult<Option<LocalTask>> {
+        let connection = self.connection();
+        TaskRepository::new(&connection).update_issue_relationships(task_id, relationships)
     }
 
     pub fn mark_tasks_csv_exported(&self, task_ids: &[String]) -> DbResult<Vec<LocalTask>> {

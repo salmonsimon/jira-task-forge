@@ -5,6 +5,7 @@ import type {
   Category,
   DescriptionProposalLogEntry,
   IssueType,
+  LocalIssueRelationship,
   JqlFavorite,
   LocalTask,
   Priority,
@@ -42,6 +43,13 @@ export type BackendTask = {
   task_order: number;
   created_at: string;
   updated_at: string;
+  issue_relationships?: BackendIssueRelationship[];
+};
+
+export type BackendIssueRelationship = {
+  id: string;
+  relationship_type: LocalIssueRelationship["type"];
+  target_task_id: string;
 };
 
 export type BackendCategory = {
@@ -95,7 +103,16 @@ export function mapBackendTask(task: BackendTask): LocalTask {
     jiraKey: task.jira_key ?? undefined,
     jiraUrl: task.jira_url ?? undefined,
     epic: task.epic_key ?? undefined,
-    parentTaskId: task.parent_task_id ?? undefined
+    parentTaskId: task.parent_task_id ?? undefined,
+    issueRelationships: task.issue_relationships?.map(mapBackendIssueRelationship)
+  };
+}
+
+export function mapBackendIssueRelationship(relationship: BackendIssueRelationship): LocalIssueRelationship {
+  return {
+    id: relationship.id,
+    type: relationship.relationship_type,
+    targetTaskId: relationship.target_task_id
   };
 }
 

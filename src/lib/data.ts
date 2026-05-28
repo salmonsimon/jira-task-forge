@@ -81,6 +81,13 @@ export const trays: Tray[] = [
             event: "story.create.failed",
             detail: "Jira auth expired before creating issue"
           }
+        ],
+        issueRelationships: [
+          {
+            id: "rel-ltask-input-blocks-ltask-save-progress",
+            type: "blocks",
+            targetTaskId: "ltask-save-progress"
+          }
         ]
       },
       {
@@ -192,7 +199,14 @@ export const trays: Tray[] = [
         descriptionStatus: "Draft",
         language: "Spanish",
         epic: "DTS-829 [STT] Programacion",
-        notes: "Evitar que el usuario pierda objetivos completados si vuelve al menu y reingresa."
+        notes: "Evitar que el usuario pierda objetivos completados si vuelve al menu y reingresa.",
+        issueRelationships: [
+          {
+            id: "rel-ltask-save-progress-blocked_by-ltask-input",
+            type: "blocked_by",
+            targetTaskId: "ltask-input"
+          }
+        ]
       },
       {
         id: "ltask-metro",

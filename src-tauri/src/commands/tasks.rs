@@ -1,6 +1,6 @@
 use tauri::State;
 
-use crate::models::{LocalTask, NewSubtask, NewTask, SyncAuditEvent, Tray};
+use crate::models::{LocalIssueRelationship, LocalTask, NewSubtask, NewTask, SyncAuditEvent, Tray};
 use crate::services::AppServices;
 
 #[tauri::command]
@@ -90,6 +90,17 @@ pub fn update_task_description(
 ) -> Result<Option<LocalTask>, String> {
     services
         .update_task_description(&task_id, description.as_deref(), &description_status)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn update_task_issue_relationships(
+    services: State<'_, AppServices>,
+    task_id: String,
+    issue_relationships: Vec<LocalIssueRelationship>,
+) -> Result<Option<LocalTask>, String> {
+    services
+        .update_task_issue_relationships(&task_id, &issue_relationships)
         .map_err(|error| error.to_string())
 }
 
