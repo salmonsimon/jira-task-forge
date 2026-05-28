@@ -1,4 +1,5 @@
 export * from "./backup";
+export * from "./attachments";
 export * from "./csvExport";
 export * from "./errors";
 export * from "./jql";

@@ -51,6 +51,18 @@ export const trays: Tray[] = [
             filename: "timer-stuck-state.png",
             purpose: "AI + Jira attachment",
             size: "482 KB"
+          },
+          {
+            id: "att-timer-design-notes",
+            filename: "timer-state-notes.pdf",
+            purpose: "AI only",
+            size: "126 KB"
+          },
+          {
+            id: "att-timer-repro",
+            filename: "timer-repro-clip.mp4",
+            purpose: "Jira attachment",
+            size: "8.4 MB"
           }
         ],
         syncLog: [
