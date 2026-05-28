@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
+  mapBackendAssistedDescriptionProposal,
   mapBackendCategory,
+  mapBackendDescriptionProposalLogEntry,
   mapBackendSyncAuditEvent,
   mapBackendTask,
   mapBackendTray,
+  type BackendAssistedDescriptionProposal,
   type BackendCategory,
+  type BackendDescriptionProposalLogEntry,
   type BackendSyncAuditEvent,
   type BackendTask,
   type BackendTray
@@ -133,5 +137,48 @@ describe("Tauri command contract mappers", () => {
       event: "Succeeded: Parent Created",
       detail: "JTFTEST-123 · [Bug] Resolver problema timer · Priority High"
     });
+  });
+
+  it("keeps assisted description proposal metadata separate from task descriptions", () => {
+    const proposal: BackendAssistedDescriptionProposal = {
+      id: "proposal-1",
+      taskId: "task-1",
+      title: "Timer proposal",
+      summary: "SRS Lite draft",
+      status: "Pending",
+      provider: "OpenAI",
+      model: "gpt-4.1",
+      userComment: "Focus risk notes.",
+      sections: [
+        {
+          sectionId: "user_story",
+          heading: "Historia de usuario",
+          currentContent: "",
+          proposedContent: "Como QA, quiero validar el timer.",
+          status: "Raw",
+          updatedAt: "2026-05-27T12:00:00Z"
+        }
+      ],
+      createdAt: "2026-05-27T12:00:00Z",
+      updatedAt: "2026-05-27T12:00:00Z",
+      decidedAt: null
+    };
+    const logEntry: BackendDescriptionProposalLogEntry = {
+      id: "log-1",
+      taskId: "task-1",
+      proposalId: "proposal-1",
+      eventType: "description.proposal.created",
+      title: "Timer proposal",
+      summary: "SRS Lite draft",
+      status: "Pending",
+      provider: "OpenAI",
+      model: "gpt-4.1",
+      userComment: null,
+      detail: { sectionCount: 11 },
+      occurredAt: "2026-05-27T12:01:00Z"
+    };
+
+    expect(mapBackendAssistedDescriptionProposal(proposal)).toEqual(proposal);
+    expect(mapBackendDescriptionProposalLogEntry(logEntry)).toEqual(logEntry);
   });
 });

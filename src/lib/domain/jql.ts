@@ -43,3 +43,21 @@ export function formatJqlAiDraftMessage(draft: JqlAiDraft): string {
   const warningText = draft.warnings.length ? ` ${draft.warnings.join(" ")}` : "";
   return `${draft.explanation}${warningText}`;
 }
+
+export function buildJiraIssueBrowseUrl(jiraSiteUrl: string, issueKey: string): string | null {
+  const trimmedIssueKey = issueKey.trim();
+  if (!isSafeJiraIssueKey(trimmedIssueKey)) return null;
+
+  try {
+    const url = new URL(jiraSiteUrl.trim());
+    if (url.protocol !== "https:" || !url.hostname.endsWith(".atlassian.net")) return null;
+
+    return `https://${url.hostname.toLowerCase()}/browse/${encodeURIComponent(trimmedIssueKey)}`;
+  } catch {
+    return null;
+  }
+}
+
+function isSafeJiraIssueKey(issueKey: string): boolean {
+  return Boolean(issueKey && /^[A-Za-z0-9_]+-[A-Za-z0-9_]+$/.test(issueKey));
+}

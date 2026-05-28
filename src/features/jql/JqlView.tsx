@@ -1,6 +1,7 @@
-import { Bot, Check, History, Loader2, Pencil, Search, Star, X } from "lucide-react";
+import { Bot, Check, ExternalLink, History, Loader2, Pencil, Search, Star, X } from "lucide-react";
 import { useEffect, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from "react";
 import { Button, IssueTypeBadge, LoadingOrb, PriorityBadge, SegmentedControl } from "../../components/ui";
+import { buildJiraIssueBrowseUrl } from "../../lib/domain";
 import type { JqlAiDraft, JqlFavorite, JqlRecentQuery, JqlResult, JqlRunState } from "../../lib/types";
 import { cn } from "../../lib/utils";
 
@@ -27,7 +28,9 @@ export function JqlView({
   onRunQuery,
   isDraftingJqlWithAi,
   isRunningQuery,
-  queryMessage
+  queryMessage,
+  jiraSiteUrl,
+  onOpenJiraIssue
 }: {
   jqlMode: "direct" | "ai";
   setJqlMode: (mode: "direct" | "ai") => void;
@@ -52,6 +55,8 @@ export function JqlView({
   isDraftingJqlWithAi: boolean;
   isRunningQuery: boolean;
   queryMessage: string | null;
+  jiraSiteUrl: string;
+  onOpenJiraIssue: (url: string) => void | Promise<void>;
 }) {
   const selectedFavorite = favorites.find((favorite) => favorite.id === selectedFavoriteId);
   const isAskAiMode = jqlMode === "ai";
@@ -221,21 +226,39 @@ export function JqlView({
                   </tr>
                 </thead>
                 <tbody>
-                  {results.map((result) => (
-                    <tr className="border-t border-[#ebecf0] hover:bg-[#f4f8ff]" key={result.key}>
-                      <td className="px-3 py-2 font-medium text-[#0052cc]">{result.key}</td>
-                      <td className="px-3 py-2">{result.project}</td>
-                      <td className="px-3 py-2">
-                        <IssueTypeBadge type={result.issueType} />
-                      </td>
-                      <td className="px-3 py-2">
-                        <PriorityBadge priority={result.priority} />
-                      </td>
-                      <td className="px-3 py-2">{result.status}</td>
-                      <td className="px-3 py-2">{result.summary}</td>
-                      <td className="px-3 py-2 text-[#6b778c]">{result.assignee}</td>
-                    </tr>
-                  ))}
+                  {results.map((result) => {
+                    const issueUrl = buildJiraIssueBrowseUrl(jiraSiteUrl, result.key);
+                    return (
+                      <tr className="border-t border-[#ebecf0] hover:bg-[#f4f8ff]" key={result.key}>
+                        <td className="px-3 py-2 font-medium text-[#0052cc]">
+                          {issueUrl ? (
+                            <button
+                              className="inline-flex items-center gap-1 text-left font-medium hover:underline focus:outline-none focus:ring-2 focus:ring-[#4c9aff]"
+                              onClick={() => {
+                                void onOpenJiraIssue(issueUrl);
+                              }}
+                              type="button"
+                            >
+                              <span>{result.key}</span>
+                              <ExternalLink size={12} />
+                            </button>
+                          ) : (
+                            result.key
+                          )}
+                        </td>
+                        <td className="px-3 py-2">{result.project}</td>
+                        <td className="px-3 py-2">
+                          <IssueTypeBadge type={result.issueType} />
+                        </td>
+                        <td className="px-3 py-2">
+                          <PriorityBadge priority={result.priority} />
+                        </td>
+                        <td className="px-3 py-2">{result.status}</td>
+                        <td className="px-3 py-2">{result.summary}</td>
+                        <td className="px-3 py-2 text-[#6b778c]">{result.assignee}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

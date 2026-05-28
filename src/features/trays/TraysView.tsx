@@ -1,7 +1,7 @@
-import { Archive, Check, Download, Filter, Loader2, Pencil, RotateCcw, UploadCloud, X } from "lucide-react";
-import { useState } from "react";
+import { Archive, Check, Download, Loader2, Pencil, RotateCcw, Search, UploadCloud, X } from "lucide-react";
+import { useEffect, useState } from "react";
 import { Button, IconButton, TrayStateBadge } from "../../components/ui";
-import { canExportTrayCsv, deriveTrayStatusTag } from "../../lib/domain";
+import { canExportTrayCsv, deriveTrayStatusTag, filterParentTasksByTraySearch } from "../../lib/domain";
 import type { LocalTask, Priority, Tray } from "../../lib/types";
 import { groupTasksByProject } from "./groupTasksByProject";
 import { ProjectTaskGroup } from "./ProjectTaskGroup";
@@ -59,6 +59,12 @@ export function TraysView({
   projects: string[];
   areas: string[];
 }) {
+  const [traySearchQuery, setTraySearchQuery] = useState("");
+
+  useEffect(() => {
+    setTraySearchQuery("");
+  }, [selectedTray?.id]);
+
   if (!selectedTray) {
     return (
       <TraySelector
@@ -75,7 +81,9 @@ export function TraysView({
     );
   }
 
-  const grouped = groupTasksByProject(selectedTray.tasks);
+  const filteredTasks = filterParentTasksByTraySearch(selectedTray.tasks, traySearchQuery);
+  const grouped = groupTasksByProject(filteredTasks);
+  const hasTraySearch = traySearchQuery.trim().length > 0;
   const isArchived = selectedTray.state === "Archived";
   const createableTaskCount = selectedTray.tasks.filter((task) => task.syncStatus !== "Created").length;
   const canCreateInJira = !isArchived && createableTaskCount > 0 && !isRunningJiraPreflight;
@@ -139,34 +147,51 @@ export function TraysView({
         <div className="flex items-center justify-between border-b border-[#dfe1e6] px-4 py-3">
           <div>
             <h2 className="text-sm font-semibold">Preparation tray</h2>
-            <p className="text-xs text-[#6b778c]">Grouped by project. Created tasks stay read-only.</p>
+            <p className="text-xs text-[#6b778c]">
+              {hasTraySearch
+                ? `${filteredTasks.length} of ${selectedTray.tasks.filter((task) => task.issueType !== "Sub-task" && !task.parentTaskId).length} tasks match this tray.`
+                : "Grouped by project. Created tasks stay read-only."}
+            </p>
           </div>
-          <div className="flex items-center gap-2 text-xs text-[#6b778c]">
+          <div className="flex flex-wrap items-center justify-end gap-2 text-xs text-[#6b778c]">
+            <label className="flex h-8 min-w-[260px] items-center gap-2 rounded border border-[#c1c7d0] bg-white px-2 text-[#42526e] focus-within:border-[#4c9aff] focus-within:ring-2 focus-within:ring-[#deebff]">
+              <Search size={14} className="shrink-0" />
+              <input
+                aria-label="Search current tray"
+                className="h-7 min-w-0 flex-1 border-0 bg-transparent p-0 text-sm outline-none"
+                placeholder="Search current tray"
+                value={traySearchQuery}
+                onChange={(event) => setTraySearchQuery(event.target.value)}
+              />
+            </label>
             <span className="inline-flex items-center gap-1">
               <Loader2 size={13} /> {isArchived ? "Archived read-only" : "Sync ready"}
             </span>
-            <Button disabled={isArchived} variant="ghost" icon={<Filter size={14} />}>
-              Review order
-            </Button>
           </div>
         </div>
 
         <div className="space-y-5 p-4">
-          {Object.entries(grouped).map(([project, tasks]) => (
-            <ProjectTaskGroup
-              key={project}
-              project={project}
-              tasks={tasks}
-              areas={areas}
-              selectedTaskId={selectedTaskId}
-              onOpenTask={onOpenTask}
-              onUpdateTask={onUpdateTask}
-              onDuplicateTask={onDuplicateTask}
-              onDeleteTask={onDeleteTask}
-              onOpenJiraIssue={onOpenJiraIssue}
-              readOnly={isArchived}
-            />
-          ))}
+          {filteredTasks.length ? (
+            Object.entries(grouped).map(([project, tasks]) => (
+              <ProjectTaskGroup
+                key={project}
+                project={project}
+                tasks={tasks}
+                areas={areas}
+                selectedTaskId={selectedTaskId}
+                onOpenTask={onOpenTask}
+                onUpdateTask={onUpdateTask}
+                onDuplicateTask={onDuplicateTask}
+                onDeleteTask={onDeleteTask}
+                onOpenJiraIssue={onOpenJiraIssue}
+                readOnly={isArchived}
+              />
+            ))
+          ) : (
+            <div className="rounded border border-dashed border-[#c1c7d0] bg-[#f7f8fa] px-4 py-6 text-sm text-[#6b778c]">
+              No tasks in this tray match the current search.
+            </div>
+          )}
         </div>
       </div>
     </section>

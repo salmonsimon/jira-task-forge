@@ -3,23 +3,32 @@ import type {
   AiProvider,
   AppSettings,
   AssistedDescriptionDraft,
+  AssistedDescriptionProposal,
+  AssistedDescriptionProposalStatus,
   Category,
+  DescriptionProposalLogEntry,
+  DescriptionSectionStatus,
   JqlAiDraft,
   JiraCreateIssuesResult,
   JiraConnectionTestResult,
   JqlFavorite,
   JqlQueryResult,
   LocalTask,
+  NewAssistedDescriptionProposal,
   SyncLogEntry,
   Tray
 } from "../types";
 import {
+  mapBackendAssistedDescriptionProposal as mapAssistedDescriptionProposal,
   mapBackendCategory as mapCategory,
+  mapBackendDescriptionProposalLogEntry as mapDescriptionProposalLogEntry,
   mapBackendJqlFavorite as mapJqlFavorite,
   mapBackendSyncAuditEvent as mapSyncAuditEvent,
   mapBackendTask as mapTask,
   mapBackendTray as mapTray,
+  type BackendAssistedDescriptionProposal,
   type BackendCategory,
+  type BackendDescriptionProposalLogEntry,
   type BackendJqlFavorite,
   type BackendSyncAuditEvent,
   type BackendTask,
@@ -217,6 +226,75 @@ export async function generatePersistedTaskDescription(
     taskId,
     additionalContext
   });
+}
+
+export async function createPersistedAssistedDescriptionProposal(
+  proposal: NewAssistedDescriptionProposal
+): Promise<AssistedDescriptionProposal> {
+  const persisted = await invoke<BackendAssistedDescriptionProposal>("create_assisted_description_proposal", proposal);
+  return mapAssistedDescriptionProposal(persisted);
+}
+
+export async function listPersistedAssistedDescriptionProposals(
+  taskId: string
+): Promise<AssistedDescriptionProposal[]> {
+  const proposals = await invoke<BackendAssistedDescriptionProposal[]>("list_assisted_description_proposals", {
+    taskId
+  });
+  return proposals.map(mapAssistedDescriptionProposal);
+}
+
+export async function listPersistedDescriptionProposalLog(taskId: string): Promise<DescriptionProposalLogEntry[]> {
+  const entries = await invoke<BackendDescriptionProposalLogEntry[]>("list_description_proposal_log", { taskId });
+  return entries.map(mapDescriptionProposalLogEntry);
+}
+
+export async function updatePersistedAssistedDescriptionProposalSection(
+  proposalId: string,
+  sectionId: string,
+  patch: {
+    proposedContent?: string | null;
+    status?: DescriptionSectionStatus | null;
+    reviewerComment?: string | null;
+    applyToTaskDescription?: boolean;
+  }
+): Promise<AssistedDescriptionProposal | null> {
+  const updated = await invoke<BackendAssistedDescriptionProposal | null>(
+    "update_assisted_description_proposal_section",
+    {
+      proposalId,
+      sectionId,
+      proposedContent: patch.proposedContent,
+      status: patch.status,
+      reviewerComment: patch.reviewerComment,
+      applyToTaskDescription: patch.applyToTaskDescription ?? false
+    }
+  );
+  return updated ? mapAssistedDescriptionProposal(updated) : null;
+}
+
+export async function transitionPersistedAssistedDescriptionProposal(
+  proposalId: string,
+  status: AssistedDescriptionProposalStatus,
+  options: {
+    reviewerComment?: string | null;
+    applyToTaskDescription?: boolean;
+  } = {}
+): Promise<AssistedDescriptionProposal | null> {
+  const updated = await invoke<BackendAssistedDescriptionProposal | null>(
+    "transition_assisted_description_proposal",
+    {
+      proposalId,
+      status,
+      reviewerComment: options.reviewerComment,
+      applyToTaskDescription: options.applyToTaskDescription ?? (status === "Accepted" || status === "Partial")
+    }
+  );
+  return updated ? mapAssistedDescriptionProposal(updated) : null;
+}
+
+export async function deletePersistedAssistedDescriptionProposal(proposalId: string): Promise<boolean> {
+  return invoke<boolean>("delete_assisted_description_proposal", { proposalId });
 }
 
 export async function createPersistedJiraParentIssues(

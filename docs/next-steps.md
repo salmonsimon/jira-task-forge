@@ -423,43 +423,57 @@ These can usually run without interruption when acceptance criteria are clear:
 
 Recommended next implementation slice:
 
-Branch: `codex/post-jira-architecture-tests`
+Branch family:
+
+- `codex/afk-polish-ui-preflight`
+- `codex/afk-description-proposal-persistence`
+- `codex/afk-description-proposal-ui`
 
 Deliverables:
 
-- Stabilize the merged Jira write path before adding sub-task creation,
-  attachment upload, or AI writes.
-- Keep already accepted PR #26 behavior intact while tightening security and
-  responsiveness around Jira credentials, JQL, keyring operations, audit logs,
-  and command worker usage.
-- Add focused tests for accepted rules rather than introducing broad coverage
-  tooling before the useful seams are clear.
-- Document deeper architecture candidates for HITL review instead of making
-  larger module splits silently.
+- Polish the live Jira preparation workflow before adding larger Jira feature
+  expansion.
+- Add focused tray ergonomics: contextual `Ctrl+Enter`, tray-local search,
+  long-title truncation, `Transversal` pinned first, and focused-window title
+  editing for editable tasks.
+- Make JQL result keys open Jira externally through the existing safe external
+  link path.
+- Contain scroll inside dropdowns, popovers, and internal overlay lists.
+- Tighten Jira preflight presentation by resolving sub-task parents from the
+  full tray and grouping epic-resolution review by `[{Project}] {Area}` target.
+- Implement persistent Assisted Description proposal metadata and chronological
+  proposal logs with backup/import support.
+- Build the brainstorming-style proposal review UX for Jira descriptions:
+  Markdown read view, fixed SRS Lite sections, hidden empty sections in read
+  mode, editable empty sections, `Raw`/`Polished` section states, paragraph
+  diffs that hide unchanged paragraphs, global and per-section request-changes,
+  and compact proposal-log cards.
 
 Reason:
 
-- The first Jira write path is live-tested and merged. A short stabilization
-  slice gives future write surfaces a safer base and reduces the chance that
-  AFK agents duplicate Jira issues or leak sensitive diagnostics.
+- Live QA showed Jira creation works, but regular task preparation still has
+  friction around review, editing, preflight density, and assisted-description
+  iteration. This polish pass should make the current Personal v1 workflow
+  comfortable before adding standalone feature surfaces such as Jira issue
+  relationships or broader category sync.
 
 ## Following Slice
 
 Recommended following implementation slice:
 
-Branch: `codex/jira-subtasks-first`
+Branch: `codex/jira-issue-relationships`
 
 Deliverables:
 
-- Add sub-task creation behind the existing preflight and metadata model.
-- Preserve the existing epic/parent issue safety model and recovery behavior.
-- Keep attachment upload, AI-generated descriptions, and manual CSV import
-  validation out of this slice unless separately approved.
+- Add Jira issue relationship management such as `blocks` and `blocked by` as a
+  standalone model/sync feature.
+- Keep the accepted local-first and Jira duplicate-prevention model intact.
+- Treat relationship writes as separate Jira mutation scope from task creation.
 
 Reason:
 
-- Parent issue creation is proven. Sub-tasks are the narrowest next Jira write
-  surface before attachments or AI provider calls.
+- Relationship links affect the local data model and Jira write behavior enough
+  that they should be designed and tested independently from the polish pass.
 
 ## Security And Reliability Tests To Add
 

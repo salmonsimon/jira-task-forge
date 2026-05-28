@@ -109,6 +109,21 @@ This document captures the product scope decisions from the grill session. UI co
   Settings.
 - Within each project, tasks keep manual/capture order for review.
 - Jira creation does not need to preserve visual order; robustness matters more.
+- Tray search is scoped only to the currently open **Preparation Tray**. It
+  should not search across other active, completed, recovery, or archived trays.
+  The first search surface should filter the open tray by local task title,
+  project, area, description text, Jira key, and sub-task titles without
+  changing task order.
+- Keyboard shortcuts should be contextual rather than global. In Quick Capture,
+  `Ctrl+Enter`/`Cmd+Enter` in the title field adds the task. In description
+  prompt textareas, it generates a proposal. In manual section edit textareas,
+  it saves the section. JQL keeps its existing `Ctrl+Enter`/`Cmd+Enter` run or
+  draft behavior.
+- Scrollable dropdowns, popovers, and internal overlay lists should contain
+  pointer-wheel scrolling. When the pointer is over an internal scroll surface
+  and that surface reaches its top or bottom, the underlying app surface should
+  not scroll. Normal modal/body scrolling remains allowed when the pointer is
+  not over a bounded internal list.
 
 ## Task Fields
 
@@ -154,6 +169,11 @@ This document captures the product scope decisions from the grill session. UI co
   - `Title`
   - `Priority`
   - possibly issue type when needed
+- The focused task window should allow editing the same local `Title` for
+  Pending, Failed, and Exported tasks. Created tasks remain read-only.
+- Title editing always edits the local title without the derived area prefix.
+  The Jira summary prefix `[{Area}]` is generated for display/Jira payloads and
+  should not be duplicated into the stored title.
 - Advanced editing opens a focused task window and includes:
   - assisted description
   - images/attachments
@@ -229,6 +249,14 @@ This document captures the product scope decisions from the grill session. UI co
   notification with the exported task count and saved filename.
 - Partial sync results should clearly show which groups and tasks were created,
   paused, or failed.
+- Preflight warning groups should aggregate repeated warnings where possible.
+  Epic resolution warnings should group by `[{Project}] {Area}` epic target,
+  show the affected task count, and allow expanding to task titles only when
+  review is useful. Normal epic targets should not fill the preflight panel when
+  there is no action required.
+- Sub-task creation summaries should resolve parent task titles from the whole
+  tray before grouping sub-tasks. They should not show `Missing parent task`
+  when the parent exists outside the filtered sub-task list.
 - When partial sync leaves failed or paused tasks, the app should offer to create
   a follow-up tray containing only those problem tasks and a short origin note
   explaining why they were separated.
@@ -295,9 +323,15 @@ This document captures the product scope decisions from the grill session. UI co
   - `PilotLab`
   - `MR Studio`
   - `Transversal`
+- For Personal v1 polish, `Transversal` is pinned to the top of project
+  dropdowns and tray project grouping when it exists. Other projects keep their
+  normal stored order.
 - Projects and areas can be created locally.
 - Locally created categories become available immediately for task capture.
 - Projects and areas are synced from Jira on demand by reading existing epics.
+- The first Jira category sync should only read existing epics whose summaries
+  match the `[{Project}] {Area}` pattern. It should not infer categories from
+  arbitrary issue labels, summaries, or global Jira scans.
 - Newly detected projects/areas are shown as suggestions and must be approved before becoming local categories.
 - Already-known categories should not create noise during sync.
 - Ignored suggestions may be remembered to avoid repeated noise.
@@ -305,6 +339,10 @@ This document captures the product scope decisions from the grill session. UI co
 - Projects/areas are not renamed in v1.
 - Hidden options do not appear in normal dropdown lists, but can appear in autocomplete when the user types the start of the name.
 - Hidden options should use a crossed-eye visibility icon.
+- Alphabetical and manual category ordering are future improvements, not part
+  of the first polish pass.
+- A broader global Jira scan for category candidates is a future improvement
+  after the pattern-based epic sync is useful.
 
 ## Assisted Descriptions
 
@@ -321,6 +359,47 @@ This document captures the product scope decisions from the grill session. UI co
   description, the AI should ask targeted follow-up questions before finalizing.
 - The Personal v1 AI description flow can be multi-step for clarification, but
   it is not a general-purpose free-form chat inside the app.
+- Assisted descriptions should render as Markdown when being read, while still
+  allowing direct manual editing of the full description even when the task has
+  no description yet.
+- AI proposal review should use the fixed Jira description sections rather than
+  asking which sections to complete. For Jira Task Forge, all required sections
+  are always in scope for a proposal.
+- The structured description model should keep every required SRS Lite section,
+  even when a section has empty content. The read view should hide empty
+  sections by default, while the edit/review view should expose them so Saimon
+  can fill them or intentionally clear a section back to empty.
+- Description sections use the brainstorming-style `Raw` vs `Polished`
+  distinction. Empty sections and unreviewed sections stay `Raw`. A section
+  should become `Polished` only after accepting/editing meaningful content or
+  explicitly marking an existing non-empty section as OK.
+- The proposal review UX should allow section-level accept, reject, manual edit,
+  and "request changes" iteration with a short user comment.
+- "Request changes" should exist at both levels: one action for the whole
+  current proposal and one action for an individual section. Section-level
+  requests should only ask the AI to revise that section.
+- Immediately after generating an AI proposal, the app should open a proposal
+  review modal similar to the brainstorming app: proposal header, provider/model
+  metadata, per-section current/proposed diff, section-level accept/reject, and
+  proposal-level accept/reject remaining actions.
+- Proposal diffs should be paragraph-level by section. Unchanged paragraphs
+  should be hidden so the review surface shows only meaningful changes rather
+  than the full current and proposed text.
+- The task detail view should also keep a compact AI/proposal panel with a
+  chronological proposal log. Log cards should show only the proposal title or
+  summary plus minimal labels for proposal status and provider/model. They
+  should not show the full proposed description body inline, section counts, or
+  verbose review counters by default.
+- Proposal metadata and the chronological iteration log should persist locally
+  with the task, similar to the brainstorming app's proposal metadata. This
+  history is for local review and backup, not Jira upload.
+- The first AFK implementation pass may add a SQLite migration for assisted
+  description proposals and proposal-log entries. The migration should keep this
+  metadata attached to the local task, include it in local backup/import, and
+  avoid changing the Jira payload except through the accepted final description.
+- Accepting or manually editing a proposed section updates the task's final
+  Assisted Description. Rejected proposal sections remain in local proposal
+  history but are not included in the Jira description.
 - Missing-description and missing-field review remains part of the existing
   preflight flow rather than a separate AI review feature in Personal v1.
 - Story descriptions use:
@@ -373,6 +452,9 @@ document such as `docs/jira-description-format.md`.
   textarea, and then the app generates an editable Jira description.
 - AI-generated descriptions are never uploaded automatically. They must remain
   editable and are uploaded only through the normal `Create in Jira` flow.
+- Jira issue relationship links such as `blocks` and `blocked by` are a future
+  standalone feature. Do not mix them into the first description/tray polish
+  pass.
 
 ## Images and Attachments
 
@@ -426,6 +508,10 @@ document such as `docs/jira-description-format.md`.
 - JQL history is not included in backups by default.
 - JQL favorites are included in backups.
 - JQL results do not create local tasks in v1.
+- Jira issue keys in JQL results should open the matching Jira issue externally
+  in the browser, using the configured Jira site URL and the same external-link
+  safety path used by created task links. Jira Task Forge does not need an
+  internal Jira issue viewer for this polish pass.
 - Direct and AI-generated JQL must include a search restriction; Jira Cloud may reject unlimited queries such as `ORDER BY created DESC` with a 400 error. For broad smoke tests, prefer bounded forms such as `created IS NOT EMPTY ORDER BY created DESC`.
 - Recommended default result columns:
   - `Key`
@@ -662,6 +748,7 @@ document such as `docs/jira-description-format.md`.
 - Multi-user/team administration.
 - Editable AI prompt/template UI.
 - Configurable sub-task template editor.
+- Jira issue relationship management such as `blocks` and `blocked by`.
 - Rich CSV export customization.
 - Automatic archival of completed trays.
 - Full tray duplication.

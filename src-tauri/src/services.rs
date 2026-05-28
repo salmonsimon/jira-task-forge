@@ -6,6 +6,7 @@ mod ai;
 mod backup;
 mod categories;
 mod credentials;
+mod description_proposals;
 mod jira;
 mod jql;
 mod settings;

@@ -7,6 +7,20 @@ export type TrayState = "Active" | "Needs attention" | "Completed" | "Archived";
 export type IssueType = "Story" | "Bug" | "Sub-task";
 export type AttachmentPurpose = "AI only" | "Jira attachment" | "AI + Jira attachment";
 export type AiProvider = "OpenAI" | "Claude" | "Gemini" | "None";
+export type DescriptionSectionStatus = "Raw" | "Polished";
+export type AssistedDescriptionProposalStatus = "Pending" | "Accepted" | "Rejected" | "Partial";
+export type AssistedDescriptionSectionId =
+  | "user_story"
+  | "problem"
+  | "objective"
+  | "scope"
+  | "out_of_scope"
+  | "main_flows"
+  | "functional_requirements"
+  | "nonfunctional_requirements"
+  | "constraints_dependencies"
+  | "acceptance_criteria"
+  | "risks_questions";
 export type PreflightWarningSeverity = "blocking" | "resolvable";
 export type PreflightWarningCode =
   | "empty-tray"
@@ -125,6 +139,55 @@ export type AssistedDescriptionDraft = {
   status: "drafted" | "needs_clarification";
   description?: string | null;
   clarificationQuestions: string[];
+};
+
+export type AssistedDescriptionProposalSection = {
+  sectionId: AssistedDescriptionSectionId;
+  heading: string;
+  currentContent: string;
+  proposedContent: string;
+  status: DescriptionSectionStatus;
+  updatedAt?: string | null;
+};
+
+export type AssistedDescriptionProposal = {
+  id: string;
+  taskId: string;
+  title: string;
+  summary?: string | null;
+  status: AssistedDescriptionProposalStatus;
+  provider?: string | null;
+  model?: string | null;
+  userComment?: string | null;
+  sections: AssistedDescriptionProposalSection[];
+  createdAt: string;
+  updatedAt: string;
+  decidedAt?: string | null;
+};
+
+export type NewAssistedDescriptionProposal = {
+  taskId: string;
+  title?: string | null;
+  summary?: string | null;
+  provider?: string | null;
+  model?: string | null;
+  userComment?: string | null;
+  sections: AssistedDescriptionProposalSection[];
+};
+
+export type DescriptionProposalLogEntry = {
+  id: string;
+  taskId: string;
+  proposalId?: string | null;
+  eventType: string;
+  title: string;
+  summary?: string | null;
+  status: AssistedDescriptionProposalStatus;
+  provider?: string | null;
+  model?: string | null;
+  userComment?: string | null;
+  detail: unknown;
+  occurredAt: string;
 };
 
 export type PreflightWarning = {

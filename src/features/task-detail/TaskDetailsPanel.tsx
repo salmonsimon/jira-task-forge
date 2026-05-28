@@ -18,7 +18,7 @@ export function TaskDetailsPanel({
   areas: string[];
   readOnly: boolean;
   onOpenJiraIssue: (url: string) => void | Promise<void>;
-  onUpdateDetails: (taskId: string, task: { project: string; area: string; priority: Priority }) => void | Promise<void>;
+  onUpdateDetails: (taskId: string, task: Partial<Pick<LocalTask, "project" | "area" | "priority" | "title">>) => void | Promise<void>;
 }) {
   function updateDetails(nextDetails: Partial<Pick<LocalTask, "project" | "area" | "priority">>) {
     if (readOnly) return;
@@ -215,7 +215,7 @@ function DetailSelect({
 
       {isOpen ? (
         <div
-          className="absolute left-0 top-[calc(100%+4px)] z-50 max-h-56 min-w-[160px] overflow-y-auto rounded border border-[#5c606a] bg-[#2b2d31] py-1 text-sm text-[#f4f5f7] shadow-xl"
+          className="absolute left-0 top-[calc(100%+4px)] z-50 max-h-56 min-w-[160px] overflow-y-auto overscroll-contain rounded border border-[#5c606a] bg-[#2b2d31] py-1 text-sm text-[#f4f5f7] shadow-xl"
           role="listbox"
         >
           {options.map((option) => {

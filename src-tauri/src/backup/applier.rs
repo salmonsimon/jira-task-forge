@@ -3,7 +3,10 @@ use std::collections::BTreeMap;
 use rusqlite::{params, Connection};
 
 use crate::db::DbResult;
-use crate::models::{Category, JqlFavorite, LocalTask, Tray};
+use crate::models::{
+    AssistedDescriptionProposal, Category, DescriptionProposalLogEntry, JqlFavorite, LocalTask,
+    Tray,
+};
 use crate::repositories::SettingsRepository;
 
 use super::format::{
@@ -91,6 +94,32 @@ fn apply_import_plan(
                 .collect::<Vec<_>>(),
         )?,
         plan.backup.data.epic_mappings.len(),
+    );
+    count_insert(
+        &mut imported_counts,
+        &mut skipped_counts,
+        "assistedDescriptionProposals",
+        import_assisted_description_proposals(
+            &transaction,
+            &plan
+                .assisted_description_proposals
+                .selected(&plan.backup.data.assisted_description_proposals)
+                .collect::<Vec<_>>(),
+        )?,
+        plan.backup.data.assisted_description_proposals.len(),
+    );
+    count_insert(
+        &mut imported_counts,
+        &mut skipped_counts,
+        "descriptionProposalLog",
+        import_description_proposal_log(
+            &transaction,
+            &plan
+                .description_proposal_log
+                .selected(&plan.backup.data.description_proposal_log)
+                .collect::<Vec<_>>(),
+        )?,
+        plan.backup.data.description_proposal_log.len(),
     );
     count_insert(
         &mut imported_counts,
@@ -288,6 +317,76 @@ fn import_epic_mappings(
                 mapping.synced_at,
                 mapping.created_at,
                 mapping.updated_at
+            ],
+        )?;
+    }
+    Ok(imported)
+}
+
+fn import_assisted_description_proposals(
+    connection: &Connection,
+    proposals: &[&AssistedDescriptionProposal],
+) -> DbResult<usize> {
+    let mut imported = 0;
+    for proposal in proposals {
+        let sections_json = serde_json::to_string(&proposal.sections)
+            .map_err(|error| crate::db::DbError::InvalidData(error.to_string()))?;
+        imported += connection.execute(
+            "
+            INSERT OR IGNORE INTO assisted_description_proposals (
+                id, task_id, title, summary, status, provider, model, user_comment,
+                sections_json, created_at, updated_at, decided_at
+            )
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+            ",
+            params![
+                proposal.id,
+                proposal.task_id,
+                proposal.title,
+                proposal.summary,
+                proposal.status.as_db_value(),
+                proposal.provider,
+                proposal.model,
+                proposal.user_comment,
+                sections_json,
+                proposal.created_at,
+                proposal.updated_at,
+                proposal.decided_at
+            ],
+        )?;
+    }
+    Ok(imported)
+}
+
+fn import_description_proposal_log(
+    connection: &Connection,
+    entries: &[&DescriptionProposalLogEntry],
+) -> DbResult<usize> {
+    let mut imported = 0;
+    for entry in entries {
+        let detail_json = serde_json::to_string(&entry.detail)
+            .map_err(|error| crate::db::DbError::InvalidData(error.to_string()))?;
+        imported += connection.execute(
+            "
+            INSERT OR IGNORE INTO description_proposal_log_entries (
+                id, task_id, proposal_id, event_type, title, summary, status, provider,
+                model, user_comment, detail_json, occurred_at
+            )
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+            ",
+            params![
+                entry.id,
+                entry.task_id,
+                entry.proposal_id,
+                entry.event_type,
+                entry.title,
+                entry.summary,
+                entry.status.as_db_value(),
+                entry.provider,
+                entry.model,
+                entry.user_comment,
+                detail_json,
+                entry.occurred_at
             ],
         )?;
     }

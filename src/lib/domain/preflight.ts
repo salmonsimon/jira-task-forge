@@ -1,6 +1,12 @@
 import { isSubtask } from "./taskGraph";
 import type { LocalTask, PreflightWarning } from "../types";
 
+export type EpicResolutionWarningGroup = {
+  target: string;
+  taskTitles: string[];
+  warnings: PreflightWarning[];
+};
+
 export function classifyTaskPreflightWarnings(task: LocalTask): PreflightWarning[] {
   const warnings: PreflightWarning[] = [];
 
@@ -68,6 +74,38 @@ export function classifyTaskPreflightWarnings(task: LocalTask): PreflightWarning
   }
 
   return warnings;
+}
+
+export function formatEpicTarget(project: string, area: string): string {
+  return `[${project.trim()}] ${area.trim()}`;
+}
+
+export function groupEpicResolutionWarnings(
+  warnings: PreflightWarning[],
+  tasks: LocalTask[]
+): EpicResolutionWarningGroup[] {
+  const tasksById = new Map(tasks.map((task) => [task.id, task]));
+  const groups = new Map<string, EpicResolutionWarningGroup>();
+
+  for (const warning of warnings) {
+    if (warning.code !== "missing-epic") continue;
+
+    const task = warning.taskId ? tasksById.get(warning.taskId) : undefined;
+    const target = task && task.project.trim() && task.area.trim()
+      ? formatEpicTarget(task.project, task.area)
+      : "Unresolved epic target";
+    const group = groups.get(target) ?? {
+      target,
+      taskTitles: [],
+      warnings: []
+    };
+
+    group.warnings.push(warning);
+    if (task) group.taskTitles.push(task.title.trim() || "Untitled task");
+    groups.set(target, group);
+  }
+
+  return Array.from(groups.values());
 }
 
 export function classifyTrayPreflightWarnings(tasks: LocalTask[]): PreflightWarning[] {

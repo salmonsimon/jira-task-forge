@@ -4,7 +4,10 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::db::{utc_now_string, DbError, DbResult};
-use crate::models::{AppSettings, Category, JqlFavorite, LocalTask, Tray};
+use crate::models::{
+    AppSettings, AssistedDescriptionProposal, Category, DescriptionProposalLogEntry, JqlFavorite,
+    LocalTask, Tray,
+};
 
 use super::{attachment_files, audit_policy};
 
@@ -41,6 +44,10 @@ pub struct BackupData {
     pub epic_mappings: Vec<EpicMappingBackup>,
     pub jql_favorites: Vec<JqlFavorite>,
     pub settings: AppSettings,
+    #[serde(default)]
+    pub assisted_description_proposals: Vec<AssistedDescriptionProposal>,
+    #[serde(default)]
+    pub description_proposal_log: Vec<DescriptionProposalLogEntry>,
     pub attachment_metadata: Vec<AttachmentBackup>,
     pub attachment_variants: Vec<AttachmentVariantBackup>,
     pub audit_summaries: Vec<AuditSummaryBackup>,
@@ -164,6 +171,14 @@ pub(crate) fn record_counts(data: &BackupData) -> BTreeMap<String, usize> {
         ("epicMappings".to_string(), data.epic_mappings.len()),
         ("jqlFavorites".to_string(), data.jql_favorites.len()),
         ("settings".to_string(), 1),
+        (
+            "assistedDescriptionProposals".to_string(),
+            data.assisted_description_proposals.len(),
+        ),
+        (
+            "descriptionProposalLog".to_string(),
+            data.description_proposal_log.len(),
+        ),
         (
             "attachmentMetadata".to_string(),
             data.attachment_metadata.len(),

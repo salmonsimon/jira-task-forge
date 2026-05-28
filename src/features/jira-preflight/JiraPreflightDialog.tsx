@@ -2,7 +2,7 @@ import { AlertTriangle, Check, CheckCircle2, Info, Loader2, ShieldCheck, XCircle
 import { useEffect, useState, type ReactNode } from "react";
 import { Button, LoadingOrb } from "../../components/ui";
 import { appOverlayLayers, useAppOverlay } from "../../lib/app-overlays";
-import { groupSubtasksByParent, isSubtask } from "../../lib/domain";
+import { formatEpicTarget, groupEpicResolutionWarnings, groupSubtasksByParent, isSubtask } from "../../lib/domain";
 import type {
   JiraConnectionTestResult,
   JiraCreateIssuesResult,
@@ -120,7 +120,7 @@ export function JiraPreflightDialog({
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-5 py-4">
           <div className="rounded border border-[#3b4454] bg-[#292c31] px-3 py-3">
             {preflight.credentialStatus === "checking" ? (
               <div className="flex min-h-[88px] flex-col items-center justify-center gap-3 text-center">
@@ -325,7 +325,8 @@ function SubtaskCreationSummary({
         task.parentTaskId &&
         task.syncStatus !== "Created" &&
         (includeExportedTasks || task.syncStatus !== "Exported")
-    )
+    ),
+    tray.tasks
   );
 
   if (!subtaskGroups.length) return null;
@@ -456,29 +457,73 @@ function PreflightWarningGroup({
         {title}
       </div>
       <div className="space-y-3">
-        {groupedWarnings.map((group) => (
-          <section className="rounded border border-black/20 bg-black/10 px-3 py-2" key={group.code}>
-            <div className="flex items-center justify-between gap-3">
-              <h3 className="text-sm font-semibold text-[#f4f5f7]">{getWarningTitle(group.code)}</h3>
-              <span className="shrink-0 rounded bg-black/20 px-2 py-0.5 text-xs font-medium text-[#dfe1e6]">
-                {group.warnings.length}
-              </span>
-            </div>
-            <p className="mt-1 text-xs leading-relaxed text-[#c7cbd3]">{getWarningSummary(group.code, group.warnings[0])}</p>
-            <ul className="mt-2 space-y-1.5">
-              {group.warnings.map((warning, index) => (
-                <li className="text-sm text-[#dfe1e6]" key={`${warning.code}-${warning.taskId ?? "tray"}-${index}`}>
-                  {warning.taskId ? (
-                    <TaskWarningLine code={warning.code} task={tasksById.get(warning.taskId)} />
-                  ) : (
-                    warning.message
-                  )}
-                </li>
-              ))}
-            </ul>
-          </section>
-        ))}
+        {groupedWarnings.map((group) => {
+          const epicGroups = group.code === "missing-epic" ? groupEpicResolutionWarnings(group.warnings, tray.tasks) : [];
+          const countLabel = group.code === "missing-epic"
+            ? `${epicGroups.length} ${epicGroups.length === 1 ? "target" : "targets"}`
+            : group.warnings.length;
+
+          return (
+            <section className="rounded border border-black/20 bg-black/10 px-3 py-2" key={group.code}>
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="text-sm font-semibold text-[#f4f5f7]">{getWarningTitle(group.code)}</h3>
+                <span className="shrink-0 rounded bg-black/20 px-2 py-0.5 text-xs font-medium text-[#dfe1e6]">
+                  {countLabel}
+                </span>
+              </div>
+              <p className="mt-1 text-xs leading-relaxed text-[#c7cbd3]">{getWarningSummary(group.code, group.warnings[0])}</p>
+              {group.code === "missing-epic" ? (
+                <EpicResolutionWarningLines groups={epicGroups} />
+              ) : (
+                <ul className="mt-2 space-y-1.5">
+                  {group.warnings.map((warning, index) => (
+                    <li className="text-sm text-[#dfe1e6]" key={`${warning.code}-${warning.taskId ?? "tray"}-${index}`}>
+                      {warning.taskId ? (
+                        <TaskWarningLine code={warning.code} task={tasksById.get(warning.taskId)} />
+                      ) : (
+                        warning.message
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          );
+        })}
       </div>
+    </div>
+  );
+}
+
+function EpicResolutionWarningLines({
+  groups
+}: {
+  groups: ReturnType<typeof groupEpicResolutionWarnings>;
+}) {
+  return (
+    <div className="mt-2 space-y-2">
+      {groups.map((group) => (
+        <div className="rounded border border-black/20 bg-black/10 px-3 py-2" key={group.target}>
+          <div className="flex items-center justify-between gap-3">
+            <span className="min-w-0 truncate text-sm font-medium text-[#f4f5f7]">{group.target}</span>
+            <span className="shrink-0 rounded bg-black/20 px-2 py-0.5 text-xs font-medium text-[#dfe1e6]">
+              {group.warnings.length} {group.warnings.length === 1 ? "task" : "tasks"}
+            </span>
+          </div>
+          {group.taskTitles.length ? (
+            <details className="mt-1 text-xs text-[#c7cbd3]">
+              <summary className="cursor-pointer select-none text-[#dfe1e6]">Review titles</summary>
+              <ul className="mt-1 space-y-1 pl-3">
+                {group.taskTitles.map((title, index) => (
+                  <li className="truncate" key={`${group.target}-${title}-${index}`} title={title}>
+                    {title}
+                  </li>
+                ))}
+              </ul>
+            </details>
+          ) : null}
+        </div>
+      ))}
     </div>
   );
 }
@@ -496,10 +541,6 @@ function TaskWarningLine({ code, task }: { code: PreflightWarningCode; task: Tra
       ) : null}
     </div>
   );
-}
-
-function formatEpicTarget(project: string, area: string) {
-  return `[${project.trim()}] ${area.trim()}`;
 }
 
 function groupWarningsByCode(warnings: PreflightWarning[]): Array<{ code: PreflightWarningCode; warnings: PreflightWarning[] }> {

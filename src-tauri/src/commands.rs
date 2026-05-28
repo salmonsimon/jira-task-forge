@@ -2,6 +2,7 @@ pub(crate) mod ai;
 pub(crate) mod backup;
 pub(crate) mod categories;
 pub(crate) mod credentials;
+pub(crate) mod description_proposals;
 pub(crate) mod external_links;
 pub(crate) mod jira;
 pub(crate) mod jql;

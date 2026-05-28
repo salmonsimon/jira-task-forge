@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   addJqlRecentQuery,
+  buildJiraIssueBrowseUrl,
   formatJqlAiDraftMessage,
   formatJqlQueryError,
   formatJqlQueryMessage
@@ -85,6 +86,15 @@ describe("JQL workflow domain helpers", () => {
     expect(formatJqlQueryMessage(4, false, ["Some results were omitted."])).toBe(
       "4 issues returned. More results are available in Jira. Some results were omitted."
     );
+  });
+
+  it("builds safe Jira issue browse URLs from the configured site URL", () => {
+    expect(buildJiraIssueBrowseUrl(" https://DTS.atlassian.net/jira/software ", "JTFTEST-123")).toBe(
+      "https://dts.atlassian.net/browse/JTFTEST-123"
+    );
+    expect(buildJiraIssueBrowseUrl("http://dts.atlassian.net", "JTFTEST-123")).toBeNull();
+    expect(buildJiraIssueBrowseUrl("https://example.com", "JTFTEST-123")).toBeNull();
+    expect(buildJiraIssueBrowseUrl("https://dts.atlassian.net", "JTFTEST 123")).toBeNull();
   });
 
   it("formats JQL errors and AI draft messages", () => {

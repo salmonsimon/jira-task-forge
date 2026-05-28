@@ -21,14 +21,17 @@ export function QuickCapture({
   const [title, setTitle] = useState("");
   const [priority, setPriority] = useState<Priority>("Medium");
 
-  function submitTask(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
+  function addCurrentTask() {
     const trimmedTitle = title.trim();
     if (!trimmedTitle) return;
 
     onAddTask({ project, area, title: trimmedTitle, priority });
     setTitle("");
+  }
+
+  function submitTask(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    addCurrentTask();
   }
 
   return (
@@ -49,9 +52,15 @@ export function QuickCapture({
           placeholder="Task title"
           value={title}
           onChange={(event) => setTitle(event.target.value)}
+          onKeyDown={(event) => {
+            if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+              event.preventDefault();
+              addCurrentTask();
+            }
+          }}
         />
         <CaptureSelect ariaLabel="Priority" disabled={disabled} options={priorities} value={priority} onChange={(value) => setPriority(value as Priority)} />
-        <Button disabled={disabled} icon={<Plus size={14} />}>Add task</Button>
+        <Button disabled={disabled} icon={<Plus size={14} />} type="submit">Add task</Button>
       </div>
     </form>
   );
@@ -150,7 +159,7 @@ function CaptureSelect({
 
       {isOpen ? (
         <div
-          className="absolute left-0 top-[calc(100%+4px)] z-30 max-h-60 w-full overflow-y-auto rounded border border-[#5c606a] bg-[#2b2d31] py-1 text-sm text-[#f4f5f7] shadow-xl"
+          className="absolute left-0 top-[calc(100%+4px)] z-30 max-h-60 w-full overflow-y-auto overscroll-contain rounded border border-[#5c606a] bg-[#2b2d31] py-1 text-sm text-[#f4f5f7] shadow-xl"
           role="listbox"
         >
           {options.map((option) => {
