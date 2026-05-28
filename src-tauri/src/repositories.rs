@@ -7,7 +7,8 @@ use crate::models::{
     AppSettings, AssistedDescriptionProposal, AssistedDescriptionProposalSection,
     AssistedDescriptionProposalStatus, Category, DescriptionProposalLogEntry,
     DescriptionSectionStatus, JqlFavorite, LocalIssueRelationship, LocalTask,
-    NewAssistedDescriptionProposal, NewSubtask, NewTask, NewTray, SyncAuditEvent, Tray, TrayState,
+    NewAssistedDescriptionProposal, NewSubtask, NewTask, NewTaskAttachment, NewTray,
+    SyncAuditEvent, TaskAttachment, Tray, TrayState,
 };
 
 const APP_SETTINGS_KEY: &str = "app_settings";
@@ -455,6 +456,7 @@ impl<'connection> TaskRepository<'connection> {
             epic_key: None,
             parent_task_id: None,
             issue_relationships: Vec::new(),
+            attachments: Vec::new(),
             task_order,
             created_at: now.clone(),
             updated_at: now,
@@ -531,6 +533,7 @@ impl<'connection> TaskRepository<'connection> {
             epic_key: None,
             parent_task_id: Some(parent.id.clone()),
             issue_relationships: Vec::new(),
+            attachments: Vec::new(),
             task_order,
             created_at: now.clone(),
             updated_at: now,
@@ -704,6 +707,131 @@ impl<'connection> TaskRepository<'connection> {
 
         self.touch_tray(&tray_id, &now)?;
         self.find_by_id(task_id)
+    }
+
+    pub fn create_attachment(&self, new_attachment: NewTaskAttachment) -> DbResult<TaskAttachment> {
+        validate_attachment_purpose(&new_attachment.purpose)?;
+        if new_attachment.original_size_bytes < 0 {
+            return Err(DbError::InvalidData(
+                "attachment size cannot be negative".to_string(),
+            ));
+        }
+        let display_filename = normalize_display_name(&new_attachment.display_filename)?;
+        let relative_path = normalize_display_name(&new_attachment.original_relative_path)?;
+        let now = utc_now_string()?;
+        let tray_id = self.connection.query_row(
+            "SELECT tray_id FROM tasks WHERE id = ?1 AND sync_status != 'Created'",
+            [new_attachment.task_id.as_str()],
+            |row| row.get::<_, String>(0),
+        );
+        let Ok(tray_id) = tray_id else {
+            return Err(DbError::InvalidData(
+                "Task must be editable before adding attachments.".to_string(),
+            ));
+        };
+
+        let attachment = TaskAttachment {
+            id: Uuid::new_v4().to_string(),
+            task_id: new_attachment.task_id,
+            display_filename,
+            mime_type: normalize_optional_text(new_attachment.mime_type.as_deref()),
+            purpose: new_attachment.purpose,
+            original_size_bytes: new_attachment.original_size_bytes,
+            original_relative_path: relative_path,
+            size_label: format_byte_size(new_attachment.original_size_bytes),
+            restore_status: None,
+            created_at: now.clone(),
+            updated_at: now.clone(),
+        };
+
+        self.connection.execute(
+            "
+            INSERT INTO attachments (
+                id, task_id, display_filename, mime_type, purpose, original_size_bytes,
+                original_relative_path, file_hash, restore_status, created_at, updated_at
+            )
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL, ?8, ?9, ?10)
+            ",
+            params![
+                attachment.id,
+                attachment.task_id,
+                attachment.display_filename,
+                attachment.mime_type,
+                attachment.purpose,
+                attachment.original_size_bytes,
+                attachment.original_relative_path,
+                attachment.restore_status,
+                attachment.created_at,
+                attachment.updated_at
+            ],
+        )?;
+        self.touch_tray(&tray_id, &now)?;
+        Ok(attachment)
+    }
+
+    pub fn update_attachment_purpose(
+        &self,
+        task_id: &str,
+        attachment_id: &str,
+        purpose: &str,
+    ) -> DbResult<Option<LocalTask>> {
+        validate_attachment_purpose(purpose)?;
+        let now = utc_now_string()?;
+        let tray_id = self.connection.query_row(
+            "SELECT tray_id FROM tasks WHERE id = ?1 AND sync_status != 'Created'",
+            [task_id],
+            |row| row.get::<_, String>(0),
+        );
+        let Ok(tray_id) = tray_id else {
+            return Ok(None);
+        };
+
+        self.connection.execute(
+            "
+            UPDATE attachments
+            SET purpose = ?1, updated_at = ?2
+            WHERE id = ?3 AND task_id = ?4
+            ",
+            (purpose, now.as_str(), attachment_id, task_id),
+        )?;
+        self.touch_tray(&tray_id, &now)?;
+        self.find_by_id(task_id)
+    }
+
+    pub fn delete_attachment(
+        &self,
+        task_id: &str,
+        attachment_id: &str,
+    ) -> DbResult<Option<LocalTask>> {
+        let now = utc_now_string()?;
+        let tray_id = self.connection.query_row(
+            "SELECT tray_id FROM tasks WHERE id = ?1 AND sync_status != 'Created'",
+            [task_id],
+            |row| row.get::<_, String>(0),
+        );
+        let Ok(tray_id) = tray_id else {
+            return Ok(None);
+        };
+
+        self.connection.execute(
+            "DELETE FROM attachments WHERE id = ?1 AND task_id = ?2",
+            (attachment_id, task_id),
+        )?;
+        self.touch_tray(&tray_id, &now)?;
+        self.find_by_id(task_id)
+    }
+
+    pub fn list_jira_uploadable_attachments(&self, task_id: &str) -> DbResult<Vec<TaskAttachment>> {
+        Ok(self
+            .list_attachments_for_task(task_id)?
+            .into_iter()
+            .filter(|attachment| {
+                matches!(
+                    attachment.purpose.as_str(),
+                    "Jira attachment" | "AI + Jira attachment"
+                )
+            })
+            .collect())
     }
 
     pub fn delete(&self, task_id: &str) -> DbResult<bool> {
@@ -1035,6 +1163,7 @@ impl<'connection> TaskRepository<'connection> {
     fn attach_issue_relationships(&self, mut tasks: Vec<LocalTask>) -> DbResult<Vec<LocalTask>> {
         for task in &mut tasks {
             task.issue_relationships = self.list_issue_relationships_for_task(&task.id)?;
+            task.attachments = self.list_attachments_for_task(&task.id)?;
         }
         Ok(tasks)
     }
@@ -1056,6 +1185,23 @@ impl<'connection> TaskRepository<'connection> {
             .query_map([task_id], map_issue_relationship_row)?
             .collect::<Result<Vec<_>, _>>()?;
         Ok(relationships)
+    }
+
+    fn list_attachments_for_task(&self, task_id: &str) -> DbResult<Vec<TaskAttachment>> {
+        let mut statement = self.connection.prepare(
+            "
+            SELECT id, task_id, display_filename, mime_type, purpose, original_size_bytes,
+                   original_relative_path, restore_status, created_at, updated_at
+            FROM attachments
+            WHERE task_id = ?1
+            ORDER BY created_at ASC, id ASC
+            ",
+        )?;
+
+        let attachments = statement
+            .query_map([task_id], map_attachment_row)?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(attachments)
     }
 }
 
@@ -1634,6 +1780,7 @@ fn map_task_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<LocalTask> {
         epic_key: row.get("epic_key")?,
         parent_task_id: row.get("parent_task_id")?,
         issue_relationships: Vec::new(),
+        attachments: Vec::new(),
         task_order: row.get("task_order")?,
         created_at: row.get("created_at")?,
         updated_at: row.get("updated_at")?,
@@ -1645,6 +1792,23 @@ fn map_issue_relationship_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Local
         id: row.get("id")?,
         relationship_type: row.get("relationship_type")?,
         target_task_id: row.get("target_task_id")?,
+    })
+}
+
+fn map_attachment_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<TaskAttachment> {
+    let original_size_bytes = row.get("original_size_bytes")?;
+    Ok(TaskAttachment {
+        id: row.get("id")?,
+        task_id: row.get("task_id")?,
+        display_filename: row.get("display_filename")?,
+        mime_type: row.get("mime_type")?,
+        purpose: row.get("purpose")?,
+        original_size_bytes,
+        original_relative_path: row.get("original_relative_path")?,
+        size_label: format_byte_size(original_size_bytes),
+        restore_status: row.get("restore_status")?,
+        created_at: row.get("created_at")?,
+        updated_at: row.get("updated_at")?,
     })
 }
 
@@ -1687,6 +1851,31 @@ fn validate_issue_relationship_type(relationship_type: &str) -> DbResult<()> {
             "unknown issue relationship type: {relationship_type}"
         ))),
     }
+}
+
+fn validate_attachment_purpose(purpose: &str) -> DbResult<()> {
+    match purpose {
+        "AI only" | "Jira attachment" | "AI + Jira attachment" => Ok(()),
+        _ => Err(DbError::InvalidData(format!(
+            "unknown attachment purpose: {purpose}"
+        ))),
+    }
+}
+
+fn format_byte_size(size_bytes: i64) -> String {
+    if size_bytes < 1024 {
+        return format!("{size_bytes} B");
+    }
+    let kib = size_bytes as f64 / 1024.0;
+    if kib < 1024.0 {
+        return format!("{kib:.1} KB");
+    }
+    let mib = kib / 1024.0;
+    if mib < 1024.0 {
+        return format!("{mib:.1} MB");
+    }
+    let gib = mib / 1024.0;
+    format!("{gib:.1} GB")
 }
 
 fn normalize_relationship_id(id: &str) -> String {
@@ -2245,6 +2434,113 @@ mod tests {
             .expect("relationship clears")
             .expect("task exists");
         assert!(cleared.issue_relationships.is_empty());
+    }
+
+    #[test]
+    fn creates_lists_updates_and_deletes_task_attachments() {
+        let connection = open_in_memory_database().expect("database opens");
+        let tray_repository = TrayRepository::new(&connection);
+        let task_repository = TaskRepository::new(&connection);
+        let tray = tray_repository
+            .create(NewTray {
+                name: "Attachment tray".to_string(),
+            })
+            .expect("tray creates");
+        let task = task_repository
+            .create(NewTask {
+                tray_id: tray.id.clone(),
+                project: "STT".to_string(),
+                area: "Bug".to_string(),
+                title: "Review repro media".to_string(),
+                priority: "High".to_string(),
+                issue_type: "Bug".to_string(),
+                content_language: "Spanish".to_string(),
+            })
+            .expect("task creates");
+
+        let created = task_repository
+            .create_attachment(NewTaskAttachment {
+                task_id: task.id.clone(),
+                display_filename: "timer repro.mp4".to_string(),
+                mime_type: Some("video/mp4".to_string()),
+                purpose: "AI + Jira attachment".to_string(),
+                original_size_bytes: 1024,
+                original_relative_path: "attachments/task/timer-repro.mp4".to_string(),
+            })
+            .expect("attachment creates");
+
+        assert_eq!(created.display_filename, "timer repro.mp4");
+        assert_eq!(created.purpose, "AI + Jira attachment");
+        assert_eq!(created.size_label, "1.0 KB");
+        let hydrated = task_repository
+            .find_by_id(&task.id)
+            .expect("task loads")
+            .expect("task exists");
+        assert_eq!(hydrated.attachments, vec![created.clone()]);
+
+        let updated = task_repository
+            .update_attachment_purpose(&task.id, &created.id, "Jira attachment")
+            .expect("attachment updates")
+            .expect("task exists");
+        assert_eq!(updated.attachments[0].purpose, "Jira attachment");
+
+        let after_delete = task_repository
+            .delete_attachment(&task.id, &created.id)
+            .expect("attachment deletes")
+            .expect("task exists");
+        assert!(after_delete.attachments.is_empty());
+    }
+
+    #[test]
+    fn refuses_to_mutate_attachments_for_created_tasks() {
+        let connection = open_in_memory_database().expect("database opens");
+        let tray_repository = TrayRepository::new(&connection);
+        let task_repository = TaskRepository::new(&connection);
+        let tray = tray_repository
+            .create(NewTray {
+                name: "Created attachment tray".to_string(),
+            })
+            .expect("tray creates");
+        let task = task_repository
+            .create(NewTask {
+                tray_id: tray.id.clone(),
+                project: "STT".to_string(),
+                area: "Bug".to_string(),
+                title: "Locked repro media".to_string(),
+                priority: "High".to_string(),
+                issue_type: "Bug".to_string(),
+                content_language: "Spanish".to_string(),
+            })
+            .expect("task creates");
+        connection
+            .execute(
+                "UPDATE tasks SET sync_status = 'Created' WHERE id = ?1",
+                [task.id.as_str()],
+            )
+            .expect("task status updates");
+
+        let create_result = task_repository.create_attachment(NewTaskAttachment {
+            task_id: task.id.clone(),
+            display_filename: "locked.png".to_string(),
+            mime_type: Some("image/png".to_string()),
+            purpose: "AI + Jira attachment".to_string(),
+            original_size_bytes: 512,
+            original_relative_path: "attachments/task/locked.png".to_string(),
+        });
+        assert!(matches!(create_result, Err(DbError::InvalidData(_))));
+
+        assert_eq!(
+            task_repository
+                .update_attachment_purpose(&task.id, "missing", "AI only")
+                .expect("created task update is ignored"),
+            None
+        );
+        assert_eq!(
+            task_repository
+                .delete_attachment(&task.id, "missing")
+                .expect("created task delete is ignored"),
+            None
+        );
     }
 
     #[test]

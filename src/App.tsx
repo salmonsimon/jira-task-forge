@@ -14,6 +14,7 @@ import { TraysView, useTrayWorkspace } from "./features/trays";
 import { mockAppDataAdapter } from "./lib/adapters";
 import { appOverlayLayers, useAppOverlay } from "./lib/app-overlays";
 import {
+  addPersistedTaskAttachmentsFromPaths,
   createPersistedCategory,
   createPersistedJiraParentIssues,
   createPersistedJqlFavorite,
@@ -22,6 +23,7 @@ import {
   deletePersistedAiProviderApiKey,
   deletePersistedJqlFavorite,
   deletePersistedJiraApiToken,
+  deletePersistedTaskAttachment,
   draftPersistedJqlWithAi,
   exportPersistedBackup,
   generatePersistedTaskDescription,
@@ -52,7 +54,8 @@ import {
   updatePersistedAppSettings,
   updatePersistedAssistedDescriptionProposalSection,
   updatePersistedCategory,
-  updatePersistedJqlFavorite
+  updatePersistedJqlFavorite,
+  updatePersistedTaskAttachmentPurpose
 } from "./lib/adapters/tauriPersistence";
 import {
   addJqlRecentQuery,
@@ -78,6 +81,7 @@ import {
 } from "./lib/domain/assistedDescription";
 import type {
   AppSettings,
+  AttachmentPurpose,
   AssistedDescriptionDraft,
   AiProvider,
   BackupOperationNotice,
@@ -405,6 +409,37 @@ export default function App() {
       fallbackSelectedTrayId: selectedTrayId,
       fallbackSelectedTaskId: taskId
     });
+  }
+
+  async function chooseTaskAttachmentFiles(taskId: string) {
+    if (!usesTauriPersistence) {
+      throw new Error("Attachment storage requires the desktop app.");
+    }
+    const selectedPaths = await open({
+      directory: false,
+      multiple: true
+    });
+    const paths = Array.isArray(selectedPaths) ? selectedPaths : selectedPaths ? [selectedPaths] : [];
+    if (!paths.length) return;
+
+    const updatedTask = await addPersistedTaskAttachmentsFromPaths(taskId, paths, "AI + Jira attachment");
+    if (updatedTask) trayWorkspace.replaceTask(updatedTask);
+  }
+
+  async function updateTaskAttachmentPurpose(taskId: string, attachmentId: string, purpose: AttachmentPurpose) {
+    if (!usesTauriPersistence) {
+      throw new Error("Attachment storage requires the desktop app.");
+    }
+    const updatedTask = await updatePersistedTaskAttachmentPurpose(taskId, attachmentId, purpose);
+    if (updatedTask) trayWorkspace.replaceTask(updatedTask);
+  }
+
+  async function deleteTaskAttachment(taskId: string, attachmentId: string) {
+    if (!usesTauriPersistence) {
+      throw new Error("Attachment storage requires the desktop app.");
+    }
+    const updatedTask = await deletePersistedTaskAttachment(taskId, attachmentId);
+    if (updatedTask) trayWorkspace.replaceTask(updatedTask);
   }
 
   async function updateAppSettings(settingsPatch: Partial<AppSettings>) {
@@ -1315,6 +1350,9 @@ export default function App() {
             readOnly={selectedTaskTray?.state === "Archived"}
             onUpdateDetails={trayWorkspace.updateTaskDetails}
             onUpdateRelationships={trayWorkspace.updateTaskRelationships}
+            onChooseAttachmentFiles={chooseTaskAttachmentFiles}
+            onUpdateAttachmentPurpose={updateTaskAttachmentPurpose}
+            onDeleteAttachment={deleteTaskAttachment}
             onAddSubtask={trayWorkspace.addSubtaskToTask}
             onDeleteSubtask={trayWorkspace.deleteTask}
             onGenerateDescription={generateTaskDescription}

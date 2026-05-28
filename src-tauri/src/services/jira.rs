@@ -81,6 +81,7 @@ impl AppServices {
         let mut client = self.jira_client()?;
         let connection = self.connection();
         JiraSyncRunner::new(&connection, &mut client, creation_project_key)
+            .with_app_data_dir(self.app_data_dir().to_path_buf())
             .create_parent_issues_from_tray_with_progress(
                 tray_id,
                 allow_missing_descriptions,

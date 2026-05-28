@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   AiProvider,
   AppSettings,
+  AttachmentPurpose,
   AssistedDescriptionDraft,
   AssistedDescriptionProposal,
   AssistedDescriptionProposalStatus,
@@ -397,6 +398,40 @@ export async function updatePersistedTaskIssueRelationships(
     }))
   });
 
+  return updated ? mapTask(updated) : null;
+}
+
+export async function addPersistedTaskAttachmentsFromPaths(
+  taskId: string,
+  paths: string[],
+  purpose: AttachmentPurpose
+): Promise<LocalTask | null> {
+  const updated = await invoke<BackendTask | null>("add_task_attachments_from_paths", {
+    taskId,
+    paths,
+    purpose
+  });
+  return updated ? mapTask(updated) : null;
+}
+
+export async function updatePersistedTaskAttachmentPurpose(
+  taskId: string,
+  attachmentId: string,
+  purpose: AttachmentPurpose
+): Promise<LocalTask | null> {
+  const updated = await invoke<BackendTask | null>("update_task_attachment_purpose", {
+    taskId,
+    attachmentId,
+    purpose
+  });
+  return updated ? mapTask(updated) : null;
+}
+
+export async function deletePersistedTaskAttachment(taskId: string, attachmentId: string): Promise<LocalTask | null> {
+  const updated = await invoke<BackendTask | null>("delete_task_attachment", {
+    taskId,
+    attachmentId
+  });
   return updated ? mapTask(updated) : null;
 }
 

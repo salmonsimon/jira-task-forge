@@ -318,6 +318,7 @@ fn map_task(row: &rusqlite::Row<'_>) -> rusqlite::Result<LocalTask> {
         epic_key: row.get(13)?,
         parent_task_id: row.get(14)?,
         issue_relationships: Vec::new(),
+        attachments: Vec::new(),
         task_order: row.get(15)?,
         created_at: row.get(16)?,
         updated_at: row.get(17)?,

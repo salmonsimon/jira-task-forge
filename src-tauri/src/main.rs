@@ -29,7 +29,7 @@ pub fn run() {
             let connection = db::open_app_database(&app_data_dir)
                 .map_err(|error| format!("failed to open app database: {error}"))?;
 
-            app.manage(AppServices::new(connection));
+            app.manage(AppServices::new_with_app_data_dir(connection, app_data_dir));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -76,6 +76,9 @@ pub fn run() {
             commands::tasks::update_task_details,
             commands::tasks::update_task_description,
             commands::tasks::update_task_issue_relationships,
+            commands::tasks::add_task_attachments_from_paths,
+            commands::tasks::update_task_attachment_purpose,
+            commands::tasks::delete_task_attachment,
             commands::tasks::mark_tasks_csv_exported,
             commands::tasks::create_recovery_tray_from_tasks,
             commands::tasks::list_task_sync_audit_events,

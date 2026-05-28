@@ -1,5 +1,6 @@
 import { summarizeTrayTasks } from "../domain/trays";
 import type {
+  Attachment,
   AssistedDescriptionProposal,
   AssistedDescriptionProposalSection,
   Category,
@@ -44,6 +45,21 @@ export type BackendTask = {
   created_at: string;
   updated_at: string;
   issue_relationships?: BackendIssueRelationship[];
+  attachments?: BackendAttachment[];
+};
+
+export type BackendAttachment = {
+  id: string;
+  task_id: string;
+  display_filename: string;
+  mime_type: string | null;
+  purpose: Attachment["purpose"];
+  original_size_bytes: number;
+  original_relative_path: string;
+  size_label: string;
+  restore_status: string | null;
+  created_at: string;
+  updated_at: string;
 };
 
 export type BackendIssueRelationship = {
@@ -104,7 +120,20 @@ export function mapBackendTask(task: BackendTask): LocalTask {
     jiraUrl: task.jira_url ?? undefined,
     epic: task.epic_key ?? undefined,
     parentTaskId: task.parent_task_id ?? undefined,
-    issueRelationships: task.issue_relationships?.map(mapBackendIssueRelationship)
+    issueRelationships: task.issue_relationships?.map(mapBackendIssueRelationship),
+    attachments: task.attachments?.map(mapBackendAttachment)
+  };
+}
+
+export function mapBackendAttachment(attachment: BackendAttachment): Attachment {
+  return {
+    id: attachment.id,
+    filename: attachment.display_filename,
+    purpose: attachment.purpose,
+    size: attachment.size_label,
+    mimeType: attachment.mime_type,
+    sizeBytes: attachment.original_size_bytes,
+    restoreStatus: attachment.restore_status
   };
 }
 

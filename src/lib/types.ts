@@ -42,6 +42,9 @@ export type Attachment = {
   filename: string;
   purpose: AttachmentPurpose;
   size: string;
+  mimeType?: string | null;
+  sizeBytes?: number;
+  restoreStatus?: string | null;
 };
 
 export type SyncLogEntry = {
