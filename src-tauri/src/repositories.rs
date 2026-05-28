@@ -793,15 +793,12 @@ impl<'connection> TaskRepository<'connection> {
         epic_key: &str,
     ) -> DbResult<Option<LocalTask>> {
         let now = utc_now_string()?;
-        let tray_id = self.connection.query_row(
-            "SELECT tray_id FROM tasks WHERE id = ?1",
-            [task_id],
-            |row| row.get::<_, String>(0),
-        );
-
-        let Ok(tray_id) = tray_id else {
+        let Some(current_task) = self.find_by_id(task_id)? else {
             return Ok(None);
         };
+        if current_task.sync_status == "Created" {
+            return Ok(Some(current_task));
+        }
 
         self.connection.execute(
             "
@@ -815,7 +812,7 @@ impl<'connection> TaskRepository<'connection> {
             ",
             (jira_key, jira_url, epic_key, now.as_str(), task_id),
         )?;
-        self.touch_tray(&tray_id, &now)?;
+        self.touch_tray(&current_task.tray_id, &now)?;
 
         Ok(self.list_all()?.into_iter().find(|task| task.id == task_id))
     }
@@ -827,15 +824,12 @@ impl<'connection> TaskRepository<'connection> {
         jira_url: &str,
     ) -> DbResult<Option<LocalTask>> {
         let now = utc_now_string()?;
-        let tray_id = self.connection.query_row(
-            "SELECT tray_id FROM tasks WHERE id = ?1",
-            [task_id],
-            |row| row.get::<_, String>(0),
-        );
-
-        let Ok(tray_id) = tray_id else {
+        let Some(current_task) = self.find_by_id(task_id)? else {
             return Ok(None);
         };
+        if current_task.sync_status == "Created" {
+            return Ok(Some(current_task));
+        }
 
         self.connection.execute(
             "
@@ -849,7 +843,7 @@ impl<'connection> TaskRepository<'connection> {
             ",
             (jira_key, jira_url, now.as_str(), task_id),
         )?;
-        self.touch_tray(&tray_id, &now)?;
+        self.touch_tray(&current_task.tray_id, &now)?;
 
         Ok(self.list_all()?.into_iter().find(|task| task.id == task_id))
     }
@@ -2270,6 +2264,104 @@ mod tests {
         assert!(statuses.contains(&(pending.id, "Exported".to_string())));
         assert!(statuses.contains(&(failed.id, "Exported".to_string())));
         assert!(statuses.contains(&(created.id, "Created".to_string())));
+    }
+
+    #[test]
+    fn keeps_created_jira_links_stable_across_retry_status_updates() {
+        let connection = open_in_memory_database().expect("database opens");
+        let tray_repository = TrayRepository::new(&connection);
+        let task_repository = TaskRepository::new(&connection);
+        let tray = tray_repository
+            .create(NewTray {
+                name: "Duplicate guard".to_string(),
+            })
+            .expect("tray creates");
+        let task = task_repository
+            .create(NewTask {
+                tray_id: tray.id.clone(),
+                project: "STT".to_string(),
+                area: "Bug".to_string(),
+                title: "Already created in Jira".to_string(),
+                priority: "High".to_string(),
+                issue_type: "Bug".to_string(),
+                content_language: "Spanish".to_string(),
+            })
+            .expect("task creates");
+
+        task_repository
+            .mark_jira_created(
+                &task.id,
+                "JTFTEST-101",
+                "https://example.atlassian.net/browse/JTFTEST-101",
+                "JTFTEST-EPIC",
+            )
+            .expect("task marks created")
+            .expect("task exists");
+        let duplicate_create = task_repository
+            .mark_jira_created(
+                &task.id,
+                "JTFTEST-999",
+                "https://example.atlassian.net/browse/JTFTEST-999",
+                "JTFTEST-OTHER",
+            )
+            .expect("duplicate mark is ignored")
+            .expect("task still exists");
+        let failed_retry = task_repository
+            .mark_jira_failed(&task.id)
+            .expect("failed retry is ignored")
+            .expect("task still exists");
+        task_repository
+            .mark_csv_exported(std::slice::from_ref(&task.id))
+            .expect("csv export retry is ignored");
+        let final_task = task_repository
+            .find_by_id(&task.id)
+            .expect("task reloads")
+            .expect("task exists");
+
+        for task in [duplicate_create, failed_retry, final_task] {
+            assert_eq!(task.sync_status, "Created");
+            assert_eq!(task.jira_key.as_deref(), Some("JTFTEST-101"));
+            assert_eq!(
+                task.jira_url.as_deref(),
+                Some("https://example.atlassian.net/browse/JTFTEST-101")
+            );
+            assert_eq!(task.epic_key.as_deref(), Some("JTFTEST-EPIC"));
+        }
+
+        let subtask = task_repository
+            .create_subtask(NewSubtask {
+                parent_task_id: task.id.clone(),
+                title: "Created child step".to_string(),
+            })
+            .expect("subtask creates");
+        task_repository
+            .mark_jira_subtask_created(
+                &subtask.id,
+                "JTFTEST-102",
+                "https://example.atlassian.net/browse/JTFTEST-102",
+            )
+            .expect("subtask marks created")
+            .expect("subtask exists");
+
+        let duplicate_subtask_create = task_repository
+            .mark_jira_subtask_created(
+                &subtask.id,
+                "JTFTEST-998",
+                "https://example.atlassian.net/browse/JTFTEST-998",
+            )
+            .expect("duplicate subtask mark is ignored")
+            .expect("subtask still exists");
+
+        assert_eq!(duplicate_subtask_create.sync_status, "Created");
+        assert_eq!(
+            duplicate_subtask_create.jira_key.as_deref(),
+            Some("JTFTEST-102")
+        );
+        assert_eq!(
+            duplicate_subtask_create.jira_url.as_deref(),
+            Some("https://example.atlassian.net/browse/JTFTEST-102")
+        );
+        assert_eq!(duplicate_subtask_create.epic_key, None);
     }
 
     #[test]

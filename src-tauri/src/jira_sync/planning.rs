@@ -485,16 +485,19 @@ fn validate_local_preflight(
         if task.title.trim().is_empty() {
             messages.push("A task is missing a title.".to_string());
         }
-        if task.description_status == "Missing" && !allow_missing_descriptions {
-            messages.push(format!(
-                "{} is missing a description. Confirm missing descriptions before creating it in Jira.",
-                task.title
-            ));
-        }
         if !matches!(task.issue_type.as_str(), "Story" | "Bug" | "Sub-task") {
             messages.push(format!(
                 "{} has unsupported issue type {} for this Jira write slice.",
                 task.title, task.issue_type
+            ));
+        }
+    }
+
+    for task in parent_tasks {
+        if task.description_status == "Missing" && !allow_missing_descriptions {
+            messages.push(format!(
+                "{} is missing a description. Confirm missing descriptions before creating it in Jira.",
+                task.title
             ));
         }
     }
@@ -840,6 +843,34 @@ mod tests {
             .local_blockers
             .iter()
             .any(|message| message.contains("Confirm missing descriptions")));
+    }
+
+    #[test]
+    fn does_not_block_subtasks_that_have_missing_descriptions_when_parent_is_ready() {
+        let mut ready_parent = local_task(
+            "ready-parent",
+            "STT",
+            "Programacion",
+            "Ready parent",
+            "Story",
+            "Pending",
+        );
+        ready_parent.description_status = "Ready".to_string();
+        let missing_description_child =
+            local_subtask("missing-description-child", Some("ready-parent"), "Pending");
+
+        let scope = JiraCreationTaskScope::from_tasks(
+            &[ready_parent, missing_description_child],
+            JiraCreationPlanningOptions {
+                creation_project_key: "JTFTEST",
+                allow_missing_descriptions: false,
+                include_exported_tasks: true,
+                include_missing_description_tasks: false,
+            },
+        );
+
+        assert_eq!(scope.createable_task_count, 2);
+        assert!(scope.local_blockers.is_empty());
     }
 
     #[test]

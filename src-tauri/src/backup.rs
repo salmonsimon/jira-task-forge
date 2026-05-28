@@ -120,6 +120,13 @@ mod tests {
                 content_language: "Spanish".to_string(),
             })
             .expect("task creates");
+        let mut section = proposal_section(
+            "user_story",
+            "Como usuario, quiero respaldo local de la propuesta.",
+        );
+        section.status = DescriptionSectionStatus::Polished;
+        section.reviewer_comment =
+            Some("Keep the reviewer-requested proposal metadata.".to_string());
         AssistedDescriptionProposalRepository::new(&source)
             .create(NewAssistedDescriptionProposal {
                 task_id: task.id.clone(),
@@ -128,10 +135,7 @@ mod tests {
                 provider: Some("OpenAI".to_string()),
                 model: Some("gpt-4.1".to_string()),
                 user_comment: Some("Keep this comment, not keys.".to_string()),
-                sections: vec![proposal_section(
-                    "user_story",
-                    "Como usuario, quiero respaldo local de la propuesta.",
-                )],
+                sections: vec![section],
             })
             .expect("proposal creates");
 
@@ -149,6 +153,12 @@ mod tests {
                 .as_deref(),
             Some("OpenAI")
         );
+        assert_eq!(
+            backup.data.assisted_description_proposals[0].sections[0]
+                .reviewer_comment
+                .as_deref(),
+            Some("Keep the reviewer-requested proposal metadata.")
+        );
         let serialized = serde_json::to_string(&backup).expect("backup serializes");
         assert!(!serialized.contains("sk-test-secret"));
 
@@ -163,6 +173,15 @@ mod tests {
                 .expect("proposals list")[0]
                 .title,
             "Proposal backup card"
+        );
+        assert_eq!(
+            AssistedDescriptionProposalRepository::new(&target)
+                .list_for_task(&task.id)
+                .expect("proposals list")[0]
+                .sections[0]
+                .reviewer_comment
+                .as_deref(),
+            Some("Keep the reviewer-requested proposal metadata.")
         );
         assert_eq!(
             AssistedDescriptionProposalRepository::new(&target)
