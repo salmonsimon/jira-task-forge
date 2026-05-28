@@ -8,6 +8,7 @@ import type {
   AssistedDescriptionProposal,
   AssistedDescriptionProposalStatus,
   AssistedDescriptionSectionId,
+  AttachmentPurpose,
   DescriptionProposalLogEntry,
   DescriptionSectionStatus,
   LocalIssueRelationship,
@@ -31,6 +32,9 @@ export function TaskFocusWindow({
   readOnly: forceReadOnly = false,
   onUpdateDetails,
   onUpdateRelationships,
+  onChooseAttachmentFiles,
+  onUpdateAttachmentPurpose,
+  onDeleteAttachment,
   onAddSubtask,
   onDeleteSubtask,
   onGenerateDescription,
@@ -55,6 +59,9 @@ export function TaskFocusWindow({
   readOnly?: boolean;
   onUpdateDetails: (taskId: string, task: Partial<Pick<LocalTask, "project" | "area" | "priority" | "title">>) => void | Promise<void>;
   onUpdateRelationships: (taskId: string, relationships: LocalIssueRelationship[]) => void | Promise<void>;
+  onChooseAttachmentFiles?: (taskId: string) => void | Promise<void>;
+  onUpdateAttachmentPurpose?: (taskId: string, attachmentId: string, purpose: AttachmentPurpose) => void | Promise<void>;
+  onDeleteAttachment?: (taskId: string, attachmentId: string) => void | Promise<void>;
   onAddSubtask: (taskId: string, title: string) => void | Promise<void>;
   onDeleteSubtask: (taskId: string) => void | Promise<void>;
   onGenerateDescription: (taskId: string, additionalContext: string) => Promise<AssistedDescriptionDraft>;
@@ -175,7 +182,13 @@ export function TaskFocusWindow({
               proposalModel={proposalModel}
               proposalProvider={proposalProvider}
             />
-            <TaskAttachmentsSection task={task} />
+            <TaskAttachmentsSection
+              task={task}
+              readOnly={readOnly}
+              onChooseFiles={onChooseAttachmentFiles}
+              onUpdatePurpose={onUpdateAttachmentPurpose}
+              onDeleteAttachment={onDeleteAttachment}
+            />
             <TaskRelationshipsSection
               task={task}
               trayTasks={trayTasks}

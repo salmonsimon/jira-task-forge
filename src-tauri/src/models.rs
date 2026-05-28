@@ -65,9 +65,36 @@ pub struct LocalTask {
     pub parent_task_id: Option<String>,
     #[serde(default)]
     pub issue_relationships: Vec<LocalIssueRelationship>,
+    #[serde(default)]
+    pub attachments: Vec<TaskAttachment>,
     pub task_order: i64,
     pub created_at: String,
     pub updated_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TaskAttachment {
+    pub id: String,
+    pub task_id: String,
+    pub display_filename: String,
+    pub mime_type: Option<String>,
+    pub purpose: String,
+    pub original_size_bytes: i64,
+    pub original_relative_path: String,
+    pub size_label: String,
+    pub restore_status: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NewTaskAttachment {
+    pub task_id: String,
+    pub display_filename: String,
+    pub mime_type: Option<String>,
+    pub purpose: String,
+    pub original_size_bytes: i64,
+    pub original_relative_path: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

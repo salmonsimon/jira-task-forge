@@ -976,6 +976,7 @@ mod tests {
             epic_key: None,
             parent_task_id: None,
             issue_relationships: Vec::new(),
+            attachments: Vec::new(),
             task_order: 0,
             created_at: "2026-05-26T00:00:00Z".to_string(),
             updated_at: "2026-05-26T00:00:00Z".to_string(),

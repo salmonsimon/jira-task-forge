@@ -16,6 +16,7 @@ use crate::redaction::redact_secret_fragments;
 
 const READ_REQUEST_TIMEOUT: Duration = Duration::from_secs(45);
 const WRITE_REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
+const ATTACHMENT_REQUEST_TIMEOUT: Duration = Duration::from_secs(60);
 const READ_REQUEST_ATTEMPTS: usize = 2;
 const JQL_SEARCH_MAX_RESULTS_CAP: usize = 100;
 
@@ -167,6 +168,44 @@ impl JiraClient {
         )
     }
 
+    pub fn upload_attachment(
+        &self,
+        key: &str,
+        filename: &str,
+        mime_type: Option<&str>,
+        bytes: Vec<u8>,
+    ) -> Result<(), String> {
+        let key = key.trim();
+        if key.is_empty() {
+            return Err("Jira issue key is required.".to_string());
+        }
+        if filename.trim().is_empty() {
+            return Err("Attachment filename is required.".to_string());
+        }
+        if bytes.is_empty() {
+            return Err("Attachment file cannot be empty.".to_string());
+        }
+
+        let boundary = "----jira-task-forge-attachment-boundary";
+        let body = multipart_attachment_body(boundary, filename, mime_type, &bytes);
+        parse_empty_response(
+            ureq::post(&self.url(&format!(
+                "/rest/api/3/issue/{}/attachments",
+                encode_path_segment(key)
+            )))
+            .set("Accept", "application/json")
+            .set("Authorization", &self.authorization_header)
+            .set("X-Atlassian-Token", "no-check")
+            .set(
+                "Content-Type",
+                &format!("multipart/form-data; boundary={boundary}"),
+            )
+            .timeout(ATTACHMENT_REQUEST_TIMEOUT)
+            .send_bytes(&body),
+            "Jira attachment upload",
+        )
+    }
+
     pub fn issue_browse_url(&self, key: &str) -> String {
         format!("{}/browse/{}", self.site_url, encode_path_segment(key))
     }
@@ -252,6 +291,31 @@ impl JiraClient {
 
         Err(last_error.unwrap_or_else(|| format!("{action} could not reach Jira.")))
     }
+}
+
+fn multipart_attachment_body(
+    boundary: &str,
+    filename: &str,
+    mime_type: Option<&str>,
+    bytes: &[u8],
+) -> Vec<u8> {
+    let escaped_filename = filename.replace('\\', "\\\\").replace('"', "\\\"");
+    let content_type = mime_type
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("application/octet-stream");
+    let mut body = Vec::new();
+    body.extend_from_slice(format!("--{boundary}\r\n").as_bytes());
+    body.extend_from_slice(
+        format!(
+            "Content-Disposition: form-data; name=\"file\"; filename=\"{escaped_filename}\"\r\n"
+        )
+        .as_bytes(),
+    );
+    body.extend_from_slice(format!("Content-Type: {content_type}\r\n\r\n").as_bytes());
+    body.extend_from_slice(bytes);
+    body.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());
+    body
 }
 
 pub fn normalize_jira_site_url(raw_site_url: &str) -> Result<String, String> {

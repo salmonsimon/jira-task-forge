@@ -2,6 +2,8 @@ mod attempt_recorder;
 mod planning;
 
 use std::collections::HashMap;
+use std::fs;
+use std::path::{Path, PathBuf};
 
 use rusqlite::Connection;
 use serde_json::{json, Value};
@@ -31,6 +33,13 @@ pub trait JiraIssueGateway {
     fn search_jql(&mut self, jql: &str, max_results: usize) -> Result<JqlSearchResponse, String>;
     fn create_issue(&mut self, payload: Value) -> Result<JiraCreateIssueResponse, String>;
     fn update_issue_fields(&mut self, key: &str, payload: Value) -> Result<(), String>;
+    fn upload_attachment(
+        &mut self,
+        key: &str,
+        filename: &str,
+        mime_type: Option<&str>,
+        bytes: Vec<u8>,
+    ) -> Result<(), String>;
     fn issue_browse_url(&self, key: &str) -> String;
 }
 
@@ -55,6 +64,16 @@ impl JiraIssueGateway for JiraClient {
         JiraClient::update_issue_fields(self, key, payload)
     }
 
+    fn upload_attachment(
+        &mut self,
+        key: &str,
+        filename: &str,
+        mime_type: Option<&str>,
+        bytes: Vec<u8>,
+    ) -> Result<(), String> {
+        JiraClient::upload_attachment(self, key, filename, mime_type, bytes)
+    }
+
     fn issue_browse_url(&self, key: &str) -> String {
         JiraClient::issue_browse_url(self, key)
     }
@@ -67,6 +86,7 @@ where
     connection: &'connection Connection,
     gateway: &'gateway mut Gateway,
     creation_project_key: String,
+    app_data_dir: Option<PathBuf>,
 }
 
 impl<'connection, 'gateway, Gateway> JiraSyncRunner<'connection, 'gateway, Gateway>
@@ -82,7 +102,13 @@ where
             connection,
             gateway,
             creation_project_key: creation_project_key.trim().to_ascii_uppercase(),
+            app_data_dir: None,
         }
+    }
+
+    pub fn with_app_data_dir(mut self, app_data_dir: PathBuf) -> Self {
+        self.app_data_dir = Some(app_data_dir);
+        self
     }
 
     pub fn create_parent_issues_from_tray(
@@ -348,6 +374,15 @@ where
                         task.title
                     ));
                     parent_jira_keys.insert(task.id.clone(), existing_key.to_string());
+                    had_non_blocking_warning |= upload_task_attachments(
+                        self.connection,
+                        self.app_data_dir.as_deref(),
+                        self.gateway,
+                        &mut recorder,
+                        task,
+                        existing_key,
+                        &mut result,
+                    )?;
                     recorder.advance();
                     continue;
                 }
@@ -376,7 +411,7 @@ where
                             "jira.issue.created",
                             "succeeded",
                             json!({
-                                "jiraKey": created_issue.key,
+                                "jiraKey": created_key.clone(),
                                 "epicKey": epic_key,
                                 "issueType": task.issue_type,
                             }),
@@ -401,13 +436,23 @@ where
                         result.created_issue_count += 1;
                         result.created_issues.push(JiraCreatedIssueResult {
                             task_id: Some(task.id.clone()),
-                            key: created_issue.key,
+                            key: created_key.clone(),
                             url: issue_url,
                             issue_type: task.issue_type.clone(),
                             summary: jira_parent_summary(&task),
                             epic_key: Some(epic_key.clone()),
                         });
+                        let created_key_for_upload = created_key.clone();
                         parent_jira_keys.insert(task.id.clone(), created_key);
+                        had_non_blocking_warning |= upload_task_attachments(
+                            self.connection,
+                            self.app_data_dir.as_deref(),
+                            self.gateway,
+                            &mut recorder,
+                            task,
+                            &created_key_for_upload,
+                            &mut result,
+                        )?;
                         recorder.advance();
                     }
                     Err(message) => {
@@ -468,6 +513,15 @@ where
                         "{} already had Jira key {existing_key}; local sub-task status was repaired.",
                         subtask.title
                     ));
+                    had_non_blocking_warning |= upload_task_attachments(
+                        self.connection,
+                        self.app_data_dir.as_deref(),
+                        self.gateway,
+                        &mut recorder,
+                        subtask,
+                        existing_key,
+                        &mut result,
+                    )?;
                     recorder.advance();
                     continue;
                 }
@@ -483,6 +537,7 @@ where
 
                 match self.gateway.create_issue(payload) {
                     Ok(created_issue) => {
+                        let created_key = created_issue.key.clone();
                         let issue_url = self.gateway.issue_browse_url(&created_issue.key);
                         TaskRepository::new(self.connection)
                             .mark_jira_subtask_created(&subtask.id, &created_issue.key, &issue_url)
@@ -492,7 +547,7 @@ where
                             "jira.subtask.created",
                             "succeeded",
                             json!({
-                                "jiraKey": created_issue.key,
+                                "jiraKey": created_key.clone(),
                                 "parentJiraKey": parent_jira_key,
                                 "issueType": subtask.issue_type,
                             }),
@@ -500,12 +555,21 @@ where
                         result.created_issue_count += 1;
                         result.created_issues.push(JiraCreatedIssueResult {
                             task_id: Some(subtask.id.clone()),
-                            key: created_issue.key,
+                            key: created_key.clone(),
                             url: issue_url,
                             issue_type: subtask.issue_type.clone(),
                             summary: jira_subtask_summary(&subtask),
                             epic_key: None,
                         });
+                        had_non_blocking_warning |= upload_task_attachments(
+                            self.connection,
+                            self.app_data_dir.as_deref(),
+                            self.gateway,
+                            &mut recorder,
+                            subtask,
+                            &created_key,
+                            &mut result,
+                        )?;
                         recorder.advance();
                     }
                     Err(message) => {
@@ -797,6 +861,121 @@ where
     }
 }
 
+fn upload_task_attachments<Gateway, F>(
+    connection: &Connection,
+    app_data_dir: Option<&Path>,
+    gateway: &mut Gateway,
+    recorder: &mut SyncAttemptRecorder<'_, '_, F>,
+    task: &LocalTask,
+    jira_key: &str,
+    result: &mut JiraCreateIssuesResult,
+) -> Result<bool, String>
+where
+    Gateway: JiraIssueGateway,
+    F: FnMut(JiraCreateProgress),
+{
+    let attachments = TaskRepository::new(connection)
+        .list_jira_uploadable_attachments(&task.id)
+        .map_err(db_error_message)?;
+    if attachments.is_empty() {
+        return Ok(false);
+    }
+
+    let mut had_warning = false;
+    for attachment in attachments {
+        recorder.progress(
+            "attachment",
+            "Uploading Jira attachment",
+            Some(&attachment.display_filename),
+            "running",
+        );
+        let Some(app_data_dir) = app_data_dir else {
+            had_warning = true;
+            let message = "Attachment upload could not find the app data directory.";
+            recorder.record_event(
+                Some(&task.id),
+                "jira.attachment.upload_failed",
+                "failed",
+                json!({
+                    "jiraKey": jira_key,
+                    "filename": attachment.display_filename,
+                    "message": audit_error_message(message),
+                }),
+            )?;
+            result.messages.push(format!(
+                "{jira_key} attachment upload skipped for {}: {message}",
+                attachment.display_filename
+            ));
+            continue;
+        };
+
+        let absolute_path = app_data_dir.join(&attachment.original_relative_path);
+        let bytes = match fs::read(&absolute_path) {
+            Ok(bytes) => bytes,
+            Err(error) => {
+                had_warning = true;
+                let message = format!("Could not read local attachment file: {error}");
+                recorder.record_event(
+                    Some(&task.id),
+                    "jira.attachment.upload_failed",
+                    "failed",
+                    json!({
+                        "jiraKey": jira_key,
+                        "filename": attachment.display_filename,
+                        "path": attachment.original_relative_path,
+                        "message": audit_error_message(&message),
+                    }),
+                )?;
+                result.messages.push(format!(
+                    "{jira_key} attachment {} could not be uploaded: {message}",
+                    attachment.display_filename
+                ));
+                continue;
+            }
+        };
+
+        match gateway.upload_attachment(
+            jira_key,
+            &attachment.display_filename,
+            attachment.mime_type.as_deref(),
+            bytes,
+        ) {
+            Ok(()) => {
+                recorder.record_event(
+                    Some(&task.id),
+                    "jira.attachment.uploaded",
+                    "succeeded",
+                    json!({
+                        "jiraKey": jira_key,
+                        "filename": attachment.display_filename,
+                        "purpose": attachment.purpose,
+                        "sizeBytes": attachment.original_size_bytes,
+                    }),
+                )?;
+            }
+            Err(message) => {
+                had_warning = true;
+                recorder.record_event(
+                    Some(&task.id),
+                    "jira.attachment.upload_failed",
+                    "failed",
+                    json!({
+                        "jiraKey": jira_key,
+                        "filename": attachment.display_filename,
+                        "message": audit_error_message(&message),
+                    }),
+                )?;
+                result.messages.push(format!(
+                    "{jira_key} attachment {} could not be uploaded: {}",
+                    attachment.display_filename, message
+                ));
+            }
+        }
+    }
+
+    Ok(had_warning)
+}
+
 fn jira_parent_summary(task: &LocalTask) -> String {
     let title = task.title.trim();
     let area_code = task.area.trim();
@@ -910,8 +1089,12 @@ fn db_error_message(error: DbError) -> String {
 mod tests {
     use super::*;
     use crate::db::open_in_memory_database;
-    use crate::models::{JiraCreateIssueTypeMetadata, JqlResult, NewTask, NewTray};
+    use crate::models::{
+        JiraCreateIssueTypeMetadata, JqlResult, NewTask, NewTaskAttachment, NewTray,
+    };
     use crate::repositories::{TaskRepository, TrayRepository};
+    use std::fs;
+    use uuid::Uuid;
 
     #[test]
     fn creates_missing_epic_and_parent_issue_then_persists_task_link() {
@@ -977,6 +1160,173 @@ mod tests {
             gateway.created_payloads[1]["properties"][0]["value"]["localTaskId"],
             json!(task.id)
         );
+    }
+
+    #[test]
+    fn uploads_only_jira_eligible_attachments_after_issue_creation() {
+        let connection = open_in_memory_database().expect("database opens");
+        let app_data_dir = std::env::temp_dir().join(format!(
+            "jira-task-forge-sync-attachments-{}",
+            Uuid::new_v4()
+        ));
+        fs::create_dir_all(app_data_dir.join("attachments").join("task"))
+            .expect("app data creates");
+        fs::write(
+            app_data_dir
+                .join("attachments")
+                .join("task")
+                .join("jira-ready.png"),
+            b"jira ready bytes",
+        )
+        .expect("jira attachment writes");
+        fs::write(
+            app_data_dir
+                .join("attachments")
+                .join("task")
+                .join("ai-only.png"),
+            b"ai only bytes",
+        )
+        .expect("ai attachment writes");
+        let tray_repository = TrayRepository::new(&connection);
+        let task_repository = TaskRepository::new(&connection);
+        let tray = tray_repository
+            .create(NewTray {
+                name: "Attachment sync".to_string(),
+            })
+            .expect("tray creates");
+        let task = task_repository
+            .create(NewTask {
+                tray_id: tray.id.clone(),
+                project: "STT".to_string(),
+                area: "Bug".to_string(),
+                title: "Fix timer drift".to_string(),
+                priority: "High".to_string(),
+                issue_type: "Story".to_string(),
+                content_language: "Spanish".to_string(),
+            })
+            .expect("task creates");
+        task_repository
+            .create_attachment(NewTaskAttachment {
+                task_id: task.id.clone(),
+                display_filename: "jira-ready.png".to_string(),
+                mime_type: Some("image/png".to_string()),
+                purpose: "AI + Jira attachment".to_string(),
+                original_size_bytes: 16,
+                original_relative_path: "attachments/task/jira-ready.png".to_string(),
+            })
+            .expect("jira attachment creates");
+        task_repository
+            .create_attachment(NewTaskAttachment {
+                task_id: task.id.clone(),
+                display_filename: "ai-only.png".to_string(),
+                mime_type: Some("image/png".to_string()),
+                purpose: "AI only".to_string(),
+                original_size_bytes: 13,
+                original_relative_path: "attachments/task/ai-only.png".to_string(),
+            })
+            .expect("ai attachment creates");
+        let mut gateway = FakeJiraGateway::new();
+        gateway.created_keys = vec!["JTFTEST-20".to_string(), "JTFTEST-21".to_string()];
+
+        let mut runner = JiraSyncRunner::new(&connection, &mut gateway, "JTFTEST".to_string())
+            .with_app_data_dir(app_data_dir.clone());
+        let result = runner
+            .create_parent_issues_from_tray(&tray.id, true)
+            .expect("sync succeeds");
+
+        assert_eq!(result.status, "succeeded");
+        assert_eq!(gateway.uploaded_attachments.len(), 1);
+        assert_eq!(gateway.uploaded_attachments[0].0, "JTFTEST-21");
+        assert_eq!(gateway.uploaded_attachments[0].1, "jira-ready.png");
+        assert_eq!(
+            gateway.uploaded_attachments[0].2.as_deref(),
+            Some("image/png")
+        );
+        assert_eq!(gateway.uploaded_attachments[0].3, b"jira ready bytes");
+        let upload_event_count: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM sync_audit_events WHERE event_type = 'jira.attachment.uploaded' AND outcome = 'succeeded'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("upload event count reads");
+        assert_eq!(upload_event_count, 1);
+
+        let _ = fs::remove_dir_all(&app_data_dir);
+    }
+
+    #[test]
+    fn marks_jira_creation_partial_when_attachment_upload_fails() {
+        let connection = open_in_memory_database().expect("database opens");
+        let app_data_dir = std::env::temp_dir().join(format!(
+            "jira-task-forge-sync-attachment-failure-{}",
+            Uuid::new_v4()
+        ));
+        fs::create_dir_all(app_data_dir.join("attachments").join("task"))
+            .expect("app data creates");
+        fs::write(
+            app_data_dir
+                .join("attachments")
+                .join("task")
+                .join("jira-ready.png"),
+            b"jira ready bytes",
+        )
+        .expect("jira attachment writes");
+        let tray_repository = TrayRepository::new(&connection);
+        let task_repository = TaskRepository::new(&connection);
+        let tray = tray_repository
+            .create(NewTray {
+                name: "Attachment sync failure".to_string(),
+            })
+            .expect("tray creates");
+        let task = task_repository
+            .create(NewTask {
+                tray_id: tray.id.clone(),
+                project: "STT".to_string(),
+                area: "Bug".to_string(),
+                title: "Fix timer drift".to_string(),
+                priority: "High".to_string(),
+                issue_type: "Story".to_string(),
+                content_language: "Spanish".to_string(),
+            })
+            .expect("task creates");
+        task_repository
+            .create_attachment(NewTaskAttachment {
+                task_id: task.id.clone(),
+                display_filename: "jira-ready.png".to_string(),
+                mime_type: Some("image/png".to_string()),
+                purpose: "Jira attachment".to_string(),
+                original_size_bytes: 16,
+                original_relative_path: "attachments/task/jira-ready.png".to_string(),
+            })
+            .expect("jira attachment creates");
+        let mut gateway = FakeJiraGateway::new();
+        gateway.created_keys = vec!["JTFTEST-22".to_string(), "JTFTEST-23".to_string()];
+        gateway.attachment_failures = vec!["upload denied".to_string()];
+
+        let mut runner = JiraSyncRunner::new(&connection, &mut gateway, "JTFTEST".to_string())
+            .with_app_data_dir(app_data_dir.clone());
+        let result = runner
+            .create_parent_issues_from_tray(&tray.id, true)
+            .expect("sync returns partial result");
+
+        assert_eq!(result.status, "partial");
+        assert_eq!(result.created_issue_count, 1);
+        assert_eq!(result.failed_issue_count, 0);
+        assert!(result
+            .messages
+            .iter()
+            .any(|message| message.contains("attachment")));
+        let upload_failure_count: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM sync_audit_events WHERE event_type = 'jira.attachment.upload_failed' AND outcome = 'failed'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("upload event count reads");
+        assert_eq!(upload_failure_count, 1);
+
+        let _ = fs::remove_dir_all(&app_data_dir);
     }
 
     #[test]
@@ -1252,6 +1602,7 @@ mod tests {
             epic_key: None,
             parent_task_id: None,
             issue_relationships: Vec::new(),
+            attachments: Vec::new(),
             task_order: 0,
             created_at: "2026-05-24T00:00:00Z".to_string(),
             updated_at: "2026-05-24T00:00:00Z".to_string(),
@@ -1530,9 +1881,11 @@ mod tests {
         metadata: JiraCreateMetadata,
         created_payloads: Vec<Value>,
         updated_payloads: Vec<(String, Value)>,
+        uploaded_attachments: Vec<(String, String, Option<String>, Vec<u8>)>,
         created_keys: Vec<String>,
         create_failures: Vec<String>,
         update_failures: Vec<String>,
+        attachment_failures: Vec<String>,
     }
 
     impl FakeJiraGateway {
@@ -1541,9 +1894,11 @@ mod tests {
                 metadata: test_metadata("JTFTEST"),
                 created_payloads: Vec::new(),
                 updated_payloads: Vec::new(),
+                uploaded_attachments: Vec::new(),
                 created_keys: Vec::new(),
                 create_failures: Vec::new(),
                 update_failures: Vec::new(),
+                attachment_failures: Vec::new(),
             }
         }
     }
@@ -1596,6 +1951,25 @@ mod tests {
                 return Err(self.update_failures.remove(0));
             }
 
+            Ok(())
+        }
+
+        fn upload_attachment(
+            &mut self,
+            key: &str,
+            filename: &str,
+            mime_type: Option<&str>,
+            bytes: Vec<u8>,
+        ) -> Result<(), String> {
+            if !self.attachment_failures.is_empty() {
+                return Err(self.attachment_failures.remove(0));
+            }
+            self.uploaded_attachments.push((
+                key.to_string(),
+                filename.to_string(),
+                mime_type.map(str::to_string),
+                bytes,
+            ));
             Ok(())
         }
 

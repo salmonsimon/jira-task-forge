@@ -2,6 +2,8 @@ use super::AppServices;
 use crate::db::open_in_memory_database;
 use crate::integrations::ai::{ai_model_or_default, AiProvider};
 use crate::models::{AppSettings, NewTask, NewTray, TrayState};
+use std::fs;
+use uuid::Uuid;
 
 #[test]
 fn manages_tray_lifecycle_through_services() {
@@ -91,6 +93,75 @@ fn manages_task_lifecycle_through_services() {
 
     assert!(services.delete_task(&task.id).expect("task deletes"));
     assert!(services.list_tasks().expect("tasks list").is_empty());
+}
+
+#[test]
+fn stores_task_attachments_as_app_managed_files() {
+    let app_data_dir = std::env::temp_dir().join(format!(
+        "jira-task-forge-attachment-test-{}",
+        Uuid::new_v4()
+    ));
+    fs::create_dir_all(&app_data_dir).expect("temp app data creates");
+    let source_path = app_data_dir.join("source image.png");
+    fs::write(&source_path, b"source attachment").expect("source file writes");
+    let services = AppServices::new_with_app_data_dir(
+        open_in_memory_database().expect("database opens"),
+        app_data_dir.clone(),
+    );
+    let tray = services
+        .create_tray(NewTray {
+            name: "Attachment service tray".to_string(),
+        })
+        .expect("tray creates");
+    let task = services
+        .create_task(NewTask {
+            tray_id: tray.id,
+            project: "STT".to_string(),
+            area: "Bug".to_string(),
+            title: "Service attachment task".to_string(),
+            priority: "Medium".to_string(),
+            issue_type: "Bug".to_string(),
+            content_language: "Spanish".to_string(),
+        })
+        .expect("task creates");
+
+    let after_path_add = services
+        .add_task_attachments_from_paths(
+            &task.id,
+            &[source_path.to_string_lossy().to_string()],
+            "AI + Jira attachment",
+        )
+        .expect("attachment adds from path")
+        .expect("task exists");
+    assert_eq!(after_path_add.attachments.len(), 1);
+    let stored_path = app_data_dir.join(&after_path_add.attachments[0].original_relative_path);
+    assert!(stored_path.exists());
+    assert_eq!(
+        fs::read(&stored_path).expect("stored file reads"),
+        b"source attachment"
+    );
+
+    let after_purpose_update = services
+        .update_task_attachment_purpose(
+            &task.id,
+            &after_path_add.attachments[0].id,
+            "Jira attachment",
+        )
+        .expect("attachment purpose updates")
+        .expect("task exists");
+    assert_eq!(
+        after_purpose_update.attachments[0].purpose,
+        "Jira attachment"
+    );
+
+    let after_delete = services
+        .delete_task_attachment(&task.id, &after_path_add.attachments[0].id)
+        .expect("attachment deletes")
+        .expect("task exists");
+    assert!(after_delete.attachments.is_empty());
+    assert!(!stored_path.exists());
+
+    let _ = fs::remove_dir_all(&app_data_dir);
 }
 
 #[test]

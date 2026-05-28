@@ -105,6 +105,41 @@ pub fn update_task_issue_relationships(
 }
 
 #[tauri::command]
+pub fn add_task_attachments_from_paths(
+    services: State<'_, AppServices>,
+    task_id: String,
+    paths: Vec<String>,
+    purpose: String,
+) -> Result<Option<LocalTask>, String> {
+    services
+        .add_task_attachments_from_paths(&task_id, &paths, &purpose)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn update_task_attachment_purpose(
+    services: State<'_, AppServices>,
+    task_id: String,
+    attachment_id: String,
+    purpose: String,
+) -> Result<Option<LocalTask>, String> {
+    services
+        .update_task_attachment_purpose(&task_id, &attachment_id, &purpose)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn delete_task_attachment(
+    services: State<'_, AppServices>,
+    task_id: String,
+    attachment_id: String,
+) -> Result<Option<LocalTask>, String> {
+    services
+        .delete_task_attachment(&task_id, &attachment_id)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 pub fn mark_tasks_csv_exported(
     services: State<'_, AppServices>,
     task_ids: Vec<String>,

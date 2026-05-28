@@ -46,4 +46,47 @@ describe("TaskAttachmentsSection", () => {
     expect(html).toContain("Jira-ready");
     expect(html).toContain("Eligible for explicit AI context and Jira upload.");
   });
+
+  it("lets purpose menus render outside attachment card bounds", () => {
+    const html = renderToStaticMarkup(
+      <TaskAttachmentsSection task={taskWithAttachments} onChooseFiles={() => {}} onUpdatePurpose={() => {}} />
+    );
+
+    expect(html).toContain("overflow-visible");
+    expect(html).not.toContain("overflow-hidden rounded border border-[#454852]");
+  });
+
+  it("shows attachment actions only for editable tasks", () => {
+    const editableHtml = renderToStaticMarkup(
+      <TaskAttachmentsSection
+        task={taskWithAttachments}
+        onChooseFiles={() => {}}
+        onUpdatePurpose={() => {}}
+        onDeleteAttachment={() => {}}
+      />
+    );
+    const readOnlyHtml = renderToStaticMarkup(
+      <TaskAttachmentsSection
+        task={taskWithAttachments}
+        readOnly
+        onChooseFiles={() => {}}
+        onUpdatePurpose={() => {}}
+        onDeleteAttachment={() => {}}
+      />
+    );
+
+    expect(editableHtml).toContain("Attach files");
+    expect(editableHtml).toContain("Remove attachment");
+    expect(readOnlyHtml).not.toContain("Attach files");
+    expect(readOnlyHtml).not.toContain("Remove attachment");
+  });
+
+  it("shows the attach action in the empty state", () => {
+    const html = renderToStaticMarkup(
+      <TaskAttachmentsSection task={{ ...taskWithAttachments, attachments: [] }} onChooseFiles={() => {}} />
+    );
+
+    expect(html).toContain("No attachments yet.");
+    expect(html).toContain("Attach files");
+  });
 });
