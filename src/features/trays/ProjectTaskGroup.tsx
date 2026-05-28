@@ -67,7 +67,7 @@ export function ProjectTaskGroup({
                     key={task.id}
                     onClick={() => onOpenTask(task)}
                   >
-                    <td className="min-w-0 overflow-hidden px-3 py-2">
+                    <td className="min-w-0 overflow-visible px-3 py-2">
                       {isEditable ? (
                         <InlineTaskSelect
                           ariaLabel={`Change area for ${task.title}`}
@@ -80,7 +80,7 @@ export function ProjectTaskGroup({
                         <AreaBadge area={task.area} />
                       )}
                     </td>
-                    <td className="min-w-0 overflow-hidden px-3 py-2">
+                    <td className="min-w-0 overflow-visible px-3 py-2">
                       {isEditable ? (
                         <InlineTaskSelect
                           ariaLabel={`Change issue type for ${task.title}`}
@@ -348,7 +348,7 @@ function InlineTaskSelect({
   }
 
   return (
-    <div className="relative block max-w-full" ref={containerRef} onClick={(event) => event.stopPropagation()}>
+    <div className={cn("relative block max-w-full", isOpen && "z-[300]")} ref={containerRef} onClick={(event) => event.stopPropagation()}>
       <button
         aria-expanded={isOpen}
         aria-haspopup="listbox"
@@ -369,7 +369,7 @@ function InlineTaskSelect({
       {isOpen ? (
         <div
           className={cn(
-            "absolute left-0 z-50 max-h-56 min-w-[150px] overflow-y-auto overscroll-contain rounded border border-[#5c606a] bg-[#2b2d31] py-1 text-sm text-[#f4f5f7] shadow-xl",
+            "absolute left-0 z-[400] max-h-56 min-w-[150px] overflow-y-auto overscroll-contain rounded border border-[#5c606a] bg-[#2b2d31] py-1 text-sm text-[#f4f5f7] shadow-xl",
             opensUp ? "bottom-[calc(100%+4px)]" : "top-[calc(100%+4px)]"
           )}
           role="listbox"

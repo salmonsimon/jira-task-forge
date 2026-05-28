@@ -13,6 +13,7 @@ export function cloneTrays(trays: Tray[]): Tray[] {
     ...tray,
     tasks: tray.tasks.map((task) => ({
       ...task,
+      issueRelationships: task.issueRelationships?.map((relationship) => ({ ...relationship })),
       attachments: task.attachments?.map((attachment) => ({ ...attachment })),
       syncLog: task.syncLog?.map((entry) => ({ ...entry }))
     }))
