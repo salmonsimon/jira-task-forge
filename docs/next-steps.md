@@ -475,6 +475,14 @@ Reason:
 - Relationship links affect the local data model and Jira write behavior enough
   that they should be designed and tested independently from the polish pass.
 
+Separate focused-window polish follow-up:
+
+- Make focused-window sections independently collapsible in a later PR:
+  `Description`, `Attachments`, `Issue relationships`, `Sub-tasks`, and
+  `Activity`.
+- Keep that interaction polish separate from the Jira relationship model/sync
+  work so the relationship slice stays easy to review and test.
+
 ## Security And Reliability Tests To Add
 
 - Frontend/domain: created tasks are read-only, delete states are allowed only for pending/failed/exported tasks, tray completion derives from created tasks, duplicated tasks exclude sync status/Jira links/audit logs, and preflight warnings are classified correctly.
