@@ -115,4 +115,49 @@ describe("preflight domain helpers", () => {
       }
     ]);
   });
+
+  it("keeps parent missing descriptions reviewable without turning sub-tasks into blockers", () => {
+    const warnings = classifyTrayPreflightWarnings([
+      task({
+        id: "blocked-parent",
+        title: " ",
+        descriptionStatus: "Missing"
+      }),
+      task({
+        id: "review-parent",
+        descriptionStatus: "Missing"
+      }),
+      task({
+        id: "subtask-1",
+        issueType: "Sub-task",
+        parentTaskId: "review-parent",
+        descriptionStatus: "Missing",
+        epic: undefined
+      })
+    ]);
+
+    expect(warnings.filter((warning) => warning.severity === "blocking")).toEqual([
+      {
+        code: "missing-title",
+        severity: "blocking",
+        taskId: "blocked-parent",
+        message: "Title is required before creating this task in Jira."
+      }
+    ]);
+    expect(warnings.filter((warning) => warning.code === "missing-description")).toEqual([
+      {
+        code: "missing-description",
+        severity: "resolvable",
+        taskId: "blocked-parent",
+        message: "Description is missing and can be reviewed before Jira creation."
+      },
+      {
+        code: "missing-description",
+        severity: "resolvable",
+        taskId: "review-parent",
+        message: "Description is missing and can be reviewed before Jira creation."
+      }
+    ]);
+    expect(warnings.some((warning) => warning.taskId === "subtask-1")).toBe(false);
+  });
 });

@@ -34,6 +34,20 @@ describe("task domain helpers", () => {
     expect(canDuplicateTask({ syncStatus: "Pending" })).toBe(true);
   });
 
+  it("allows delete and duplicate only while tasks remain local-first", () => {
+    expect([
+      ["Pending", canDeleteTask({ syncStatus: "Pending" }), canDuplicateTask({ syncStatus: "Pending" })],
+      ["Failed", canDeleteTask({ syncStatus: "Failed" }), canDuplicateTask({ syncStatus: "Failed" })],
+      ["Exported", canDeleteTask({ syncStatus: "Exported" }), canDuplicateTask({ syncStatus: "Exported" })],
+      ["Created", canDeleteTask({ syncStatus: "Created" }), canDuplicateTask({ syncStatus: "Created" })]
+    ]).toEqual([
+      ["Pending", true, true],
+      ["Failed", true, true],
+      ["Exported", true, true],
+      ["Created", false, false]
+    ]);
+  });
+
   it("duplicates editable task content without copying sync identity", () => {
     const duplicate = duplicateLocalTask(baseTask, "task-copy");
 
@@ -53,5 +67,33 @@ describe("task domain helpers", () => {
     });
     expect(duplicate.attachments).toEqual(baseTask.attachments);
     expect(duplicate.attachments).not.toBe(baseTask.attachments);
+  });
+
+  it("duplicates Jira-linked tasks as fresh local drafts without remote audit identity", () => {
+    const duplicate = duplicateLocalTask(
+      {
+        ...baseTask,
+        syncStatus: "Created",
+        jiraKey: "JTFTEST-12",
+        jiraUrl: "https://example.atlassian.net/browse/JTFTEST-12",
+        syncLog: [
+          {
+            id: "log-1",
+            timestamp: "2026-05-28T10:00:00.000Z",
+            event: "created",
+            detail: "Created JTFTEST-12"
+          }
+        ]
+      },
+      "task-copy"
+    );
+
+    expect(duplicate).toMatchObject({
+      id: "task-copy",
+      syncStatus: "Pending"
+    });
+    expect(duplicate.jiraKey).toBeUndefined();
+    expect(duplicate.jiraUrl).toBeUndefined();
+    expect(duplicate.syncLog).toBeUndefined();
   });
 });
