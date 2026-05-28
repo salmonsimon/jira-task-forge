@@ -66,4 +66,47 @@ describe("tray domain helpers", () => {
       updatedAt: "Just now"
     });
   });
+
+  it("does not complete a tray while any local child task still needs Jira creation", () => {
+    const tray: Tray = {
+      id: "tray-1",
+      name: "Prep tray",
+      state: "Active",
+      summary: "No tasks",
+      updatedAt: "Yesterday",
+      tasks: []
+    };
+
+    expect(
+      updateTrayTasks(tray, [
+        {
+          id: "parent-1",
+          project: "DTS",
+          area: "3D",
+          title: "Model vending machine",
+          priority: "High",
+          issueType: "Story",
+          syncStatus: "Created",
+          descriptionStatus: "Ready",
+          language: "Spanish",
+          jiraKey: "JTFTEST-12"
+        },
+        {
+          id: "subtask-1",
+          project: "DTS",
+          area: "3D",
+          title: "Texturizar",
+          priority: "High",
+          issueType: "Sub-task",
+          syncStatus: "Pending",
+          descriptionStatus: "Ready",
+          language: "Spanish",
+          parentTaskId: "parent-1"
+        }
+      ])
+    ).toMatchObject({
+      state: "Active",
+      summary: "1 task · 1 sub-task · 1 created"
+    });
+  });
 });
