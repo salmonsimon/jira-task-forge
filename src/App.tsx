@@ -69,6 +69,7 @@ import {
   formatJqlQueryMessage,
   getVisibleBackupCounts,
   isEligibleForCsvExport,
+  isSubtask,
   orderProjectNames
 } from "./lib/domain";
 import {
@@ -1127,12 +1128,17 @@ export default function App() {
     }
   }
 
-  async function createJiraParentIssues(options: { allowMissingDescriptions: boolean; includeExportedTasks: boolean }) {
+  async function createJiraParentIssues(options: {
+    allowMissingDescriptions: boolean;
+    includeExportedTasks: boolean;
+    includeMissingDescriptionTasks: boolean;
+  }) {
     if (!jiraCreatePreflight || !usesTauriPersistence) return;
 
     const selectedCreateableTaskCount = countJiraApiCreateableTasks(
       jiraCreatePreflight.tray.tasks,
-      options.includeExportedTasks
+      options.includeExportedTasks,
+      options.includeMissingDescriptionTasks
     );
     flushSync(() => {
       setIsCreatingJiraIssues(true);
@@ -1160,7 +1166,8 @@ export default function App() {
       const result = await createPersistedJiraParentIssues(
         jiraCreatePreflight.tray.id,
         options.allowMissingDescriptions,
-        options.includeExportedTasks
+        options.includeExportedTasks,
+        options.includeMissingDescriptionTasks
       );
       const persistedTrays = await listPersistedTrays();
       trayWorkspace.replaceTrays(persistedTrays, {
@@ -1788,12 +1795,26 @@ async function waitForMinimumElapsed(startedAt: number, minimumMs: number): Prom
   await new Promise((resolve) => setTimeout(resolve, remainingMs));
 }
 
-function countJiraApiCreateableTasks(tasks: LocalTask[], includeExportedTasks: boolean): number {
-  return tasks.filter(
-    (task) =>
-      task.syncStatus !== "Created" &&
-      (includeExportedTasks || task.syncStatus !== "Exported")
-  ).length;
+function countJiraApiCreateableTasks(
+  tasks: LocalTask[],
+  includeExportedTasks: boolean,
+  includeMissingDescriptionTasks: boolean
+): number {
+  const tasksById = new Map(tasks.map((task) => [task.id, task]));
+
+  return tasks.filter((task) => {
+    if (task.syncStatus === "Created") return false;
+    if (!includeExportedTasks && task.syncStatus === "Exported") return false;
+    if (!includeMissingDescriptionTasks && !isSubtask(task) && task.descriptionStatus === "Missing") return false;
+    if (!isSubtask(task) || !task.parentTaskId) return true;
+
+    const parentTask = tasksById.get(task.parentTaskId);
+    if (!parentTask || parentTask.syncStatus === "Created") return true;
+    if (!includeExportedTasks && parentTask.syncStatus === "Exported") return false;
+    if (!includeMissingDescriptionTasks && parentTask.descriptionStatus === "Missing") return false;
+
+    return true;
+  }).length;
 }
 
 function toFileSlug(value: string): string {

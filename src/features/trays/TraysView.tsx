@@ -154,11 +154,11 @@ export function TraysView({
             </p>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2 text-xs text-[#6b778c]">
-            <label className="flex h-8 min-w-[260px] items-center gap-2 rounded border border-[#c1c7d0] bg-white px-2 text-[#42526e] focus-within:border-[#4c9aff] focus-within:ring-2 focus-within:ring-[#deebff]">
+            <label className="tray-search-shell flex h-8 min-w-[260px] items-center gap-2 rounded border border-[#c1c7d0] bg-[#f7f8fa] px-2 text-[#42526e] focus-within:border-[#4c9aff] focus-within:ring-2 focus-within:ring-[#deebff]">
               <Search size={14} className="shrink-0" />
               <input
                 aria-label="Search current tray"
-                className="h-7 min-w-0 flex-1 border-0 bg-transparent p-0 text-sm outline-none"
+                className="tray-search-input h-7 min-w-0 flex-1 border-0 bg-transparent p-0 text-sm outline-none"
                 placeholder="Search current tray"
                 value={traySearchQuery}
                 onChange={(event) => setTraySearchQuery(event.target.value)}

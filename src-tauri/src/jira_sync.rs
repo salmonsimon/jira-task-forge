@@ -94,6 +94,7 @@ where
             tray_id,
             allow_missing_descriptions,
             true,
+            true,
             |_| {},
         )
     }
@@ -103,6 +104,7 @@ where
         tray_id: &str,
         allow_missing_descriptions: bool,
         include_exported_tasks: bool,
+        include_missing_description_tasks: bool,
         mut report_progress: F,
     ) -> Result<JiraCreateIssuesResult, String>
     where
@@ -121,6 +123,7 @@ where
             &tray.name,
             &self.creation_project_key,
             include_exported_tasks,
+            include_missing_description_tasks,
             &mut report_progress,
         )?;
         let mut result = recorder.running_result();
@@ -131,6 +134,7 @@ where
                 creation_project_key: &self.creation_project_key,
                 allow_missing_descriptions,
                 include_exported_tasks,
+                include_missing_description_tasks,
             },
         );
         let createable_task_count = task_scope.createable_task_count;
@@ -1015,7 +1019,7 @@ mod tests {
 
         let mut runner = JiraSyncRunner::new(&connection, &mut gateway, "JTFTEST".to_string());
         let result = runner
-            .create_parent_issues_from_tray_with_progress(&tray.id, true, false, |_| {})
+            .create_parent_issues_from_tray_with_progress(&tray.id, true, false, true, |_| {})
             .expect("sync succeeds");
 
         assert_eq!(result.status, "succeeded");

@@ -484,6 +484,7 @@ mod tests {
             current_content: String::new(),
             proposed_content: proposed_content.to_string(),
             status: DescriptionSectionStatus::Raw,
+            reviewer_comment: None,
             updated_at: None,
         }
     }

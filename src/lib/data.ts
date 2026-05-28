@@ -435,6 +435,82 @@ export const trays: Tray[] = [
     ]
   },
   {
+    id: "tray-blocking-preflight-qa",
+    name: "Blocking preflight QA",
+    state: "Active",
+    summary: "5 tasks · 4 blocking · QA",
+    updatedAt: "Today",
+    tasks: [
+      {
+        id: "ltask-blocking-missing-project",
+        project: "",
+        area: "Polish",
+        title: "Validar flujo sin proyecto",
+        priority: "High",
+        issueType: "Story",
+        syncStatus: "Pending",
+        descriptionStatus: "Ready",
+        language: "Spanish",
+        epic: "DTS-999 [QA] Polish",
+        description:
+          "## Historia de usuario\n\nYo como preparador de tareas,\nquiero detectar cuando una tarea no tiene proyecto,\npara bloquear la creacion antes de llegar a Jira."
+      },
+      {
+        id: "ltask-blocking-missing-area",
+        project: "STT",
+        area: "",
+        title: "Validar flujo sin area",
+        priority: "Medium",
+        issueType: "Story",
+        syncStatus: "Pending",
+        descriptionStatus: "Ready",
+        language: "Spanish",
+        epic: "DTS-999 [QA] General",
+        description:
+          "## Historia de usuario\n\nYo como preparador de tareas,\nquiero detectar cuando una tarea no tiene area,\npara corregir la agrupacion antes de crear issues."
+      },
+      {
+        id: "ltask-blocking-missing-title",
+        project: "STT",
+        area: "Bug",
+        title: "",
+        priority: "Highest",
+        issueType: "Bug",
+        syncStatus: "Pending",
+        descriptionStatus: "Ready",
+        language: "Spanish",
+        epic: "DTS-999 [QA] Bug",
+        description:
+          "## Historia de usuario\n\nYo como preparador de tareas,\nquiero bloquear tareas sin titulo,\npara evitar issues inutiles en Jira."
+      },
+      {
+        id: "ltask-blocking-orphan-subtask",
+        project: "STT",
+        area: "3D",
+        title: "Sub-task sin padre local",
+        priority: "Medium",
+        issueType: "Sub-task",
+        syncStatus: "Pending",
+        descriptionStatus: "Ready",
+        language: "Spanish"
+      },
+      {
+        id: "ltask-blocking-ready-control",
+        project: "STT",
+        area: "Programacion",
+        title: "Tarea valida de control",
+        priority: "Low",
+        issueType: "Story",
+        syncStatus: "Pending",
+        descriptionStatus: "Ready",
+        language: "Spanish",
+        epic: "DTS-999 [QA] Programacion",
+        description:
+          "## Historia de usuario\n\nYo como preparador de tareas,\nquiero mantener una tarea valida junto a los bloqueos,\npara comparar que se puede crear cuando el tray quede limpio."
+      }
+    ]
+  },
+  {
     id: "tray-pilotlab-sync",
     name: "PilotLab sync mayo",
     state: "Completed",

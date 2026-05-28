@@ -9,6 +9,7 @@ import {
   createEmptyAssistedDescriptionSectionStatuses,
   getAssistedDescriptionProposalItems,
   parseAssistedDescriptionMarkdown,
+  reviseAssistedDescriptionProposal,
   serializeAssistedDescriptionSections,
   toNewAssistedDescriptionProposal
 } from "./assistedDescription";
@@ -122,6 +123,101 @@ Plan de reversa.`);
       provider: "OpenAI",
       model: "gpt-4.1"
     });
+  });
+
+  it("marks revised proposal sections with the reviewer request", () => {
+    const currentSections = parseAssistedDescriptionMarkdown("## Historia de usuario\n\nRaw story");
+    const proposal = buildAssistedDescriptionProposal({
+      changeRequest: "Initial draft.",
+      currentMarkdown: serializeAssistedDescriptionSections(currentSections),
+      id: "proposal-1",
+      now: "2026-05-27T12:00:00.000Z",
+      proposedMarkdown: serializeAssistedDescriptionSections({
+        ...currentSections,
+        objective: "Clear objective"
+      }),
+      sectionIds: ["objective"],
+      taskId: "task-1"
+    });
+    const revision = buildAssistedDescriptionProposal({
+      changeRequest: "Make the objective measurable.",
+      currentMarkdown: serializeAssistedDescriptionSections(currentSections),
+      id: "proposal-revision",
+      now: "2026-05-27T12:05:00.000Z",
+      proposedMarkdown: serializeAssistedDescriptionSections({
+        ...currentSections,
+        objective: "Measurable objective"
+      }),
+      sectionIds: ["objective"],
+      taskId: "task-1"
+    });
+
+    const revisedProposal = reviseAssistedDescriptionProposal(
+      proposal,
+      revision,
+      ["objective"],
+      "2026-05-27T12:06:00.000Z"
+    );
+    const item = getAssistedDescriptionProposalItems(revisedProposal).find((candidate) => candidate.sectionId === "objective");
+
+    expect(item?.proposedValue).toBe("Measurable objective");
+    expect(item?.reviewerComment).toBe("Make the objective measurable.");
+  });
+
+  it("keeps reviewer-requested empty proposal sections reviewable", () => {
+    const currentSections = parseAssistedDescriptionMarkdown("## Historia de usuario\n\nRaw story");
+    const proposal = buildAssistedDescriptionProposal({
+      changeRequest: "Initial draft.",
+      currentMarkdown: serializeAssistedDescriptionSections(currentSections),
+      id: "proposal-1",
+      now: "2026-05-27T12:00:00.000Z",
+      proposedMarkdown: serializeAssistedDescriptionSections({
+        ...currentSections,
+        problem: "Problem detail"
+      }),
+      sectionIds: ["problem"],
+      taskId: "task-1"
+    });
+    const emptyRevision = buildAssistedDescriptionProposal({
+      changeRequest: "Leave this section empty.",
+      currentMarkdown: serializeAssistedDescriptionSections(currentSections),
+      id: "proposal-revision",
+      now: "2026-05-27T12:05:00.000Z",
+      proposedMarkdown: serializeAssistedDescriptionSections({
+        ...currentSections,
+        problem: ""
+      }),
+      sectionIds: ["problem"],
+      taskId: "task-1"
+    });
+
+    const revisedProposal = reviseAssistedDescriptionProposal(
+      proposal,
+      emptyRevision,
+      ["problem"],
+      "2026-05-27T12:06:00.000Z"
+    );
+    const items = getAssistedDescriptionProposalItems(revisedProposal);
+
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({
+      proposedValue: "",
+      reviewerComment: "Leave this section empty.",
+      sectionId: "problem"
+    });
+
+    const patch = buildResolveAssistedDescriptionProposalItemPatch(
+      {
+        sections: currentSections,
+        sectionStatuses: createEmptyAssistedDescriptionSectionStatuses()
+      },
+      revisedProposal,
+      items[0].id,
+      true,
+      "2026-05-27T12:07:00.000Z"
+    );
+
+    expect(getAssistedDescriptionProposalItems(patch!.proposal)[0].status).toBe("accepted");
   });
 
   it("accepts one proposal section and marks only meaningful accepted content polished", () => {

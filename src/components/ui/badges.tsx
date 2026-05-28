@@ -3,7 +3,11 @@ import type { Priority, SyncStatus } from "../../lib/types";
 import { cn } from "../../lib/utils";
 
 export function AreaBadge({ area }: { area: string }) {
-  return <span className="rounded bg-[#deebff] px-2 py-1 text-xs font-medium text-[#0747a6]">{area}</span>;
+  return (
+    <span className="inline-block max-w-full truncate rounded bg-[#deebff] px-2 py-1 text-xs font-medium text-[#0747a6]" title={area}>
+      {area}
+    </span>
+  );
 }
 
 export function IssueTypeBadge({ type, dark = false }: { type: string; dark?: boolean }) {
@@ -11,12 +15,13 @@ export function IssueTypeBadge({ type, dark = false }: { type: string; dark?: bo
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium",
+        "inline-flex max-w-full items-center gap-1 rounded px-2 py-1 text-xs font-medium",
         dark ? "bg-[#454852] text-[#dfe1e6]" : "bg-[#f4f5f7] text-[#42526e]"
       )}
+      title={type}
     >
-      {icon}
-      {type}
+      <span className="shrink-0">{icon}</span>
+      <span className="min-w-0 truncate">{type}</span>
     </span>
   );
 }

@@ -1,4 +1,4 @@
-import { AlertTriangle, Check, CheckCircle2, Info, Loader2, ShieldCheck, XCircle } from "lucide-react";
+import { AlertTriangle, Check, CheckCircle2, ChevronRight, Info, Loader2, ShieldCheck, XCircle } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { Button, LoadingOrb } from "../../components/ui";
 import { appOverlayLayers, useAppOverlay } from "../../lib/app-overlays";
@@ -12,6 +12,14 @@ import type {
   Tray
 } from "../../lib/types";
 import { cn } from "../../lib/utils";
+
+type MissingDescriptionMode = "exclude" | "include";
+
+type JiraCreateOptions = {
+  allowMissingDescriptions: boolean;
+  includeExportedTasks: boolean;
+  includeMissingDescriptionTasks: boolean;
+};
 
 export type JiraCreatePreflight = {
   tray: Tray;
@@ -40,10 +48,10 @@ export function JiraPreflightDialog({
   createResult: JiraCreateIssuesResult | null;
   createProgress: JiraCreateProgress | null;
   onClose: () => void;
-  onCreate: (options: { allowMissingDescriptions: boolean; includeExportedTasks: boolean }) => void;
+  onCreate: (options: JiraCreateOptions) => void;
   onCreateRecoveryTray: () => void;
 }) {
-  const [missingDescriptionsConfirmed, setMissingDescriptionsConfirmed] = useState(false);
+  const [missingDescriptionMode, setMissingDescriptionMode] = useState<MissingDescriptionMode>("exclude");
   const [exportedTasksIncluded, setExportedTasksIncluded] = useState(false);
   const blockingWarnings = preflight.warnings.filter((warning) => warning.severity === "blocking");
   const reviewWarnings = preflight.warnings.filter((warning) => warning.severity !== "blocking");
@@ -56,18 +64,23 @@ export function JiraPreflightDialog({
   const includedWarnings = reviewWarnings.filter(
     (warning) => exportedTasksIncluded || !warning.taskId || !exportedTaskIds.has(warning.taskId)
   );
-  const hasMissingDescriptions = includedWarnings.some((warning) => warning.code === "missing-description");
-  const needsMissingDescriptionConfirmation = hasMissingDescriptions && !missingDescriptionsConfirmed;
-  const includedCreateableTaskCount = Math.max(
-    0,
-    preflight.createableTaskCount - (exportedTasksIncluded ? 0 : exportedDuplicateRiskCount)
+  const missingDescriptionTaskIds = new Set(
+    includedWarnings
+      .filter((warning) => warning.code === "missing-description" && warning.taskId)
+      .map((warning) => warning.taskId!)
+  );
+  const hasMissingDescriptions = missingDescriptionTaskIds.size > 0;
+  const missingDescriptionTasksIncluded = missingDescriptionMode === "include";
+  const includedCreateableTaskCount = countIncludedCreateableTasks(
+    preflight.tray.tasks,
+    exportedTasksIncluded,
+    missingDescriptionTasksIncluded
   );
   const isBusy = isCreating || isCreatingRecoveryTray;
   const canCreate =
     blockingWarnings.length === 0 &&
     includedCreateableTaskCount > 0 &&
     preflight.credentialStatus !== "checking" &&
-    !needsMissingDescriptionConfirmation &&
     !isBusy;
   const credentialMessage =
     preflight.credentialStatus === "checking"
@@ -84,7 +97,7 @@ export function JiraPreflightDialog({
   });
 
   useEffect(() => {
-    setMissingDescriptionsConfirmed(false);
+    setMissingDescriptionMode("exclude");
     setExportedTasksIncluded(false);
   }, [preflight.tray.id]);
 
@@ -107,7 +120,12 @@ export function JiraPreflightDialog({
           <div>
             <h2 className="text-base font-semibold text-[#f4f5f7]">Jira create preflight</h2>
             <p className="mt-1 text-xs text-[#aeb3bd]">
-              {preflight.tray.name} · {preflightTaskCountLabel(includedCreateableTaskCount, preflight.createableTaskCount, exportedDuplicateRiskCount)}
+              {preflight.tray.name} · {preflightTaskCountLabel(
+                includedCreateableTaskCount,
+                preflight.createableTaskCount,
+                exportedDuplicateRiskCount,
+                missingDescriptionTaskIds.size
+              )}
             </p>
           </div>
           <button
@@ -148,7 +166,11 @@ export function JiraPreflightDialog({
             </div>
           </div>
 
-          <SubtaskCreationSummary tray={preflight.tray} includeExportedTasks={exportedTasksIncluded} />
+          <SubtaskCreationSummary
+            tray={preflight.tray}
+            includeExportedTasks={exportedTasksIncluded}
+            includeMissingDescriptionTasks={missingDescriptionTasksIncluded}
+          />
 
           {blockingWarnings.length ? (
             <PreflightWarningGroup
@@ -205,32 +227,12 @@ export function JiraPreflightDialog({
           ) : null}
 
           {hasMissingDescriptions ? (
-            <button
-              aria-checked={missingDescriptionsConfirmed}
-              className={cn(
-                "flex w-full min-w-0 items-center gap-3 rounded border border-[#7f5f01] bg-[#2f2606] px-3 py-3 text-left text-sm text-[#dfe1e6] transition hover:bg-[#3a3008] focus:outline-none focus:ring-2 focus:ring-[#579dff] focus:ring-offset-2 focus:ring-offset-[#202328]",
-                isBusy && "cursor-not-allowed opacity-60"
-              )}
+            <MissingDescriptionModeSelector
               disabled={isBusy}
-              onClick={() => setMissingDescriptionsConfirmed((currentValue) => !currentValue)}
-              role="checkbox"
-              type="button"
-            >
-              <span
-                aria-hidden="true"
-                className={cn(
-                  "flex h-5 w-5 shrink-0 items-center justify-center rounded border transition",
-                  missingDescriptionsConfirmed
-                    ? "border-[#579dff] bg-[#0c66e4] text-white"
-                    : "border-[#9f7f18] bg-[#1f1a06] text-transparent"
-                )}
-              >
-                <Check size={14} strokeWidth={3} />
-              </span>
-              <span className="min-w-0 flex-1 leading-relaxed">
-                I reviewed the missing descriptions and want to create these issues without placeholder descriptions.
-              </span>
-            </button>
+              mode={missingDescriptionMode}
+              taskCount={missingDescriptionTaskIds.size}
+              onChange={setMissingDescriptionMode}
+            />
           ) : null}
 
           {createResult ? (
@@ -255,8 +257,9 @@ export function JiraPreflightDialog({
             variant={canCreate || isCreating ? "darkPrimary" : "darkSecondary"}
             onClick={() =>
               onCreate({
-                allowMissingDescriptions: missingDescriptionsConfirmed,
-                includeExportedTasks: exportedTasksIncluded
+                allowMissingDescriptions: missingDescriptionTasksIncluded,
+                includeExportedTasks: exportedTasksIncluded,
+                includeMissingDescriptionTasks: missingDescriptionTasksIncluded
               })
             }
           >
@@ -312,11 +315,14 @@ function JiraCreateLoading({
 
 function SubtaskCreationSummary({
   tray,
-  includeExportedTasks
+  includeExportedTasks,
+  includeMissingDescriptionTasks
 }: {
   tray: Tray;
   includeExportedTasks: boolean;
+  includeMissingDescriptionTasks: boolean;
 }) {
+  const parentTasksById = new Map(tray.tasks.map((task) => [task.id, task]));
   const subtaskGroups = groupSubtasksByParent(
     tray.tasks
     .filter(
@@ -324,7 +330,8 @@ function SubtaskCreationSummary({
         isSubtask(task) &&
         task.parentTaskId &&
         task.syncStatus !== "Created" &&
-        (includeExportedTasks || task.syncStatus !== "Exported")
+        (includeExportedTasks || task.syncStatus !== "Exported") &&
+        shouldIncludeSubtaskInPreflightSummary(task, parentTasksById, includeMissingDescriptionTasks, includeExportedTasks)
     ),
     tray.tasks
   );
@@ -334,38 +341,57 @@ function SubtaskCreationSummary({
   const subtaskCount = subtaskGroups.reduce((total, group) => total + group.subtasks.length, 0);
 
   return (
-    <div className="rounded border border-[#315a8a] bg-[#102d50] px-3 py-3">
-      <div className="flex items-center justify-between gap-3">
-        <span className="text-sm font-semibold text-[#f4f5f7]">Sub-task creation</span>
+    <details className="preflight-disclosure rounded border border-[#315a8a] bg-[#102d50]">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-3 focus:outline-none">
+        <span className="flex min-w-0 items-center gap-2">
+          <ChevronRight size={14} className="preflight-disclosure-chevron shrink-0 text-[#b7d5ff] transition-transform" />
+          <span className="truncate text-sm font-semibold text-[#f4f5f7]">Sub-task creation</span>
+        </span>
         <span className="rounded bg-[#0b2442] px-2 py-1 text-xs font-medium text-[#b7d5ff]">
           {subtaskCount} {subtaskCount === 1 ? "sub-task" : "sub-tasks"}
         </span>
+      </summary>
+      <div className="space-y-2 px-3 pb-3">
+        {subtaskGroups.map((group) => {
+          const parentTitle = group.parentTask?.title ?? "Missing parent task";
+
+          return (
+            <details className="preflight-disclosure rounded border border-[#244d7a] bg-[#0b2442]" key={group.parentTask?.id ?? "missing-parent"}>
+              <summary className="flex cursor-pointer list-none items-start justify-between gap-3 px-3 py-2 focus:outline-none">
+                <span className="flex min-w-0 items-start gap-2">
+                  <ChevronRight size={14} className="preflight-disclosure-chevron mt-0.5 shrink-0 text-[#b7d5ff] transition-transform" />
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-medium text-[#f4f5f7]" title={parentTitle}>{parentTitle}</span>
+                    <span className="mt-0.5 block text-xs text-[#b7d5ff]">Review sub-tasks</span>
+                  </span>
+                </span>
+                <span className="shrink-0 rounded bg-[#12365f] px-2 py-0.5 text-xs font-medium text-[#b7d5ff]">
+                  {group.subtasks.length} {group.subtasks.length === 1 ? "sub-task" : "sub-tasks"}
+                </span>
+              </summary>
+              <ul className="space-y-1 px-8 pb-2 text-xs text-[#b7d5ff]">
+                {group.subtasks.map((subtask) => (
+                  <li className="flex min-w-0 gap-2" key={subtask.id}>
+                    <span>-</span>
+                    <span className="min-w-0 truncate" title={subtask.title}>{subtask.title}</span>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          );
+        })}
       </div>
-      <div className="mt-2 space-y-2">
-        {subtaskGroups.map((group) => (
-          <div className="rounded border border-[#244d7a] bg-[#0b2442] px-3 py-2" key={group.parentTask?.id ?? "missing-parent"}>
-            <div className="text-sm font-medium text-[#f4f5f7]">{group.parentTask?.title ?? "Missing parent task"}</div>
-            <ul className="mt-1 space-y-1 text-xs text-[#b7d5ff]">
-              {group.subtasks.map((subtask) => (
-                <li className="flex gap-2" key={subtask.id}>
-                  <span>-</span>
-                  <span>{subtask.title}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ))}
-      </div>
-    </div>
+    </details>
   );
 }
 
 function preflightTaskCountLabel(
   includedCreateableTaskCount: number,
   createableTaskCount: number,
-  exportedDuplicateRiskCount: number
+  exportedDuplicateRiskCount: number,
+  missingDescriptionTaskCount: number
 ): string {
-  if (!exportedDuplicateRiskCount) {
+  if (!exportedDuplicateRiskCount && !missingDescriptionTaskCount) {
     return `${createableTaskCount} createable ${createableTaskCount === 1 ? "task" : "tasks"}`;
   }
 
@@ -428,6 +454,64 @@ function CreateResultSummary({
   );
 }
 
+function MissingDescriptionModeSelector({
+  disabled,
+  mode,
+  taskCount,
+  onChange
+}: {
+  disabled: boolean;
+  mode: MissingDescriptionMode;
+  taskCount: number;
+  onChange: (mode: MissingDescriptionMode) => void;
+}) {
+  return (
+    <div className={cn("rounded border border-[#7f5f01] bg-[#2f2606] px-3 py-3", disabled && "opacity-60")}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <div className="text-sm font-semibold text-[#f5cd47]">Missing descriptions</div>
+          <p className="mt-1 text-xs leading-relaxed text-[#dfe1e6]">
+            Choose whether {taskCount} parent {taskCount === 1 ? "task" : "tasks"} without descriptions are part of this Jira run.
+          </p>
+        </div>
+        <span className="rounded bg-black/20 px-2 py-0.5 text-xs font-medium text-[#dfe1e6]">
+          {taskCount} parent {taskCount === 1 ? "task" : "tasks"}
+        </span>
+      </div>
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        <button
+          aria-pressed={mode === "exclude"}
+          className={cn(
+            "rounded border px-3 py-2 text-left text-sm transition focus:outline-none",
+            mode === "exclude"
+              ? "border-[#579dff] bg-[#0c2d55] text-[#b7d5ff]"
+              : "border-[#7f5f01] bg-[#1f1a06] text-[#dfe1e6] hover:bg-[#3a3008]"
+          )}
+          disabled={disabled}
+          onClick={() => onChange("exclude")}
+          type="button"
+        >
+          Don't include parent tasks with missing descriptions
+        </button>
+        <button
+          aria-pressed={mode === "include"}
+          className={cn(
+            "rounded border px-3 py-2 text-left text-sm transition focus:outline-none",
+            mode === "include"
+              ? "border-[#579dff] bg-[#0c2d55] text-[#b7d5ff]"
+              : "border-[#7f5f01] bg-[#1f1a06] text-[#dfe1e6] hover:bg-[#3a3008]"
+          )}
+          disabled={disabled}
+          onClick={() => onChange("include")}
+          type="button"
+        >
+          Include parent tasks with missing descriptions
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function PreflightWarningGroup({
   icon,
   title,
@@ -444,19 +528,27 @@ function PreflightWarningGroup({
   const tasksById = new Map(tray.tasks.map((task) => [task.id, task]));
   const groupedWarnings = groupWarningsByCode(warnings);
 
+  const warningCount = warnings.length;
+
   return (
-    <div
+    <details
       className={cn(
-        "rounded border px-3 py-3",
+        "preflight-disclosure rounded border",
         tone === "danger" && "border-[#ae2e24] bg-[#4f1d1a]",
         tone === "warning" && "border-[#7f5f01] bg-[#3f3102]"
       )}
     >
-      <div className={cn("mb-2 flex items-center gap-2 text-sm font-semibold", tone === "danger" ? "text-[#ff9c8f]" : "text-[#f5cd47]")}>
-        {icon}
-        {title}
-      </div>
-      <div className="space-y-3">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-3 focus:outline-none">
+        <span className={cn("flex min-w-0 items-center gap-2 text-sm font-semibold", tone === "danger" ? "text-[#ff9c8f]" : "text-[#f5cd47]")}>
+          <ChevronRight size={14} className="preflight-disclosure-chevron shrink-0 transition-transform" />
+          {icon}
+          <span className="truncate">{title}</span>
+        </span>
+        <span className="shrink-0 rounded bg-black/20 px-2 py-0.5 text-xs font-medium text-[#dfe1e6]">
+          {warningCount} {warningCount === 1 ? "item" : "items"}
+        </span>
+      </summary>
+      <div className="space-y-3 px-3 pb-3">
         {groupedWarnings.map((group) => {
           const epicGroups = group.code === "missing-epic" ? groupEpicResolutionWarnings(group.warnings, tray.tasks) : [];
           const countLabel = group.code === "missing-epic"
@@ -464,34 +556,42 @@ function PreflightWarningGroup({
             : group.warnings.length;
 
           return (
-            <section className="rounded border border-black/20 bg-black/10 px-3 py-2" key={group.code}>
-              <div className="flex items-center justify-between gap-3">
-                <h3 className="text-sm font-semibold text-[#f4f5f7]">{getWarningTitle(group.code)}</h3>
+            <details className="preflight-disclosure rounded border border-black/20 bg-black/10" key={group.code}>
+              <summary className="flex cursor-pointer list-none items-start justify-between gap-3 px-3 py-2 focus:outline-none">
+                <span className="flex min-w-0 items-start gap-2">
+                  <ChevronRight size={14} className="preflight-disclosure-chevron mt-0.5 shrink-0 text-[#dfe1e6] transition-transform" />
+                  <span className="min-w-0 truncate text-sm font-semibold text-[#f4f5f7]">{getWarningTitle(group.code)}</span>
+                </span>
                 <span className="shrink-0 rounded bg-black/20 px-2 py-0.5 text-xs font-medium text-[#dfe1e6]">
                   {countLabel}
                 </span>
-              </div>
-              <p className="mt-1 text-xs leading-relaxed text-[#c7cbd3]">{getWarningSummary(group.code, group.warnings[0])}</p>
+              </summary>
               {group.code === "missing-epic" ? (
-                <EpicResolutionWarningLines groups={epicGroups} />
+                <div className="px-3 pb-3">
+                  <p className="mb-2 text-xs leading-relaxed text-[#c7cbd3]">{getWarningSummary(group.code, group.warnings[0])}</p>
+                  <EpicResolutionWarningLines groups={epicGroups} />
+                </div>
               ) : (
-                <ul className="mt-2 space-y-1.5">
-                  {group.warnings.map((warning, index) => (
-                    <li className="text-sm text-[#dfe1e6]" key={`${warning.code}-${warning.taskId ?? "tray"}-${index}`}>
-                      {warning.taskId ? (
-                        <TaskWarningLine code={warning.code} task={tasksById.get(warning.taskId)} />
-                      ) : (
-                        warning.message
-                      )}
-                    </li>
-                  ))}
-                </ul>
+                <div className="px-8 pb-3">
+                  <p className="mb-2 text-xs leading-relaxed text-[#c7cbd3]">{getWarningSummary(group.code, group.warnings[0])}</p>
+                  <ul className="space-y-1.5">
+                    {group.warnings.map((warning, index) => (
+                      <li className="text-sm text-[#dfe1e6]" key={`${warning.code}-${warning.taskId ?? "tray"}-${index}`}>
+                        {warning.taskId ? (
+                          <TaskWarningLine code={warning.code} task={tasksById.get(warning.taskId)} />
+                        ) : (
+                          warning.message
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               )}
-            </section>
+            </details>
           );
         })}
       </div>
-    </div>
+    </details>
   );
 }
 
@@ -503,37 +603,78 @@ function EpicResolutionWarningLines({
   return (
     <div className="mt-2 space-y-2">
       {groups.map((group) => (
-        <div className="rounded border border-black/20 bg-black/10 px-3 py-2" key={group.target}>
-          <div className="flex items-center justify-between gap-3">
-            <span className="min-w-0 truncate text-sm font-medium text-[#f4f5f7]">{group.target}</span>
+        <details className="preflight-disclosure rounded border border-black/20 bg-black/10" key={group.target}>
+          <summary className="flex cursor-pointer list-none items-start justify-between gap-3 px-3 py-2 focus:outline-none">
+            <span className="flex min-w-0 items-start gap-2">
+              <ChevronRight size={14} className="preflight-disclosure-chevron mt-0.5 shrink-0 text-[#dfe1e6] transition-transform" />
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-medium text-[#f4f5f7]" title={group.target}>{group.target}</span>
+                {group.taskTitles.length ? <span className="mt-0.5 block text-xs text-[#dfe1e6]">Review titles</span> : null}
+              </span>
+            </span>
             <span className="shrink-0 rounded bg-black/20 px-2 py-0.5 text-xs font-medium text-[#dfe1e6]">
               {group.warnings.length} {group.warnings.length === 1 ? "task" : "tasks"}
             </span>
-          </div>
+          </summary>
           {group.taskTitles.length ? (
-            <details className="mt-1 text-xs text-[#c7cbd3]">
-              <summary className="cursor-pointer select-none text-[#dfe1e6]">Review titles</summary>
-              <ul className="mt-1 space-y-1 pl-3">
-                {group.taskTitles.map((title, index) => (
-                  <li className="truncate" key={`${group.target}-${title}-${index}`} title={title}>
-                    {title}
-                  </li>
-                ))}
-              </ul>
-            </details>
+            <ul className="space-y-1 px-8 pb-2 text-xs text-[#c7cbd3]">
+              {group.taskTitles.map((title, index) => (
+                <li className="truncate" key={`${group.target}-${title}-${index}`} title={title}>
+                  {title}
+                </li>
+              ))}
+            </ul>
           ) : null}
-        </div>
+        </details>
       ))}
     </div>
   );
+}
+
+function shouldIncludeSubtaskInPreflightSummary(
+  task: Tray["tasks"][number],
+  tasksById: Map<string, Tray["tasks"][number]>,
+  includeMissingDescriptionTasks: boolean,
+  includeExportedTasks: boolean
+): boolean {
+  if (!task.parentTaskId) return true;
+
+  const parentTask = tasksById.get(task.parentTaskId);
+  if (!parentTask || parentTask.syncStatus === "Created") return true;
+  if (!includeExportedTasks && parentTask.syncStatus === "Exported") return false;
+  if (!includeMissingDescriptionTasks && parentTask.descriptionStatus === "Missing") return false;
+
+  return true;
+}
+
+function countIncludedCreateableTasks(
+  tasks: Tray["tasks"],
+  includeExportedTasks: boolean,
+  includeMissingDescriptionTasks: boolean
+): number {
+  const tasksById = new Map(tasks.map((task) => [task.id, task]));
+
+  return tasks.filter((task) => {
+    if (task.syncStatus === "Created") return false;
+    if (!includeExportedTasks && task.syncStatus === "Exported") return false;
+    if (!includeMissingDescriptionTasks && !isSubtask(task) && task.descriptionStatus === "Missing") return false;
+    if (!isSubtask(task)) return true;
+
+    return shouldIncludeSubtaskInPreflightSummary(
+      task,
+      tasksById,
+      includeMissingDescriptionTasks,
+      includeExportedTasks
+    );
+  }).length;
 }
 
 function TaskWarningLine({ code, task }: { code: PreflightWarningCode; task: Tray["tasks"][number] | undefined }) {
   if (!task) return <>Untitled task</>;
 
   return (
-    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-      <span>{task.title || "Untitled task"}</span>
+    <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+      <span className="block min-w-0 max-w-full truncate" title={task.title || "Untitled task"}>{task.title || "Untitled task"}</span>
       {code === "missing-epic" && task.project.trim() && task.area.trim() ? (
         <span className="rounded bg-black/20 px-2 py-0.5 text-xs font-medium text-[#c7d1db]">
           Epic target: {formatEpicTarget(task.project, task.area)}

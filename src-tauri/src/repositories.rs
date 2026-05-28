@@ -1081,6 +1081,7 @@ impl<'connection> AssistedDescriptionProposalRepository<'connection> {
 
         let now = utc_now_string()?;
         let reviewer_comment = normalize_optional_text(reviewer_comment);
+        let proposed_content_changed = proposed_content.is_some();
         let mut section_found = false;
         for section in &mut proposal.sections {
             if section.section_id != section_id {
@@ -1093,8 +1094,10 @@ impl<'connection> AssistedDescriptionProposalRepository<'connection> {
             if let Some(status) = status {
                 section.status = status;
             }
-            if section.proposed_content.trim().is_empty() {
-                section.status = DescriptionSectionStatus::Raw;
+            if proposed_content_changed {
+                section.reviewer_comment = reviewer_comment
+                    .clone()
+                    .or_else(|| section.reviewer_comment.clone());
             }
             section.updated_at = Some(now.clone());
             section_found = true;
@@ -1622,11 +1625,8 @@ fn normalize_proposal_sections(
             let status = incoming
                 .map(|section| section.status)
                 .unwrap_or(DescriptionSectionStatus::Raw);
-            let status = if proposed_content.is_empty() {
-                DescriptionSectionStatus::Raw
-            } else {
-                status
-            };
+            let reviewer_comment = incoming
+                .and_then(|section| normalize_optional_text(section.reviewer_comment.as_deref()));
 
             Ok(AssistedDescriptionProposalSection {
                 section_id: (*section_id).to_string(),
@@ -1634,6 +1634,7 @@ fn normalize_proposal_sections(
                 current_content,
                 proposed_content,
                 status,
+                reviewer_comment,
                 updated_at: incoming
                     .and_then(|section| section.updated_at.clone())
                     .or_else(|| Some(updated_at.to_string())),
@@ -2618,6 +2619,27 @@ mod tests {
                 && section.proposed_content.is_empty()
                 && section.status == DescriptionSectionStatus::Raw));
 
+        let revised = repository
+            .update_section(
+                &proposal.id,
+                "problem",
+                Some("El timer puede seguir activo despues de completar el flujo y confundir el cierre de QA."),
+                Some(DescriptionSectionStatus::Raw),
+                Some("Make the risk concrete."),
+                false,
+            )
+            .expect("proposal section updates")
+            .expect("proposal exists");
+        let revised_problem = revised
+            .sections
+            .iter()
+            .find(|section| section.section_id == "problem")
+            .expect("problem section exists");
+        assert_eq!(
+            revised_problem.reviewer_comment.as_deref(),
+            Some("Make the risk concrete.")
+        );
+
         let accepted = repository
             .transition(
                 &proposal.id,
@@ -2649,12 +2671,69 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec![
                 "description.proposal.created",
+                "description.proposal.section_updated",
                 "description.proposal.status_changed"
             ]
         );
-        assert_eq!(log[1].status, AssistedDescriptionProposalStatus::Accepted);
-        assert_eq!(log[1].provider.as_deref(), Some("OpenAI"));
-        assert_eq!(log[1].model.as_deref(), Some("gpt-4.1"));
+        assert_eq!(log[2].status, AssistedDescriptionProposalStatus::Accepted);
+        assert_eq!(log[2].provider.as_deref(), Some("OpenAI"));
+        assert_eq!(log[2].model.as_deref(), Some("gpt-4.1"));
+    }
+
+    #[test]
+    fn accepts_reviewer_requested_empty_proposal_sections() {
+        let connection = open_in_memory_database().expect("database opens");
+        let tray = TrayRepository::new(&connection)
+            .create(NewTray {
+                name: "Empty proposal section tray".to_string(),
+            })
+            .expect("tray creates");
+        let task = TaskRepository::new(&connection)
+            .create(NewTask {
+                tray_id: tray.id,
+                project: "STT".to_string(),
+                area: "Bug".to_string(),
+                title: "Keep section empty".to_string(),
+                priority: "Medium".to_string(),
+                issue_type: "Story".to_string(),
+                content_language: "Spanish".to_string(),
+            })
+            .expect("task creates");
+        let repository = AssistedDescriptionProposalRepository::new(&connection);
+        let proposal = repository
+            .create(NewAssistedDescriptionProposal {
+                task_id: task.id.clone(),
+                title: Some("Empty section proposal".to_string()),
+                summary: None,
+                provider: None,
+                model: None,
+                user_comment: Some("Keep problem empty.".to_string()),
+                sections: vec![proposal_section("problem", "")],
+            })
+            .expect("proposal creates");
+
+        let updated = repository
+            .update_section(
+                &proposal.id,
+                "problem",
+                Some(""),
+                Some(DescriptionSectionStatus::Polished),
+                Some("Leave this section empty."),
+                true,
+            )
+            .expect("section updates")
+            .expect("proposal exists");
+        let problem = updated
+            .sections
+            .iter()
+            .find(|section| section.section_id == "problem")
+            .expect("problem section exists");
+
+        assert_eq!(problem.status, DescriptionSectionStatus::Polished);
+        assert_eq!(
+            problem.reviewer_comment.as_deref(),
+            Some("Leave this section empty.")
+        );
     }
 
     #[test]
@@ -2878,6 +2957,7 @@ mod tests {
             current_content: String::new(),
             proposed_content: proposed_content.to_string(),
             status: DescriptionSectionStatus::Raw,
+            reviewer_comment: None,
             updated_at: None,
         }
     }

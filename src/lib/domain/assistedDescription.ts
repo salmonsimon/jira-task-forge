@@ -49,6 +49,7 @@ export type AssistedDescriptionProposalItem = {
   currentValue: string;
   label: string;
   proposedValue: string;
+  reviewerComment?: string | null;
   sectionId: AssistedDescriptionSectionId;
   status: AssistedDescriptionProposalItemStatus;
 };
@@ -237,6 +238,7 @@ export function buildAssistedDescriptionProposal({
       currentContent: currentSections[section.id],
       heading: section.markdownHeading,
       proposedContent,
+      reviewerComment: null,
       sectionId: section.id,
       status: "Raw",
       updatedAt: now
@@ -313,6 +315,7 @@ export function reviseAssistedDescriptionProposal(
         ...section,
         currentContent: revisionSection.currentContent,
         proposedContent: revisionSection.proposedContent,
+        reviewerComment: revision.userComment ?? null,
         status: "Raw",
         updatedAt: now
       };
@@ -328,23 +331,39 @@ export function getAssistedDescriptionProposalItems(
   proposal: AssistedDescriptionProposal
 ): AssistedDescriptionProposalItem[] {
   return proposal.sections
-    .filter((section) =>
-      Boolean(section.proposedContent.trim()) ||
-      section.status === "Polished" ||
-      (proposal.status !== "Pending" && Boolean(section.currentContent.trim()))
-    )
+    .filter((section) => isReviewableProposalSection(proposal.status, section))
     .map((section) => ({
       currentValue: section.currentContent,
       id: `${proposal.id}-${section.sectionId}`,
       label: getAssistedDescriptionSectionLabel(section.sectionId),
       proposedValue: section.proposedContent,
+      reviewerComment: section.reviewerComment ?? null,
       sectionId: section.sectionId,
       status: getAssistedDescriptionProposalItemStatus(proposal.status, section)
     }));
 }
 
+function isReviewableProposalSection(
+  proposalStatus: AssistedDescriptionProposalStatus,
+  section: AssistedDescriptionProposalSection
+): boolean {
+  const currentContent = section.currentContent.trim();
+  const proposedContent = section.proposedContent.trim();
+  const hasReviewerRequest = Boolean(section.reviewerComment?.trim());
+  const hasContentChange = currentContent !== proposedContent;
+
+  if (hasReviewerRequest) return true;
+  if (section.status === "Polished" && proposedContent && hasContentChange) return true;
+  if (proposedContent && hasContentChange) return true;
+  if (proposalStatus !== "Pending" && currentContent && hasContentChange) return true;
+
+  return false;
+}
+
 export function hasAcceptedAssistedDescriptionProposalSections(proposal: AssistedDescriptionProposal): boolean {
-  return proposal.sections.some((section) => section.status === "Polished" && section.proposedContent.trim());
+  return proposal.sections.some((section) =>
+    section.status === "Polished" && (section.proposedContent.trim() || section.reviewerComment?.trim())
+  );
 }
 
 export function buildResolveAssistedDescriptionProposalItemPatch(
@@ -401,9 +420,14 @@ export function buildResolveAssistedDescriptionProposalPatch(
       }
     }
     nextStatus = "Accepted";
+    const pendingSectionIds = new Set(
+      getAssistedDescriptionProposalItems(proposal)
+        .filter((item) => item.status === "pending")
+        .map((item) => item.sectionId)
+    );
     nextSections = proposal.sections.map((section) => ({
       ...section,
-      status: section.proposedContent.trim() ? "Polished" : "Raw",
+      status: pendingSectionIds.has(section.sectionId) || section.status === "Polished" ? "Polished" : "Raw",
       updatedAt: now
     }));
   } else {
@@ -494,7 +518,7 @@ function getAssistedDescriptionProposalItemStatus(
   proposalStatus: AssistedDescriptionProposalStatus,
   section: AssistedDescriptionProposalSection
 ): AssistedDescriptionProposalItemStatus {
-  if (section.status === "Polished" && section.proposedContent.trim()) return "accepted";
+  if (section.status === "Polished") return "accepted";
   if (proposalStatus === "Rejected" || proposalStatus === "Partial") return "rejected";
   if (proposalStatus === "Accepted") return section.proposedContent.trim() ? "accepted" : "rejected";
   return "pending";

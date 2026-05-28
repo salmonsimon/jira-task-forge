@@ -1,5 +1,6 @@
 import { Check, ChevronDown, Eye, Loader2, MessageCircle, Pencil, Sparkles, X } from "lucide-react";
 import { useEffect, useMemo, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { createPortal } from "react-dom";
 import { Button, IconButton } from "../../components/ui";
 import { appOverlayLayers, useAppOverlay } from "../../lib/app-overlays";
 import {
@@ -56,6 +57,7 @@ export function AssistedDescriptionSection({
   onRefreshTask,
   onTransitionProposal,
   onUpdateProposalSection,
+  proposalPanelContainer,
   proposalModel,
   proposalProvider
 }: {
@@ -83,6 +85,7 @@ export function AssistedDescriptionSection({
       applyToTaskDescription?: boolean;
     }
   ) => Promise<AssistedDescriptionProposal | null>;
+  proposalPanelContainer?: HTMLElement | null;
   proposalModel?: string | null;
   proposalProvider?: string | null;
 }) {
@@ -97,7 +100,8 @@ export function AssistedDescriptionSection({
   const [descriptionContext, setDescriptionContext] = useState("");
   const [descriptionMessage, setDescriptionMessage] = useState<string | null>(null);
   const [clarificationQuestions, setClarificationQuestions] = useState<string[]>([]);
-  const [promptOpen, setPromptOpen] = useState(() => !hasDescriptionContent);
+  const [promptOpen, setPromptOpen] = useState(false);
+  const [promptSectionIds, setPromptSectionIds] = useState<AssistedDescriptionSectionId[]>(allSectionIds);
   const [proposalPanelOpen, setProposalPanelOpen] = useState(true);
   const [proposals, setProposals] = useState<AssistedDescriptionProposal[]>([]);
   const [proposalLog, setProposalLog] = useState<DescriptionProposalLogEntry[]>([]);
@@ -110,6 +114,7 @@ export function AssistedDescriptionSection({
   const [resolvingProposalAction, setResolvingProposalAction] = useState<"accept" | "reject" | null>(null);
   const [resolvingItemId, setResolvingItemId] = useState<string | null>(null);
   const [isRequestingProposalChanges, setIsRequestingProposalChanges] = useState(false);
+  const [requestingProposalChangeLabel, setRequestingProposalChangeLabel] = useState<string | null>(null);
   const [editingProposalItemId, setEditingProposalItemId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -119,7 +124,8 @@ export function AssistedDescriptionSection({
     setDescriptionContext("");
     setDescriptionMessage(null);
     setClarificationQuestions([]);
-    setPromptOpen(!hasMeaningfulAssistedDescriptionContent(nextSections));
+    setPromptOpen(false);
+    setPromptSectionIds(allSectionIds);
     setProposalPanelOpen(true);
     setProposals([]);
     setProposalLog([]);
@@ -132,6 +138,7 @@ export function AssistedDescriptionSection({
     setResolvingProposalAction(null);
     setResolvingItemId(null);
     setIsRequestingProposalChanges(false);
+    setRequestingProposalChangeLabel(null);
     setEditingProposalItemId(null);
     if (!onListProposals && !onListProposalLog) return;
 
@@ -165,7 +172,16 @@ export function AssistedDescriptionSection({
     setDescriptionContext("");
     setDescriptionMessage(null);
     setClarificationQuestions([]);
-    if (hasDescriptionContent) setPromptOpen(false);
+    setPromptSectionIds(allSectionIds);
+    setPromptOpen(false);
+  }
+
+  function openDescriptionPrompt(sectionIds: AssistedDescriptionSectionId[] = allSectionIds, initialContext = "") {
+    setPromptSectionIds(sectionIds);
+    setDescriptionContext(initialContext);
+    setDescriptionMessage(null);
+    setClarificationQuestions([]);
+    setPromptOpen(true);
   }
 
   async function generateProposal(sectionIds: AssistedDescriptionSectionId[] = allSectionIds, changeRequest = descriptionContext) {
@@ -208,6 +224,7 @@ export function AssistedDescriptionSection({
       setDescriptionMessage(null);
       setClarificationQuestions([]);
       setPromptOpen(false);
+      setPromptSectionIds(allSectionIds);
       setProposalPanelOpen(true);
       return true;
     } catch (error) {
@@ -226,8 +243,40 @@ export function AssistedDescriptionSection({
     if (readOnly || isRequestingProposalChanges || isGeneratingDescription || !changeRequest.trim()) return false;
 
     setIsRequestingProposalChanges(true);
+    setRequestingProposalChangeLabel(formatSectionScopeLabel(sectionIds));
     setReviewMessage(null);
     try {
+      if (isEmptySectionChangeRequest(changeRequest)) {
+        const emptyRevision = buildAssistedDescriptionProposal({
+          changeRequest,
+          currentMarkdown: serializeAssistedDescriptionSections(sections),
+          model: proposalModel,
+          proposedMarkdown: serializeAssistedDescriptionSections({
+            ...sections,
+            ...Object.fromEntries(sectionIds.map((sectionId) => [sectionId, ""]))
+          } as AssistedDescriptionSections),
+          provider: proposalProvider,
+          sectionIds,
+          taskId: task.id
+        });
+        let revisedProposal = reviseAssistedDescriptionProposal(proposal, emptyRevision, sectionIds);
+        if (onUpdateProposalSection) {
+          for (const sectionId of sectionIds) {
+            const persistedProposal = await onUpdateProposalSection(proposal.id, sectionId, {
+              proposedContent: "",
+              status: "Raw",
+              reviewerComment: changeRequest,
+              applyToTaskDescription: false
+            });
+            if (persistedProposal) revisedProposal = persistedProposal;
+          }
+        }
+        setProposals((currentProposals) => replaceAssistedDescriptionProposal(currentProposals, revisedProposal));
+        await refreshProposalLog();
+        setActiveProposalId(proposal.id);
+        return true;
+      }
+
       const draft = await onGenerateDescription(task.id, buildGenerationContext(changeRequest, sectionIds));
       if (draft.status === "needs_clarification") {
         setReviewMessage(`More context is needed: ${draft.clarificationQuestions.join(" ")}`);
@@ -269,6 +318,7 @@ export function AssistedDescriptionSection({
       return false;
     } finally {
       setIsRequestingProposalChanges(false);
+      setRequestingProposalChangeLabel(null);
     }
   }
 
@@ -481,7 +531,7 @@ export function AssistedDescriptionSection({
     if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
       event.preventDefault();
       event.stopPropagation();
-      void generateProposal();
+      void generateProposal(promptSectionIds);
       return;
     }
 
@@ -491,6 +541,21 @@ export function AssistedDescriptionSection({
       clearDescriptionPrompt();
     }
   }
+
+  const proposalPanel = (
+    <AssistedDescriptionProposalPanel
+      isLoadingProposals={isLoadingProposals}
+      isGeneratingDescription={isGeneratingDescription}
+      onOpenProposal={(proposalId) => setActiveProposalId(proposalId)}
+      onOpenPrompt={() => openDescriptionPrompt()}
+      onToggle={() => setProposalPanelOpen((current) => !current)}
+      open={proposalPanelOpen}
+      proposalLoadMessage={proposalLoadMessage}
+      proposalLog={proposalLog}
+      proposals={proposals}
+      readOnly={readOnly}
+    />
+  );
 
   return (
     <>
@@ -507,10 +572,7 @@ export function AssistedDescriptionSection({
               <Button
                 variant="darkSecondary"
                 icon={<Sparkles size={14} />}
-                onClick={() => {
-                  setProposalPanelOpen(true);
-                  setPromptOpen(true);
-                }}
+                onClick={() => openDescriptionPrompt()}
               >
                 Generate
               </Button>
@@ -523,7 +585,7 @@ export function AssistedDescriptionSection({
           notes={task.notes}
           onMarkSectionOk={markSectionOk}
           onRequestSectionProposal={(sectionId) => {
-            void generateProposal([sectionId], `Revise only ${getAssistedDescriptionSectionLabel(sectionId)}.`);
+            openDescriptionPrompt([sectionId], `Revise only ${getAssistedDescriptionSectionLabel(sectionId)}.`);
           }}
           onSaveSection={saveSection}
           readOnly={readOnly}
@@ -533,35 +595,30 @@ export function AssistedDescriptionSection({
           sections={sections}
           showEmptySections={showEmptySections}
         />
+      </TaskFocusSection>
 
-        <AssistedDescriptionProposalPanel
+      {proposalPanelContainer ? createPortal(proposalPanel, proposalPanelContainer) : proposalPanel}
+
+      {promptOpen ? (
+        <DescriptionPromptModal
           clarificationQuestions={clarificationQuestions}
           descriptionContext={descriptionContext}
           descriptionMessage={descriptionMessage}
-          isLoadingProposals={isLoadingProposals}
           isGeneratingDescription={isGeneratingDescription}
-          onCancelPrompt={clearDescriptionPrompt}
-          onChangePrompt={setDescriptionContext}
+          onCancel={clearDescriptionPrompt}
+          onChange={setDescriptionContext}
           onGenerate={() => {
-            void generateProposal();
+            void generateProposal(promptSectionIds);
           }}
           onKeyDown={handleDescriptionContextKeyDown}
-          onOpenProposal={(proposalId) => setActiveProposalId(proposalId)}
-          onToggle={() => setProposalPanelOpen((current) => !current)}
-          open={proposalPanelOpen}
-          promptOpen={promptOpen}
-          proposalLoadMessage={proposalLoadMessage}
-          proposalLog={proposalLog}
-          proposals={proposals}
-          readOnly={readOnly}
-          setPromptOpen={setPromptOpen}
         />
-      </TaskFocusSection>
+      ) : null}
 
       {activeProposal ? (
         <AssistedDescriptionProposalReviewModal
           editingItemId={editingProposalItemId}
           isBusy={Boolean(resolvingProposalAction || resolvingItemId || editingProposalItemId || isRequestingProposalChanges || isGeneratingDescription)}
+          loadingScopeLabel={requestingProposalChangeLabel}
           isRequestingChanges={isRequestingProposalChanges}
           onClose={() => setActiveProposalId(null)}
           onEditProposalItem={editProposalItem}
@@ -773,44 +830,30 @@ function AssistedDescriptionSectionBlock({
 }
 
 function AssistedDescriptionProposalPanel({
-  clarificationQuestions,
-  descriptionContext,
-  descriptionMessage,
   isLoadingProposals,
   isGeneratingDescription,
-  onCancelPrompt,
-  onChangePrompt,
-  onGenerate,
-  onKeyDown,
   onOpenProposal,
+  onOpenPrompt,
   onToggle,
   open,
-  promptOpen,
   proposalLoadMessage,
   proposalLog,
   proposals,
-  readOnly,
-  setPromptOpen
+  readOnly
 }: {
-  clarificationQuestions: string[];
-  descriptionContext: string;
-  descriptionMessage: string | null;
   isLoadingProposals: boolean;
   isGeneratingDescription: boolean;
-  onCancelPrompt: () => void;
-  onChangePrompt: (value: string) => void;
-  onGenerate: () => void;
-  onKeyDown: (event: ReactKeyboardEvent<HTMLTextAreaElement>) => void;
   onOpenProposal: (proposalId: string) => void;
+  onOpenPrompt: () => void;
   onToggle: () => void;
   open: boolean;
-  promptOpen: boolean;
   proposalLoadMessage: string | null;
   proposalLog: DescriptionProposalLogEntry[];
   proposals: AssistedDescriptionProposal[];
   readOnly: boolean;
-  setPromptOpen: (open: boolean) => void;
 }) {
+  const pendingProposals = proposals.filter((proposal) => proposal.status === "Pending");
+
   return (
     <section className="mt-4 overflow-hidden rounded border border-[#454852] bg-[#25272c]">
       <button
@@ -818,9 +861,13 @@ function AssistedDescriptionProposalPanel({
         onClick={onToggle}
         type="button"
       >
-        <span className="inline-flex items-center gap-2 text-sm font-semibold text-[#f4f5f7]">
+        <span className="inline-flex min-w-0 flex-wrap items-center gap-2 text-sm font-semibold text-[#f4f5f7]">
           <Sparkles size={15} className="text-[#85b8ff]" />
-          AI proposals
+          AI
+          <span className="rounded bg-[#1d3b66] px-2 py-1 text-xs font-medium text-[#85b8ff]">Proposals</span>
+          <span className="rounded bg-[#303238] px-2 py-1 text-xs font-medium text-[#dfe1e6]">
+            {pendingProposals.length} pending
+          </span>
         </span>
         <ChevronDown className={cn("shrink-0 text-[#aeb3bd] transition", open && "rotate-180")} size={16} />
       </button>
@@ -829,26 +876,14 @@ function AssistedDescriptionProposalPanel({
         <>
           {!readOnly ? (
             <div className="border-t border-[#454852] px-4 py-3">
-              {!promptOpen ? (
-                <Button
-                  icon={<Sparkles size={14} />}
-                  onClick={() => setPromptOpen(true)}
-                  variant="darkPrimary"
-                >
-                  New proposal
-                </Button>
-              ) : (
-                <DescriptionPromptPanel
-                  clarificationQuestions={clarificationQuestions}
-                  descriptionContext={descriptionContext}
-                  descriptionMessage={descriptionMessage}
-                  isGeneratingDescription={isGeneratingDescription}
-                  onCancel={onCancelPrompt}
-                  onChange={onChangePrompt}
-                  onGenerate={onGenerate}
-                  onKeyDown={onKeyDown}
-                />
-              )}
+              <Button
+                disabled={isGeneratingDescription}
+                icon={isGeneratingDescription ? <Loader2 className="animate-spin" size={14} /> : <Sparkles size={14} />}
+                onClick={onOpenPrompt}
+                variant="darkPrimary"
+              >
+                New proposal
+              </Button>
             </div>
           ) : null}
 
@@ -863,9 +898,9 @@ function AssistedDescriptionProposalPanel({
             </div>
           ) : null}
 
-          {proposals.length ? (
+          {pendingProposals.length ? (
             <div className="space-y-2 border-t border-[#454852] p-4">
-              {proposals.map((proposal) => (
+              {pendingProposals.map((proposal) => (
                 <button
                   className="group w-full rounded border border-[#454852] bg-[#1f2126] px-3 py-3 text-left transition hover:border-[#85b8ff] hover:bg-[#252b35] focus:outline-none focus:ring-2 focus:ring-[#85b8ff]"
                   key={proposal.id}
@@ -892,7 +927,7 @@ function AssistedDescriptionProposalPanel({
             </div>
           ) : (
             !isLoadingProposals ? (
-              <div className="border-t border-[#454852] px-4 py-3 text-sm text-[#aeb3bd]">No proposals yet.</div>
+              <div className="border-t border-[#454852] px-4 py-3 text-sm text-[#aeb3bd]">No pending proposals.</div>
             ) : null
           )}
 
@@ -930,7 +965,7 @@ function ProposalLogList({ entries }: { entries: DescriptionProposalLogEntry[] }
   );
 }
 
-function DescriptionPromptPanel({
+function DescriptionPromptModal({
   clarificationQuestions,
   descriptionContext,
   descriptionMessage,
@@ -949,54 +984,96 @@ function DescriptionPromptPanel({
   onGenerate: () => void;
   onKeyDown: (event: ReactKeyboardEvent<HTMLTextAreaElement>) => void;
 }) {
+  const overlay = useAppOverlay({
+    layer: appOverlayLayers.nestedModal,
+    onDismiss: onCancel,
+    dismissOnEscape: true,
+    dismissOnBackdrop: true,
+    lockScroll: true,
+    shouldDismiss: () => !isGeneratingDescription
+  });
+
   return (
-    <div className="relative overflow-hidden rounded border border-[#454852] bg-[#25272c]" data-description-editor>
-      {isGeneratingDescription ? (
-        <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#1f2126]/80 px-4 text-sm font-medium text-[#dfe1e6] backdrop-blur-[2px]">
-          <span className="inline-flex items-center gap-2 rounded border border-[#454852] bg-[#25272c] px-4 py-3 shadow-xl">
-            <Loader2 className="animate-spin text-[#85b8ff]" size={16} />
-            Generating proposal...
-          </span>
+    <div
+      className="fixed inset-0 z-[70] flex items-center justify-center bg-[#091e42]/70 px-4 py-6 backdrop-blur-sm"
+      {...overlay.backdropProps}
+    >
+      <section
+        className="relative w-full max-w-[520px] overflow-hidden rounded border border-[#5d6470] bg-[#25272c] text-[#dfe1e6] shadow-2xl"
+        data-description-editor
+        {...overlay.surfaceProps}
+      >
+        {isGeneratingDescription ? (
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#1f2126]/80 px-4 text-sm font-medium text-[#dfe1e6] backdrop-blur-[2px]">
+            <span className="inline-flex items-center gap-2 rounded border border-[#454852] bg-[#25272c] px-4 py-3 shadow-xl">
+              <Loader2 className="animate-spin text-[#85b8ff]" size={16} />
+              Generating proposal...
+            </span>
+          </div>
+        ) : null}
+
+        <div className="flex items-start justify-between gap-4 border-b border-[#454852] px-5 py-4">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 text-sm font-semibold text-[#f4f5f7]">
+              <Sparkles size={15} className="text-[#85b8ff]" />
+              Description proposal
+            </div>
+            <p className="mt-1 text-sm text-[#aeb3bd]">You can leave the request empty.</p>
+          </div>
+          <IconButton
+            title="Close"
+            onClick={() => {
+              if (!isGeneratingDescription) onCancel();
+            }}
+          >
+            <X size={18} />
+          </IconButton>
         </div>
-      ) : null}
-      <div className="flex items-center justify-between border-b border-[#454852] px-3 py-2">
-        <div className="inline-flex items-center gap-2 text-sm font-semibold text-[#f4f5f7]">
-          <Sparkles size={14} className="text-[#85b8ff]" />
-          Description prompt
+
+        <div className="space-y-3 px-5 py-4">
+          <textarea
+            autoFocus
+            className="min-h-[150px] w-full resize-y rounded border border-[#454852] bg-[#1f2126] p-3 text-sm leading-relaxed text-[#dfe1e6] outline-none placeholder:text-[#7f858f] focus:border-[#85b8ff]"
+            disabled={isGeneratingDescription}
+            onChange={(event) => onChange(event.target.value)}
+            onKeyDown={onKeyDown}
+            placeholder="Optional context to guide the proposal..."
+            value={descriptionContext}
+          />
+          {descriptionMessage ? (
+            <div className="rounded border border-[#454852] bg-[#22252a] px-3 py-2 text-xs leading-relaxed text-[#aeb3bd]">
+              {descriptionMessage}
+            </div>
+          ) : null}
+          {clarificationQuestions.length ? (
+            <div className="rounded border border-[#7f5f01] bg-[#2f2606] px-3 py-3 text-sm text-[#dfe1e6]">
+              <div className="mb-2 text-xs font-semibold text-[#f5cd47]">More context needed</div>
+              <ul className="space-y-1">
+                {clarificationQuestions.map((question) => (
+                  <li className="flex gap-2" key={question}>
+                    <span className="text-[#f5cd47]">-</span>
+                    <span>{question}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
         </div>
-      </div>
-      <textarea
-        className="min-h-[130px] w-full resize-y border-0 bg-[#1f2126] p-3 text-sm leading-relaxed text-[#dfe1e6] outline-none placeholder:text-[#7f858f] focus:ring-2 focus:ring-inset focus:ring-[#85b8ff]"
-        disabled={isGeneratingDescription}
-        onChange={(event) => onChange(event.target.value)}
-        onKeyDown={onKeyDown}
-        placeholder="Describe what should change, what context matters, and what Jira-ready detail the proposal should add."
-        value={descriptionContext}
-      />
-      {descriptionMessage ? (
-        <div className="border-t border-[#454852] px-3 py-2 text-xs leading-relaxed text-[#aeb3bd]">{descriptionMessage}</div>
-      ) : null}
-      {clarificationQuestions.length ? (
-        <div className="border-t border-[#454852] bg-[#22252a] px-3 py-2 text-sm text-[#dfe1e6]">
-          <div className="mb-2 text-xs font-semibold text-[#aeb3bd]">Clarification questions</div>
-          <ul className="space-y-1">
-            {clarificationQuestions.map((question) => (
-              <li className="flex gap-2" key={question}>
-                <span className="text-[#85b8ff]">-</span>
-                <span>{question}</span>
-              </li>
-            ))}
-          </ul>
+
+        <div className="flex justify-end gap-2 border-t border-[#454852] bg-[#22252a] px-5 py-4">
+          <Button disabled={isGeneratingDescription} variant="darkSecondary" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button
+            disabled={isGeneratingDescription}
+            icon={isGeneratingDescription ? <Loader2 className="animate-spin" size={14} /> : <Sparkles size={14} />}
+            variant="darkPrimary"
+            onClick={onGenerate}
+          >
+            {isGeneratingDescription ? "Generating" : "Generate proposal"}
+          </Button>
         </div>
-      ) : null}
-      <div className="flex justify-end gap-2 border-t border-[#454852] px-3 py-3">
-        <Button disabled={isGeneratingDescription} variant="darkSecondary" onClick={onCancel}>
-          Cancel
-        </Button>
-        <Button disabled={isGeneratingDescription} variant="darkPrimary" onClick={onGenerate}>
-          Generate
-        </Button>
-      </div>
+      </section>
     </div>
   );
 }
@@ -1005,6 +1082,7 @@ function AssistedDescriptionProposalReviewModal({
   editingItemId,
   isBusy,
   isRequestingChanges,
+  loadingScopeLabel,
   onClose,
   onEditProposalItem,
   onRequestChanges,
@@ -1020,6 +1098,7 @@ function AssistedDescriptionProposalReviewModal({
   editingItemId: string | null;
   isBusy: boolean;
   isRequestingChanges: boolean;
+  loadingScopeLabel: string | null;
   onClose: () => void;
   onEditProposalItem: (
     proposal: AssistedDescriptionProposal,
@@ -1079,9 +1158,20 @@ function AssistedDescriptionProposalReviewModal({
       {...overlay.backdropProps}
     >
       <section
-        className="mx-auto flex h-full max-h-[840px] w-full max-w-[1040px] flex-col overflow-hidden rounded border border-[#5d6470] bg-[#25272c] text-[#dfe1e6] shadow-2xl"
+        className="relative mx-auto flex h-full max-h-[840px] w-full max-w-[1040px] flex-col overflow-hidden rounded border border-[#5d6470] bg-[#25272c] text-[#dfe1e6] shadow-2xl"
         {...overlay.surfaceProps}
       >
+        {isRequestingChanges ? (
+          <div className="absolute inset-0 z-20 flex items-center justify-center bg-[#091e42]/70 px-6 backdrop-blur-[2px]">
+            <div className="w-full max-w-sm rounded border border-[#454852] bg-[#25272c] px-5 py-4 text-center shadow-2xl">
+              <Loader2 className="mx-auto mb-3 animate-spin text-[#85b8ff]" size={24} />
+              <div className="text-sm font-semibold text-[#f4f5f7]">Generating revision</div>
+              <div className="mt-1 text-xs leading-relaxed text-[#aeb3bd]">
+                Updating {loadingScopeLabel ?? "the requested sections"} with your adjustment.
+              </div>
+            </div>
+          </div>
+        ) : null}
         <div className="flex items-start justify-between gap-4 border-b border-[#454852] px-5 py-4">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-[#f4f5f7]">
@@ -1245,6 +1335,7 @@ function ProposalDiffItemRow({
   const currentValue = sections[item.sectionId];
   const paragraphDiff = buildAssistedDescriptionParagraphDiff(currentValue, item.proposedValue);
   const isStale = isAssistedDescriptionProposalItemStale(sections, item);
+  const isModified = Boolean(item.reviewerComment?.trim());
 
   useEffect(() => {
     setChangeRequestOpen(false);
@@ -1297,6 +1388,7 @@ function ProposalDiffItemRow({
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <span className="font-medium text-[#f4f5f7]">{item.label}</span>
           <ProposalItemStatusBadge status={item.status} />
+          {isModified ? <ModifiedProposalItemBadge comment={item.reviewerComment} /> : null}
           {isStale ? <span className="rounded bg-[#533f04] px-2 py-1 text-xs text-[#f5cd47]">Current changed</span> : null}
         </div>
         {item.status === "pending" ? (
@@ -1488,6 +1580,20 @@ function ProposalItemStatusBadge({ status }: { status: AssistedDescriptionPropos
   return <span className={cn("rounded px-2 py-1 text-xs font-medium", classes[status])}>{labels[status]}</span>;
 }
 
+function ModifiedProposalItemBadge({ comment }: { comment?: string | null }) {
+  const title = comment?.trim()
+    ? `Modified after reviewer feedback: ${comment.trim()}`
+    : "Modified after reviewer feedback.";
+  return (
+    <span
+      className="rounded bg-[#303238] px-2 py-1 text-xs font-medium text-[#dfe1e6]"
+      title={title}
+    >
+      Modified
+    </span>
+  );
+}
+
 function ProviderModelLabel({ model, provider }: { model?: string | null; provider?: string | null }) {
   const label = [provider, model].filter(Boolean).join(" / ");
   if (!label) return null;
@@ -1519,4 +1625,22 @@ function buildGenerationContext(changeRequest: string, sectionIds: AssistedDescr
     scope,
     "Use these fixed sections: User story, Problem, Objective, Scope, Out of scope, Main flows, Functional requirements, Non-functional requirements, Constraints and dependencies, Acceptance criteria, Risks and open questions."
   ].filter(Boolean).join("\n\n");
+}
+
+function formatSectionScopeLabel(sectionIds: AssistedDescriptionSectionId[]): string {
+  if (sectionIds.length === 1) return getAssistedDescriptionSectionLabel(sectionIds[0]);
+  if (sectionIds.length === assistedDescriptionSectionDefinitions.length) return "all proposal sections";
+  return `${sectionIds.length} proposal sections`;
+}
+
+function isEmptySectionChangeRequest(changeRequest: string): boolean {
+  const normalized = changeRequest
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+
+  const asksForEmpty = /\b(empty|blank|vacia|vacio|sin contenido)\b/.test(normalized);
+  const asksForClearing = /\b(clear|remove|delete|leave|deja|dejar|dejala|dejalo|mantener|manten|queda|quede)\b/.test(normalized);
+
+  return asksForEmpty && asksForClearing;
 }

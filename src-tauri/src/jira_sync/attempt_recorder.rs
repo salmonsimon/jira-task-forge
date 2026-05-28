@@ -31,6 +31,7 @@ where
         tray_name: &str,
         jira_project_key: &str,
         include_exported_tasks: bool,
+        include_missing_description_tasks: bool,
         report_progress: &'progress mut F,
     ) -> Result<Self, String> {
         let sync_repository = SyncRepository::new(connection);
@@ -62,6 +63,7 @@ where
                 "trayName": tray_name,
                 "jiraProjectKey": jira_project_key,
                 "includeExportedTasks": include_exported_tasks,
+                "includeMissingDescriptionTasks": include_missing_description_tasks,
             }),
         )?;
 
@@ -273,6 +275,7 @@ mod tests {
             &tray.id,
             &tray.name,
             "JTFTEST",
+            true,
             true,
             &mut report_progress,
         )

@@ -300,12 +300,14 @@ export async function deletePersistedAssistedDescriptionProposal(proposalId: str
 export async function createPersistedJiraParentIssues(
   trayId: string,
   allowMissingDescriptions: boolean,
-  includeExportedTasks: boolean
+  includeExportedTasks: boolean,
+  includeMissingDescriptionTasks: boolean
 ): Promise<JiraCreateIssuesResult> {
   return invoke<JiraCreateIssuesResult>("create_jira_parent_issues", {
     trayId,
     allowMissingDescriptions,
-    includeExportedTasks
+    includeExportedTasks,
+    includeMissingDescriptionTasks
   });
 }
 

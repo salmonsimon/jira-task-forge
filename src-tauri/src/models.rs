@@ -207,6 +207,8 @@ pub struct AssistedDescriptionProposalSection {
     pub current_content: String,
     pub proposed_content: String,
     pub status: DescriptionSectionStatus,
+    #[serde(default)]
+    pub reviewer_comment: Option<String>,
     pub updated_at: Option<String>,
 }
 

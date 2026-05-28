@@ -120,6 +120,14 @@ button {
   color: #dfe1e6;
 }
 
+.theme-dark .tray-search-shell {
+  background-color: #22252a !important;
+}
+
+.theme-dark .tray-search-input {
+  background-color: transparent !important;
+}
+
 .theme-dark input::placeholder,
 .theme-dark textarea::placeholder {
   color: #7f858f;
@@ -142,6 +150,14 @@ button {
 
 .theme-dark .task-row-selected {
   background-color: #2b2f36 !important;
+}
+
+.preflight-disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+
+.preflight-disclosure[open] > summary .preflight-disclosure-chevron {
+  transform: rotate(90deg);
 }
 
 .app-loading-dot,

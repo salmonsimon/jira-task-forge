@@ -147,6 +147,7 @@ export type AssistedDescriptionProposalSection = {
   currentContent: string;
   proposedContent: string;
   status: DescriptionSectionStatus;
+  reviewerComment?: string | null;
   updatedAt?: string | null;
 };
 

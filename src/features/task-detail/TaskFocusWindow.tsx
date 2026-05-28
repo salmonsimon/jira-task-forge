@@ -79,6 +79,7 @@ export function TaskFocusWindow({
   proposalProvider?: string | null;
 }) {
   const readOnly = forceReadOnly || isTaskReadOnly(task);
+  const [proposalPanelContainer, setProposalPanelContainer] = useState<HTMLDivElement | null>(null);
 
   const overlay = useAppOverlay({
     layer: appOverlayLayers.focusedTask,
@@ -164,6 +165,7 @@ export function TaskFocusWindow({
               onRefreshTask={onRefreshTask}
               onTransitionProposal={onTransitionDescriptionProposal}
               onUpdateProposalSection={onUpdateDescriptionProposalSection}
+              proposalPanelContainer={proposalPanelContainer}
               proposalModel={proposalModel}
               proposalProvider={proposalProvider}
             />
@@ -188,6 +190,7 @@ export function TaskFocusWindow({
             onOpenJiraIssue={onOpenJiraIssue}
             onUpdateDetails={onUpdateDetails}
           />
+          <div ref={setProposalPanelContainer} />
         </aside>
       </section>
     </div>

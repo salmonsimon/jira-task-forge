@@ -213,16 +213,16 @@ export function JqlView({
           <div className="mb-2 text-sm font-semibold">Results</div>
           {results.length > 0 ? (
             <div className="overflow-hidden rounded border border-[#dfe1e6]">
-              <table className="w-full border-collapse text-sm">
+              <table className="w-full table-fixed border-collapse text-sm">
                 <thead>
                   <tr className="bg-[#f4f5f7] text-left text-xs font-semibold text-[#6b778c]">
-                    <th className="px-3 py-2">Key</th>
-                    <th className="px-3 py-2">Project</th>
-                    <th className="px-3 py-2">Type</th>
-                    <th className="px-3 py-2">Priority</th>
-                    <th className="px-3 py-2">Status</th>
+                    <th className="w-24 px-3 py-2">Key</th>
+                    <th className="w-20 px-3 py-2">Project</th>
+                    <th className="w-28 px-3 py-2">Type</th>
+                    <th className="w-24 px-3 py-2">Priority</th>
+                    <th className="w-32 px-3 py-2">Status</th>
                     <th className="px-3 py-2">Summary</th>
-                    <th className="px-3 py-2">Assignee</th>
+                    <th className="w-28 px-3 py-2">Assignee</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -230,32 +230,41 @@ export function JqlView({
                     const issueUrl = buildJiraIssueBrowseUrl(jiraSiteUrl, result.key);
                     return (
                       <tr className="border-t border-[#ebecf0] hover:bg-[#f4f8ff]" key={result.key}>
-                        <td className="px-3 py-2 font-medium text-[#0052cc]">
+                        <td className="min-w-0 px-3 py-2 font-medium text-[#0052cc]">
                           {issueUrl ? (
                             <button
-                              className="inline-flex items-center gap-1 text-left font-medium hover:underline focus:outline-none focus:ring-2 focus:ring-[#4c9aff]"
+                              className="inline-flex max-w-full items-center gap-1 whitespace-nowrap text-left font-medium hover:underline focus:outline-none focus:ring-2 focus:ring-[#4c9aff]"
                               onClick={() => {
                                 void onOpenJiraIssue(issueUrl);
                               }}
+                              title={result.key}
                               type="button"
                             >
-                              <span>{result.key}</span>
-                              <ExternalLink size={12} />
+                              <span className="min-w-0 truncate">{result.key}</span>
+                              <ExternalLink size={12} className="shrink-0" />
                             </button>
                           ) : (
-                            result.key
+                            <span className="block truncate" title={result.key}>{result.key}</span>
                           )}
                         </td>
-                        <td className="px-3 py-2">{result.project}</td>
-                        <td className="px-3 py-2">
+                        <td className="min-w-0 px-3 py-2">
+                          <span className="block truncate" title={result.project}>{result.project}</span>
+                        </td>
+                        <td className="min-w-0 px-3 py-2">
                           <IssueTypeBadge type={result.issueType} />
                         </td>
-                        <td className="px-3 py-2">
+                        <td className="min-w-0 px-3 py-2">
                           <PriorityBadge priority={result.priority} />
                         </td>
-                        <td className="px-3 py-2">{result.status}</td>
-                        <td className="px-3 py-2">{result.summary}</td>
-                        <td className="px-3 py-2 text-[#6b778c]">{result.assignee}</td>
+                        <td className="min-w-0 px-3 py-2">
+                          <span className="block truncate" title={result.status}>{result.status}</span>
+                        </td>
+                        <td className="min-w-0 px-3 py-2">
+                          <span className="block truncate" title={result.summary}>{result.summary}</span>
+                        </td>
+                        <td className="min-w-0 px-3 py-2 text-[#6b778c]">
+                          <span className="block truncate" title={result.assignee}>{result.assignee}</span>
+                        </td>
                       </tr>
                     );
                   })}
