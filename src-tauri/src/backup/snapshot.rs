@@ -1,7 +1,10 @@
 use rusqlite::Connection;
 
 use crate::db::{DbError, DbResult};
-use crate::models::{LocalTask, Tray};
+use crate::models::{
+    AssistedDescriptionProposal, AssistedDescriptionProposalStatus, DescriptionProposalLogEntry,
+    LocalTask, Tray,
+};
 use crate::repositories::{CategoryRepository, JqlFavoriteRepository, SettingsRepository};
 
 use super::format::{
@@ -19,6 +22,8 @@ pub(crate) fn export_snapshot(connection: &Connection) -> DbResult<BackupData> {
         epic_mappings: list_epic_mappings(connection)?,
         jql_favorites,
         settings: SettingsRepository::new(connection).get_app_settings()?,
+        assisted_description_proposals: list_assisted_description_proposals(connection)?,
+        description_proposal_log: list_description_proposal_log(connection)?,
         attachment_metadata: list_attachments(connection)?,
         attachment_variants: list_attachment_variants(connection)?,
         audit_summaries: list_audit_summaries(connection)?,
@@ -101,6 +106,112 @@ fn list_epic_mappings(connection: &Connection) -> DbResult<Vec<EpicMappingBackup
         .collect::<Result<Vec<_>, _>>()
         .map_err(DbError::from)?;
     Ok(mappings)
+}
+
+fn list_assisted_description_proposals(
+    connection: &Connection,
+) -> DbResult<Vec<AssistedDescriptionProposal>> {
+    let mut statement = connection.prepare(
+        "
+        SELECT id, task_id, title, summary, status, provider, model, user_comment,
+               sections_json, created_at, updated_at, decided_at
+        FROM assisted_description_proposals
+        ORDER BY task_id ASC, created_at ASC
+        ",
+    )?;
+
+    let proposals = statement
+        .query_map([], |row| {
+            let status_value: String = row.get(4)?;
+            let status = AssistedDescriptionProposalStatus::from_db_value(&status_value).map_err(
+                |message| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        status_value.len(),
+                        rusqlite::types::Type::Text,
+                        message.into(),
+                    )
+                },
+            )?;
+            let sections_json: String = row.get(8)?;
+            let sections = serde_json::from_str(&sections_json).map_err(|error| {
+                rusqlite::Error::FromSqlConversionFailure(
+                    sections_json.len(),
+                    rusqlite::types::Type::Text,
+                    Box::new(DbError::InvalidData(error.to_string())),
+                )
+            })?;
+
+            Ok(AssistedDescriptionProposal {
+                id: row.get(0)?,
+                task_id: row.get(1)?,
+                title: row.get(2)?,
+                summary: row.get(3)?,
+                status,
+                provider: row.get(5)?,
+                model: row.get(6)?,
+                user_comment: row.get(7)?,
+                sections,
+                created_at: row.get(9)?,
+                updated_at: row.get(10)?,
+                decided_at: row.get(11)?,
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(DbError::from)?;
+    Ok(proposals)
+}
+
+fn list_description_proposal_log(
+    connection: &Connection,
+) -> DbResult<Vec<DescriptionProposalLogEntry>> {
+    let mut statement = connection.prepare(
+        "
+        SELECT id, task_id, proposal_id, event_type, title, summary, status, provider,
+               model, user_comment, detail_json, occurred_at
+        FROM description_proposal_log_entries
+        ORDER BY task_id ASC, occurred_at ASC
+        ",
+    )?;
+
+    let entries = statement
+        .query_map([], |row| {
+            let status_value: String = row.get(6)?;
+            let status = AssistedDescriptionProposalStatus::from_db_value(&status_value).map_err(
+                |message| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        status_value.len(),
+                        rusqlite::types::Type::Text,
+                        message.into(),
+                    )
+                },
+            )?;
+            let detail_json: String = row.get(10)?;
+            let detail = serde_json::from_str(&detail_json).map_err(|error| {
+                rusqlite::Error::FromSqlConversionFailure(
+                    detail_json.len(),
+                    rusqlite::types::Type::Text,
+                    Box::new(DbError::InvalidData(error.to_string())),
+                )
+            })?;
+
+            Ok(DescriptionProposalLogEntry {
+                id: row.get(0)?,
+                task_id: row.get(1)?,
+                proposal_id: row.get(2)?,
+                event_type: row.get(3)?,
+                title: row.get(4)?,
+                summary: row.get(5)?,
+                status,
+                provider: row.get(7)?,
+                model: row.get(8)?,
+                user_comment: row.get(9)?,
+                detail,
+                occurred_at: row.get(11)?,
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(DbError::from)?;
+    Ok(entries)
 }
 
 fn list_attachments(connection: &Connection) -> DbResult<Vec<AttachmentBackup>> {

@@ -377,7 +377,7 @@ fn returns_early_jira_errors_before_keyring_or_network_work() {
 
     assert_eq!(
         services
-            .create_jira_parent_issues(&tray.id, true, true)
+            .create_jira_parent_issues(&tray.id, true, true, true)
             .expect_err("missing project key should fail"),
         "Jira creation project key is required."
     );
@@ -408,7 +408,7 @@ fn returns_early_jira_errors_before_keyring_or_network_work() {
         .expect("settings update");
     assert_eq!(
         services
-            .create_jira_parent_issues(&tray.id, true, true)
+            .create_jira_parent_issues(&tray.id, true, true, true)
             .expect_err("missing email should fail"),
         "Jira account email is required."
     );

@@ -122,6 +122,9 @@ describe("Local Task graph helpers", () => {
     expect(groupSubtasksByParent([parentTask, childTask])).toEqual([
       { parentTask, subtasks: [childTask] }
     ]);
+    expect(groupSubtasksByParent([childTask], [parentTask, childTask])).toEqual([
+      { parentTask, subtasks: [childTask] }
+    ]);
     expect(groupSubtasksByParent([childTask])).toEqual([
       { parentTask: undefined, subtasks: [childTask] }
     ]);

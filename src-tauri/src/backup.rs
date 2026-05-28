@@ -21,8 +21,13 @@ mod tests {
         AuditSummaryBackup, EpicMappingBackup,
     };
     use crate::db::open_in_memory_database;
-    use crate::models::{NewTask, NewTray};
-    use crate::repositories::{TaskRepository, TrayRepository};
+    use crate::models::{
+        AssistedDescriptionProposalSection, DescriptionSectionStatus,
+        NewAssistedDescriptionProposal, NewTask, NewTray,
+    };
+    use crate::repositories::{
+        AssistedDescriptionProposalRepository, TaskRepository, TrayRepository,
+    };
 
     #[test]
     fn exports_backup_without_secrets() {
@@ -93,6 +98,79 @@ mod tests {
         assert_eq!(
             TaskRepository::new(&target).list_all().expect("tasks list")[0].title,
             "Imported task"
+        );
+    }
+
+    #[test]
+    fn exports_and_imports_assisted_description_proposals_without_secrets() {
+        let source = open_in_memory_database().expect("source database opens");
+        let tray = TrayRepository::new(&source)
+            .create(NewTray {
+                name: "Proposal backup".to_string(),
+            })
+            .expect("tray creates");
+        let task = TaskRepository::new(&source)
+            .create(NewTask {
+                tray_id: tray.id,
+                project: "STT".to_string(),
+                area: "Bug".to_string(),
+                title: "Persist proposal metadata".to_string(),
+                priority: "High".to_string(),
+                issue_type: "Bug".to_string(),
+                content_language: "Spanish".to_string(),
+            })
+            .expect("task creates");
+        AssistedDescriptionProposalRepository::new(&source)
+            .create(NewAssistedDescriptionProposal {
+                task_id: task.id.clone(),
+                title: Some("Proposal backup card".to_string()),
+                summary: Some("Only local review metadata".to_string()),
+                provider: Some("OpenAI".to_string()),
+                model: Some("gpt-4.1".to_string()),
+                user_comment: Some("Keep this comment, not keys.".to_string()),
+                sections: vec![proposal_section(
+                    "user_story",
+                    "Como usuario, quiero respaldo local de la propuesta.",
+                )],
+            })
+            .expect("proposal creates");
+
+        let backup = export_backup(&source, None).expect("backup exports");
+
+        assert_eq!(
+            backup.manifest.record_counts["assistedDescriptionProposals"],
+            1
+        );
+        assert_eq!(backup.manifest.record_counts["descriptionProposalLog"], 1);
+        assert!(!backup.manifest.secrets_included);
+        assert_eq!(
+            backup.data.assisted_description_proposals[0]
+                .provider
+                .as_deref(),
+            Some("OpenAI")
+        );
+        let serialized = serde_json::to_string(&backup).expect("backup serializes");
+        assert!(!serialized.contains("sk-test-secret"));
+
+        let mut target = open_in_memory_database().expect("target database opens");
+        let result = import_backup(&mut target, backup).expect("backup imports");
+
+        assert_eq!(result.imported_counts["assistedDescriptionProposals"], 1);
+        assert_eq!(result.imported_counts["descriptionProposalLog"], 1);
+        assert_eq!(
+            AssistedDescriptionProposalRepository::new(&target)
+                .list_for_task(&task.id)
+                .expect("proposals list")[0]
+                .title,
+            "Proposal backup card"
+        );
+        assert_eq!(
+            AssistedDescriptionProposalRepository::new(&target)
+                .list_log_for_task(&task.id)
+                .expect("log lists")[0]
+                .provider
+                .as_deref(),
+            Some("OpenAI")
         );
     }
 
@@ -394,5 +472,20 @@ mod tests {
         connection
             .query_row(sql.as_str(), [], |row| row.get(0))
             .expect("row count reads")
+    }
+
+    fn proposal_section(
+        section_id: &str,
+        proposed_content: &str,
+    ) -> AssistedDescriptionProposalSection {
+        AssistedDescriptionProposalSection {
+            section_id: section_id.to_string(),
+            heading: String::new(),
+            current_content: String::new(),
+            proposed_content: proposed_content.to_string(),
+            status: DescriptionSectionStatus::Raw,
+            reviewer_comment: None,
+            updated_at: None,
+        }
     }
 }

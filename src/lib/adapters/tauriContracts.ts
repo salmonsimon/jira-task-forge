@@ -1,6 +1,9 @@
 import { summarizeTrayTasks } from "../domain/trays";
 import type {
+  AssistedDescriptionProposal,
+  AssistedDescriptionProposalSection,
   Category,
+  DescriptionProposalLogEntry,
   IssueType,
   JqlFavorite,
   LocalTask,
@@ -73,6 +76,10 @@ export type BackendSyncAuditEvent = {
   detail: unknown;
 };
 
+export type BackendAssistedDescriptionProposalSection = AssistedDescriptionProposalSection;
+export type BackendAssistedDescriptionProposal = AssistedDescriptionProposal;
+export type BackendDescriptionProposalLogEntry = DescriptionProposalLogEntry;
+
 export function mapBackendTask(task: BackendTask): LocalTask {
   return {
     id: task.id,
@@ -117,6 +124,21 @@ export function mapBackendSyncAuditEvent(event: BackendSyncAuditEvent): SyncLogE
     event: formatAuditEventTitle(event),
     detail: formatAuditEventDetail(event.detail)
   };
+}
+
+export function mapBackendAssistedDescriptionProposal(
+  proposal: BackendAssistedDescriptionProposal
+): AssistedDescriptionProposal {
+  return {
+    ...proposal,
+    sections: proposal.sections.map((section) => ({ ...section }))
+  };
+}
+
+export function mapBackendDescriptionProposalLogEntry(
+  entry: BackendDescriptionProposalLogEntry
+): DescriptionProposalLogEntry {
+  return { ...entry };
 }
 
 export function mapBackendTray(tray: BackendTray, tasks: LocalTask[]): Tray {

@@ -34,6 +34,7 @@ pub async fn create_jira_parent_issues(
     tray_id: String,
     allow_missing_descriptions: bool,
     include_exported_tasks: bool,
+    include_missing_description_tasks: bool,
 ) -> Result<JiraCreateIssuesResult, String> {
     let services = services.inner().clone();
     run_blocking_result("Jira creation worker", move || {
@@ -41,6 +42,7 @@ pub async fn create_jira_parent_issues(
             &tray_id,
             allow_missing_descriptions,
             include_exported_tasks,
+            include_missing_description_tasks,
             |progress| {
                 let _ = app_handle.emit("jira-create-progress", progress);
             },

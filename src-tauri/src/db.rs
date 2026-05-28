@@ -13,6 +13,10 @@ const MIGRATIONS: &[(&str, &str)] = &[
         "0002_task_descriptions",
         include_str!("migrations/0002_task_descriptions.sql"),
     ),
+    (
+        "0003_assisted_description_proposals",
+        include_str!("migrations/0003_assisted_description_proposals.sql"),
+    ),
 ];
 
 pub type DbResult<T> = Result<T, DbError>;
@@ -151,9 +155,11 @@ mod tests {
             .expect("table names load");
 
         for expected in [
+            "assisted_description_proposals",
             "attachment_variants",
             "attachments",
             "categories",
+            "description_proposal_log_entries",
             "epic_mappings",
             "jql_favorites",
             "schema_migrations",
@@ -192,7 +198,7 @@ mod tests {
                     row.get(0)
                 })
                 .expect("migration count reads");
-            assert_eq!(migration_count, 2);
+            assert_eq!(migration_count, 3);
         }
 
         assert!(path.exists());
@@ -204,7 +210,7 @@ mod tests {
                     row.get(0)
                 })
                 .expect("migration count reads");
-            assert_eq!(migration_count, 2);
+            assert_eq!(migration_count, 3);
         }
 
         fs::remove_dir_all(app_data_dir).expect("database cleanup");

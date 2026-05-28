@@ -4,8 +4,10 @@ use uuid::Uuid;
 
 use crate::db::{utc_now_string, DbError, DbResult};
 use crate::models::{
-    AppSettings, Category, JqlFavorite, LocalTask, NewSubtask, NewTask, NewTray, SyncAuditEvent,
-    Tray, TrayState,
+    AppSettings, AssistedDescriptionProposal, AssistedDescriptionProposalSection,
+    AssistedDescriptionProposalStatus, Category, DescriptionProposalLogEntry,
+    DescriptionSectionStatus, JqlFavorite, LocalTask, NewAssistedDescriptionProposal, NewSubtask,
+    NewTask, NewTray, SyncAuditEvent, Tray, TrayState,
 };
 
 const APP_SETTINGS_KEY: &str = "app_settings";
@@ -40,12 +42,38 @@ const DEFAULT_JQL_FAVORITES: &[(&str, &str)] = &[
         "project = DTS AND labels = \"3D\" AND statusCategory != Done ORDER BY updated DESC",
     ),
 ];
+const ASSISTED_DESCRIPTION_SECTION_DEFINITIONS: &[(&str, &str)] = &[
+    ("user_story", "Historia de usuario"),
+    ("problem", "1. Problema"),
+    ("objective", "2. Objetivo"),
+    ("scope", "3. Alcance"),
+    ("out_of_scope", "4. Fuera de alcance"),
+    ("main_flows", "5. Flujos principales"),
+    ("functional_requirements", "6. Requisitos funcionales"),
+    (
+        "nonfunctional_requirements",
+        "7. Requisitos no funcionales relevantes",
+    ),
+    (
+        "constraints_dependencies",
+        "8. Restricciones y dependencias",
+    ),
+    (
+        "acceptance_criteria",
+        "9. Criterios de aceptacion de alto nivel",
+    ),
+    ("risks_questions", "10. Riesgos y preguntas abiertas"),
+];
 
 pub struct TrayRepository<'connection> {
     connection: &'connection Connection,
 }
 
 pub struct TaskRepository<'connection> {
+    connection: &'connection Connection,
+}
+
+pub struct AssistedDescriptionProposalRepository<'connection> {
     connection: &'connection Connection,
 }
 
@@ -931,6 +959,374 @@ impl<'connection> TaskRepository<'connection> {
     }
 }
 
+impl<'connection> AssistedDescriptionProposalRepository<'connection> {
+    pub fn new(connection: &'connection Connection) -> Self {
+        Self { connection }
+    }
+
+    pub fn create(
+        &self,
+        new_proposal: NewAssistedDescriptionProposal,
+    ) -> DbResult<AssistedDescriptionProposal> {
+        if !self.task_exists(&new_proposal.task_id)? {
+            return Err(DbError::InvalidData("Task not found.".to_string()));
+        }
+
+        let now = utc_now_string()?;
+        let proposal = AssistedDescriptionProposal {
+            id: Uuid::new_v4().to_string(),
+            task_id: new_proposal.task_id,
+            title: normalize_optional_text(new_proposal.title.as_deref())
+                .unwrap_or_else(|| "Assisted description proposal".to_string()),
+            summary: normalize_optional_text(new_proposal.summary.as_deref()),
+            status: AssistedDescriptionProposalStatus::Pending,
+            provider: normalize_optional_text(new_proposal.provider.as_deref()),
+            model: normalize_optional_text(new_proposal.model.as_deref()),
+            user_comment: normalize_optional_text(new_proposal.user_comment.as_deref()),
+            sections: normalize_proposal_sections(new_proposal.sections, &now)?,
+            created_at: now.clone(),
+            updated_at: now,
+            decided_at: None,
+        };
+        let sections_json = proposal_sections_json(&proposal.sections)?;
+
+        self.connection.execute(
+            "
+            INSERT INTO assisted_description_proposals (
+                id, task_id, title, summary, status, provider, model, user_comment,
+                sections_json, created_at, updated_at, decided_at
+            )
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+            ",
+            params![
+                proposal.id,
+                proposal.task_id,
+                proposal.title,
+                proposal.summary,
+                proposal.status.as_db_value(),
+                proposal.provider,
+                proposal.model,
+                proposal.user_comment,
+                sections_json,
+                proposal.created_at,
+                proposal.updated_at,
+                proposal.decided_at
+            ],
+        )?;
+
+        self.record_log_entry(
+            &proposal,
+            "description.proposal.created",
+            proposal.user_comment.as_deref(),
+            serde_json::json!({
+                "sectionCount": proposal.sections.len(),
+                "polishedSectionCount": polished_section_count(&proposal.sections),
+            }),
+        )?;
+
+        Ok(proposal)
+    }
+
+    pub fn list_for_task(&self, task_id: &str) -> DbResult<Vec<AssistedDescriptionProposal>> {
+        let mut statement = self.connection.prepare(
+            "
+            SELECT id, task_id, title, summary, status, provider, model, user_comment,
+                   sections_json, created_at, updated_at, decided_at
+            FROM assisted_description_proposals
+            WHERE task_id = ?1
+            ORDER BY created_at DESC, id DESC
+            ",
+        )?;
+
+        let proposals = statement
+            .query_map([task_id], map_assisted_description_proposal_row)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(DbError::from)?;
+
+        Ok(proposals)
+    }
+
+    pub fn list_log_for_task(&self, task_id: &str) -> DbResult<Vec<DescriptionProposalLogEntry>> {
+        let mut statement = self.connection.prepare(
+            "
+            SELECT id, task_id, proposal_id, event_type, title, summary, status, provider,
+                   model, user_comment, detail_json, occurred_at
+            FROM description_proposal_log_entries
+            WHERE task_id = ?1
+            ORDER BY occurred_at ASC, id ASC
+            ",
+        )?;
+
+        let entries = statement
+            .query_map([task_id], map_description_proposal_log_row)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(DbError::from)?;
+
+        Ok(entries)
+    }
+
+    pub fn update_section(
+        &self,
+        proposal_id: &str,
+        section_id: &str,
+        proposed_content: Option<&str>,
+        status: Option<DescriptionSectionStatus>,
+        reviewer_comment: Option<&str>,
+        apply_to_task_description: bool,
+    ) -> DbResult<Option<AssistedDescriptionProposal>> {
+        validate_assisted_description_section_id(section_id)?;
+        let Some(mut proposal) = self.find_by_id(proposal_id)? else {
+            return Ok(None);
+        };
+
+        let now = utc_now_string()?;
+        let reviewer_comment = normalize_optional_text(reviewer_comment);
+        let proposed_content_changed = proposed_content.is_some();
+        let mut section_found = false;
+        for section in &mut proposal.sections {
+            if section.section_id != section_id {
+                continue;
+            }
+
+            if let Some(proposed_content) = proposed_content {
+                section.proposed_content = proposed_content.trim().to_string();
+            }
+            if let Some(status) = status {
+                section.status = status;
+            }
+            if proposed_content_changed {
+                section.reviewer_comment = reviewer_comment
+                    .clone()
+                    .or_else(|| section.reviewer_comment.clone());
+            }
+            section.updated_at = Some(now.clone());
+            section_found = true;
+            break;
+        }
+
+        if !section_found {
+            return Err(DbError::InvalidData(format!(
+                "proposal is missing assisted description section: {section_id}"
+            )));
+        }
+
+        proposal.sections = normalize_proposal_sections(proposal.sections, &now)?;
+        proposal.updated_at = now.clone();
+        self.update_proposal_sections(&proposal)?;
+        let should_apply = apply_to_task_description
+            || status.is_some_and(|status| status == DescriptionSectionStatus::Polished);
+        if should_apply {
+            self.apply_sections_to_task_description(&proposal.task_id, &proposal.sections)?;
+        }
+        self.record_log_entry(
+            &proposal,
+            "description.proposal.section_updated",
+            reviewer_comment.as_deref(),
+            serde_json::json!({
+                "sectionId": section_id,
+                "applyToTaskDescription": should_apply,
+                "polishedSectionCount": polished_section_count(&proposal.sections),
+            }),
+        )?;
+
+        self.find_by_id(proposal_id)
+    }
+
+    pub fn transition(
+        &self,
+        proposal_id: &str,
+        status: AssistedDescriptionProposalStatus,
+        reviewer_comment: Option<&str>,
+        apply_to_task_description: bool,
+    ) -> DbResult<Option<AssistedDescriptionProposal>> {
+        let Some(mut proposal) = self.find_by_id(proposal_id)? else {
+            return Ok(None);
+        };
+
+        let now = utc_now_string()?;
+        if status == AssistedDescriptionProposalStatus::Accepted {
+            for section in &mut proposal.sections {
+                if !section.proposed_content.trim().is_empty() {
+                    section.status = DescriptionSectionStatus::Polished;
+                    section.updated_at = Some(now.clone());
+                }
+            }
+        }
+
+        proposal.sections = normalize_proposal_sections(proposal.sections, &now)?;
+        proposal.status = status;
+        proposal.updated_at = now.clone();
+        proposal.decided_at = if status == AssistedDescriptionProposalStatus::Pending {
+            None
+        } else {
+            Some(now)
+        };
+
+        self.connection.execute(
+            "
+            UPDATE assisted_description_proposals
+            SET status = ?1,
+                sections_json = ?2,
+                updated_at = ?3,
+                decided_at = ?4
+            WHERE id = ?5
+            ",
+            params![
+                proposal.status.as_db_value(),
+                proposal_sections_json(&proposal.sections)?,
+                proposal.updated_at,
+                proposal.decided_at,
+                proposal.id
+            ],
+        )?;
+
+        let should_apply = matches!(
+            status,
+            AssistedDescriptionProposalStatus::Accepted
+                | AssistedDescriptionProposalStatus::Partial
+        );
+        if should_apply {
+            self.apply_sections_to_task_description(&proposal.task_id, &proposal.sections)?;
+        }
+        self.record_log_entry(
+            &proposal,
+            "description.proposal.status_changed",
+            normalize_optional_text(reviewer_comment).as_deref(),
+            serde_json::json!({
+                "status": proposal.status.as_db_value(),
+                "applyToTaskDescription": should_apply,
+                "requestedApplyToTaskDescription": apply_to_task_description,
+                "polishedSectionCount": polished_section_count(&proposal.sections),
+            }),
+        )?;
+
+        self.find_by_id(proposal_id)
+    }
+
+    pub fn delete(&self, proposal_id: &str) -> DbResult<bool> {
+        let Some(proposal) = self.find_by_id(proposal_id)? else {
+            return Ok(false);
+        };
+
+        self.record_log_entry(
+            &proposal,
+            "description.proposal.deleted",
+            None,
+            serde_json::json!({}),
+        )?;
+        let changed = self.connection.execute(
+            "DELETE FROM assisted_description_proposals WHERE id = ?1",
+            [proposal_id],
+        )?;
+        Ok(changed > 0)
+    }
+
+    fn find_by_id(&self, proposal_id: &str) -> DbResult<Option<AssistedDescriptionProposal>> {
+        let mut statement = self.connection.prepare(
+            "
+            SELECT id, task_id, title, summary, status, provider, model, user_comment,
+                   sections_json, created_at, updated_at, decided_at
+            FROM assisted_description_proposals
+            WHERE id = ?1
+            ",
+        )?;
+
+        let result = statement.query_row([proposal_id], map_assisted_description_proposal_row);
+        match result {
+            Ok(proposal) => Ok(Some(proposal)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(error) => Err(error.into()),
+        }
+    }
+
+    fn update_proposal_sections(&self, proposal: &AssistedDescriptionProposal) -> DbResult<()> {
+        self.connection.execute(
+            "
+            UPDATE assisted_description_proposals
+            SET sections_json = ?1, updated_at = ?2
+            WHERE id = ?3
+            ",
+            (
+                proposal_sections_json(&proposal.sections)?.as_str(),
+                proposal.updated_at.as_str(),
+                proposal.id.as_str(),
+            ),
+        )?;
+        Ok(())
+    }
+
+    fn record_log_entry(
+        &self,
+        proposal: &AssistedDescriptionProposal,
+        event_type: &str,
+        user_comment: Option<&str>,
+        detail: Value,
+    ) -> DbResult<()> {
+        let entry_id = Uuid::new_v4().to_string();
+        let occurred_at = utc_now_string()?;
+        let detail_json = serde_json::to_string(&detail)
+            .map_err(|error| DbError::InvalidData(error.to_string()))?;
+        let user_comment = normalize_optional_text(user_comment);
+
+        self.connection.execute(
+            "
+            INSERT INTO description_proposal_log_entries (
+                id, task_id, proposal_id, event_type, title, summary, status, provider,
+                model, user_comment, detail_json, occurred_at
+            )
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+            ",
+            params![
+                entry_id,
+                proposal.task_id,
+                proposal.id,
+                event_type,
+                proposal.title,
+                proposal.summary,
+                proposal.status.as_db_value(),
+                proposal.provider,
+                proposal.model,
+                user_comment,
+                detail_json,
+                occurred_at
+            ],
+        )?;
+        Ok(())
+    }
+
+    fn apply_sections_to_task_description(
+        &self,
+        task_id: &str,
+        sections: &[AssistedDescriptionProposalSection],
+    ) -> DbResult<()> {
+        let description = render_assisted_description_from_sections(sections);
+        let trimmed = description.trim();
+        let description = if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed)
+        };
+        let status = if description.is_some() {
+            "Ready"
+        } else {
+            "Missing"
+        };
+
+        TaskRepository::new(self.connection).update_description(task_id, description, status)?;
+        Ok(())
+    }
+
+    fn task_exists(&self, task_id: &str) -> DbResult<bool> {
+        self.connection
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM tasks WHERE id = ?1)",
+                [task_id],
+                |row| row.get(0),
+            )
+            .map_err(DbError::from)
+    }
+}
+
 impl<'connection> SyncRepository<'connection> {
     pub fn new(connection: &'connection Connection) -> Self {
         Self { connection }
@@ -1046,6 +1442,80 @@ fn map_sync_audit_event_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<SyncAud
     })
 }
 
+fn map_assisted_description_proposal_row(
+    row: &rusqlite::Row<'_>,
+) -> rusqlite::Result<AssistedDescriptionProposal> {
+    let status_value: String = row.get("status")?;
+    let status =
+        AssistedDescriptionProposalStatus::from_db_value(&status_value).map_err(|message| {
+            rusqlite::Error::FromSqlConversionFailure(
+                status_value.len(),
+                rusqlite::types::Type::Text,
+                Box::new(DbError::InvalidData(message)),
+            )
+        })?;
+    let sections_json: String = row.get("sections_json")?;
+    let sections = serde_json::from_str(&sections_json).map_err(|error| {
+        rusqlite::Error::FromSqlConversionFailure(
+            sections_json.len(),
+            rusqlite::types::Type::Text,
+            Box::new(DbError::InvalidData(error.to_string())),
+        )
+    })?;
+
+    Ok(AssistedDescriptionProposal {
+        id: row.get("id")?,
+        task_id: row.get("task_id")?,
+        title: row.get("title")?,
+        summary: row.get("summary")?,
+        status,
+        provider: row.get("provider")?,
+        model: row.get("model")?,
+        user_comment: row.get("user_comment")?,
+        sections,
+        created_at: row.get("created_at")?,
+        updated_at: row.get("updated_at")?,
+        decided_at: row.get("decided_at")?,
+    })
+}
+
+fn map_description_proposal_log_row(
+    row: &rusqlite::Row<'_>,
+) -> rusqlite::Result<DescriptionProposalLogEntry> {
+    let status_value: String = row.get("status")?;
+    let status =
+        AssistedDescriptionProposalStatus::from_db_value(&status_value).map_err(|message| {
+            rusqlite::Error::FromSqlConversionFailure(
+                status_value.len(),
+                rusqlite::types::Type::Text,
+                Box::new(DbError::InvalidData(message)),
+            )
+        })?;
+    let detail_json: String = row.get("detail_json")?;
+    let detail = serde_json::from_str(&detail_json).map_err(|error| {
+        rusqlite::Error::FromSqlConversionFailure(
+            detail_json.len(),
+            rusqlite::types::Type::Text,
+            Box::new(DbError::InvalidData(error.to_string())),
+        )
+    })?;
+
+    Ok(DescriptionProposalLogEntry {
+        id: row.get("id")?,
+        task_id: row.get("task_id")?,
+        proposal_id: row.get("proposal_id")?,
+        event_type: row.get("event_type")?,
+        title: row.get("title")?,
+        summary: row.get("summary")?,
+        status,
+        provider: row.get("provider")?,
+        model: row.get("model")?,
+        user_comment: row.get("user_comment")?,
+        detail,
+        occurred_at: row.get("occurred_at")?,
+    })
+}
+
 fn map_task_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<LocalTask> {
     Ok(LocalTask {
         id: row.get("id")?,
@@ -1129,6 +1599,134 @@ fn bool_to_db(value: bool) -> i64 {
         1
     } else {
         0
+    }
+}
+
+fn normalize_proposal_sections(
+    sections: Vec<AssistedDescriptionProposalSection>,
+    updated_at: &str,
+) -> DbResult<Vec<AssistedDescriptionProposalSection>> {
+    for section in &sections {
+        validate_assisted_description_section_id(&section.section_id)?;
+    }
+
+    ASSISTED_DESCRIPTION_SECTION_DEFINITIONS
+        .iter()
+        .map(|(section_id, heading)| {
+            let incoming = sections
+                .iter()
+                .find(|section| section.section_id == *section_id);
+            let current_content = incoming
+                .map(|section| section.current_content.trim().to_string())
+                .unwrap_or_default();
+            let proposed_content = incoming
+                .map(|section| section.proposed_content.trim().to_string())
+                .unwrap_or_default();
+            let status = incoming
+                .map(|section| section.status)
+                .unwrap_or(DescriptionSectionStatus::Raw);
+            let reviewer_comment = incoming
+                .and_then(|section| normalize_optional_text(section.reviewer_comment.as_deref()));
+
+            Ok(AssistedDescriptionProposalSection {
+                section_id: (*section_id).to_string(),
+                heading: (*heading).to_string(),
+                current_content,
+                proposed_content,
+                status,
+                reviewer_comment,
+                updated_at: incoming
+                    .and_then(|section| section.updated_at.clone())
+                    .or_else(|| Some(updated_at.to_string())),
+            })
+        })
+        .collect()
+}
+
+fn validate_assisted_description_section_id(section_id: &str) -> DbResult<()> {
+    if ASSISTED_DESCRIPTION_SECTION_DEFINITIONS
+        .iter()
+        .any(|(fixed_section_id, _)| *fixed_section_id == section_id)
+    {
+        Ok(())
+    } else {
+        Err(DbError::InvalidData(format!(
+            "unknown assisted description section: {section_id}"
+        )))
+    }
+}
+
+fn proposal_sections_json(sections: &[AssistedDescriptionProposalSection]) -> DbResult<String> {
+    serde_json::to_string(sections).map_err(|error| DbError::InvalidData(error.to_string()))
+}
+
+fn polished_section_count(sections: &[AssistedDescriptionProposalSection]) -> usize {
+    sections
+        .iter()
+        .filter(|section| {
+            section.status == DescriptionSectionStatus::Polished
+                && !section.proposed_content.trim().is_empty()
+        })
+        .count()
+}
+
+fn normalize_optional_text(value: Option<&str>) -> Option<String> {
+    value
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string)
+}
+
+fn render_assisted_description_from_sections(
+    sections: &[AssistedDescriptionProposalSection],
+) -> String {
+    let mut parts = Vec::new();
+    if let Some(user_story) = sections
+        .iter()
+        .find(|section| section.section_id == "user_story")
+    {
+        if let Some(content) = accepted_or_current_section_content(user_story) {
+            parts.push(format!("## Historia de usuario\n\n{content}"));
+        }
+    }
+
+    let mut srs_parts = Vec::new();
+    for (section_id, heading) in ASSISTED_DESCRIPTION_SECTION_DEFINITIONS
+        .iter()
+        .filter(|(section_id, _)| *section_id != "user_story")
+    {
+        let Some(section) = sections
+            .iter()
+            .find(|section| section.section_id == *section_id)
+        else {
+            continue;
+        };
+        let Some(content) = accepted_or_current_section_content(section) else {
+            continue;
+        };
+        srs_parts.push(format!("### {heading}\n\n{content}"));
+    }
+
+    if !srs_parts.is_empty() {
+        parts.push(format!("## SRS Lite\n\n{}", srs_parts.join("\n\n")));
+    }
+
+    parts.join("\n\n")
+}
+
+fn accepted_or_current_section_content(
+    section: &AssistedDescriptionProposalSection,
+) -> Option<&str> {
+    let content = if section.status == DescriptionSectionStatus::Polished {
+        section.proposed_content.trim()
+    } else {
+        section.current_content.trim()
+    };
+
+    if content.is_empty() {
+        None
+    } else {
+        Some(content)
     }
 }
 
@@ -1970,6 +2568,223 @@ mod tests {
     }
 
     #[test]
+    fn stores_proposals_with_fixed_sections_and_applies_accepted_description() {
+        let connection = open_in_memory_database().expect("database opens");
+        let tray = TrayRepository::new(&connection)
+            .create(NewTray {
+                name: "Description proposal tray".to_string(),
+            })
+            .expect("tray creates");
+        let task = TaskRepository::new(&connection)
+            .create(NewTask {
+                tray_id: tray.id,
+                project: "STT".to_string(),
+                area: "Bug".to_string(),
+                title: "Resolver problema timer".to_string(),
+                priority: "High".to_string(),
+                issue_type: "Bug".to_string(),
+                content_language: "Spanish".to_string(),
+            })
+            .expect("task creates");
+        let repository = AssistedDescriptionProposalRepository::new(&connection);
+
+        let proposal = repository
+            .create(NewAssistedDescriptionProposal {
+                task_id: task.id.clone(),
+                title: Some("Timer description pass".to_string()),
+                summary: Some("Draft SRS Lite description".to_string()),
+                provider: Some("OpenAI".to_string()),
+                model: Some("gpt-4.1".to_string()),
+                user_comment: Some("Focus on validation risk.".to_string()),
+                sections: vec![
+                    proposal_section(
+                        "user_story",
+                        "Como QA, quiero que el timer cierre al completar objetivos.",
+                    ),
+                    proposal_section(
+                        "problem",
+                        "El timer puede seguir activo despues de completar el flujo.",
+                    ),
+                ],
+            })
+            .expect("proposal creates");
+
+        assert_eq!(proposal.status, AssistedDescriptionProposalStatus::Pending);
+        assert_eq!(proposal.sections.len(), 11);
+        assert_eq!(proposal.provider.as_deref(), Some("OpenAI"));
+        assert!(proposal
+            .sections
+            .iter()
+            .any(|section| section.section_id == "objective"
+                && section.proposed_content.is_empty()
+                && section.status == DescriptionSectionStatus::Raw));
+
+        let revised = repository
+            .update_section(
+                &proposal.id,
+                "problem",
+                Some("El timer puede seguir activo despues de completar el flujo y confundir el cierre de QA."),
+                Some(DescriptionSectionStatus::Raw),
+                Some("Make the risk concrete."),
+                false,
+            )
+            .expect("proposal section updates")
+            .expect("proposal exists");
+        let revised_problem = revised
+            .sections
+            .iter()
+            .find(|section| section.section_id == "problem")
+            .expect("problem section exists");
+        assert_eq!(
+            revised_problem.reviewer_comment.as_deref(),
+            Some("Make the risk concrete.")
+        );
+
+        let accepted = repository
+            .transition(
+                &proposal.id,
+                AssistedDescriptionProposalStatus::Accepted,
+                Some("Accepted after review."),
+                true,
+            )
+            .expect("proposal accepts")
+            .expect("proposal exists");
+        assert_eq!(accepted.status, AssistedDescriptionProposalStatus::Accepted);
+        assert_eq!(polished_section_count(&accepted.sections), 2);
+
+        let task = TaskRepository::new(&connection)
+            .find_by_id(&task.id)
+            .expect("task reloads")
+            .expect("task exists");
+        let description = task.description.expect("description applied");
+        assert!(description.contains("## Historia de usuario"));
+        assert!(description.contains("## SRS Lite"));
+        assert!(description.contains("### 1. Problema"));
+        assert!(!description.contains("OpenAI"));
+
+        let log = repository
+            .list_log_for_task(&task.id)
+            .expect("proposal log lists");
+        assert_eq!(
+            log.iter()
+                .map(|entry| entry.event_type.as_str())
+                .collect::<Vec<_>>(),
+            vec![
+                "description.proposal.created",
+                "description.proposal.section_updated",
+                "description.proposal.status_changed"
+            ]
+        );
+        assert_eq!(log[2].status, AssistedDescriptionProposalStatus::Accepted);
+        assert_eq!(log[2].provider.as_deref(), Some("OpenAI"));
+        assert_eq!(log[2].model.as_deref(), Some("gpt-4.1"));
+    }
+
+    #[test]
+    fn accepts_reviewer_requested_empty_proposal_sections() {
+        let connection = open_in_memory_database().expect("database opens");
+        let tray = TrayRepository::new(&connection)
+            .create(NewTray {
+                name: "Empty proposal section tray".to_string(),
+            })
+            .expect("tray creates");
+        let task = TaskRepository::new(&connection)
+            .create(NewTask {
+                tray_id: tray.id,
+                project: "STT".to_string(),
+                area: "Bug".to_string(),
+                title: "Keep section empty".to_string(),
+                priority: "Medium".to_string(),
+                issue_type: "Story".to_string(),
+                content_language: "Spanish".to_string(),
+            })
+            .expect("task creates");
+        let repository = AssistedDescriptionProposalRepository::new(&connection);
+        let proposal = repository
+            .create(NewAssistedDescriptionProposal {
+                task_id: task.id.clone(),
+                title: Some("Empty section proposal".to_string()),
+                summary: None,
+                provider: None,
+                model: None,
+                user_comment: Some("Keep problem empty.".to_string()),
+                sections: vec![proposal_section("problem", "")],
+            })
+            .expect("proposal creates");
+
+        let updated = repository
+            .update_section(
+                &proposal.id,
+                "problem",
+                Some(""),
+                Some(DescriptionSectionStatus::Polished),
+                Some("Leave this section empty."),
+                true,
+            )
+            .expect("section updates")
+            .expect("proposal exists");
+        let problem = updated
+            .sections
+            .iter()
+            .find(|section| section.section_id == "problem")
+            .expect("problem section exists");
+
+        assert_eq!(problem.status, DescriptionSectionStatus::Polished);
+        assert_eq!(
+            problem.reviewer_comment.as_deref(),
+            Some("Leave this section empty.")
+        );
+    }
+
+    #[test]
+    fn proposal_metadata_cascades_when_task_is_deleted() {
+        let connection = open_in_memory_database().expect("database opens");
+        let tray = TrayRepository::new(&connection)
+            .create(NewTray {
+                name: "Proposal cascade tray".to_string(),
+            })
+            .expect("tray creates");
+        let task_repository = TaskRepository::new(&connection);
+        let task = task_repository
+            .create(NewTask {
+                tray_id: tray.id,
+                project: "STT".to_string(),
+                area: "Bug".to_string(),
+                title: "Delete with proposal".to_string(),
+                priority: "Medium".to_string(),
+                issue_type: "Bug".to_string(),
+                content_language: "Spanish".to_string(),
+            })
+            .expect("task creates");
+        let proposal_repository = AssistedDescriptionProposalRepository::new(&connection);
+        proposal_repository
+            .create(NewAssistedDescriptionProposal {
+                task_id: task.id.clone(),
+                title: None,
+                summary: None,
+                provider: Some("Claude".to_string()),
+                model: Some("claude-sonnet-4-20250514".to_string()),
+                user_comment: None,
+                sections: vec![proposal_section(
+                    "user_story",
+                    "Como usuario, quiero una descripcion revisable.",
+                )],
+            })
+            .expect("proposal creates");
+
+        assert!(task_repository.delete(&task.id).expect("task deletes"));
+
+        assert!(proposal_repository
+            .list_for_task(&task.id)
+            .expect("proposals list")
+            .is_empty());
+        assert!(proposal_repository
+            .list_log_for_task(&task.id)
+            .expect("log lists")
+            .is_empty());
+    }
+
+    #[test]
     fn reads_and_updates_app_settings() {
         let connection = open_in_memory_database().expect("database opens");
         let repository = SettingsRepository::new(&connection);
@@ -2130,5 +2945,20 @@ mod tests {
             repository.find_by_id(&tray.id).expect("query succeeds"),
             None
         );
+    }
+
+    fn proposal_section(
+        section_id: &str,
+        proposed_content: &str,
+    ) -> AssistedDescriptionProposalSection {
+        AssistedDescriptionProposalSection {
+            section_id: section_id.to_string(),
+            heading: String::new(),
+            current_content: String::new(),
+            proposed_content: proposed_content.to_string(),
+            status: DescriptionSectionStatus::Raw,
+            reviewer_comment: None,
+            updated_at: None,
+        }
     }
 }

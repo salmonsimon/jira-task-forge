@@ -162,6 +162,102 @@ pub struct AssistedDescriptionDraft {
     pub clarification_questions: Vec<String>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum AssistedDescriptionProposalStatus {
+    Pending,
+    Accepted,
+    Rejected,
+    Partial,
+}
+
+impl AssistedDescriptionProposalStatus {
+    pub fn as_db_value(self) -> &'static str {
+        match self {
+            Self::Pending => "Pending",
+            Self::Accepted => "Accepted",
+            Self::Rejected => "Rejected",
+            Self::Partial => "Partial",
+        }
+    }
+
+    pub fn from_db_value(value: &str) -> Result<Self, String> {
+        match value {
+            "Pending" => Ok(Self::Pending),
+            "Accepted" => Ok(Self::Accepted),
+            "Rejected" => Ok(Self::Rejected),
+            "Partial" => Ok(Self::Partial),
+            _ => Err(format!(
+                "unknown assisted description proposal status: {value}"
+            )),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DescriptionSectionStatus {
+    Raw,
+    Polished,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AssistedDescriptionProposalSection {
+    pub section_id: String,
+    pub heading: String,
+    pub current_content: String,
+    pub proposed_content: String,
+    pub status: DescriptionSectionStatus,
+    #[serde(default)]
+    pub reviewer_comment: Option<String>,
+    pub updated_at: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AssistedDescriptionProposal {
+    pub id: String,
+    pub task_id: String,
+    pub title: String,
+    pub summary: Option<String>,
+    pub status: AssistedDescriptionProposalStatus,
+    pub provider: Option<String>,
+    pub model: Option<String>,
+    pub user_comment: Option<String>,
+    pub sections: Vec<AssistedDescriptionProposalSection>,
+    pub created_at: String,
+    pub updated_at: String,
+    pub decided_at: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NewAssistedDescriptionProposal {
+    pub task_id: String,
+    pub title: Option<String>,
+    pub summary: Option<String>,
+    pub provider: Option<String>,
+    pub model: Option<String>,
+    pub user_comment: Option<String>,
+    pub sections: Vec<AssistedDescriptionProposalSection>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DescriptionProposalLogEntry {
+    pub id: String,
+    pub task_id: String,
+    pub proposal_id: Option<String>,
+    pub event_type: String,
+    pub title: String,
+    pub summary: Option<String>,
+    pub status: AssistedDescriptionProposalStatus,
+    pub provider: Option<String>,
+    pub model: Option<String>,
+    pub user_comment: Option<String>,
+    pub detail: Value,
+    pub occurred_at: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct JqlResult {

@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { classifyTaskPreflightWarnings, classifyTrayPreflightWarnings } from "./preflight";
+import {
+  classifyTaskPreflightWarnings,
+  classifyTrayPreflightWarnings,
+  groupEpicResolutionWarnings
+} from "./preflight";
 import type { LocalTask } from "../types";
 
 function task(overrides: Partial<LocalTask>): LocalTask {
@@ -88,5 +92,27 @@ describe("preflight domain helpers", () => {
       taskId: "subtask-1",
       message: "Sub-task parent is marked Created but has no Jira key to attach to."
     });
+  });
+
+  it("groups missing epic warnings by target with compact task title lists", () => {
+    const tasks = [
+      task({ id: "task-1", project: "STT", area: "3D", title: "Model vending machine", epic: undefined }),
+      task({ id: "task-2", project: "STT", area: "3D", title: "Model ticket machine", epic: undefined }),
+      task({ id: "task-3", project: "PilotLab", area: "Bug", title: "Fix onboarding", epic: undefined })
+    ];
+    const warnings = classifyTrayPreflightWarnings(tasks).filter((warning) => warning.code === "missing-epic");
+
+    expect(groupEpicResolutionWarnings(warnings, tasks)).toEqual([
+      {
+        target: "[STT] 3D",
+        taskTitles: ["Model vending machine", "Model ticket machine"],
+        warnings: [warnings[0], warnings[1]]
+      },
+      {
+        target: "[PilotLab] Bug",
+        taskTitles: ["Fix onboarding"],
+        warnings: [warnings[2]]
+      }
+    ]);
   });
 });

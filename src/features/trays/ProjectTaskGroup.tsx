@@ -42,11 +42,11 @@ export function ProjectTaskGroup({
       </div>
       <div>
         <div className="bg-white">
-          <table className="w-full border-collapse text-sm">
+          <table className="w-full table-fixed border-collapse text-sm">
             <thead>
               <tr className="bg-white text-left text-xs font-semibold text-[#6b778c]">
-                <th className="w-24 px-3 py-2">Area</th>
-                <th className="w-20 px-3 py-2">Type</th>
+                <th className="w-36 px-3 py-2">Area</th>
+                <th className="w-28 px-3 py-2">Type</th>
                 <th className="px-3 py-2">Title</th>
                 <th className="w-28 px-3 py-2">Priority</th>
                 <th className="w-28 px-3 py-2">Desc</th>
@@ -67,7 +67,7 @@ export function ProjectTaskGroup({
                     key={task.id}
                     onClick={() => onOpenTask(task)}
                   >
-                    <td className="px-3 py-2">
+                    <td className="min-w-0 overflow-hidden px-3 py-2">
                       {isEditable ? (
                         <InlineTaskSelect
                           ariaLabel={`Change area for ${task.title}`}
@@ -80,7 +80,7 @@ export function ProjectTaskGroup({
                         <AreaBadge area={task.area} />
                       )}
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="min-w-0 overflow-hidden px-3 py-2">
                       {isEditable ? (
                         <InlineTaskSelect
                           ariaLabel={`Change issue type for ${task.title}`}
@@ -93,7 +93,7 @@ export function ProjectTaskGroup({
                         <IssueTypeBadge type={task.issueType} />
                       )}
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="min-w-0 px-3 py-2">
                       <EditableTaskTitle
                         editable={isEditable}
                         task={task}
@@ -221,9 +221,9 @@ function EditableTaskTitle({
   }
 
   return (
-    <div className="min-w-0">
+    <div className="min-w-0 max-w-full">
       <div className="flex min-w-0 items-center gap-1.5">
-        <span className="min-w-0 truncate text-left font-medium group-hover:text-[#0052cc]">{task.title}</span>
+        <span className="min-w-0 truncate text-left font-medium group-hover:text-[#0052cc]" title={task.title}>{task.title}</span>
         {editable ? (
           <button
             aria-label={`Edit title for ${task.title}`}
@@ -236,11 +236,11 @@ function EditableTaskTitle({
         ) : null}
       </div>
       {task.jiraKey ? (
-        <div className="mt-0.5 flex items-center gap-1 text-xs text-[#0052cc]">
-          <Link2 size={12} />
+        <div className="mt-0.5 flex min-w-0 items-center gap-1 text-xs text-[#0052cc]">
+          <Link2 size={12} className="shrink-0" />
           {task.jiraUrl ? (
             <a
-              className="font-medium hover:underline"
+              className="inline-block min-w-0 max-w-full truncate font-medium hover:underline"
               href={task.jiraUrl}
               onClick={(event) => {
                 event.preventDefault();
@@ -248,10 +248,10 @@ function EditableTaskTitle({
                 void onOpenJiraIssue(task.jiraUrl!);
               }}
             >
-              {task.jiraKey}
+              <span className="truncate">{task.jiraKey}</span>
             </a>
           ) : (
-            task.jiraKey
+            <span className="min-w-0 truncate">{task.jiraKey}</span>
           )}
         </div>
       ) : null}
@@ -348,13 +348,13 @@ function InlineTaskSelect({
   }
 
   return (
-    <div className="relative inline-block max-w-full" ref={containerRef} onClick={(event) => event.stopPropagation()}>
+    <div className="relative block max-w-full" ref={containerRef} onClick={(event) => event.stopPropagation()}>
       <button
         aria-expanded={isOpen}
         aria-haspopup="listbox"
         aria-label={ariaLabel}
         className={cn(
-          "inline-flex max-w-full items-center gap-1 rounded px-2 py-1 text-left text-xs font-medium outline-none transition hover:brightness-95 focus:ring-2 focus:ring-[#deebff]",
+          "inline-flex w-full max-w-full items-center gap-1 rounded px-2 py-1 text-left text-xs font-medium outline-none transition hover:brightness-95 focus:ring-2 focus:ring-[#deebff]",
           getInlineSelectClasses(variant, value)
         )}
         onKeyDown={handleKeyDown}
@@ -369,7 +369,7 @@ function InlineTaskSelect({
       {isOpen ? (
         <div
           className={cn(
-            "absolute left-0 z-50 max-h-56 min-w-[150px] overflow-y-auto rounded border border-[#5c606a] bg-[#2b2d31] py-1 text-sm text-[#f4f5f7] shadow-xl",
+            "absolute left-0 z-50 max-h-56 min-w-[150px] overflow-y-auto overscroll-contain rounded border border-[#5c606a] bg-[#2b2d31] py-1 text-sm text-[#f4f5f7] shadow-xl",
             opensUp ? "bottom-[calc(100%+4px)]" : "top-[calc(100%+4px)]"
           )}
           role="listbox"

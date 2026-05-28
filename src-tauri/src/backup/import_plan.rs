@@ -15,6 +15,8 @@ pub(crate) struct ImportPlan {
     pub(crate) jql_favorites: SectionPlan,
     pub(crate) tasks: SectionPlan,
     pub(crate) epic_mappings: SectionPlan,
+    pub(crate) assisted_description_proposals: SectionPlan,
+    pub(crate) description_proposal_log: SectionPlan,
     pub(crate) attachment_metadata: SectionPlan,
     pub(crate) attachment_variants: SectionPlan,
     pub(crate) warnings: Vec<String>,
@@ -36,6 +38,14 @@ impl ImportPlan {
             (
                 "epicMappings".to_string(),
                 self.epic_mappings.planned_skipped_count(),
+            ),
+            (
+                "assistedDescriptionProposals".to_string(),
+                self.assisted_description_proposals.planned_skipped_count(),
+            ),
+            (
+                "descriptionProposalLog".to_string(),
+                self.description_proposal_log.planned_skipped_count(),
             ),
             (
                 "attachmentMetadata".to_string(),
@@ -100,6 +110,8 @@ pub(crate) struct ImportTargetSnapshot {
     task_ids: BTreeSet<String>,
     epic_mapping_ids: BTreeSet<String>,
     epic_mapping_category_pairs: BTreeSet<(String, String)>,
+    assisted_description_proposal_ids: BTreeSet<String>,
+    description_proposal_log_ids: BTreeSet<String>,
     attachment_ids: BTreeSet<String>,
     attachment_variant_ids: BTreeSet<String>,
 }
@@ -119,6 +131,14 @@ impl ImportTargetSnapshot {
             epic_mapping_category_pairs: read_pair_set(
                 connection,
                 "SELECT project_category_id, area_category_id FROM epic_mappings",
+            )?,
+            assisted_description_proposal_ids: read_string_set(
+                connection,
+                "SELECT id FROM assisted_description_proposals",
+            )?,
+            description_proposal_log_ids: read_string_set(
+                connection,
+                "SELECT id FROM description_proposal_log_entries",
             )?,
             attachment_ids: read_string_set(connection, "SELECT id FROM attachments")?,
             attachment_variant_ids: read_string_set(
@@ -234,6 +254,55 @@ pub(crate) fn plan_import_for_target(
             .collect(),
     );
 
+    let mut known_proposal_ids = target.assisted_description_proposal_ids;
+    let assisted_description_proposals = SectionPlan::new(
+        backup
+            .data
+            .assisted_description_proposals
+            .iter()
+            .map(|proposal| {
+                if !known_task_ids.contains(&proposal.task_id) {
+                    warnings.push(format!(
+                        "Skipped assisted description proposal {} because its task was not imported.",
+                        proposal.title
+                    ));
+                    return RecordDecision::Skip;
+                }
+
+                plan_id_insert(&mut known_proposal_ids, &proposal.id)
+            })
+            .collect(),
+    );
+
+    let mut known_description_log_ids = target.description_proposal_log_ids;
+    let description_proposal_log = SectionPlan::new(
+        backup
+            .data
+            .description_proposal_log
+            .iter()
+            .map(|entry| {
+                if !known_task_ids.contains(&entry.task_id) {
+                    warnings.push(format!(
+                        "Skipped description proposal log entry {} because its task was not imported.",
+                        entry.event_type
+                    ));
+                    return RecordDecision::Skip;
+                }
+                if let Some(proposal_id) = &entry.proposal_id {
+                    if !known_proposal_ids.contains(proposal_id) {
+                        warnings.push(format!(
+                            "Skipped description proposal log entry {} because its proposal was not imported.",
+                            entry.event_type
+                        ));
+                        return RecordDecision::Skip;
+                    }
+                }
+
+                plan_id_insert(&mut known_description_log_ids, &entry.id)
+            })
+            .collect(),
+    );
+
     let mut known_attachment_ids = target.attachment_ids;
     let attachment_metadata = SectionPlan::new(
         backup
@@ -283,6 +352,8 @@ pub(crate) fn plan_import_for_target(
         jql_favorites,
         tasks,
         epic_mappings,
+        assisted_description_proposals,
+        description_proposal_log,
         attachment_metadata,
         attachment_variants,
         warnings,

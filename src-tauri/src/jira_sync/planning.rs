@@ -9,6 +9,7 @@ pub(super) struct JiraCreationPlanningOptions<'a> {
     pub(super) creation_project_key: &'a str,
     pub(super) allow_missing_descriptions: bool,
     pub(super) include_exported_tasks: bool,
+    pub(super) include_missing_description_tasks: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -32,15 +33,32 @@ impl JiraCreationTaskScope {
                 task.sync_status != "Created"
                     && task.issue_type != "Sub-task"
                     && (options.include_exported_tasks || task.sync_status != "Exported")
+                    && (options.include_missing_description_tasks
+                        || task.description_status != "Missing")
             })
             .cloned()
             .collect::<Vec<_>>();
+        let included_parent_task_ids = parent_tasks
+            .iter()
+            .map(|task| task.id.as_str())
+            .collect::<BTreeSet<_>>();
+        let tasks_by_id = tasks
+            .iter()
+            .map(|task| (task.id.as_str(), task))
+            .collect::<HashMap<_, _>>();
         let subtask_tasks = tasks
             .iter()
             .filter(|task| {
                 task.sync_status != "Created"
                     && task.issue_type == "Sub-task"
                     && (options.include_exported_tasks || task.sync_status != "Exported")
+                    && subtask_parent_is_included_or_created(
+                        task,
+                        &tasks_by_id,
+                        &included_parent_task_ids,
+                        options.include_exported_tasks,
+                        options.include_missing_description_tasks,
+                    )
             })
             .cloned()
             .collect::<Vec<_>>();
@@ -71,6 +89,40 @@ impl JiraCreationTaskScope {
     ) -> Result<JiraCreationPlan, Vec<String>> {
         JiraCreationPlan::from_scope_and_metadata(self, metadata)
     }
+}
+
+fn subtask_parent_is_included_or_created(
+    task: &LocalTask,
+    tasks_by_id: &HashMap<&str, &LocalTask>,
+    included_parent_task_ids: &BTreeSet<&str>,
+    include_exported_tasks: bool,
+    include_missing_description_tasks: bool,
+) -> bool {
+    let Some(parent_task_id) = task.parent_task_id.as_deref() else {
+        return true;
+    };
+
+    if included_parent_task_ids.contains(parent_task_id) {
+        return true;
+    }
+
+    let Some(parent_task) = tasks_by_id.get(parent_task_id) else {
+        return true;
+    };
+
+    if parent_task.sync_status == "Created" {
+        return true;
+    }
+
+    if !include_exported_tasks && parent_task.sync_status == "Exported" {
+        return false;
+    }
+
+    if !include_missing_description_tasks && parent_task.description_status == "Missing" {
+        return false;
+    }
+
+    true
 }
 
 #[derive(Debug, Clone)]
@@ -647,6 +699,7 @@ mod tests {
                 creation_project_key: "JTFTEST",
                 allow_missing_descriptions: true,
                 include_exported_tasks: true,
+                include_missing_description_tasks: true,
             },
         )
         .expect("plan builds");
@@ -709,6 +762,7 @@ mod tests {
                 creation_project_key: "",
                 allow_missing_descriptions: false,
                 include_exported_tasks: true,
+                include_missing_description_tasks: true,
             },
         );
 
@@ -722,6 +776,67 @@ mod tests {
             .iter()
             .any(|message| message.contains("missing a local project")));
         assert!(scope
+            .local_blockers
+            .iter()
+            .any(|message| message.contains("Confirm missing descriptions")));
+    }
+
+    #[test]
+    fn excludes_missing_description_parent_tasks_and_their_pending_subtasks_when_requested() {
+        let mut ready_parent = local_task(
+            "ready-parent",
+            "STT",
+            "Programacion",
+            "Ready parent",
+            "Story",
+            "Pending",
+        );
+        ready_parent.description_status = "Ready".to_string();
+        let mut ready_child = local_subtask("ready-child", Some("ready-parent"), "Pending");
+        ready_child.description_status = "Ready".to_string();
+        let tasks = vec![
+            ready_parent,
+            ready_child,
+            local_task(
+                "missing-parent",
+                "STT",
+                "Bug",
+                "Missing description parent",
+                "Bug",
+                "Pending",
+            ),
+            local_subtask("missing-child", Some("missing-parent"), "Pending"),
+        ];
+
+        let scope = JiraCreationTaskScope::from_tasks(
+            &tasks,
+            JiraCreationPlanningOptions {
+                creation_project_key: "JTFTEST",
+                allow_missing_descriptions: false,
+                include_exported_tasks: true,
+                include_missing_description_tasks: false,
+            },
+        );
+
+        assert_eq!(scope.createable_task_count, 2);
+        assert_eq!(scope.skipped_issue_count, 2);
+        assert_eq!(
+            scope
+                .parent_tasks
+                .iter()
+                .map(|task| task.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["ready-parent"]
+        );
+        assert_eq!(
+            scope
+                .subtask_tasks
+                .iter()
+                .map(|task| task.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["ready-child"]
+        );
+        assert!(!scope
             .local_blockers
             .iter()
             .any(|message| message.contains("Confirm missing descriptions")));
@@ -755,6 +870,7 @@ mod tests {
                 creation_project_key: "JTFTEST",
                 allow_missing_descriptions: true,
                 include_exported_tasks: true,
+                include_missing_description_tasks: true,
             },
         )
         .expect("plan builds");
@@ -794,6 +910,7 @@ mod tests {
                 creation_project_key: "JTFTEST",
                 allow_missing_descriptions: true,
                 include_exported_tasks: true,
+                include_missing_description_tasks: true,
             },
         )
         .expect_err("metadata should block");

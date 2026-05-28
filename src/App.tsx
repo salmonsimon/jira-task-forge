@@ -29,7 +29,10 @@ import {
   hasPersistedAiProviderApiKey,
   hasPersistedJiraApiToken,
   importPersistedBackup,
+  createPersistedAssistedDescriptionProposal,
   listPersistedCategories,
+  listPersistedAssistedDescriptionProposals,
+  listPersistedDescriptionProposalLog,
   listPersistedJqlFavorites,
   listPersistedTaskSyncLog,
   listPersistedTrays,
@@ -45,7 +48,9 @@ import {
   testPersistedAiProviderConnection,
   testPersistedJiraApiToken,
   testPersistedJiraConnection,
+  transitionPersistedAssistedDescriptionProposal,
   updatePersistedAppSettings,
+  updatePersistedAssistedDescriptionProposalSection,
   updatePersistedCategory,
   updatePersistedJqlFavorite
 } from "./lib/adapters/tauriPersistence";
@@ -63,8 +68,14 @@ import {
   formatJqlQueryError,
   formatJqlQueryMessage,
   getVisibleBackupCounts,
-  isEligibleForCsvExport
+  isEligibleForCsvExport,
+  isSubtask,
+  orderProjectNames
 } from "./lib/domain";
+import {
+  createEmptyAssistedDescriptionSections,
+  serializeAssistedDescriptionSections
+} from "./lib/domain/assistedDescription";
 import type {
   AppSettings,
   AssistedDescriptionDraft,
@@ -187,7 +198,10 @@ export default function App() {
 
   const projectCategories = useMemo(() => categories.filter((category) => category.categoryType === "project"), [categories]);
   const areaCategories = useMemo(() => categories.filter((category) => category.categoryType === "area"), [categories]);
-  const projectOptions = useMemo(() => projectCategories.filter((project) => !project.hidden).map((project) => project.name), [projectCategories]);
+  const projectOptions = useMemo(
+    () => orderProjectNames(projectCategories.filter((project) => !project.hidden).map((project) => project.name)),
+    [projectCategories]
+  );
   const areaOptions = useMemo(() => areaCategories.filter((area) => !area.hidden).map((area) => area.name), [areaCategories]);
 
   useEffect(() => {
@@ -369,14 +383,28 @@ export default function App() {
 
     setGeneratingDescriptionTaskId(taskId);
     try {
-      const draft = usesTauriPersistence
-        ? await generatePersistedTaskDescription(taskId, additionalContext)
-        : createPreviewAssistedDescription(task, additionalContext);
+      if (!usesTauriPersistence) return createPreviewAssistedDescription(task, additionalContext);
 
-      return draft;
+      try {
+        return await generatePersistedTaskDescription(taskId, additionalContext);
+      } catch (error) {
+        if (isTaskDescriptionCommandUnavailable(error)) {
+          return createPreviewAssistedDescription(task, additionalContext);
+        }
+        throw error;
+      }
     } finally {
       setGeneratingDescriptionTaskId(null);
     }
+  }
+
+  async function refreshPersistedTask(taskId: string) {
+    if (!usesTauriPersistence) return;
+    const persistedTrays = await listPersistedTrays();
+    trayWorkspace.replaceTrays(persistedTrays, {
+      fallbackSelectedTrayId: selectedTrayId,
+      fallbackSelectedTaskId: taskId
+    });
   }
 
   async function updateAppSettings(settingsPatch: Partial<AppSettings>) {
@@ -1100,12 +1128,17 @@ export default function App() {
     }
   }
 
-  async function createJiraParentIssues(options: { allowMissingDescriptions: boolean; includeExportedTasks: boolean }) {
+  async function createJiraParentIssues(options: {
+    allowMissingDescriptions: boolean;
+    includeExportedTasks: boolean;
+    includeMissingDescriptionTasks: boolean;
+  }) {
     if (!jiraCreatePreflight || !usesTauriPersistence) return;
 
     const selectedCreateableTaskCount = countJiraApiCreateableTasks(
       jiraCreatePreflight.tray.tasks,
-      options.includeExportedTasks
+      options.includeExportedTasks,
+      options.includeMissingDescriptionTasks
     );
     flushSync(() => {
       setIsCreatingJiraIssues(true);
@@ -1133,7 +1166,8 @@ export default function App() {
       const result = await createPersistedJiraParentIssues(
         jiraCreatePreflight.tray.id,
         options.allowMissingDescriptions,
-        options.includeExportedTasks
+        options.includeExportedTasks,
+        options.includeMissingDescriptionTasks
       );
       const persistedTrays = await listPersistedTrays();
       trayWorkspace.replaceTrays(persistedTrays, {
@@ -1265,6 +1299,8 @@ export default function App() {
               isDraftingJqlWithAi={isDraftingJqlWithAi}
               isRunningQuery={isRunningJqlQuery}
               queryMessage={jqlQueryMessage}
+              jiraSiteUrl={appSettings.jiraSiteUrl}
+              onOpenJiraIssue={openJiraIssue}
             />
           )}
         </main>
@@ -1280,10 +1316,18 @@ export default function App() {
             onAddSubtask={trayWorkspace.addSubtaskToTask}
             onDeleteSubtask={trayWorkspace.deleteTask}
             onGenerateDescription={generateTaskDescription}
+            onListDescriptionProposals={usesTauriPersistence ? listPersistedAssistedDescriptionProposals : undefined}
+            onListDescriptionProposalLog={usesTauriPersistence ? listPersistedDescriptionProposalLog : undefined}
             onSaveDescription={trayWorkspace.saveTaskDescription}
+            onCreateDescriptionProposal={usesTauriPersistence ? createPersistedAssistedDescriptionProposal : undefined}
+            onRefreshTask={usesTauriPersistence ? refreshPersistedTask : undefined}
+            onTransitionDescriptionProposal={usesTauriPersistence ? transitionPersistedAssistedDescriptionProposal : undefined}
+            onUpdateDescriptionProposalSection={usesTauriPersistence ? updatePersistedAssistedDescriptionProposalSection : undefined}
             onOpenJiraIssue={openJiraIssue}
             onClose={() => setOpenPanel(null)}
             isGeneratingDescription={generatingDescriptionTaskId === selectedTaskWithSyncLog.id}
+            proposalProvider={usesTauriPersistence ? (appSettings.aiProvider === "None" ? null : appSettings.aiProvider) : "In-memory"}
+            proposalModel={usesTauriPersistence ? appSettings.aiModel : "preview"}
           />
         ) : null}
         {openPanel === "categories" ? (
@@ -1704,45 +1748,36 @@ function createPreviewAssistedDescription(task: LocalTask, additionalContext: st
   return {
     status: "drafted",
     clarificationQuestions: [],
-    description: `## Historia de usuario
-
-Como usuario de ${task.project},
-quiero ${task.title},
-para obtener un resultado claro y validable.
-
-## Contexto
-
-${context || "Contexto pendiente de revisar con el responsable antes de crear la tarea en Jira."}
-
-## Alcance
-
-Incluye:
-- Preparar la tarea ${task.area} descrita en el titulo.
-- Validar el resultado esperado con el responsable del area.
-
-No incluye:
-- Cambios fuera del alcance confirmado para esta tarea.
-
-## Criterios de aceptación
-
-- La tarea queda implementada o preparada segun el alcance confirmado.
-- El responsable puede validar el resultado sin informacion adicional critica.
-
-## SRE Lite
-
-### Impacto esperado
-Impacto acotado a ${task.project} / ${task.area}.
-
-### Riesgos
-- Alcance incompleto si el titulo no captura restricciones o casos borde.
-
-### Observabilidad / señales
-QA/Arte/Programacion/etc. debe validar:
-- El resultado visible o funcional asociado a la tarea.
-
-### Rollback / mitigación
-Revertir el cambio puntual o retirar el artefacto/configuracion asociado si la validacion falla.`
+    description: serializeAssistedDescriptionSections({
+      ...createEmptyAssistedDescriptionSections(),
+      user_story: `Como usuario de ${task.project},\nquiero ${task.title},\npara obtener un resultado claro y validable.`,
+      problem: context || "Contexto pendiente de revisar con el responsable antes de crear la tarea en Jira.",
+      objective: `Preparar una tarea ${task.area} clara, validable y lista para Jira.`,
+      scope: [
+        "Incluye:",
+        `- Preparar la tarea ${task.area} descrita en el titulo.`,
+        "- Validar el resultado esperado con el responsable del area.",
+        "",
+        "No incluye:",
+        "- Cambios fuera del alcance confirmado para esta tarea."
+      ].join("\n"),
+      out_of_scope: "Cambios no confirmados por el responsable del area.",
+      main_flows: "- Revisar el contexto.\n- Implementar o preparar el cambio.\n- Validar el resultado esperado.",
+      functional_requirements: `- La tarea ${task.area} debe quedar descrita con acciones verificables.`,
+      nonfunctional_requirements: "- Mantener el alcance acotado y comprensible para revision.",
+      constraints_dependencies: "- Confirmar dependencias si aparecen durante la implementacion.",
+      acceptance_criteria: [
+        "- La tarea queda implementada o preparada segun el alcance confirmado.",
+        "- El responsable puede validar el resultado sin informacion adicional critica."
+      ].join("\n"),
+      risks_questions: "- Alcance incompleto si el titulo no captura restricciones o casos borde."
+    })
   };
+}
+
+function isTaskDescriptionCommandUnavailable(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /generate_task_description|unknown command|command .*not found|not implemented/i.test(message);
 }
 
 async function waitForNextPaint(): Promise<void> {
@@ -1760,12 +1795,26 @@ async function waitForMinimumElapsed(startedAt: number, minimumMs: number): Prom
   await new Promise((resolve) => setTimeout(resolve, remainingMs));
 }
 
-function countJiraApiCreateableTasks(tasks: LocalTask[], includeExportedTasks: boolean): number {
-  return tasks.filter(
-    (task) =>
-      task.syncStatus !== "Created" &&
-      (includeExportedTasks || task.syncStatus !== "Exported")
-  ).length;
+function countJiraApiCreateableTasks(
+  tasks: LocalTask[],
+  includeExportedTasks: boolean,
+  includeMissingDescriptionTasks: boolean
+): number {
+  const tasksById = new Map(tasks.map((task) => [task.id, task]));
+
+  return tasks.filter((task) => {
+    if (task.syncStatus === "Created") return false;
+    if (!includeExportedTasks && task.syncStatus === "Exported") return false;
+    if (!includeMissingDescriptionTasks && !isSubtask(task) && task.descriptionStatus === "Missing") return false;
+    if (!isSubtask(task) || !task.parentTaskId) return true;
+
+    const parentTask = tasksById.get(task.parentTaskId);
+    if (!parentTask || parentTask.syncStatus === "Created") return true;
+    if (!includeExportedTasks && parentTask.syncStatus === "Exported") return false;
+    if (!includeMissingDescriptionTasks && parentTask.descriptionStatus === "Missing") return false;
+
+    return true;
+  }).length;
 }
 
 function toFileSlug(value: string): string {

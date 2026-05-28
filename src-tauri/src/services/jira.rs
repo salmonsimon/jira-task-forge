@@ -45,11 +45,13 @@ impl AppServices {
         tray_id: &str,
         allow_missing_descriptions: bool,
         include_exported_tasks: bool,
+        include_missing_description_tasks: bool,
     ) -> Result<JiraCreateIssuesResult, String> {
         self.create_jira_parent_issues_with_progress(
             tray_id,
             allow_missing_descriptions,
             include_exported_tasks,
+            include_missing_description_tasks,
             |_| {},
         )
     }
@@ -59,6 +61,7 @@ impl AppServices {
         tray_id: &str,
         allow_missing_descriptions: bool,
         include_exported_tasks: bool,
+        include_missing_description_tasks: bool,
         report_progress: F,
     ) -> Result<JiraCreateIssuesResult, String>
     where
@@ -82,6 +85,7 @@ impl AppServices {
                 tray_id,
                 allow_missing_descriptions,
                 include_exported_tasks,
+                include_missing_description_tasks,
                 report_progress,
             )
     }

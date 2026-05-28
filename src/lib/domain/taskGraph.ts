@@ -119,9 +119,10 @@ export function insertChildrenAfterExistingChildren(
 }
 
 export function groupSubtasksByParent<TTask extends Pick<LocalTask, "id" | "parentTaskId" | "issueType">>(
-  tasks: TTask[]
+  tasks: TTask[],
+  parentCandidates: TTask[] = tasks
 ): TaskGraphSubtaskGroup<TTask>[] {
-  const tasksById = new Map(tasks.map((task) => [task.id, task]));
+  const tasksById = new Map(parentCandidates.map((task) => [task.id, task]));
   return tasks.filter(isSubtask).reduce<TaskGraphSubtaskGroup<TTask>[]>((groups, subtask) => {
     const parentTask = subtask.parentTaskId ? tasksById.get(subtask.parentTaskId) : undefined;
     const existingGroup = groups.find((group) => group.parentTask?.id === parentTask?.id);

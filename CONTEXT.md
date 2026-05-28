@@ -62,6 +62,14 @@ _Avoid_: Stars
 Una descripcion de Jira generada con ayuda de IA para una **Local Task**, usando historia de usuario y SRS Lite.
 _Avoid_: freeform notes only
 
+**Assisted Description Proposal**:
+Una propuesta local para cambiar una **Assisted Description**, separada por secciones SRS Lite para aceptar, rechazar, editar o pedir iteraciones antes de convertirla en descripcion final.
+_Avoid_: final Jira description
+
+**Description Proposal Log**:
+Historial local y cronologico de iteraciones, comentarios y decisiones sobre **Assisted Description Proposals**.
+_Avoid_: Sync Audit Log, Jira comments
+
 **Attachment Purpose**:
 El uso previsto de una imagen o archivo adjunto de una **Local Task**: AI only, Jira attachment o AI + Jira attachment.
 _Avoid_: implicit upload
@@ -114,6 +122,11 @@ _Avoid_: content version history
 - A **Jira Issue** created by the app should receive one **Remote Correlation
   Marker** when Jira permissions allow it
 - A **Local Task** may have one **Assisted Description**
+- A **Local Task** may have one or more **Assisted Description Proposals**
+- Accepted or edited **Assisted Description Proposal** sections update the
+  **Assisted Description**
+- A **Description Proposal Log** belongs to one **Local Task** and is not
+  uploaded to Jira as issue content or comments
 - A **Local Task** may have zero or more attachments with **Attachment Purpose**
 - A **Local Task** may have zero or more sub-tasks
 - A **Project** and **Area** may resolve to one **Epic Mapping**
