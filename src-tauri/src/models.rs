@@ -327,6 +327,13 @@ pub struct JiraCreateMetadata {
     pub issue_types: Vec<JiraCreateIssueTypeMetadata>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JiraAttachmentSettings {
+    pub enabled: bool,
+    pub upload_limit: i64,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct JiraCreateIssueTypeMetadata {
     pub id: String,

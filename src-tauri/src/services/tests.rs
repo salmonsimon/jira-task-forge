@@ -1,7 +1,8 @@
 use super::AppServices;
 use crate::db::open_in_memory_database;
 use crate::integrations::ai::{ai_model_or_default, AiProvider};
-use crate::models::{AppSettings, NewTask, NewTray, TrayState};
+use crate::models::{AppSettings, NewSubtask, NewTask, NewTray, TrayState};
+use crate::repositories::{TaskRepository, TrayRepository};
 use std::fs;
 use uuid::Uuid;
 
@@ -161,6 +162,183 @@ fn stores_task_attachments_as_app_managed_files() {
     assert!(after_delete.attachments.is_empty());
     assert!(!stored_path.exists());
 
+    let _ = fs::remove_dir_all(&app_data_dir);
+}
+
+#[test]
+fn deleting_task_removes_managed_attachment_files_for_task_graph() {
+    let app_data_dir = std::env::temp_dir().join(format!(
+        "jira-task-forge-delete-attachment-test-{}",
+        Uuid::new_v4()
+    ));
+    fs::create_dir_all(&app_data_dir).expect("temp app data creates");
+    let parent_source_path = app_data_dir.join("parent.txt");
+    let child_source_path = app_data_dir.join("child.txt");
+    fs::write(&parent_source_path, b"parent attachment").expect("parent source writes");
+    fs::write(&child_source_path, b"child attachment").expect("child source writes");
+    let services = AppServices::new_with_app_data_dir(
+        open_in_memory_database().expect("database opens"),
+        app_data_dir.clone(),
+    );
+    let tray = services
+        .create_tray(NewTray {
+            name: "Attachment delete tray".to_string(),
+        })
+        .expect("tray creates");
+    let parent = services
+        .create_task(NewTask {
+            tray_id: tray.id,
+            project: "STT".to_string(),
+            area: "Bug".to_string(),
+            title: "Parent with attachment".to_string(),
+            priority: "Medium".to_string(),
+            issue_type: "Story".to_string(),
+            content_language: "Spanish".to_string(),
+        })
+        .expect("parent creates");
+    let child = services
+        .create_subtask(NewSubtask {
+            parent_task_id: parent.id.clone(),
+            title: "Child with attachment".to_string(),
+        })
+        .expect("subtask creates");
+    let parent_with_attachment = services
+        .add_task_attachments_from_paths(
+            &parent.id,
+            &[parent_source_path.to_string_lossy().to_string()],
+            "Jira attachment",
+        )
+        .expect("parent attachment adds")
+        .expect("parent exists");
+    let child_with_attachment = services
+        .add_task_attachments_from_paths(
+            &child.id,
+            &[child_source_path.to_string_lossy().to_string()],
+            "Jira attachment",
+        )
+        .expect("child attachment adds")
+        .expect("child exists");
+    let parent_stored_path =
+        app_data_dir.join(&parent_with_attachment.attachments[0].original_relative_path);
+    let child_stored_path =
+        app_data_dir.join(&child_with_attachment.attachments[0].original_relative_path);
+    assert!(parent_stored_path.exists());
+    assert!(child_stored_path.exists());
+
+    assert!(services.delete_task(&parent.id).expect("task deletes"));
+
+    assert!(!parent_stored_path.exists());
+    assert!(!child_stored_path.exists());
+    let _ = fs::remove_dir_all(&app_data_dir);
+}
+
+#[test]
+fn deleting_tray_removes_managed_attachment_files() {
+    let app_data_dir = std::env::temp_dir().join(format!(
+        "jira-task-forge-delete-tray-attachment-test-{}",
+        Uuid::new_v4()
+    ));
+    fs::create_dir_all(&app_data_dir).expect("temp app data creates");
+    let source_path = app_data_dir.join("tray-file.txt");
+    fs::write(&source_path, b"tray attachment").expect("source writes");
+    let services = AppServices::new_with_app_data_dir(
+        open_in_memory_database().expect("database opens"),
+        app_data_dir.clone(),
+    );
+    let tray = services
+        .create_tray(NewTray {
+            name: "Delete tray attachments".to_string(),
+        })
+        .expect("tray creates");
+    let task = services
+        .create_task(NewTask {
+            tray_id: tray.id.clone(),
+            project: "STT".to_string(),
+            area: "Bug".to_string(),
+            title: "Tray attachment task".to_string(),
+            priority: "Medium".to_string(),
+            issue_type: "Story".to_string(),
+            content_language: "Spanish".to_string(),
+        })
+        .expect("task creates");
+    let task_with_attachment = services
+        .add_task_attachments_from_paths(
+            &task.id,
+            &[source_path.to_string_lossy().to_string()],
+            "Jira attachment",
+        )
+        .expect("attachment adds")
+        .expect("task exists");
+    let stored_path =
+        app_data_dir.join(&task_with_attachment.attachments[0].original_relative_path);
+    assert!(stored_path.exists());
+
+    assert!(services.delete_tray(&tray.id).expect("tray deletes"));
+
+    assert!(!stored_path.exists());
+    let _ = fs::remove_dir_all(&app_data_dir);
+}
+
+#[test]
+fn unsafe_attachment_paths_do_not_delete_outside_files() {
+    let app_data_dir = std::env::temp_dir().join(format!(
+        "jira-task-forge-unsafe-delete-test-{}",
+        Uuid::new_v4()
+    ));
+    fs::create_dir_all(&app_data_dir).expect("temp app data creates");
+    let sentinel_path = app_data_dir.join("sentinel.txt");
+    fs::write(&sentinel_path, b"keep me").expect("sentinel writes");
+    let connection = open_in_memory_database().expect("database opens");
+    let tray = TrayRepository::new(&connection)
+        .create(NewTray {
+            name: "Unsafe attachment delete".to_string(),
+        })
+        .expect("tray creates");
+    let task = TaskRepository::new(&connection)
+        .create(NewTask {
+            tray_id: tray.id,
+            project: "STT".to_string(),
+            area: "Bug".to_string(),
+            title: "Unsafe attachment task".to_string(),
+            priority: "Medium".to_string(),
+            issue_type: "Story".to_string(),
+            content_language: "Spanish".to_string(),
+        })
+        .expect("task creates");
+    connection
+        .execute(
+            "
+            INSERT INTO attachments (
+                id, task_id, display_filename, mime_type, purpose, original_size_bytes,
+                original_relative_path, file_hash, restore_status, created_at, updated_at
+            )
+            VALUES ('attachment-unsafe', ?1, 'sentinel.txt', 'text/plain', 'Jira attachment', 7,
+                    '../sentinel.txt', NULL, NULL, '2026-05-25T12:00:00Z', '2026-05-25T12:00:00Z')
+            ",
+            [task.id.as_str()],
+        )
+        .expect("unsafe metadata inserts");
+    let services = AppServices::new_with_app_data_dir(connection, app_data_dir.clone());
+
+    let error = services
+        .delete_task_attachment(&task.id, "attachment-unsafe")
+        .expect_err("unsafe path should block delete");
+
+    assert!(error.to_string().contains("attachment path"));
+    assert_eq!(
+        fs::read(&sentinel_path).expect("sentinel reads"),
+        b"keep me"
+    );
+    assert_eq!(
+        services
+            .list_tasks()
+            .expect("tasks list")
+            .first()
+            .expect("task exists")
+            .attachments
+            .len(),
+        1
+    );
     let _ = fs::remove_dir_all(&app_data_dir);
 }
 

@@ -1,3 +1,4 @@
+mod attachment_storage;
 mod backup;
 mod commands;
 mod db;

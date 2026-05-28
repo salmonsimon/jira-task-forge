@@ -458,6 +458,97 @@ mod tests {
     }
 
     #[test]
+    fn warns_and_skips_attachment_metadata_with_unsafe_paths() {
+        let source = open_in_memory_database().expect("source database opens");
+        let tray = TrayRepository::new(&source)
+            .create(NewTray {
+                name: "Unsafe attachment backup".to_string(),
+            })
+            .expect("tray creates");
+        let task = TaskRepository::new(&source)
+            .create(NewTask {
+                tray_id: tray.id,
+                project: "STT".to_string(),
+                area: "Bug".to_string(),
+                title: "Imported task".to_string(),
+                priority: "Medium".to_string(),
+                issue_type: "Story".to_string(),
+                content_language: "Spanish".to_string(),
+            })
+            .expect("task creates");
+        let mut backup = export_backup(&source, None).expect("backup exports");
+        backup.data.attachment_metadata.push(AttachmentBackup {
+            id: "attachment-unsafe".to_string(),
+            task_id: task.id,
+            display_filename: "secret.txt".to_string(),
+            mime_type: Some("text/plain".to_string()),
+            purpose: "Jira attachment".to_string(),
+            original_size_bytes: 123,
+            original_relative_path: "../secret.txt".to_string(),
+            file_hash: None,
+            restore_status: None,
+            created_at: "2026-05-25T12:00:00Z".to_string(),
+            updated_at: "2026-05-25T12:00:00Z".to_string(),
+        });
+
+        let mut target = open_in_memory_database().expect("target database opens");
+        let result = import_backup(&mut target, backup).expect("backup imports");
+
+        assert_eq!(result.imported_counts["attachmentMetadata"], 0);
+        assert_eq!(result.skipped_counts["attachmentMetadata"], 1);
+        assert_eq!(
+            result.warnings,
+            vec!["Skipped attachment metadata secret.txt because its managed path is unsafe."]
+        );
+    }
+
+    #[test]
+    fn warns_and_skips_attachment_metadata_for_preexisting_tasks() {
+        let source = open_in_memory_database().expect("source database opens");
+        let mut backup = export_backup(&source, None).expect("backup exports");
+
+        let mut target = open_in_memory_database().expect("target database opens");
+        let target_tray = TrayRepository::new(&target)
+            .create(NewTray {
+                name: "Existing target tray".to_string(),
+            })
+            .expect("target tray creates");
+        let target_task = TaskRepository::new(&target)
+            .create(NewTask {
+                tray_id: target_tray.id,
+                project: "STT".to_string(),
+                area: "Bug".to_string(),
+                title: "Existing target task".to_string(),
+                priority: "High".to_string(),
+                issue_type: "Bug".to_string(),
+                content_language: "Spanish".to_string(),
+            })
+            .expect("target task creates");
+        backup.data.attachment_metadata.push(AttachmentBackup {
+            id: "attachment-graft".to_string(),
+            task_id: target_task.id,
+            display_filename: "grafted.png".to_string(),
+            mime_type: Some("image/png".to_string()),
+            purpose: "Jira attachment".to_string(),
+            original_size_bytes: 123,
+            original_relative_path: "attachments/task/grafted.png".to_string(),
+            file_hash: None,
+            restore_status: None,
+            created_at: "2026-05-25T12:00:00Z".to_string(),
+            updated_at: "2026-05-25T12:00:00Z".to_string(),
+        });
+
+        let result = import_backup(&mut target, backup).expect("backup imports");
+
+        assert_eq!(result.imported_counts["attachmentMetadata"], 0);
+        assert_eq!(result.skipped_counts["attachmentMetadata"], 1);
+        assert_eq!(
+            result.warnings,
+            vec!["Skipped attachment metadata grafted.png because its task was not imported from this backup."]
+        );
+    }
+
+    #[test]
     fn warns_and_skips_attachment_variants_with_missing_metadata() {
         let source = open_in_memory_database().expect("source database opens");
         let mut backup = export_backup(&source, None).expect("backup exports");
@@ -483,6 +574,65 @@ mod tests {
         assert_eq!(
             result.warnings,
             vec!["Skipped attachment variant compressed because its attachment metadata was not imported."]
+        );
+    }
+
+    #[test]
+    fn warns_and_skips_attachment_variants_with_unsafe_paths() {
+        let source = open_in_memory_database().expect("source database opens");
+        let tray = TrayRepository::new(&source)
+            .create(NewTray {
+                name: "Unsafe variant backup".to_string(),
+            })
+            .expect("tray creates");
+        let task = TaskRepository::new(&source)
+            .create(NewTask {
+                tray_id: tray.id,
+                project: "STT".to_string(),
+                area: "Bug".to_string(),
+                title: "Imported task".to_string(),
+                priority: "Medium".to_string(),
+                issue_type: "Story".to_string(),
+                content_language: "Spanish".to_string(),
+            })
+            .expect("task creates");
+        let mut backup = export_backup(&source, None).expect("backup exports");
+        backup.data.attachment_metadata.push(AttachmentBackup {
+            id: "attachment-safe".to_string(),
+            task_id: task.id,
+            display_filename: "reference.png".to_string(),
+            mime_type: Some("image/png".to_string()),
+            purpose: "AI + Jira attachment".to_string(),
+            original_size_bytes: 123,
+            original_relative_path: "attachments/task/reference.png".to_string(),
+            file_hash: None,
+            restore_status: None,
+            created_at: "2026-05-25T12:00:00Z".to_string(),
+            updated_at: "2026-05-25T12:00:00Z".to_string(),
+        });
+        backup
+            .data
+            .attachment_variants
+            .push(AttachmentVariantBackup {
+                id: "variant-unsafe".to_string(),
+                attachment_id: "attachment-safe".to_string(),
+                profile: "compressed".to_string(),
+                mime_type: "image/webp".to_string(),
+                size_bytes: 42,
+                relative_path: "attachments/task/../../secret.webp".to_string(),
+                accepted_at: None,
+                created_at: "2026-05-25T12:00:00Z".to_string(),
+            });
+
+        let mut target = open_in_memory_database().expect("target database opens");
+        let result = import_backup(&mut target, backup).expect("backup imports");
+
+        assert_eq!(result.imported_counts["attachmentMetadata"], 1);
+        assert_eq!(result.imported_counts["attachmentVariants"], 0);
+        assert_eq!(result.skipped_counts["attachmentVariants"], 1);
+        assert_eq!(
+            result.warnings,
+            vec!["Skipped attachment variant compressed because its managed path is unsafe."]
         );
     }
 

@@ -2,6 +2,7 @@ use rusqlite::{params, Connection};
 use serde_json::Value;
 use uuid::Uuid;
 
+use crate::attachment_storage::validate_managed_relative_path;
 use crate::db::{utc_now_string, DbError, DbResult};
 use crate::models::{
     AppSettings, AssistedDescriptionProposal, AssistedDescriptionProposalSection,
@@ -717,7 +718,7 @@ impl<'connection> TaskRepository<'connection> {
             ));
         }
         let display_filename = normalize_display_name(&new_attachment.display_filename)?;
-        let relative_path = normalize_display_name(&new_attachment.original_relative_path)?;
+        let relative_path = validate_managed_relative_path(&new_attachment.original_relative_path)?;
         let now = utc_now_string()?;
         let tray_id = self.connection.query_row(
             "SELECT tray_id FROM tasks WHERE id = ?1 AND sync_status != 'Created'",
@@ -821,6 +822,36 @@ impl<'connection> TaskRepository<'connection> {
         self.find_by_id(task_id)
     }
 
+    pub fn attachment_paths_for_task_delete(&self, task_id: &str) -> DbResult<Option<Vec<String>>> {
+        let task_exists = self.connection.query_row(
+            "SELECT 1 FROM tasks WHERE id = ?1 AND sync_status != 'Created'",
+            [task_id],
+            |row| row.get::<_, i64>(0),
+        );
+        if task_exists.is_err() {
+            return Ok(None);
+        }
+
+        let created_child_count: i64 = self.connection.query_row(
+            "SELECT COUNT(*) FROM tasks WHERE parent_task_id = ?1 AND sync_status = 'Created'",
+            [task_id],
+            |row| row.get(0),
+        )?;
+        if created_child_count > 0 {
+            return Ok(None);
+        }
+
+        self.attachment_paths_for_task_filter(
+            "(tasks.id = ?1 OR tasks.parent_task_id = ?1) AND tasks.sync_status != 'Created'",
+            task_id,
+        )
+        .map(Some)
+    }
+
+    pub fn attachment_paths_for_tray_delete(&self, tray_id: &str) -> DbResult<Vec<String>> {
+        self.attachment_paths_for_task_filter("tasks.tray_id = ?1", tray_id)
+    }
+
     pub fn list_jira_uploadable_attachments(&self, task_id: &str) -> DbResult<Vec<TaskAttachment>> {
         Ok(self
             .list_attachments_for_task(task_id)?
@@ -829,7 +860,7 @@ impl<'connection> TaskRepository<'connection> {
                 matches!(
                     attachment.purpose.as_str(),
                     "Jira attachment" | "AI + Jira attachment"
-                )
+                ) && attachment.restore_status.is_none()
             })
             .collect())
     }
@@ -1202,6 +1233,32 @@ impl<'connection> TaskRepository<'connection> {
             .query_map([task_id], map_attachment_row)?
             .collect::<Result<Vec<_>, _>>()?;
         Ok(attachments)
+    }
+
+    fn attachment_paths_for_task_filter(
+        &self,
+        filter_sql: &str,
+        value: &str,
+    ) -> DbResult<Vec<String>> {
+        let mut statement = self.connection.prepare(&format!(
+            "
+            SELECT attachments.original_relative_path
+            FROM attachments
+            JOIN tasks ON tasks.id = attachments.task_id
+            WHERE {filter_sql}
+            UNION ALL
+            SELECT attachment_variants.relative_path
+            FROM attachment_variants
+            JOIN attachments ON attachments.id = attachment_variants.attachment_id
+            JOIN tasks ON tasks.id = attachments.task_id
+            WHERE {filter_sql}
+            "
+        ))?;
+        let paths = statement
+            .query_map([value], |row| row.get::<_, String>(0))?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(DbError::from)?;
+        Ok(paths)
     }
 }
 
