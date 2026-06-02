@@ -8,12 +8,16 @@ use std::path::{Path, PathBuf};
 use rusqlite::Connection;
 use serde_json::{json, Value};
 
+use crate::attachment_storage::{
+    resolve_existing_managed_attachment_file, sanitize_attachment_audit_name,
+    JIRA_CLOUD_FALLBACK_ATTACHMENT_UPLOAD_LIMIT_BYTES,
+};
 use crate::db::DbError;
 use crate::integrations::jira::JiraClient;
 use crate::models::{
-    JiraCreateAllowedValue, JiraCreateFieldMetadata, JiraCreateIssueResponse,
-    JiraCreateIssuesResult, JiraCreateMetadata, JiraCreateProgress, JiraCreatedIssueResult,
-    JiraMyself, JqlSearchResponse, LocalTask,
+    JiraAttachmentSettings, JiraCreateAllowedValue, JiraCreateFieldMetadata,
+    JiraCreateIssueResponse, JiraCreateIssuesResult, JiraCreateMetadata, JiraCreateProgress,
+    JiraCreatedIssueResult, JiraMyself, JqlSearchResponse, LocalTask, TaskAttachment,
 };
 use crate::repositories::{TaskRepository, TrayRepository};
 use crate::sync_audit::audit_error_message;
@@ -29,6 +33,7 @@ const JIRA_TASK_FORGE_PROPERTY_KEY: &str = "jira-task-forge-sync";
 
 pub trait JiraIssueGateway {
     fn create_metadata(&mut self, project_key: &str) -> Result<JiraCreateMetadata, String>;
+    fn attachment_settings(&mut self) -> Result<JiraAttachmentSettings, String>;
     fn current_user(&mut self) -> Result<JiraMyself, String>;
     fn search_jql(&mut self, jql: &str, max_results: usize) -> Result<JqlSearchResponse, String>;
     fn create_issue(&mut self, payload: Value) -> Result<JiraCreateIssueResponse, String>;
@@ -46,6 +51,10 @@ pub trait JiraIssueGateway {
 impl JiraIssueGateway for JiraClient {
     fn create_metadata(&mut self, project_key: &str) -> Result<JiraCreateMetadata, String> {
         self.get_create_issue_metadata(project_key)
+    }
+
+    fn attachment_settings(&mut self) -> Result<JiraAttachmentSettings, String> {
+        self.get_attachment_settings()
     }
 
     fn current_user(&mut self) -> Result<JiraMyself, String> {
@@ -192,6 +201,38 @@ where
         }
         recorder.advance();
 
+        let mut had_non_blocking_warning = false;
+        recorder.progress(
+            "attachments",
+            "Checking Jira attachments",
+            Some("Validating managed files and Jira upload limits"),
+            "running",
+        );
+        match validate_attachment_upload_preflight(
+            self.app_data_dir.as_deref(),
+            self.gateway,
+            task_scope
+                .parent_tasks
+                .iter()
+                .chain(task_scope.subtask_tasks.iter()),
+        ) {
+            Ok(warnings) => {
+                if !warnings.is_empty() {
+                    had_non_blocking_warning = true;
+                    result.messages.extend(warnings);
+                }
+            }
+            Err(messages) => {
+                recorder.progress(
+                    "attachments",
+                    "Jira attachment validation blocked creation",
+                    messages.first().map(String::as_str),
+                    "failed",
+                );
+                return recorder.finish_blocked(messages, result);
+            }
+        }
+
         recorder.progress(
             "metadata",
             "Reading Jira create metadata",
@@ -294,7 +335,6 @@ where
         };
         recorder.advance();
 
-        let mut had_non_blocking_warning = false;
         let mut parent_jira_keys = tasks
             .iter()
             .filter_map(|task| {
@@ -861,6 +901,103 @@ where
     }
 }
 
+fn validate_attachment_upload_preflight<'task, Gateway, Tasks>(
+    app_data_dir: Option<&Path>,
+    gateway: &mut Gateway,
+    tasks: Tasks,
+) -> Result<Vec<String>, Vec<String>>
+where
+    Gateway: JiraIssueGateway,
+    Tasks: IntoIterator<Item = &'task LocalTask>,
+{
+    let attachments = tasks
+        .into_iter()
+        .flat_map(|task| task.attachments.iter())
+        .filter(|attachment| is_jira_uploadable_attachment(attachment))
+        .collect::<Vec<_>>();
+    if attachments.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let Some(app_data_dir) = app_data_dir else {
+        return Err(vec![
+            "Attachment upload could not find the app data directory. Remove Jira-ready attachments or retry from the desktop app."
+                .to_string(),
+        ]);
+    };
+
+    let mut warnings = Vec::new();
+    let limit_bytes = match gateway.attachment_settings() {
+        Ok(settings) => jira_attachment_upload_limit(&settings)?,
+        Err(message) => {
+            warnings.push(format!(
+                "Could not read Jira attachment settings: {message}. Using Jira Cloud fallback limit of {} per file for this run.",
+                format_byte_size_u64(JIRA_CLOUD_FALLBACK_ATTACHMENT_UPLOAD_LIMIT_BYTES)
+            ));
+            JIRA_CLOUD_FALLBACK_ATTACHMENT_UPLOAD_LIMIT_BYTES
+        }
+    };
+
+    let mut blockers = Vec::new();
+    for attachment in attachments {
+        let filename = sanitize_attachment_audit_name(&attachment.display_filename);
+        let managed_file = match resolve_existing_managed_attachment_file(
+            app_data_dir,
+            &attachment.original_relative_path,
+        ) {
+            Ok(file) => file,
+            Err(error) => {
+                blockers.push(format!(
+                    "{filename} could not be validated as a managed attachment file: {error}"
+                ));
+                continue;
+            }
+        };
+
+        if managed_file.size_bytes == 0 {
+            blockers.push(format!(
+                "{filename} is empty. Attach a non-empty file before creating it in Jira."
+            ));
+        } else if managed_file.size_bytes > limit_bytes {
+            blockers.push(format!(
+                "{} is {}. Jira allows attachments up to {} per file.",
+                filename,
+                format_byte_size_u64(managed_file.size_bytes),
+                format_byte_size_u64(limit_bytes)
+            ));
+        }
+    }
+
+    if blockers.is_empty() {
+        Ok(warnings)
+    } else {
+        Err(blockers)
+    }
+}
+
+fn jira_attachment_upload_limit(settings: &JiraAttachmentSettings) -> Result<u64, Vec<String>> {
+    if !settings.enabled {
+        return Err(vec![
+            "Jira attachments are disabled for this site. Remove Jira-ready attachments or ask a Jira admin to enable attachments."
+                .to_string(),
+        ]);
+    }
+    match u64::try_from(settings.upload_limit) {
+        Ok(limit) if limit > 0 => Ok(limit),
+        _ => Err(vec![
+            "Jira did not report a valid attachment upload limit. Remove Jira-ready attachments or retry after checking Jira attachment settings."
+                .to_string(),
+        ]),
+    }
+}
+
+fn is_jira_uploadable_attachment(attachment: &TaskAttachment) -> bool {
+    matches!(
+        attachment.purpose.as_str(),
+        "Jira attachment" | "AI + Jira attachment"
+    )
+}
+
 fn upload_task_attachments<Gateway, F>(
     connection: &Connection,
     app_data_dir: Option<&Path>,
@@ -883,10 +1020,11 @@ where
 
     let mut had_warning = false;
     for attachment in attachments {
+        let filename = sanitize_attachment_audit_name(&attachment.display_filename);
         recorder.progress(
             "attachment",
             "Uploading Jira attachment",
-            Some(&attachment.display_filename),
+            Some(&filename),
             "running",
         );
         let Some(app_data_dir) = app_data_dir else {
@@ -898,19 +1036,42 @@ where
                 "failed",
                 json!({
                     "jiraKey": jira_key,
-                    "filename": attachment.display_filename,
+                    "filename": filename,
                     "message": audit_error_message(message),
                 }),
             )?;
             result.messages.push(format!(
                 "{jira_key} attachment upload skipped for {}: {message}",
-                attachment.display_filename
+                filename
             ));
             continue;
         };
 
-        let absolute_path = app_data_dir.join(&attachment.original_relative_path);
-        let bytes = match fs::read(&absolute_path) {
+        let managed_file = match resolve_existing_managed_attachment_file(
+            app_data_dir,
+            &attachment.original_relative_path,
+        ) {
+            Ok(file) => file,
+            Err(error) => {
+                had_warning = true;
+                let message = format!("Attachment file could not be validated: {error}");
+                recorder.record_event(
+                    Some(&task.id),
+                    "jira.attachment.upload_failed",
+                    "failed",
+                    json!({
+                        "jiraKey": jira_key,
+                        "filename": filename,
+                        "message": audit_error_message(&message),
+                    }),
+                )?;
+                result.messages.push(format!(
+                    "{jira_key} attachment {filename} could not be uploaded: {message}"
+                ));
+                continue;
+            }
+        };
+        let bytes = match fs::read(&managed_file.absolute_path) {
             Ok(bytes) => bytes,
             Err(error) => {
                 had_warning = true;
@@ -921,25 +1082,19 @@ where
                     "failed",
                     json!({
                         "jiraKey": jira_key,
-                        "filename": attachment.display_filename,
-                        "path": attachment.original_relative_path,
+                        "filename": filename,
                         "message": audit_error_message(&message),
                     }),
                 )?;
                 result.messages.push(format!(
-                    "{jira_key} attachment {} could not be uploaded: {message}",
-                    attachment.display_filename
+                    "{jira_key} attachment {filename} could not be uploaded: {message}"
                 ));
                 continue;
             }
         };
 
-        match gateway.upload_attachment(
-            jira_key,
-            &attachment.display_filename,
-            attachment.mime_type.as_deref(),
-            bytes,
-        ) {
+        match gateway.upload_attachment(jira_key, &filename, attachment.mime_type.as_deref(), bytes)
+        {
             Ok(()) => {
                 recorder.record_event(
                     Some(&task.id),
@@ -947,9 +1102,9 @@ where
                     "succeeded",
                     json!({
                         "jiraKey": jira_key,
-                        "filename": attachment.display_filename,
+                        "filename": filename,
                         "purpose": attachment.purpose,
-                        "sizeBytes": attachment.original_size_bytes,
+                        "sizeBytes": managed_file.size_bytes,
                     }),
                 )?;
             }
@@ -961,19 +1116,34 @@ where
                     "failed",
                     json!({
                         "jiraKey": jira_key,
-                        "filename": attachment.display_filename,
+                        "filename": filename,
                         "message": audit_error_message(&message),
                     }),
                 )?;
                 result.messages.push(format!(
-                    "{jira_key} attachment {} could not be uploaded: {}",
-                    attachment.display_filename, message
+                    "{jira_key} attachment {filename} could not be uploaded: {message}"
                 ));
             }
         }
     }
 
     Ok(had_warning)
+}
+
+fn format_byte_size_u64(size_bytes: u64) -> String {
+    const KB: f64 = 1_024.0;
+    const MB: f64 = KB * 1_024.0;
+    const GB: f64 = MB * 1_024.0;
+    let size = size_bytes as f64;
+    if size >= GB {
+        format!("{:.1} GB", size / GB)
+    } else if size >= MB {
+        format!("{:.1} MB", size / MB)
+    } else if size >= KB {
+        format!("{:.1} KB", size / KB)
+    } else {
+        format!("{} B", size_bytes)
+    }
 }
 
 fn jira_parent_summary(task: &LocalTask) -> String {
@@ -1325,6 +1495,196 @@ mod tests {
             )
             .expect("upload event count reads");
         assert_eq!(upload_failure_count, 1);
+
+        let _ = fs::remove_dir_all(&app_data_dir);
+    }
+
+    #[test]
+    fn blocks_oversized_jira_ready_attachments_before_creating_issues() {
+        let connection = open_in_memory_database().expect("database opens");
+        let app_data_dir =
+            std::env::temp_dir().join(format!("jira-task-forge-sync-oversized-{}", Uuid::new_v4()));
+        fs::create_dir_all(app_data_dir.join("attachments").join("task"))
+            .expect("app data creates");
+        fs::write(
+            app_data_dir
+                .join("attachments")
+                .join("task")
+                .join("large.csv"),
+            b"too large",
+        )
+        .expect("attachment writes");
+        let tray_repository = TrayRepository::new(&connection);
+        let task_repository = TaskRepository::new(&connection);
+        let tray = tray_repository
+            .create(NewTray {
+                name: "Oversized attachment".to_string(),
+            })
+            .expect("tray creates");
+        let task = task_repository
+            .create(NewTask {
+                tray_id: tray.id.clone(),
+                project: "STT".to_string(),
+                area: "Bug".to_string(),
+                title: "Block large upload".to_string(),
+                priority: "High".to_string(),
+                issue_type: "Story".to_string(),
+                content_language: "Spanish".to_string(),
+            })
+            .expect("task creates");
+        task_repository
+            .create_attachment(NewTaskAttachment {
+                task_id: task.id.clone(),
+                display_filename: "large.csv".to_string(),
+                mime_type: Some("text/csv".to_string()),
+                purpose: "Jira attachment".to_string(),
+                original_size_bytes: 9,
+                original_relative_path: "attachments/task/large.csv".to_string(),
+            })
+            .expect("attachment creates");
+        let mut gateway = FakeJiraGateway::new();
+        gateway.attachment_settings = Ok(JiraAttachmentSettings {
+            enabled: true,
+            upload_limit: 4,
+        });
+
+        let mut runner = JiraSyncRunner::new(&connection, &mut gateway, "JTFTEST".to_string())
+            .with_app_data_dir(app_data_dir.clone());
+        let result = runner
+            .create_parent_issues_from_tray(&tray.id, true)
+            .expect("sync blocks cleanly");
+
+        assert_eq!(result.status, "blocked");
+        assert_eq!(gateway.attachment_settings_calls, 1);
+        assert!(gateway.created_payloads.is_empty());
+        assert!(gateway.uploaded_attachments.is_empty());
+        assert!(result
+            .messages
+            .iter()
+            .any(|message| message.contains("large.csv") && message.contains("Jira allows")));
+
+        let _ = fs::remove_dir_all(&app_data_dir);
+    }
+
+    #[test]
+    fn blocks_unsafe_attachment_paths_before_jira_writes() {
+        let connection = open_in_memory_database().expect("database opens");
+        let app_data_dir = std::env::temp_dir().join(format!(
+            "jira-task-forge-sync-unsafe-path-{}",
+            Uuid::new_v4()
+        ));
+        fs::create_dir_all(&app_data_dir).expect("app data creates");
+        let sentinel_path = app_data_dir.join("sentinel.txt");
+        fs::write(&sentinel_path, b"do not read").expect("sentinel writes");
+        let tray_repository = TrayRepository::new(&connection);
+        let task_repository = TaskRepository::new(&connection);
+        let tray = tray_repository
+            .create(NewTray {
+                name: "Unsafe attachment".to_string(),
+            })
+            .expect("tray creates");
+        let task = task_repository
+            .create(NewTask {
+                tray_id: tray.id.clone(),
+                project: "STT".to_string(),
+                area: "Bug".to_string(),
+                title: "Block unsafe attachment".to_string(),
+                priority: "High".to_string(),
+                issue_type: "Story".to_string(),
+                content_language: "Spanish".to_string(),
+            })
+            .expect("task creates");
+        connection
+            .execute(
+                "
+                INSERT INTO attachments (
+                    id, task_id, display_filename, mime_type, purpose, original_size_bytes,
+                    original_relative_path, file_hash, restore_status, created_at, updated_at
+                )
+                VALUES ('attachment-unsafe', ?1, 'sentinel.txt', 'text/plain', 'Jira attachment',
+                        11, '../sentinel.txt', NULL, NULL, '2026-05-28T00:00:00Z', '2026-05-28T00:00:00Z')
+                ",
+                [&task.id],
+            )
+            .expect("unsafe metadata inserts");
+        let mut gateway = FakeJiraGateway::new();
+
+        let mut runner = JiraSyncRunner::new(&connection, &mut gateway, "JTFTEST".to_string())
+            .with_app_data_dir(app_data_dir.clone());
+        let result = runner
+            .create_parent_issues_from_tray(&tray.id, true)
+            .expect("sync blocks cleanly");
+
+        assert_eq!(result.status, "blocked");
+        assert!(gateway.created_payloads.is_empty());
+        assert!(gateway.uploaded_attachments.is_empty());
+        assert_eq!(
+            fs::read(&sentinel_path).expect("sentinel reads"),
+            b"do not read"
+        );
+        assert!(result
+            .messages
+            .iter()
+            .any(|message| message.contains("could not be validated")));
+
+        let _ = fs::remove_dir_all(&app_data_dir);
+    }
+
+    #[test]
+    fn does_not_fetch_attachment_settings_for_ai_only_attachments() {
+        let connection = open_in_memory_database().expect("database opens");
+        let app_data_dir =
+            std::env::temp_dir().join(format!("jira-task-forge-sync-ai-only-{}", Uuid::new_v4()));
+        fs::create_dir_all(app_data_dir.join("attachments").join("task"))
+            .expect("app data creates");
+        fs::write(
+            app_data_dir
+                .join("attachments")
+                .join("task")
+                .join("context.txt"),
+            b"ai only context",
+        )
+        .expect("attachment writes");
+        let tray_repository = TrayRepository::new(&connection);
+        let task_repository = TaskRepository::new(&connection);
+        let tray = tray_repository
+            .create(NewTray {
+                name: "AI-only attachment".to_string(),
+            })
+            .expect("tray creates");
+        let task = task_repository
+            .create(NewTask {
+                tray_id: tray.id.clone(),
+                project: "STT".to_string(),
+                area: "Bug".to_string(),
+                title: "Create without upload".to_string(),
+                priority: "High".to_string(),
+                issue_type: "Story".to_string(),
+                content_language: "Spanish".to_string(),
+            })
+            .expect("task creates");
+        task_repository
+            .create_attachment(NewTaskAttachment {
+                task_id: task.id,
+                display_filename: "context.txt".to_string(),
+                mime_type: Some("text/plain".to_string()),
+                purpose: "AI only".to_string(),
+                original_size_bytes: 15,
+                original_relative_path: "attachments/task/context.txt".to_string(),
+            })
+            .expect("attachment creates");
+        let mut gateway = FakeJiraGateway::new();
+        gateway.created_keys = vec!["JTFTEST-30".to_string(), "JTFTEST-31".to_string()];
+
+        let mut runner = JiraSyncRunner::new(&connection, &mut gateway, "JTFTEST".to_string())
+            .with_app_data_dir(app_data_dir.clone());
+        let result = runner
+            .create_parent_issues_from_tray(&tray.id, true)
+            .expect("sync succeeds");
+
+        assert_eq!(result.status, "succeeded");
+        assert_eq!(gateway.attachment_settings_calls, 0);
+        assert!(gateway.uploaded_attachments.is_empty());
 
         let _ = fs::remove_dir_all(&app_data_dir);
     }
@@ -1879,6 +2239,8 @@ mod tests {
 
     struct FakeJiraGateway {
         metadata: JiraCreateMetadata,
+        attachment_settings: Result<JiraAttachmentSettings, String>,
+        attachment_settings_calls: usize,
         created_payloads: Vec<Value>,
         updated_payloads: Vec<(String, Value)>,
         uploaded_attachments: Vec<(String, String, Option<String>, Vec<u8>)>,
@@ -1892,6 +2254,11 @@ mod tests {
         fn new() -> Self {
             Self {
                 metadata: test_metadata("JTFTEST"),
+                attachment_settings: Ok(JiraAttachmentSettings {
+                    enabled: true,
+                    upload_limit: JIRA_CLOUD_FALLBACK_ATTACHMENT_UPLOAD_LIMIT_BYTES as i64,
+                }),
+                attachment_settings_calls: 0,
                 created_payloads: Vec::new(),
                 updated_payloads: Vec::new(),
                 uploaded_attachments: Vec::new(),
@@ -1908,6 +2275,11 @@ mod tests {
             let mut metadata = self.metadata.clone();
             metadata.project_key = project_key.to_string();
             Ok(metadata)
+        }
+
+        fn attachment_settings(&mut self) -> Result<JiraAttachmentSettings, String> {
+            self.attachment_settings_calls += 1;
+            self.attachment_settings.clone()
         }
 
         fn current_user(&mut self) -> Result<JiraMyself, String> {

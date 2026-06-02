@@ -76,6 +76,11 @@ import {
   orderProjectNames
 } from "./lib/domain";
 import {
+  formatJiraCreationResultCounts,
+  getJiraCreationNoticeGuidance,
+  shouldShowBlockingJiraCreationNotice
+} from "./lib/domain/jiraCreation";
+import {
   createEmptyAssistedDescriptionSections,
   serializeAssistedDescriptionSections
 } from "./lib/domain/assistedDescription";
@@ -137,6 +142,14 @@ type CsvExportNotice = {
   fileName: string;
 };
 
+type JiraCreationNotice = {
+  id: number;
+  sourceTrayId: string;
+  sourceTrayName: string;
+  result: JiraCreateIssuesResult;
+  recoveryError?: string | null;
+};
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<MainTab>("trays");
   const [openPanel, setOpenPanel] = useState<Panel>(null);
@@ -161,6 +174,7 @@ export default function App() {
   const [usesTauriPersistence, setUsesTauriPersistence] = useState(false);
   const [csvExportMessage, setCsvExportMessage] = useState<string | null>(null);
   const [csvExportNotice, setCsvExportNotice] = useState<CsvExportNotice | null>(null);
+  const [jiraCreationNotice, setJiraCreationNotice] = useState<JiraCreationNotice | null>(null);
   const [hasJiraApiToken, setHasJiraApiToken] = useState(false);
   const [hasAiProviderApiKey, setHasAiProviderApiKey] = useState(false);
   const [jiraCredentialMessage, setJiraCredentialMessage] = useState<string | null>(null);
@@ -1077,6 +1091,7 @@ export default function App() {
     setJiraCreateResult(null);
     setJiraCreateError(null);
     setJiraCreateProgress(null);
+    setJiraCreationNotice(null);
     const loadingStartedAt = performance.now();
     await waitForNextPaint();
 
@@ -1194,6 +1209,7 @@ export default function App() {
     let shouldClosePreflight = false;
     let nextCreateResult: JiraCreateIssuesResult | null = null;
     let nextCreateError: string | null = null;
+    let nextCreationNotice: JiraCreationNotice | null = null;
     await waitForNextPaint();
     await delay(1000);
 
@@ -1210,6 +1226,14 @@ export default function App() {
       });
       if (result.status === "succeeded" && result.failedIssueCount === 0) {
         shouldClosePreflight = true;
+      } else if (shouldShowBlockingJiraCreationNotice(result)) {
+        shouldClosePreflight = true;
+        nextCreationNotice = {
+          id: Date.now(),
+          sourceTrayId: jiraCreatePreflight.tray.id,
+          sourceTrayName: jiraCreatePreflight.tray.name,
+          result
+        };
       } else {
         nextCreateResult = result;
       }
@@ -1220,11 +1244,38 @@ export default function App() {
       if (shouldClosePreflight) {
         setJiraCreatePreflight(null);
         setJiraCreateResult(null);
+        setJiraCreateError(null);
         setJiraCreateProgress(null);
       } else {
         if (nextCreateResult) setJiraCreateResult(nextCreateResult);
         if (nextCreateError) setJiraCreateError(nextCreateError);
       }
+      if (nextCreationNotice) setJiraCreationNotice(nextCreationNotice);
+    }
+  }
+
+  async function createRecoveryTrayFromJiraNotice() {
+    if (!jiraCreationNotice || jiraCreationNotice.result.failedTasks.length === 0) return;
+
+    setIsCreatingRecoveryTray(true);
+    setJiraCreationNotice((notice) => notice ? { ...notice, recoveryError: null } : notice);
+
+    try {
+      const recoveryTray = await createPersistedRecoveryTrayFromTasks(
+        jiraCreationNotice.sourceTrayId,
+        jiraCreationNotice.result.failedTasks.map((task) => task.taskId)
+      );
+      const persistedTrays = await listPersistedTrays();
+      trayWorkspace.replaceTraysAndSelect(persistedTrays, {
+        selectedTrayId: recoveryTray.id,
+        selectedTaskId: persistedTrays.find((tray) => tray.id === recoveryTray.id)?.tasks[0]?.id ?? null
+      });
+      setJiraCreationNotice(null);
+    } catch (error) {
+      const recoveryError = error instanceof Error ? error.message : String(error || "Could not create recovery tray.");
+      setJiraCreationNotice((notice) => notice ? { ...notice, recoveryError } : notice);
+    } finally {
+      setIsCreatingRecoveryTray(false);
     }
   }
 
@@ -1432,10 +1483,120 @@ export default function App() {
           <ConnectionNoticeToast notice={connectionNotice} onClose={() => setConnectionNotice(null)} />
         ) : null}
         {backupNotice ? <BackupNoticeDialog notice={backupNotice} onClose={() => setBackupNotice(null)} /> : null}
+        {jiraCreationNotice ? (
+          <JiraCreationNoticeDialog
+            notice={jiraCreationNotice}
+            isCreatingRecoveryTray={isCreatingRecoveryTray}
+            onCreateRecoveryTray={createRecoveryTrayFromJiraNotice}
+            onClose={() => setJiraCreationNotice(null)}
+          />
+        ) : null}
         {csvExportNotice ? (
           <CsvExportNoticeToast key={csvExportNotice.id} notice={csvExportNotice} onClose={() => setCsvExportNotice(null)} />
         ) : null}
       </div>
+    </div>
+  );
+}
+
+function JiraCreationNoticeDialog({
+  notice,
+  isCreatingRecoveryTray,
+  onCreateRecoveryTray,
+  onClose
+}: {
+  notice: JiraCreationNotice;
+  isCreatingRecoveryTray: boolean;
+  onCreateRecoveryTray: () => void;
+  onClose: () => void;
+}) {
+  const result = notice.result;
+  const visibleMessages = result.messages.slice(0, 5);
+  const hiddenMessageCount = Math.max(0, result.messages.length - visibleMessages.length);
+  const hasFailedTasks = result.failedTasks.length > 0;
+  const overlay = useAppOverlay({
+    layer: appOverlayLayers.nestedModal,
+    onDismiss: onClose,
+    dismissOnEscape: false,
+    dismissOnBackdrop: false,
+    lockScroll: true
+  });
+
+  return (
+    <div
+      className="fixed inset-0 z-[70] flex items-center justify-center bg-[#091e42]/70 px-4 backdrop-blur-[2px]"
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby="jira-creation-notice-title"
+      {...overlay.backdropProps}
+    >
+      <section
+        className="w-full max-w-[620px] overflow-hidden rounded border border-[#7f5f01] bg-[#2b2d31] text-[#dfe1e6] shadow-2xl"
+        {...overlay.surfaceProps}
+      >
+        <div className="flex items-start justify-between gap-4 border-b border-[#454852] px-5 py-4">
+          <div className="flex min-w-0 items-start gap-3">
+            <AlertTriangle className="mt-0.5 shrink-0 text-[#f5cd47]" size={22} />
+            <div className="min-w-0">
+              <h2 id="jira-creation-notice-title" className="text-base font-semibold text-[#f4f5f7]">
+                Jira creation needs attention
+              </h2>
+              <p className="mt-1 break-words text-sm leading-relaxed text-[#b7bbc4]">
+                {notice.sourceTrayName} · {formatJiraCreationResultCounts(result)}
+              </p>
+            </div>
+          </div>
+        </div>
+        <div className="space-y-4 px-5 py-4">
+          <div className="rounded border border-[#7f5f01] bg-[#3f3102] px-3 py-3 text-sm leading-relaxed text-[#f5cd47]">
+            {getJiraCreationNoticeGuidance(result)}
+          </div>
+          {visibleMessages.length ? (
+            <div>
+              <div className="text-xs font-semibold uppercase text-[#b7bbc4]">Result details</div>
+              <ul className="mt-2 space-y-1.5 text-sm leading-relaxed text-[#dfe1e6]">
+                {visibleMessages.map((message, index) => (
+                  <li className="break-words" key={`jira-result-message-${index}`}>
+                    {message}
+                  </li>
+                ))}
+              </ul>
+              {hiddenMessageCount ? (
+                <p className="mt-2 text-xs text-[#aeb3bd]">{hiddenMessageCount} more result details are available in task activity.</p>
+              ) : null}
+            </div>
+          ) : null}
+          {hasFailedTasks ? (
+            <div className="rounded border border-[#5c606a] bg-[#22252a] px-3 py-3 text-sm text-[#dfe1e6]">
+              <div className="font-semibold text-[#f4f5f7]">Failed tasks need recovery</div>
+              <p className="mt-1 text-[#b7bbc4]">Move them to a recovery tray before retrying.</p>
+            </div>
+          ) : null}
+          {notice.recoveryError ? (
+            <div className="rounded border border-[#ae2e24] bg-[#4f1d1a] px-3 py-3 text-sm text-[#ffb8ad]">{notice.recoveryError}</div>
+          ) : null}
+        </div>
+        <div className="flex flex-wrap justify-end gap-2 border-t border-[#454852] px-5 py-4">
+          {hasFailedTasks ? (
+            <button
+              className="inline-flex h-9 items-center justify-center rounded border border-[#5c606a] px-3 text-sm font-medium text-[#dfe1e6] hover:bg-[#3a3d43] disabled:pointer-events-none disabled:opacity-60"
+              disabled={isCreatingRecoveryTray}
+              onClick={onCreateRecoveryTray}
+              type="button"
+            >
+              {isCreatingRecoveryTray ? "Moving..." : "Move failed tasks to recovery tray"}
+            </button>
+          ) : null}
+          <button
+            className="inline-flex h-9 items-center justify-center rounded bg-[#0052cc] px-3 text-sm font-medium text-white hover:bg-[#0747a6] disabled:pointer-events-none disabled:opacity-60"
+            disabled={isCreatingRecoveryTray}
+            onClick={onClose}
+            type="button"
+          >
+            Continue
+          </button>
+        </div>
+      </section>
     </div>
   );
 }

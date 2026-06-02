@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use rusqlite::Connection;
 
+use crate::attachment_storage::validate_managed_relative_path;
 use crate::db::{DbError, DbResult};
 
 use super::audit_policy;
@@ -217,6 +218,19 @@ pub(crate) fn plan_import_for_target(
             .map(|task| plan_id_insert(&mut known_task_ids, &task.id))
             .collect(),
     );
+    let imported_task_ids = backup
+        .data
+        .tasks
+        .iter()
+        .zip(tasks.decisions.iter())
+        .filter_map(|(task, decision)| {
+            if matches!(decision, RecordDecision::Import) {
+                Some(task.id.clone())
+            } else {
+                None
+            }
+        })
+        .collect::<BTreeSet<_>>();
 
     let mut warnings = Vec::new();
     let mut known_epic_mapping_ids = target.epic_mapping_ids;
@@ -317,6 +331,20 @@ pub(crate) fn plan_import_for_target(
                     ));
                     return RecordDecision::Skip;
                 }
+                if !imported_task_ids.contains(&attachment.task_id) {
+                    warnings.push(format!(
+                        "Skipped attachment metadata {} because its task was not imported from this backup.",
+                        attachment.display_filename
+                    ));
+                    return RecordDecision::Skip;
+                }
+                if validate_managed_relative_path(&attachment.original_relative_path).is_err() {
+                    warnings.push(format!(
+                        "Skipped attachment metadata {} because its managed path is unsafe.",
+                        attachment.display_filename
+                    ));
+                    return RecordDecision::Skip;
+                }
 
                 plan_id_insert(&mut known_attachment_ids, &attachment.id)
             })
@@ -333,6 +361,13 @@ pub(crate) fn plan_import_for_target(
                 if !known_attachment_ids.contains(&variant.attachment_id) {
                     warnings.push(format!(
                         "Skipped attachment variant {} because its attachment metadata was not imported.",
+                        variant.profile
+                    ));
+                    return RecordDecision::Skip;
+                }
+                if validate_managed_relative_path(&variant.relative_path).is_err() {
+                    warnings.push(format!(
+                        "Skipped attachment variant {} because its managed path is unsafe.",
                         variant.profile
                     ));
                     return RecordDecision::Skip;

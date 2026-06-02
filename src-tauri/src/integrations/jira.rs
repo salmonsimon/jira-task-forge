@@ -3,14 +3,15 @@ use std::time::Duration;
 use base64::Engine;
 use serde::de::DeserializeOwned;
 use serde_json::{json, Value};
+use uuid::Uuid;
 
 use super::jira_mapping::{
     jira_error_message, map_create_field, map_issue, JiraCreateFieldsApiResponse,
     JiraCreateIssueTypesApiResponse, JiraSearchApiResponse,
 };
 use crate::models::{
-    JiraCreateIssueResponse, JiraCreateIssueTypeMetadata, JiraCreateMetadata, JiraMyself,
-    JqlSearchResponse,
+    JiraAttachmentSettings, JiraCreateIssueResponse, JiraCreateIssueTypeMetadata,
+    JiraCreateMetadata, JiraMyself, JqlSearchResponse,
 };
 use crate::redaction::redact_secret_fragments;
 
@@ -72,6 +73,14 @@ impl JiraClient {
             self.get("/rest/api/3/myself").call(),
             "Jira connection test",
             Some("Jira rejected the email or API token."),
+        )
+    }
+
+    pub fn get_attachment_settings(&self) -> Result<JiraAttachmentSettings, String> {
+        parse_response(
+            self.get("/rest/api/3/attachment/meta").call(),
+            "Jira attachment settings",
+            None,
         )
     }
 
@@ -186,8 +195,8 @@ impl JiraClient {
             return Err("Attachment file cannot be empty.".to_string());
         }
 
-        let boundary = "----jira-task-forge-attachment-boundary";
-        let body = multipart_attachment_body(boundary, filename, mime_type, &bytes);
+        let boundary = attachment_multipart_boundary();
+        let body = multipart_attachment_body(&boundary, filename, mime_type, &bytes);
         parse_empty_response(
             ureq::post(&self.url(&format!(
                 "/rest/api/3/issue/{}/attachments",
@@ -293,17 +302,18 @@ impl JiraClient {
     }
 }
 
+fn attachment_multipart_boundary() -> String {
+    format!("jtf-{}", Uuid::new_v4().simple())
+}
+
 fn multipart_attachment_body(
     boundary: &str,
     filename: &str,
     mime_type: Option<&str>,
     bytes: &[u8],
 ) -> Vec<u8> {
-    let escaped_filename = filename.replace('\\', "\\\\").replace('"', "\\\"");
-    let content_type = mime_type
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .unwrap_or("application/octet-stream");
+    let escaped_filename = sanitize_multipart_filename(filename);
+    let content_type = sanitize_multipart_mime_type(mime_type);
     let mut body = Vec::new();
     body.extend_from_slice(format!("--{boundary}\r\n").as_bytes());
     body.extend_from_slice(
@@ -316,6 +326,69 @@ fn multipart_attachment_body(
     body.extend_from_slice(bytes);
     body.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());
     body
+}
+
+fn sanitize_multipart_filename(filename: &str) -> String {
+    let basename = filename
+        .rsplit(['/', '\\'])
+        .next()
+        .unwrap_or(filename)
+        .trim();
+    let sanitized = basename
+        .chars()
+        .map(|character| {
+            if character.is_control() || matches!(character, '"' | '\\' | '/' | ':') {
+                '-'
+            } else {
+                character
+            }
+        })
+        .collect::<String>()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    let sanitized = sanitized.trim();
+    let truncated = if sanitized.is_empty() {
+        "attachment".to_string()
+    } else {
+        sanitized.chars().take(180).collect::<String>()
+    };
+
+    truncated.replace('"', "-")
+}
+
+fn sanitize_multipart_mime_type(mime_type: Option<&str>) -> String {
+    let Some(candidate) = mime_type.map(str::trim).filter(|value| !value.is_empty()) else {
+        return "application/octet-stream".to_string();
+    };
+    if candidate.chars().any(|character| character.is_control()) {
+        return "application/octet-stream".to_string();
+    }
+
+    let Some((media_type, subtype)) = candidate.split_once('/') else {
+        return "application/octet-stream".to_string();
+    };
+    if media_type.is_empty()
+        || subtype.is_empty()
+        || !media_type.chars().all(is_mime_token_character)
+        || !subtype.chars().all(is_mime_token_character)
+    {
+        return "application/octet-stream".to_string();
+    }
+
+    format!(
+        "{}/{}",
+        media_type.to_ascii_lowercase(),
+        subtype.to_ascii_lowercase()
+    )
+}
+
+fn is_mime_token_character(character: char) -> bool {
+    character.is_ascii_alphanumeric()
+        || matches!(
+            character,
+            '!' | '#' | '$' | '&' | '^' | '_' | '.' | '+' | '-'
+        )
 }
 
 pub fn normalize_jira_site_url(raw_site_url: &str) -> Result<String, String> {
@@ -422,9 +495,11 @@ fn is_retryable_jira_read_error(message: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
-        encode_path_segment, is_retryable_jira_read_error, normalize_jira_site_url,
-        parse_empty_response, parse_response, JiraClient, JiraCredentials,
+        attachment_multipart_boundary, encode_path_segment, is_retryable_jira_read_error,
+        multipart_attachment_body, normalize_jira_site_url, parse_empty_response, parse_response,
+        JiraClient, JiraCredentials,
     };
+    use crate::models::JiraAttachmentSettings;
     use serde_json::{json, Value};
 
     #[test]
@@ -604,6 +679,20 @@ mod tests {
     }
 
     #[test]
+    fn parses_attachment_settings_responses() {
+        let response =
+            ureq::Response::new(200, "OK", r#"{"enabled":true,"uploadLimit":1000000000}"#)
+                .expect("response builds");
+
+        let parsed: JiraAttachmentSettings =
+            parse_response(Ok(response), "Jira attachment settings", None)
+                .expect("attachment settings parse");
+
+        assert!(parsed.enabled);
+        assert_eq!(parsed.upload_limit, 1_000_000_000);
+    }
+
+    #[test]
     fn reports_malformed_json_responses() {
         let response = ureq::Response::new(200, "OK", "not json").expect("response builds");
 
@@ -693,6 +782,33 @@ mod tests {
         let response = ureq::Response::new(204, "No Content", "").expect("response builds");
 
         parse_empty_response(Ok(response), "Jira issue update").expect("empty response is ok");
+    }
+
+    #[test]
+    fn creates_rfc_safe_multipart_boundary() {
+        let boundary = attachment_multipart_boundary();
+
+        assert!(boundary.len() <= 70);
+        assert!(boundary.starts_with("jtf-"));
+        assert!(boundary
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || character == '-'));
+    }
+
+    #[test]
+    fn sanitizes_multipart_attachment_headers() {
+        let body = multipart_attachment_body(
+            "boundary",
+            "folder/bad\"\r\nX-Bad: yes.txt",
+            Some("text/plain\r\nX-Injected: yes"),
+            b"bytes",
+        );
+        let body_text = String::from_utf8(body).expect("multipart body is utf8 around headers");
+
+        assert!(body_text.contains("filename=\"bad---X-Bad- yes.txt\""));
+        assert!(body_text.contains("Content-Type: application/octet-stream"));
+        assert!(!body_text.contains("\r\nX-Bad: yes"));
+        assert!(!body_text.contains("\r\nX-Injected: yes"));
     }
 
     #[test]

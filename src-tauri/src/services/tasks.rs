@@ -1,12 +1,13 @@
 use super::AppServices;
+use crate::attachment_storage::{
+    copy_into_managed_attachment, remove_managed_attachment_file, validate_managed_relative_path,
+};
 use crate::db::DbResult;
 use crate::models::{
     LocalIssueRelationship, LocalTask, NewSubtask, NewTask, NewTaskAttachment, NewTray, Tray,
 };
 use crate::repositories::{TaskRepository, TrayRepository};
-use std::fs;
-use std::path::{Path, PathBuf};
-use uuid::Uuid;
+use std::path::Path;
 
 impl AppServices {
     pub fn create_task(&self, new_task: NewTask) -> DbResult<LocalTask> {
@@ -25,6 +26,17 @@ impl AppServices {
     }
 
     pub fn delete_task(&self, task_id: &str) -> DbResult<bool> {
+        let attachment_paths = {
+            let connection = self.connection();
+            let Some(paths) =
+                TaskRepository::new(&connection).attachment_paths_for_task_delete(task_id)?
+            else {
+                return Ok(false);
+            };
+            paths
+        };
+        self.remove_managed_attachment_files(&attachment_paths)?;
+
         let connection = self.connection();
         TaskRepository::new(&connection).delete(task_id)
     }
@@ -78,37 +90,22 @@ impl AppServices {
 
         for path in paths {
             let source_path = Path::new(path);
-            let metadata = fs::metadata(source_path)?;
-            if !metadata.is_file() {
-                return Err(crate::db::DbError::InvalidData(
-                    "Only files can be attached.".to_string(),
-                ));
-            }
-            let filename = source_path
-                .file_name()
-                .and_then(|value| value.to_str())
-                .ok_or_else(|| {
-                    crate::db::DbError::InvalidData(
-                        "Attachment filename could not be read.".to_string(),
-                    )
-                })?;
-            let relative_path = managed_attachment_relative_path(task_id, filename);
-            let absolute_path = self.app_data_dir().join(&relative_path);
-            copy_into_managed_attachment(source_path, &absolute_path)?;
+            let (filename, relative_path, size_bytes) =
+                copy_into_managed_attachment(self.app_data_dir(), source_path, task_id)?;
 
             let create_result = {
                 let connection = self.connection();
                 TaskRepository::new(&connection).create_attachment(NewTaskAttachment {
                     task_id: task_id.to_string(),
-                    display_filename: filename.to_string(),
-                    mime_type: infer_mime_type(filename),
+                    display_filename: filename.clone(),
+                    mime_type: infer_mime_type(&filename),
                     purpose: purpose.to_string(),
-                    original_size_bytes: metadata.len() as i64,
-                    original_relative_path: relative_path.to_string_lossy().to_string(),
+                    original_size_bytes: size_bytes as i64,
+                    original_relative_path: relative_path.clone(),
                 })
             };
             if let Err(error) = create_result {
-                let _ = fs::remove_file(&absolute_path);
+                let _ = remove_managed_attachment_file(self.app_data_dir(), &relative_path);
                 return Err(error);
             }
         }
@@ -131,21 +128,27 @@ impl AppServices {
         task_id: &str,
         attachment_id: &str,
     ) -> DbResult<Option<LocalTask>> {
-        let existing_attachment = self.find_task(task_id)?.and_then(|task| {
-            task.attachments
-                .into_iter()
-                .find(|attachment| attachment.id == attachment_id)
-        });
+        let Some(task) = self.find_task(task_id)? else {
+            return Ok(None);
+        };
+        if task.sync_status == "Created" {
+            return Ok(None);
+        }
+        if let Some(attachment) = task
+            .attachments
+            .iter()
+            .find(|attachment| attachment.id == attachment_id)
+        {
+            remove_managed_attachment_file(
+                self.app_data_dir(),
+                &attachment.original_relative_path,
+            )?;
+        }
+
         let updated_task = {
             let connection = self.connection();
             TaskRepository::new(&connection).delete_attachment(task_id, attachment_id)?
         };
-        if updated_task.is_some() {
-            if let Some(attachment) = existing_attachment {
-                let path = self.app_data_dir().join(attachment.original_relative_path);
-                let _ = fs::remove_file(path);
-            }
-        }
 
         Ok(updated_task)
     }
@@ -186,44 +189,18 @@ impl AppServices {
         let connection = self.connection();
         TaskRepository::new(&connection).find_by_id(task_id)
     }
-}
 
-fn managed_attachment_relative_path(task_id: &str, filename: &str) -> PathBuf {
-    PathBuf::from("attachments")
-        .join(sanitize_path_segment(task_id))
-        .join(format!(
-            "{}-{}",
-            Uuid::new_v4(),
-            sanitize_path_segment(filename)
-        ))
-}
-
-fn copy_into_managed_attachment(source_path: &Path, destination_path: &Path) -> DbResult<()> {
-    if let Some(parent) = destination_path.parent() {
-        fs::create_dir_all(parent)?;
-    }
-    fs::copy(source_path, destination_path)?;
-    Ok(())
-}
-
-fn sanitize_path_segment(value: &str) -> String {
-    let sanitized = value
-        .chars()
-        .map(|character| {
-            if character.is_ascii_alphanumeric() || matches!(character, '.' | '-' | '_') {
-                character
-            } else {
-                '-'
-            }
-        })
-        .collect::<String>()
-        .trim_matches('-')
-        .to_string();
-
-    if sanitized.is_empty() {
-        "attachment".to_string()
-    } else {
-        sanitized
+    pub(super) fn remove_managed_attachment_files(
+        &self,
+        relative_paths: &[String],
+    ) -> DbResult<()> {
+        for relative_path in relative_paths {
+            validate_managed_relative_path(relative_path)?;
+        }
+        for relative_path in relative_paths {
+            remove_managed_attachment_file(self.app_data_dir(), relative_path)?;
+        }
+        Ok(())
     }
 }
 
