@@ -195,7 +195,7 @@ impl JiraClient {
             return Err("Attachment file cannot be empty.".to_string());
         }
 
-        let boundary = format!("----jira-task-forge-attachment-boundary-{}", Uuid::new_v4());
+        let boundary = attachment_multipart_boundary();
         let body = multipart_attachment_body(&boundary, filename, mime_type, &bytes);
         parse_empty_response(
             ureq::post(&self.url(&format!(
@@ -300,6 +300,10 @@ impl JiraClient {
 
         Err(last_error.unwrap_or_else(|| format!("{action} could not reach Jira.")))
     }
+}
+
+fn attachment_multipart_boundary() -> String {
+    format!("jtf-{}", Uuid::new_v4().simple())
 }
 
 fn multipart_attachment_body(
@@ -491,8 +495,9 @@ fn is_retryable_jira_read_error(message: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
-        encode_path_segment, is_retryable_jira_read_error, multipart_attachment_body,
-        normalize_jira_site_url, parse_empty_response, parse_response, JiraClient, JiraCredentials,
+        attachment_multipart_boundary, encode_path_segment, is_retryable_jira_read_error,
+        multipart_attachment_body, normalize_jira_site_url, parse_empty_response, parse_response,
+        JiraClient, JiraCredentials,
     };
     use crate::models::JiraAttachmentSettings;
     use serde_json::{json, Value};
@@ -777,6 +782,17 @@ mod tests {
         let response = ureq::Response::new(204, "No Content", "").expect("response builds");
 
         parse_empty_response(Ok(response), "Jira issue update").expect("empty response is ok");
+    }
+
+    #[test]
+    fn creates_rfc_safe_multipart_boundary() {
+        let boundary = attachment_multipart_boundary();
+
+        assert!(boundary.len() <= 70);
+        assert!(boundary.starts_with("jtf-"));
+        assert!(boundary
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || character == '-'));
     }
 
     #[test]

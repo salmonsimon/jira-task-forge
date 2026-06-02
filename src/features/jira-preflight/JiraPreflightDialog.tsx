@@ -81,6 +81,7 @@ export function JiraPreflightDialog({
     blockingWarnings.length === 0 &&
     includedCreateableTaskCount > 0 &&
     preflight.credentialStatus !== "checking" &&
+    !createResult &&
     !isBusy;
   const credentialMessage =
     preflight.credentialStatus === "checking"
