@@ -28,7 +28,6 @@ use planning::{
     JiraCreationPlanningOptions, JiraCreationTaskScope,
 };
 
-const JIRA_TASK_FORGE_LABEL: &str = "jira-task-forge";
 const JIRA_TASK_FORGE_PROPERTY_KEY: &str = "jira-task-forge-sync";
 
 pub trait JiraIssueGateway {
@@ -701,7 +700,7 @@ fn build_epic_payload(
         "project": { "key": jira_project_key },
         "issuetype": { "id": plan.issue_types.epic.id },
         "summary": summary,
-        "labels": labels_for(local_project, area),
+        "labels": labels_for_area(area),
     });
     if plan.issue_types.epic.field("priority").is_some() {
         fields["priority"] = priority_value(plan.issue_types.epic.field("priority"), "Medium");
@@ -740,7 +739,7 @@ fn build_parent_issue_payload(
         "project": { "key": jira_project_key },
         "issuetype": { "id": issue_type.id },
         "summary": jira_parent_summary(task),
-        "labels": labels_for(&task.project, &task.area),
+        "labels": labels_for_area(&task.area),
     });
     if issue_type.field("priority").is_some() {
         fields["priority"] = priority_value(issue_type.field("priority"), &task.priority);
@@ -794,7 +793,7 @@ fn build_subtask_issue_payload(
         "issuetype": { "id": issue_type.id },
         "summary": jira_subtask_summary(task),
         "parent": { "key": parent_jira_key },
-        "labels": labels_for(&task.project, &task.area),
+        "labels": labels_for_area(&task.area),
     });
     if issue_type.field("priority").is_some() {
         fields["priority"] = priority_value(issue_type.field("priority"), &task.priority);
@@ -1202,16 +1201,16 @@ fn allowed_value_matches(allowed_value: &JiraCreateAllowedValue, local_priority:
     .any(|value| value.eq_ignore_ascii_case(local_priority))
 }
 
-fn labels_for(local_project: &str, area: &str) -> Vec<String> {
-    [JIRA_TASK_FORGE_LABEL, local_project, area]
-        .into_iter()
-        .filter_map(sanitize_jira_label)
-        .fold(Vec::<String>::new(), |mut labels, label| {
+fn labels_for_area(area: &str) -> Vec<String> {
+    [area].into_iter().filter_map(sanitize_jira_label).fold(
+        Vec::<String>::new(),
+        |mut labels, label| {
             if !labels.iter().any(|existing| existing == &label) {
                 labels.push(label);
             }
             labels
-        })
+        },
+    )
 }
 
 fn sanitize_jira_label(value: &str) -> Option<String> {
@@ -1315,8 +1314,16 @@ mod tests {
             json!("[STT] Bug")
         );
         assert_eq!(
+            gateway.created_payloads[0]["fields"]["labels"],
+            json!(["Bug"])
+        );
+        assert_eq!(
             gateway.created_payloads[1]["fields"]["parent"]["key"],
             json!("JTFTEST-10")
+        );
+        assert_eq!(
+            gateway.created_payloads[1]["fields"]["labels"],
+            json!(["Bug"])
         );
         assert_eq!(
             gateway.created_payloads[1]["fields"]["priority"]["id"],
