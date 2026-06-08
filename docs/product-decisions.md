@@ -490,8 +490,9 @@ document such as `docs/jira-description-format.md`.
   delete the local managed attachment file and keep only metadata/audit history.
 - `AI + Jira attachment` files should also be deleted locally after successful
   Jira upload; Jira becomes the durable copy for that asset.
-- `AI only` files are not uploaded to Jira, so they remain local until the task
-  lifecycle removes them or a future AI retention policy changes that behavior.
+- `AI only` files are not uploaded to Jira during sync, but they should be
+  deleted locally when the Local Task becomes `Created`; Jira Task Forge should
+  keep only metadata/audit history after the task is loaded to Jira.
 - Backups include images and attachment metadata.
 - Personal v1 attachment support should prioritize uploading files/images to
   Jira from local tasks.
@@ -619,6 +620,14 @@ document such as `docs/jira-description-format.md`.
   explicit review.
 - `npm audit` should not be added as a CI or merge gate for Personal v1. Revisit
   CI gating before broader distribution.
+- PR-blocking checks should be fast, deterministic, and actionable. Unit tests,
+  integration tests, builds, formatting, and stable local smoke checks may become
+  blocking when they meet that bar.
+- Live Jira E2E against `JTFTEST` should remain advisory/manual for Personal v1
+  because it depends on credentials, network, remote Jira state, and rate limits.
+- Before release or merge of Jira-write behavior, run focused live Jira QA
+  manually or as an advisory check; do not make it an automatic PR gate until it
+  is stable enough to fail only on product regressions.
 
 ## Personal V1 Quality And Security Bar
 

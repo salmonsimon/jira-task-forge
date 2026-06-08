@@ -100,9 +100,11 @@ filename, size, purpose, Jira issue key, and upload result, but the managed byte
 should not remain local after successful Jira upload. This applies to both Jira
 attachment and AI + Jira attachment purposes once the Jira upload succeeds.
 
-`AI only` attachments are not uploaded to Jira, so they keep their managed local
-file until the task lifecycle deletes them or another explicit AI attachment
-retention decision supersedes this rule.
+`AI only` attachments are not uploaded to Jira during sync, but they should not
+remain as durable duplicate asset storage after the Local Task becomes `Created`.
+When a Local Task becomes `Created`, the app should delete any remaining managed
+AI-only attachment bytes and keep only metadata/audit history needed to explain
+what was prepared.
 
 Import should continue when individual attachments are missing, corrupt, or fail
 to copy. The imported task may still be restored, while the attachment is either
