@@ -467,8 +467,31 @@ document such as `docs/jira-description-format.md`.
 - Images and attachments live as filesystem files managed by the app, not as SQLite blobs.
 - SQLite stores attachment metadata and references to app-managed file paths.
 - The app copies pasted or imported attachments into its own app data folder so trays do not depend on external file paths.
+- Attachment selection for Personal v1 is backend-owned: Rust/Tauri opens the
+  native file dialog, validates selected files, copies accepted files into
+  managed storage, and returns metadata to React.
+- React should not pass arbitrary filesystem paths to a backend copy command.
+- Drag-and-drop attachment selection is out of scope for Personal v1.
+- Jira-ready attachments larger than 25 MB should show a warning before sync.
+- Jira-ready attachments larger than 100 MB should be blocked, even if Jira's
+  configured upload limit is higher.
+- Jira-ready attachments must always be blocked when they exceed Jira's reported
+  attachment `uploadLimit`.
+- These thresholds protect Personal v1 sync/backup behavior and Jira Free plan
+  storage, where 100 MB is already about 5% of the 2 GB file storage limit.
+- Symbolic links should be rejected for Personal v1 attachments. The user should
+  choose the original file instead.
+- Files inside Jira Task Forge internal app data directories should be blocked
+  as attachment sources, including `data/`, `settings/`, `credentials/`,
+  `logs/`, `logs/diagnostics/`, `backups/`, and `attachments/`.
 - Images marked as Jira attachments are uploaded during Jira sync.
 - Images marked AI-only are used for context but are not uploaded.
+- After a Jira-ready attachment uploads successfully to Jira, the app should
+  delete the local managed attachment file and keep only metadata/audit history.
+- `AI + Jira attachment` files should also be deleted locally after successful
+  Jira upload; Jira becomes the durable copy for that asset.
+- `AI only` files are not uploaded to Jira, so they remain local until the task
+  lifecycle removes them or a future AI retention policy changes that behavior.
 - Backups include images and attachment metadata.
 - Personal v1 attachment support should prioritize uploading files/images to
   Jira from local tasks.
@@ -586,6 +609,13 @@ document such as `docs/jira-description-format.md`.
 - Before distribution, add a short privacy/security note in Settings or first-run
   onboarding so users understand what leaves the machine during Jira and AI
   actions.
+- Agents may run `npm audit` locally for dependency/security work. This sends
+  dependency metadata from `package-lock.json` to the configured npm registry,
+  but does not send app data, Jira content, attachments, credentials, or secrets.
+- Agents must not run `npm audit fix` automatically; dependency changes require
+  explicit review.
+- `npm audit` should not be added as a CI or merge gate for Personal v1. Revisit
+  CI gating before broader distribution.
 
 ## Personal V1 Quality And Security Bar
 

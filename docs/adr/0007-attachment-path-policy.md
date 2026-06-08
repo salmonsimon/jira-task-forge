@@ -41,6 +41,36 @@ Attachment operations should canonicalize paths and reject any path that escapes
 the app-managed storage root. Backups should include attachment files only from
 managed storage.
 
+For v1, attachment selection should be backend-owned. React may ask the backend
+to attach files for a Local Task, but it should not pass arbitrary filesystem
+paths into a copy command. The Rust/Tauri command should open the native file
+dialog, validate the selected files, copy accepted files into managed storage,
+and return attachment metadata to the UI.
+
+Drag-and-drop attachment selection is out of scope for v1. If added later, it
+must go through a new backend-owned selection flow or a deliberately designed
+short-lived file grant model before any frontend-provided path can be copied.
+
+Jira-ready attachments should use product-level size guardrails in addition to
+Jira's configured upload limit. Files over 25 MB should be allowed with a
+warning. Files over 100 MB should be blocked even when Jira would accept them.
+Files over Jira's reported uploadLimit should always be blocked. Empty files
+should be blocked. If Jira attachment settings cannot be read, the app may use
+its Jira Cloud fallback limit for the technical check, but the 25 MB warning and
+100 MB product block still apply. These guardrails protect Personal v1 from
+slow sync/backup behavior and avoid consuming too much of Jira Free plan storage,
+which is 2 GB total per app/site.
+
+Symbolic links should be rejected for Personal v1 attachment selection. The app
+should ask the user to choose the original file instead of following or
+canonicalizing symlink targets.
+
+Attachment selection should reject files inside Jira Task Forge internal app data
+directories, including `data/`, `settings/`, `credentials/`, `logs/`,
+`logs/diagnostics/`, `backups/`, and `attachments/`. The user should choose an
+external original file instead of attaching app databases, logs, backups,
+credentials, or files already under managed attachment storage.
+
 Managed attachment files should live under a folder named by attachment UUID.
 Original files use the sanitized original filename for human debugging and
 display continuity:
@@ -62,6 +92,17 @@ between multiple tasks.
 Deleting a pending, failed, or exported local task should delete its local
 attachment metadata and app-managed attachment files. Created tasks are read-only
 in v1 and should not trigger Jira attachment deletion.
+
+After a Jira-ready attachment uploads successfully to Jira, the app should delete
+the local managed attachment file to avoid permanent duplicate asset storage.
+The Local Task may keep redacted metadata and audit history such as display
+filename, size, purpose, Jira issue key, and upload result, but the managed bytes
+should not remain local after successful Jira upload. This applies to both Jira
+attachment and AI + Jira attachment purposes once the Jira upload succeeds.
+
+`AI only` attachments are not uploaded to Jira, so they keep their managed local
+file until the task lifecycle deletes them or another explicit AI attachment
+retention decision supersedes this rule.
 
 Import should continue when individual attachments are missing, corrupt, or fail
 to copy. The imported task may still be restored, while the attachment is either
@@ -95,6 +136,9 @@ available; otherwise it should use the original managed file.
 - Path traversal and accidental overwrite risks are concentrated in backend
   filesystem services.
 - Sending files to Jira or AI remains an explicit high-risk integration gate.
+- Frontend code does not become a trusted source of attachment filesystem paths.
+- Drag-and-drop is intentionally deferred until there is a dedicated provenance
+  model for it.
 
 ## HITL Decisions Still Needed
 
