@@ -406,6 +406,17 @@ Pause and ask before implementing or merging changes that:
 - add update/installer behavior
 - change branch protection, CI gates, release gates, or local Git guard behavior
 
+Current E2E/check policy:
+
+- PR-blocking checks should be fast, deterministic, and actionable.
+- Unit/integration tests, builds, formatting, and stable local smoke checks may
+  become blocking when they meet that bar.
+- Live Jira E2E against `JTFTEST` remains advisory/manual for Personal v1 because
+  it depends on credentials, network, remote Jira state, and rate limits.
+- Before release or merge of Jira-write behavior, run focused live Jira QA
+  manually or as an advisory check. Do not make it an automatic PR gate until it
+  is stable enough to fail only on product regressions.
+
 ## AFK-Safe Work
 
 These can usually run without interruption when acceptance criteria are clear:
