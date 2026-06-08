@@ -599,6 +599,9 @@ document such as `docs/jira-description-format.md`.
   from logs and debug output.
 - Settings should explain that Jira and OpenAI credentials are sent only to
   their respective providers over HTTPS/TLS.
+- Jira Site URLs should be limited to standard Atlassian Cloud sites for
+  Personal v1: `https://<site>.atlassian.net`. Custom Jira domains or arbitrary
+  HTTPS hosts require a future HITL decision before support is added.
 - Settings should explain that AI providers receive the user's AI prompt and
   relevant local/Jira context, but never the Jira API token.
 - Error surfaces should keep provider details useful while redacting request
