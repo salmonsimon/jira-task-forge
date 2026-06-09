@@ -430,6 +430,49 @@ These can usually run without interruption when acceptance criteria are clear:
 - read-only Jira payload shape exploration without credentials
 - real Jira write QA against `JTFTEST` for already accepted Jira sync flows
 
+## Current AFK Batch Plan
+
+Use visible Codex threads backed by separate Git worktrees for AFK
+implementation. Each slice should use its own `codex/...` branch, commit its
+changes, push, and open a draft PR when done. Do not use opaque in-thread
+subagents for implementation work.
+
+Batch 1 can run in parallel with low conflict risk:
+
+- `#93` Minimal Tauri Content Security Policy. Keep the scope to Tauri config
+  and any small supporting security note.
+- `#92` + `#91` Jira Cloud Site URL validation and external Jira issue-link
+  hardening. Keep these together because they share URL canonicalization and
+  host validation. Personal v1 accepts only `https://<site>.atlassian.net`;
+  custom domains require future HITL.
+- `#89` + `#90` supply-chain audit tooling and frontend coverage reporting. Keep
+  these together because they may both touch package scripts, dependencies, and
+  coverage/security docs. `npm audit` is local/manual only and `npm audit fix`
+  requires explicit review.
+- `#99` keyring/token recovery docs for Jira and AI credentials.
+- `#104` live QA evidence templates.
+
+Batch 2 should follow after the first PRs are reviewed or when more worktree
+capacity is useful:
+
+- `#95` attachment provenance/source validation as a dedicated PR. Do not run it
+  in parallel with sync/audit internals.
+- `#100` Internal Release Readiness checklist.
+- `#101` backup/restore drill with realistic local data.
+- `#105` large-tray performance smoke scenario using 200 Local Tasks.
+
+Batch 3 should avoid overlap with attachment work and should stay in separate
+PRs:
+
+- `#88` Sync Audit Log detail allowlist and redaction.
+- `#94` Remote Correlation Marker recovery for ambiguous Jira sync writes.
+
+Batch 4 is readiness polish after the relevant security/attachment slices land:
+
+- `#103` local data cleanup and storage inventory note, ideally after `#95`.
+- `#102` visible Settings privacy copy, ideally after `#88`, `#89`, and `#93` so
+  copy reflects the implemented boundaries.
+
 ## Next Slice
 
 Recommended next implementation slice:
