@@ -9,7 +9,9 @@
     "preview": "vite preview",
     "test": "TMPDIR=${TMPDIR:-/tmp} vitest run",
     "coverage:rust": "cd src-tauri && ${CARGO:-$HOME/.cargo/bin/cargo} llvm-cov --summary-only",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "coverage:frontend": "TMPDIR=${TMPDIR:-/tmp} vitest run --coverage",
+    "audit:js": "npm audit"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.17",
@@ -27,6 +29,7 @@
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.1",
+    "@vitest/coverage-v8": "^4.1.7",
     "typescript": "^5.9.3",
     "vite": "^7.2.4",
     "vitest": "^4.1.7"
