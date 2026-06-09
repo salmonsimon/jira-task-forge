@@ -4,6 +4,9 @@ This checklist covers the native/manual validation path after the PR #47
 stabilization work. It is intentionally focused on already-accepted behavior,
 not new product decisions.
 
+Use `docs/live-qa-results/live-qa-evidence-template.md` to record repeatable
+evidence for PR or internal release QA runs.
+
 ## Safety Boundary
 
 - `DTS` is read-only reference data. Agents may run JQL against `DTS`, but must
