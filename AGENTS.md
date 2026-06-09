@@ -57,6 +57,21 @@ The Matt Pocock-style skills are global workflow tools for this project:
 `to-prd`, `to-issues`, `triage`, `grill-with-docs`, `tdd`, `diagnose`,
 `improve-codebase-architecture`, and `zoom-out`.
 
+## AFK Parallel Work
+
+For parallel AFK implementation, use visible Codex threads backed by separate
+Git worktrees.
+
+- Do not use opaque in-thread subagents for implementation work that should
+  produce code, commits, branches, or PRs.
+- Each AFK slice should have its own worktree, `codex/<short-topic>` branch,
+  visible thread, commit, push, and draft PR when done.
+- Keep ownership boundaries explicit so parallel slices avoid file conflicts.
+- If a thread blocks, it must leave visible status in that thread; do not rely
+  on hidden subagent state.
+- In-thread subagents are acceptable only for short-lived read-only
+  investigation where no code changes, commits, branches, or PRs are expected.
+
 ## Manual PR Testing Guidance
 
 When Saimon needs to manually test a PR, choose the shortest safe command path:
