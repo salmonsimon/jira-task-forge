@@ -1,14 +1,15 @@
 # Coverage Report
 
-Date: 2026-05-25
+Date: 2026-06-09
 
-Scope: Rust/Tauri backend coverage plus frontend test-harness status. The React
-frontend now has a small Vitest harness for domain/workflow helpers, but it does
-not yet have percentage coverage reporting.
+Scope: Rust/Tauri backend coverage plus React/Vitest frontend coverage
+reporting. Frontend thresholds are advisory-only for Personal v1; use the
+baseline to guide useful domain/workflow coverage instead of blocking merges on
+broad UI percentages.
 
 ## Commands
 
-Install the coverage tool once in the WSL checkout:
+Install the Rust coverage tool once in the WSL checkout:
 
 ```bash
 rustup component add llvm-tools-preview
@@ -28,21 +29,42 @@ cd src-tauri
 ${CARGO:-$HOME/.cargo/bin/cargo} llvm-cov --summary-only
 ```
 
+Measure frontend coverage from the repo root:
+
+```bash
+npm run coverage:frontend
+```
+
+The frontend command uses Vitest with the V8 coverage provider. It writes HTML
+and JSON summary output under `coverage/frontend/`, which is intentionally a
+local artifact and should not be committed.
+
 ## Current Baseline
 
-Measured after the command/Jira coverage target pass:
+Measured during the frontend coverage and supply-chain tooling pass:
 
-- Rust tests: 91 passed
-- Rust line coverage: 80.23%
-- Rust region coverage: 79.72%
-- Rust function coverage: 67.52%
-- Frontend tests: 20 passed
+- Frontend tests: 93 passed across 23 files
+- Frontend statement coverage: 20.47%
+- Frontend branch coverage: 19.99%
+- Frontend function coverage: 23.63%
+- Frontend line coverage: 20.53%
+- Rust tests: 168 passed
+- Rust line coverage: 80.40%
+- Rust region coverage: 79.80%
+- Rust function coverage: 70.13%
 
-This is the baseline for the Personal v1 quality/security stabilization pass.
-The Rust/Tauri backend is back above the 80% line-coverage target. Continue
-growing tests around product-risk seams rather than chasing broad percentages,
-and grow frontend tests around domain/workflow behavior before chasing UI
-coverage percentages.
+The frontend all-files percentage is low because coverage now includes the full
+React surface, including large app-shell and feature UI files that are not yet
+covered by DOM/component tests. The more useful Personal v1 signal is the
+existing domain/workflow helper coverage: `src/lib/domain` reports 93.48% line
+coverage, with `trayWorkspace.ts` at 86.66% line coverage and focused component
+coverage starting around task relationships, attachments, categories, and tray
+grouping. Keep the first frontend threshold advisory-only until the project has
+a deliberate component/DOM strategy.
+
+This remains the Personal v1 quality/security stabilization baseline. Continue
+growing tests around product-risk behavior, local-first state transitions, and
+Jira workflow helpers before chasing broad app-shell coverage.
 
 ## Historical Baselines
 
@@ -81,34 +103,56 @@ After the first Personal v1 stabilization coverage PRs:
 - Region coverage: 77.56%
 - Function coverage: 64.93%
 
-## Current Rust Coverage By File
+After the command/Jira coverage target pass:
 
-| File | Line Coverage | Region Coverage | Function Coverage |
-| --- | ---: | ---: | ---: |
-| `src-tauri/src/backup.rs` | 84.16% | 79.91% | 85.71% |
-| `src-tauri/src/commands.rs` | 23.24% | 31.66% | 11.38% |
-| `src-tauri/src/db.rs` | 89.39% | 82.95% | 83.33% |
-| `src-tauri/src/integrations/jira.rs` | 75.06% | 79.12% | 86.05% |
-| `src-tauri/src/integrations/jira_mapping.rs` | 100.00% | 99.39% | 100.00% |
-| `src-tauri/src/integrations/openai.rs` | 65.19% | 62.14% | 71.05% |
-| `src-tauri/src/jira_sync.rs` | 86.53% | 85.25% | 85.29% |
-| `src-tauri/src/main.rs` | 0.00% | 0.00% | 0.00% |
-| `src-tauri/src/models.rs` | 100.00% | 100.00% | 100.00% |
-| `src-tauri/src/repositories.rs` | 93.75% | 90.15% | 92.23% |
-| `src-tauri/src/services.rs` | 83.28% | 80.40% | 65.75% |
-| `src-tauri/src/sync_audit.rs` | 97.73% | 99.26% | 100.00% |
-| **TOTAL** | **80.23%** | **79.72%** | **67.52%** |
+- Rust tests: 91 passed
+- Rust line coverage: 80.23%
+- Rust region coverage: 79.72%
+- Rust function coverage: 67.52%
+- Frontend tests: 20 passed
+
+## Current Rust Coverage Summary
+
+The current backend report is more granular than older single-file module
+summaries because several modules have been split into submodules. The latest
+`npm run coverage:rust` total is:
+
+| Metric | Coverage |
+| --- | ---: |
+| Regions | 79.80% |
+| Functions | 70.13% |
+| Lines | 80.40% |
+
+Strong areas include backup import/export helpers, Jira sync planning and
+attempt recording, Jira mapping, repositories, redaction, sync audit helpers,
+and many local-first service paths. Lower-coverage areas remain mostly command
+wrappers, credential/keyring paths, provider transport edges, app bootstrap, and
+large integration-facing service modules where live dependencies should stay
+behind explicit seams. Run `npm run coverage:rust` for the full current file
+table.
+
+## Current Frontend Coverage By Area
+
+| Area | Line Coverage | Notes |
+| --- | ---: | --- |
+| `src/lib/domain` | 93.48% | Strong domain/workflow helper baseline. |
+| `src/features/trays/trayWorkspace.ts` | 86.66% | Good local tray workspace behavior coverage. |
+| `src/lib/adapters/tauriContracts.ts` | 80.76% | Useful Tauri payload normalization coverage. |
+| `src/components/ui` | 33.33% | Early shared UI coverage only. |
+| `src/features/task-detail` | 8.07% | Focused component tests exist, but broad detail UI remains mostly unmeasured. |
+| `src/features/trays` | 10.60% | Domain workspace is covered; large React tray views remain mostly unmeasured. |
+| `src/App.tsx` and app-shell files | 0.00% | App composition is not covered by the current harness. |
+| **TOTAL** | **20.53%** | Advisory all-files baseline. |
 
 ## What Changed Since The Previous Report
 
-- Added focused Rust tests for Jira client request construction, early input
-  validation, response parsing, REST error formatting, retry classification,
-  and Jira issue URL validation.
-- Added frontend workflow tests for JQL recent history, JQL messages, AI draft
-  messages, backup timestamps, and backup count labels.
-- Core persistence and sync remain strong: `repositories.rs`, `jira_sync.rs`,
-  `jira_mapping.rs`, `models.rs`, and `sync_audit.rs` are still well covered.
-- Rust line coverage moved from 78.26% to 80.23%.
+- Added frontend coverage reporting through `npm run coverage:frontend` using
+  `@vitest/coverage-v8`.
+- Recorded the first all-files frontend baseline instead of only saying the
+  React test runner exists.
+- Kept frontend coverage advisory-only because broad UI coverage is still low
+  and a deliberate component/DOM strategy is not in place.
+- The frontend test suite has grown from 20 to 93 passing tests across 23 files.
 
 ## Next Coverage Targets
 
@@ -120,13 +164,23 @@ Keep backend line coverage above 80% by focusing on:
   that can be tested without real Jira network calls.
 - Additional `services.rs` coverage only where it can avoid real keyring or
   provider network dependencies.
-- Frontend domain/workflow tests around JQL recent history, backup notices,
-  Settings state, and preflight/progress view models as seams become available.
+
+Grow frontend coverage around behavior that reduces product risk:
+
+- JQL recent history, backup notices, Settings state, and preflight/progress
+  view models as more seams become available.
+- Component tests for bounded UI behavior in task detail, tray grouping,
+  categories, and settings.
+- Avoid brittle broad app-shell snapshots; test domain/workflow helpers and
+  stable component contracts first.
 
 ## Remaining Gaps
 
-- The React frontend has a test runner, but no coverage reporting and no
-  component/DOM test strategy yet.
+- Frontend coverage reporting now exists, but there is no enforced frontend
+  threshold yet.
+- `App.tsx`, app-shell composition, JQL view, Settings view, and the large Jira
+  preflight dialog remain mostly or entirely uncovered by the current frontend
+  harness.
 - `commands.rs` and `main.rs` are mostly glue/bootstrap. Do not chase high
   function coverage there unless useful seams are extracted or a Tauri
   integration smoke harness is added.
