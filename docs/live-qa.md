@@ -56,6 +56,9 @@ desktop session from the WSL environment.
 - Use the OpenAI connection test and confirm the loading state resolves
   successfully.
 - Restart the app and confirm non-secret settings persist.
+- If saved-token state is unexpectedly missing after a Windows, WSL, Tauri, or
+  worktree session change, follow the non-secret recovery steps in
+  [Credential and Keyring Recovery](keyring-recovery.md).
 
 ## Read-Only Jira QA
 
