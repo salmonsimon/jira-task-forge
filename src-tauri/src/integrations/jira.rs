@@ -392,28 +392,55 @@ fn is_mime_token_character(character: char) -> bool {
 }
 
 pub fn normalize_jira_site_url(raw_site_url: &str) -> Result<String, String> {
-    let trimmed = raw_site_url.trim();
-    if trimmed.is_empty() {
+    if raw_site_url.is_empty() {
         return Err("Jira site URL is required.".to_string());
     }
-    if !trimmed.starts_with("https://") {
+    if raw_site_url
+        .chars()
+        .any(|character| character.is_whitespace() || character.is_control())
+    {
+        return Err("Jira site URL must not include whitespace or control characters.".to_string());
+    }
+    if !raw_site_url.starts_with("https://") {
         return Err("Jira site URL must start with https://.".to_string());
     }
 
-    let rest = &trimmed["https://".len()..];
+    let rest = &raw_site_url["https://".len()..];
     let host_end = rest
         .find(|character| matches!(character, '/' | '?' | '#'))
         .unwrap_or(rest.len());
     let host = &rest[..host_end];
+    let suffix = &rest[host_end..];
 
     if host.is_empty() {
         return Err("Jira site URL must include a host.".to_string());
     }
-    if host.chars().any(char::is_whitespace) {
-        return Err("Jira site URL must not include spaces.".to_string());
+    if host.contains('@') {
+        return Err("Jira site URL must not include credentials.".to_string());
+    }
+    if host.contains(':') {
+        return Err("Jira site URL must not include a port.".to_string());
+    }
+    if !(suffix.is_empty() || suffix == "/") {
+        return Err("Jira site URL must be the Atlassian Cloud site root.".to_string());
     }
 
-    Ok(format!("https://{}", host.to_ascii_lowercase()))
+    let host = host.to_ascii_lowercase();
+    let Some(site) = host.strip_suffix(".atlassian.net") else {
+        return Err("Jira site URL must use an Atlassian Cloud host.".to_string());
+    };
+    if site.is_empty()
+        || site.contains('.')
+        || site.starts_with('-')
+        || site.ends_with('-')
+        || !site
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || character == '-')
+    {
+        return Err("Jira site URL must use a standard Atlassian Cloud site host.".to_string());
+    }
+
+    Ok(format!("https://{host}"))
 }
 
 fn parse_response<T: DeserializeOwned>(
@@ -503,16 +530,14 @@ mod tests {
     use serde_json::{json, Value};
 
     #[test]
-    fn normalizes_jira_cloud_urls_to_site_root() {
+    fn normalizes_standard_jira_cloud_site_roots() {
         assert_eq!(
-            normalize_jira_site_url(
-                "https://salmonsimondts.atlassian.net/jira/software/projects/STT/boards/1"
-            )
-            .expect("url should normalize"),
-            "https://salmonsimondts.atlassian.net"
+            normalize_jira_site_url("https://SALMON-SIMON-DTS.atlassian.net/")
+                .expect("url should normalize"),
+            "https://salmon-simon-dts.atlassian.net"
         );
         assert_eq!(
-            normalize_jira_site_url("  https://SALMONSIMONDTS.atlassian.net/  ")
+            normalize_jira_site_url("https://salmonsimondts.atlassian.net")
                 .expect("url should normalize"),
             "https://salmonsimondts.atlassian.net"
         );
@@ -521,7 +546,7 @@ mod tests {
     #[test]
     fn rejects_empty_or_hostless_jira_urls() {
         assert_eq!(
-            normalize_jira_site_url("  ").expect_err("empty url should fail"),
+            normalize_jira_site_url("").expect_err("empty url should fail"),
             "Jira site URL is required."
         );
         assert_eq!(
@@ -531,16 +556,48 @@ mod tests {
         assert_eq!(
             normalize_jira_site_url("https://bad host.atlassian.net")
                 .expect_err("spaces should fail"),
-            "Jira site URL must not include spaces."
+            "Jira site URL must not include whitespace or control characters."
         );
     }
 
     #[test]
-    fn rejects_non_https_jira_urls() {
+    fn rejects_unsupported_jira_site_url_shapes() {
         assert_eq!(
             normalize_jira_site_url("http://salmonsimondts.atlassian.net")
                 .expect_err("http should fail"),
             "Jira site URL must start with https://."
+        );
+        assert_eq!(
+            normalize_jira_site_url(" https://salmonsimondts.atlassian.net ")
+                .expect_err("surrounding whitespace should fail"),
+            "Jira site URL must not include whitespace or control characters."
+        );
+        assert_eq!(
+            normalize_jira_site_url("https://user@salmonsimondts.atlassian.net")
+                .expect_err("credentials should fail"),
+            "Jira site URL must not include credentials."
+        );
+        assert_eq!(
+            normalize_jira_site_url("https://salmonsimondts.atlassian.net:443")
+                .expect_err("ports should fail"),
+            "Jira site URL must not include a port."
+        );
+        assert_eq!(
+            normalize_jira_site_url(
+                "https://salmonsimondts.atlassian.net/jira/software/projects/STT/boards/1"
+            )
+            .expect_err("paths should fail"),
+            "Jira site URL must be the Atlassian Cloud site root."
+        );
+        assert_eq!(
+            normalize_jira_site_url("https://jira.example.com")
+                .expect_err("custom domains require HITL"),
+            "Jira site URL must use an Atlassian Cloud host."
+        );
+        assert_eq!(
+            normalize_jira_site_url("https://team.eu.atlassian.net")
+                .expect_err("multi-label hosts should fail"),
+            "Jira site URL must use a standard Atlassian Cloud site host."
         );
     }
 
