@@ -60,7 +60,7 @@ export function SettingsPanel({
   aiCredentialMessage: string | null;
   isTestingJiraConnection: boolean;
   isTestingAiProviderConnection: boolean;
-  onChange: (settings: Partial<AppSettings>) => void;
+  onChange: (settings: Partial<AppSettings>) => Promise<boolean>;
   onSaveJiraApiToken: (token: string) => Promise<boolean>;
   onDeleteJiraApiToken: () => void;
   onSaveAiProviderApiKey: (apiKey: string) => Promise<boolean>;
@@ -80,6 +80,9 @@ export function SettingsPanel({
   const aiProviderApiKeyDraftRef = useRef("");
   const [jiraApiTokenDraft, setJiraApiTokenDraft] = useState("");
   const [jiraTokenDraftTestStatus, setJiraTokenDraftTestStatus] = useState<CredentialDraftTestStatus>("idle");
+  const [jiraSiteUrlDraft, setJiraSiteUrlDraft] = useState(settings.jiraSiteUrl);
+  const [jiraSiteUrlDirty, setJiraSiteUrlDirty] = useState(false);
+  const [jiraSiteUrlStatus, setJiraSiteUrlStatus] = useState<"idle" | "saving" | "saved" | "failed">("idle");
   const [aiProviderApiKeyDraft, setAiProviderApiKeyDraft] = useState("");
   const [aiProviderKeyDraftTestStatus, setAiProviderKeyDraftTestStatus] = useState<CredentialDraftTestStatus>("idle");
   const selectedAiProvider = settings.aiProvider === "None" ? "OpenAI" : settings.aiProvider;
@@ -112,6 +115,37 @@ export function SettingsPanel({
     lockScroll: true,
     surfaceRef: panelRef
   });
+
+  useEffect(() => {
+    if (jiraSiteUrlDirty) return;
+    setJiraSiteUrlDraft(settings.jiraSiteUrl);
+  }, [jiraSiteUrlDirty, settings.jiraSiteUrl]);
+
+  function updateJiraSiteUrlDraft(value: string) {
+    setJiraSiteUrlDraft(value);
+    setJiraSiteUrlDirty(value !== settings.jiraSiteUrl);
+    setJiraSiteUrlStatus("idle");
+  }
+
+  async function saveJiraSiteUrlDraft() {
+    const nextSiteUrl = jiraSiteUrlDraft.trim();
+    if (!nextSiteUrl || nextSiteUrl === settings.jiraSiteUrl) {
+      setJiraSiteUrlDraft(settings.jiraSiteUrl);
+      setJiraSiteUrlDirty(false);
+      setJiraSiteUrlStatus("idle");
+      return;
+    }
+
+    setJiraSiteUrlStatus("saving");
+    const saved = await onChange({ jiraSiteUrl: nextSiteUrl });
+    if (saved) {
+      setJiraSiteUrlDirty(false);
+      setJiraSiteUrlStatus("saved");
+      return;
+    }
+
+    setJiraSiteUrlStatus("failed");
+  }
 
   function updateJiraApiTokenDraft(value: string) {
     jiraApiTokenDraftRef.current = value;
@@ -202,11 +236,33 @@ export function SettingsPanel({
         </DetailBlock>
 
         <DetailBlock icon={<KeyRound size={15} />} title="Jira connection">
-          <SettingsInput
-            label="Site URL"
-            value={settings.jiraSiteUrl}
-            onChange={(jiraSiteUrl) => onChange({ jiraSiteUrl })}
-          />
+          <div className="mb-3">
+            <div className="mb-1 text-xs font-medium text-[#6b778c]">Site URL</div>
+            <div className="flex gap-2">
+              <input
+                className="h-9 min-w-0 flex-1 rounded border border-[#c1c7d0] bg-white px-2 text-sm outline-none focus:border-[#4c9aff] focus:ring-2 focus:ring-[#deebff]"
+                placeholder="https://your-site.atlassian.net"
+                type="text"
+                value={jiraSiteUrlDraft}
+                onChange={(event) => updateJiraSiteUrlDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.currentTarget.blur();
+                  }
+                }}
+              />
+              <Button disabled={!jiraSiteUrlDirty || jiraSiteUrlStatus === "saving"} variant="secondary" onClick={saveJiraSiteUrlDraft}>
+                {jiraSiteUrlStatus === "saving" ? "Saving..." : "Save"}
+              </Button>
+            </div>
+            {jiraSiteUrlStatus === "failed" ? (
+              <p className="mt-1 text-xs text-[#bf2600]">Use a standard Atlassian Cloud site root, for example https://your-site.atlassian.net.</p>
+            ) : jiraSiteUrlStatus === "saved" ? (
+              <p className="mt-1 text-xs text-[#006644]">Site URL saved.</p>
+            ) : (
+              <p className="mt-1 text-xs text-[#6b778c]">Save a standard Atlassian Cloud site root. Paths, ports, credentials, and custom domains are rejected.</p>
+            )}
+          </div>
           <SettingsInput
             label="Account email"
             placeholder="name@example.com"

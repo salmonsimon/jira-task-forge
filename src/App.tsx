@@ -456,7 +456,7 @@ export default function App() {
     if (updatedTask) trayWorkspace.replaceTask(updatedTask);
   }
 
-  async function updateAppSettings(settingsPatch: Partial<AppSettings>) {
+  async function updateAppSettings(settingsPatch: Partial<AppSettings>): Promise<boolean> {
     const previousSettings = appSettings;
     const nextSettings = {
       ...appSettings,
@@ -464,13 +464,15 @@ export default function App() {
     };
 
     setAppSettings(nextSettings);
-    if (!usesTauriPersistence) return;
+    if (!usesTauriPersistence) return true;
 
     try {
       const persistedSettings = await updatePersistedAppSettings(nextSettings);
       setAppSettings(persistedSettings);
+      return true;
     } catch {
       setAppSettings(previousSettings);
+      return false;
     }
   }
 
