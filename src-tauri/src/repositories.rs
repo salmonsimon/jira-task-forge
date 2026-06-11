@@ -4,6 +4,7 @@ use uuid::Uuid;
 
 use crate::attachment_storage::validate_managed_relative_path;
 use crate::db::{utc_now_string, DbError, DbResult};
+use crate::integrations::jira::normalize_jira_site_url;
 use crate::models::{
     AppSettings, AssistedDescriptionProposal, AssistedDescriptionProposalSection,
     AssistedDescriptionProposalStatus, Category, DescriptionProposalLogEntry,
@@ -116,7 +117,9 @@ impl<'connection> SettingsRepository<'connection> {
         serde_json::from_str(&value_json).map_err(|error| DbError::InvalidData(error.to_string()))
     }
 
-    pub fn update_app_settings(&self, settings: AppSettings) -> DbResult<AppSettings> {
+    pub fn update_app_settings(&self, mut settings: AppSettings) -> DbResult<AppSettings> {
+        settings.jira_site_url =
+            normalize_jira_site_url(&settings.jira_site_url).map_err(DbError::InvalidData)?;
         let updated_at = utc_now_string()?;
         let value_json = serde_json::to_string(&settings)
             .map_err(|error| DbError::InvalidData(error.to_string()))?;
@@ -3463,6 +3466,57 @@ mod tests {
             repository.get_app_settings().expect("settings reload"),
             updated
         );
+    }
+
+    #[test]
+    fn canonicalizes_jira_site_url_when_saving_settings() {
+        let connection = open_in_memory_database().expect("database opens");
+        let repository = SettingsRepository::new(&connection);
+
+        let updated = repository
+            .update_app_settings(AppSettings {
+                theme_mode: "system".to_string(),
+                jira_site_url: "https://EXAMPLE.atlassian.net/".to_string(),
+                jira_account_email: "saimon@example.com".to_string(),
+                jira_auth_method: "api-token".to_string(),
+                jira_creation_project_key: "JTFTEST".to_string(),
+                ai_provider: "OpenAI".to_string(),
+                ai_model: "gpt-4.1-mini".to_string(),
+                default_content_language: "Spanish".to_string(),
+            })
+            .expect("settings update");
+
+        assert_eq!(updated.jira_site_url, "https://example.atlassian.net");
+        assert_eq!(
+            repository
+                .get_app_settings()
+                .expect("settings reload")
+                .jira_site_url,
+            "https://example.atlassian.net"
+        );
+    }
+
+    #[test]
+    fn rejects_invalid_jira_site_url_when_saving_settings() {
+        let connection = open_in_memory_database().expect("database opens");
+        let repository = SettingsRepository::new(&connection);
+
+        let error = repository
+            .update_app_settings(AppSettings {
+                theme_mode: "system".to_string(),
+                jira_site_url: "https://evil.example.com".to_string(),
+                jira_account_email: "saimon@example.com".to_string(),
+                jira_auth_method: "api-token".to_string(),
+                jira_creation_project_key: "JTFTEST".to_string(),
+                ai_provider: "OpenAI".to_string(),
+                ai_model: "gpt-4.1-mini".to_string(),
+                default_content_language: "Spanish".to_string(),
+            })
+            .expect_err("custom hosts should fail");
+
+        assert!(error
+            .to_string()
+            .contains("Jira site URL must use an Atlassian Cloud host."));
     }
 
     #[test]
