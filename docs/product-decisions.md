@@ -564,6 +564,14 @@ document such as `docs/jira-description-format.md`.
   the Settings UI allows saving it to the OS credential store.
 - Jira and AI provider credential controls should use the same action shape:
   `Save key`, `Remove key`, and `Test connection`.
+- Personal v1 currently keeps Jira Site URL, account email, and Jira creation
+  project key in Settings, but Site URL edits must be explicit: users can type a
+  full draft value and press `Save`; invalid values should show clear feedback
+  instead of silently normalizing or reverting while the user types.
+- A guided `Set Jira Connection` flow is the preferred future UX for Site URL,
+  account email, and Jira project key setup. That flow should validate the site,
+  verify credentials, and offer available Jira project keys before saving. API
+  token management should remain a separate Settings section. See issue #112.
 - AI provider credential controls should include a provider-specific
   `Create or manage key` link. Personal v1 routes OpenAI to
   `https://platform.openai.com/home`, Claude to
@@ -600,9 +608,14 @@ document such as `docs/jira-description-format.md`.
   from logs and debug output.
 - Settings should explain that Jira and OpenAI credentials are sent only to
   their respective providers over HTTPS/TLS.
-- Jira Site URLs should be limited to standard Atlassian Cloud sites for
-  Personal v1: `https://<site>.atlassian.net`. Custom Jira domains or arbitrary
-  HTTPS hosts require a future HITL decision before support is added.
+- Jira Site URLs should be limited to standard Atlassian Cloud site roots for
+  Personal v1: `https://<site>.atlassian.net`. Paths, query strings, fragments,
+  credentials, ports, custom Jira domains, or arbitrary HTTPS hosts are rejected.
+  Custom Jira domains require a future HITL decision before support is added.
+- External Jira issue links may open only when they match the configured
+  canonical Jira site host and use `/browse/<issue-key>`. Mismatched hosts,
+  query strings, nested paths, or incomplete issue keys should be rejected before
+  launching a browser.
 - Settings should explain that AI providers receive the user's AI prompt and
   relevant local/Jira context, but never the Jira API token.
 - Error surfaces should keep provider details useful while redacting request
