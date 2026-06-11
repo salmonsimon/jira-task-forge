@@ -568,8 +568,10 @@ document such as `docs/jira-description-format.md`.
   project key in Settings, but Site URL edits must be explicit: users can type a
   full draft value and press `Save`; invalid values should show clear feedback
   instead of silently normalizing or reverting while the user types.
-- A guided `Set Jira Connection` flow is the preferred future UX for Site URL,
-  account email, and Jira project key setup. That flow should validate the site,
+- The guided `Set Jira Connection` flow should become the only user-facing path
+  for Site URL, account email, and Jira project key setup. Do not keep parallel
+  manual fields or an advanced manual mode for those values, because that makes
+  connection state harder to reason about. The flow should validate the site,
   verify credentials, and offer available Jira project keys before saving. API
   token management should remain a separate Settings section. See issue #112.
 - AI provider credential controls should include a provider-specific

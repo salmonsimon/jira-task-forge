@@ -471,8 +471,10 @@ Batch 1 status:
 - `#93` Minimal Tauri Content Security Policy: still open and remains a good
   AFK slice. Keep the scope to Tauri config and any small supporting security
   note.
-- `#112` guided Jira Connection setup: newly captured HITL/product-design issue;
-  do not start implementation until the flow decisions are settled.
+- `#112` guided Jira Connection setup: design decision settled that `Set Jira
+  Connection` should be the only user-facing path for Site URL, account email,
+  and Jira project key setup. Do not keep parallel manual fields for those
+  values. API token management remains separate.
 
 Batch 2 should follow after the first PRs are reviewed or when more worktree
 capacity is useful:
