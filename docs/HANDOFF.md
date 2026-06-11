@@ -136,8 +136,9 @@ Still pending:
   `docs/coverage-report.md`.
 - Continue growing frontend workflow tests beyond the current domain/workflow
   helper coverage, especially around Settings and preflight flows.
-- Design the guided `Set Jira Connection` flow captured in issue #112 before
-  implementing it.
+- Implement the guided `Set Jira Connection` flow captured in issue #112 as the
+  only user-facing path for Jira Site URL, account email, and project key setup.
+  Keep API token management in its separate Settings section.
 
 ## Open Grill Area
 
