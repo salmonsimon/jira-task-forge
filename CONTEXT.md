@@ -42,6 +42,14 @@ _Avoid_: Board, Jira project key
 La key del proyecto Jira real donde se crean los issues, como DTS o JTFTEST. Es una configuracion de sync independiente de **Project**.
 _Avoid_: Project
 
+**Jira Connection**:
+La configuracion que permite a la app hablar con un sitio Jira Cloud: **Jira Site URL**, account email, **Jira Creation Project Key** y credencial guardada en el OS credential store.
+_Avoid_: API token only, Project
+
+**Jira Site URL**:
+La raiz canonica del sitio Jira Cloud usado por la app, con forma `https://<site>.atlassian.net`.
+_Avoid_: Jira issue URL, arbitrary HTTPS URL
+
 **Area**:
 La categoria funcional o disciplinaria que agrupa tareas dentro de un proyecto, como Bug, 3D, Polish o Programacion.
 _Avoid_: Type, tag
@@ -111,6 +119,8 @@ _Avoid_: content version history
 - A **Tray Draft** has one **Tray State**
 - A **Tray Draft** may be exported to or imported from JSON
 - A **Local Task** belongs to exactly one **Project**
+- **Jira Connection** supplies the Jira site, account email, credential, and
+  **Jira Creation Project Key** used by **Jira Sync**
 - **Jira Sync** creates **Jira Issues** under one configured **Jira Creation
   Project Key**
 - **Jira Sync** validates **Jira Creation Metadata** before creating any

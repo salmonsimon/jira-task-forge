@@ -95,7 +95,7 @@ High-level shape:
 
 ## Current Engineering Checkpoint
 
-As of the merged PR #47 stabilization coverage report, the app includes:
+As of the merged PR #111 Jira URL hardening checkpoint, the app includes:
 
 - Tauri + React shell with Jira-like styling.
 - SQLite-backed local trays and local tasks.
@@ -105,13 +105,17 @@ As of the merged PR #47 stabilization coverage report, the app includes:
 - Persisted non-secret settings.
 - Jira API token storage through the OS credential store.
 - Jira connection test using the configured site, account email, and saved token.
+- Strict Jira Cloud Site URL validation for Personal v1, explicit Site URL saving
+  in Settings, and hardened external Jira issue-link opening against the
+  configured Jira site host.
 - `Create in Jira` preflight, including credential/project/task validation and a configurable Jira creation project key.
 - First Jira write slice behind preflight: creation metadata validation, epic search/create by `[{Project}] {Area}`, parent Story/Bug creation, local Jira key/link persistence, remote correlation markers through Jira issue properties, sync audit events, and partial recovery via moving failed tasks to a recovery tray.
 - A reusable backend Jira client and read-only JQL query command wired to the JQL panel.
 - Persisted JQL favorites, session recent JQL history, and honest empty/error/loading states in the JQL panel.
 - OpenAI key storage, connection testing, and AI-assisted JQL draft generation through the Rust/Tauri backend.
 - Visible sync progress steps and per-task sync audit activity.
-- Stabilization coverage work for backup, OpenAI, services, and frontend domain helpers.
+- Stabilization coverage work for backup, OpenAI, services, frontend domain
+  helpers, frontend coverage reporting, and dependency audit documentation.
 - Jira QA boundary: `JTFTEST` is the writable test project. Agents may freely
   mutate `JTFTEST` for implementation and QA. `DTS` is read-only reference data
   and must not be mutated by agents.
@@ -128,10 +132,12 @@ Still pending:
   upload, and audit log UI.
 - Full native QA in an environment with the Linux system dependencies needed by Tauri/keyring.
 - Manual Jira admin CSV import fallback validation after the API create flow works.
-- Bring Rust backend line coverage back above 80%; it is currently 78.26% in
+- Keep Rust backend line coverage above 80%; it is currently 80.40% in
   `docs/coverage-report.md`.
-- Continue growing frontend workflow tests beyond the current JQL and backup
-  helper coverage.
+- Continue growing frontend workflow tests beyond the current domain/workflow
+  helper coverage, especially around Settings and preflight flows.
+- Design the guided `Set Jira Connection` flow captured in issue #112 before
+  implementing it.
 
 ## Open Grill Area
 

@@ -46,6 +46,11 @@ desktop session from the WSL environment.
 
 - Open `Settings`.
 - Set Jira site URL, account email, and Jira creation project key `JTFTEST`.
+- For Jira Site URL, confirm the field can be edited as a draft and only saves
+  after pressing `Save`. Valid standard Atlassian Cloud roots such as
+  `https://salmonsimondts.atlassian.net` should save; invalid paths, custom
+  hosts, ports, credentials, query strings, or surrounding whitespace should
+  show explicit feedback and not silently persist.
 - Save a Jira API token and confirm the saved state.
 - Delete the Jira API token and confirm the missing state.
 - Re-save the Jira API token.
@@ -156,3 +161,17 @@ Expected result: issues render in the table.
   runtime library `libnspr4.so`.
 - Jira CSV import is a manual/admin fallback; Jira Cloud does not expose a CSV
   file import endpoint equivalent to the admin UI import flow.
+
+## External Jira Issue-Link Hardening
+
+Use a tray such as `QA - Jira URL hardening links` when available. With the
+configured Jira site set to `https://salmonsimondts.atlassian.net`:
+
+- `https://salmonsimondts.atlassian.net/browse/JTFTEST-1` may open.
+- `https://evil.atlassian.net/browse/JTFTEST-1` must be rejected.
+- `https://salmonsimondts.atlassian.net/browse/JTFTEST-1?x=1` must be rejected.
+- `https://salmonsimondts.atlassian.net/jira/software` must be rejected.
+- `https://salmonsimondts.atlassian.net/browse/JTFTEST` must be rejected.
+
+The app must not mutate DTS during this QA. JTFTEST remains the only allowed
+write sandbox.

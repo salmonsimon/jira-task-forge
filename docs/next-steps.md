@@ -4,9 +4,24 @@ This document is the default execution path for the repo. It is meant to support
 
 ## Current Checkpoint
 
-Date: 2026-05-25
+Date: 2026-06-11
 
-Main is up to date at:
+Main is up to date through:
+
+```text
+#111 Harden Jira URL validation
+```
+
+Recent Personal v1 hardening merged since the older May checkpoint:
+
+- PR #107 added local/manual dependency audit commands and frontend Vitest/V8 coverage reporting.
+- PR #108 added a reusable live QA evidence template and linked it from the live QA checklist.
+- PR #109 documented the local AFK worktree-thread workflow in `AGENTS.md`.
+- PR #110 added keyring recovery documentation for Jira and AI credentials.
+- PR #111 enforced strict Jira Cloud Site URL validation, hardened external Jira issue links against the configured site host, and made Site URL editing explicit with a `Save` action.
+- Issue #112 captures the next HITL product design for a guided `Set Jira Connection` flow.
+
+Historical baseline from the first checkpoint:
 
 ```text
 d588934 Update coverage report after stabilization tests (#47)
@@ -68,13 +83,14 @@ Current validation:
   redaction, sync audit error redaction/capping, backend delete protection for
   created tasks, command/model/db helper behavior, service-layer local-first
   workflows, backup behavior, and OpenAI integration helpers.
-- Rust coverage is measured with `cargo llvm-cov --summary-only`. The current
-  Rust line coverage is 78.26%; see `docs/coverage-report.md`.
-- `npm test` passes in WSL with 20 frontend domain/workflow tests. The script pins
+- Rust coverage is measured with `npm run coverage:rust`. The current
+  Rust line coverage is 80.40%; see `docs/coverage-report.md`.
+- `npm test` passes in WSL with 93 frontend tests across 23 files. The script pins
   `TMPDIR` to `/tmp` by default so Vitest does not inherit a Windows temp path
   that is not creatable from WSL.
-- The React frontend has a test runner but no coverage reporting or component/
-  DOM test strategy yet.
+- Frontend coverage reporting exists through `npm run coverage:frontend` using
+  Vitest/V8. It is advisory-only for Personal v1; current all-files frontend
+  line coverage is 20.53%.
 - Playwright screenshots are blocked in the current WSL environment by missing Chromium runtime library `libnspr4.so`.
 - The prototype runs with `npm run dev` at:
 
@@ -124,6 +140,9 @@ Human QA to run before choosing the next implementation slice is captured in
 - Export and import a JSON backup, confirming secrets are excluded and restored
   Jira links/audit history remain useful.
 - Visit `JQL`, `Categories`, and `Settings` and confirm navigation still works.
+- Edit Jira Site URL in Settings, press `Save`, and confirm valid standard
+  Atlassian Cloud site roots persist across app restart while invalid values
+  show explicit feedback and do not silently replace the field.
 - Save non-secret Jira settings and confirm they persist across app restart.
 - Save, delete, and re-save a Jira API token through the OS credential store.
 - Save, delete, and re-save an OpenAI API key through the OS credential store.
@@ -151,8 +170,9 @@ Expected limitations right now:
 - Read-only JQL queries are wired through Jira Cloud REST API v3.
 - JQL favorites persistence, session JQL history, backup/import, sync progress,
   task sync audit activity, OpenAI settings, and Ask AI JQL drafting are wired.
-- Categories persistence, per-task assisted descriptions, attachments, audit log
-  UI, sub-task creation, and attachment upload are not fully implemented.
+- Categories persistence, per-task assisted descriptions, audit log UI, sub-task
+  creation, guided Jira Connection setup, and attachment upload are not fully
+  implemented.
 - Task detail `Details` supports editable project, area, and priority for editable non-archived tasks. Auto-generated epic and labels remain visible but muted/read-only.
 
 Near-term decided follow-ups:
@@ -167,10 +187,11 @@ Recommended next implementation:
 
 - Re-check native QA after the stabilization, backup, audit, JQL, and Ask AI
   changes.
-- Raise backend coverage above 80% by targeting `commands.rs` and
-  `integrations/jira.rs`.
+- Keep backend coverage above 80% while adding focused tests for new security
+  and sync behavior.
 - Expand frontend workflow tests around JQL recent history, backup notices,
-  Settings state, and preflight/progress view models.
+  Settings state, guided Jira Connection setup, and preflight/progress view
+  models.
 - Next write slices should stay narrow: sub-task creation first, attachment upload later.
 - If QA reveals product/UI friction, do a small frontend-only fix branch before expanding integration writes.
 
@@ -432,25 +453,26 @@ These can usually run without interruption when acceptance criteria are clear:
 
 ## Current AFK Batch Plan
 
-Use visible Codex threads backed by separate Git worktrees for AFK
-implementation. Each slice should use its own `codex/...` branch, commit its
-changes, push, and open a draft PR when done. Do not use opaque in-thread
-subagents for implementation work.
+Use visible Codex threads backed by separate WSL Git worktrees under
+`/home/saimon/Development/...` for AFK implementation. Each slice should use its
+own `codex/...` branch, commit its changes, push, and open a draft PR when
+done. Do not use opaque in-thread subagents for implementation work.
 
-Batch 1 can run in parallel with low conflict risk:
+Batch 1 status:
 
-- `#93` Minimal Tauri Content Security Policy. Keep the scope to Tauri config
-  and any small supporting security note.
 - `#92` + `#91` Jira Cloud Site URL validation and external Jira issue-link
-  hardening. Keep these together because they share URL canonicalization and
-  host validation. Personal v1 accepts only `https://<site>.atlassian.net`;
-  custom domains require future HITL.
-- `#89` + `#90` supply-chain audit tooling and frontend coverage reporting. Keep
-  these together because they may both touch package scripts, dependencies, and
-  coverage/security docs. `npm audit` is local/manual only and `npm audit fix`
+  hardening: merged in PR #111. Personal v1 accepts only
+  `https://<site>.atlassian.net`; custom domains require future HITL.
+- `#89` + `#90` supply-chain audit tooling and frontend coverage reporting:
+  merged in PR #107. `npm audit` is local/manual only and `npm audit fix`
   requires explicit review.
-- `#99` keyring/token recovery docs for Jira and AI credentials.
-- `#104` live QA evidence templates.
+- `#99` keyring/token recovery docs: merged in PR #110.
+- `#104` live QA evidence templates: merged in PR #108.
+- `#93` Minimal Tauri Content Security Policy: still open and remains a good
+  AFK slice. Keep the scope to Tauri config and any small supporting security
+  note.
+- `#112` guided Jira Connection setup: newly captured HITL/product-design issue;
+  do not start implementation until the flow decisions are settled.
 
 Batch 2 should follow after the first PRs are reviewed or when more worktree
 capacity is useful:
