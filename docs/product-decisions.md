@@ -213,11 +213,13 @@ This document captures the product scope decisions from the grill session. UI co
   - create accepted sub-tasks after parent issues
   - upload selected attachments
   - record audit events
-- First Jira write slice should include only metadata preflight, epic
-  search/create, parent Story/Bug creation, local Jira link persistence, remote
-  correlation markers, audit events, and partial recovery.
-- Sub-task creation and attachment upload are part of later slices, even though
-  they remain in the full `Create in Jira` product scope.
+- First Jira write slice included metadata preflight, epic search/create, parent
+  Story/Bug creation, local Jira link persistence, remote correlation markers,
+  audit events, and partial recovery.
+- Later slices have added accepted sub-task creation and selected Jira-ready
+  attachment upload to the `Create in Jira` path. Broader relationship sync,
+  attachment cleanup/compression hardening, and additional partial-failure polish
+  remain separate scopes.
 - If there are no warnings, sync starts directly.
 - If warnings exist, show a preflight panel.
 - Blocking warnings:
@@ -443,10 +445,10 @@ Then include:
 The AI should avoid inventing missing details and should leave uncertainty in
 the generated description when the source context is incomplete.
 
-Personal v1 should refine the current "Crear descripciones de JIRA" chat format
-into a fixed internal template before implementing AI description generation.
-The fixed format and prompt rules should be captured in a dedicated roadmap
-document such as `docs/jira-description-format.md`.
+Personal v1 refines the earlier "Crear descripciones de JIRA" chat format into
+a fixed internal template for AI description generation. Keep the implemented
+prompt shape and required sections aligned with the dedicated
+`docs/assisted-description-context.md` context.
 - The Personal v1 clarification UX should be structured rather than chat-like:
   AI shows the targeted questions it needs answered, Saimon responds in a single
   textarea, and then the app generates an editable Jira description.
@@ -692,14 +694,11 @@ document such as `docs/jira-description-format.md`.
 ## Personal V1 Feature Order After Stabilization
 
 - After the quality and security stabilization pass, Personal v1 feature work
-  should continue in this order:
-  - Sub-task creation in Jira.
-  - Attachment metadata and filesystem policy polish where needed.
-  - Attachment upload to Jira.
-  - AI-assisted Jira descriptions and hardcoded 3D sub-task suggestions.
-- Sub-task creation should come before attachment upload because it is closer to
-  the current Jira creation flow, has less filesystem/security uncertainty, and
-  completes the core Jira issue hierarchy sooner.
+  has advanced through sub-task creation, attachment metadata/filesystem policy,
+  attachment upload to Jira, AI-assisted Jira descriptions, and JQL generation.
+  Remaining Personal v1 feature work should stay focused on hardcoded 3D
+  sub-task suggestions, Jira issue relationship sync, and QA hardening for the
+  new Jira child-operation and AI proposal-review paths.
 
 ## Personal V1 Definition Of Done
 

@@ -152,7 +152,10 @@ Human QA to run before choosing the next implementation slice is captured in
 - Save, rename, delete, and reuse a JQL favorite.
 - Use Ask AI in the JQL tab and confirm it drafts a query without running it automatically.
 - Open `Create in Jira` preflight and confirm missing credentials, missing creation project, and missing task fields produce blocking warnings.
-- Against `JTFTEST`, confirm preflight can create missing epics, create parent Story/Bug issues, persist Jira keys locally, and move failed tasks to a recovery tray without duplicating them.
+- Against `JTFTEST`, confirm preflight can create missing epics, create parent
+  Story/Bug issues, create accepted sub-tasks, upload selected Jira-ready
+  attachments, persist Jira keys locally, and move failed tasks to a recovery
+  tray without duplicating them.
 - Re-check that Settings token actions, Settings connection test, direct JQL,
   and Create in Jira show loading before blocking work and remain responsive
   enough after the command worker split.
@@ -162,7 +165,9 @@ Human QA to run before choosing the next implementation slice is captured in
 
 Expected limitations right now:
 
-- `Create in Jira` creates required epics and parent Story/Bug issues only. Sub-tasks and attachments are intentionally still out of scope.
+- `Create in Jira` creates required epics, parent Story/Bug issues, accepted
+  sub-tasks, and selected Jira-ready attachments. Live QA should continue to
+  cover partial failure and retry behavior for these child operations.
 - `Export CSV` is wired and opens a native save dialog.
 - SQLite persistence exists for trays, local tasks, and non-secret app settings.
 - Jira API token storage exists through the OS credential store.
@@ -170,9 +175,11 @@ Expected limitations right now:
 - Read-only JQL queries are wired through Jira Cloud REST API v3.
 - JQL favorites persistence, session JQL history, backup/import, sync progress,
   task sync audit activity, OpenAI settings, and Ask AI JQL drafting are wired.
-- Categories persistence, per-task assisted descriptions, audit log UI, sub-task
-  creation, guided Jira Connection setup, and attachment upload are not fully
-  implemented.
+- Categories persistence, audit log UI, guided Jira Connection setup, and broader
+  Jira issue relationship sync are not fully implemented. Per-task assisted
+  description structure/proposal logs, local sub-task editing, managed
+  attachment ingestion, and Jira attachment upload have landed and still need
+  regular native/live QA coverage.
 - Task detail `Details` supports editable project, area, and priority for editable non-archived tasks. Auto-generated epic and labels remain visible but muted/read-only.
 
 Near-term decided follow-ups:
@@ -192,7 +199,9 @@ Recommended next implementation:
 - Expand frontend workflow tests around JQL recent history, backup notices,
   Settings state, guided Jira Connection setup, and preflight/progress view
   models.
-- Next write slices should stay narrow: sub-task creation first, attachment upload later.
+- Next write slices should stay narrow around remaining Jira mutation surfaces,
+  especially Jira issue relationship sync and any attachment cleanup/compression
+  hardening that changes filesystem behavior.
 - If QA reveals product/UI friction, do a small frontend-only fix branch before expanding integration writes.
 
 ## Working Model
@@ -355,18 +364,21 @@ HITL:
 
 ### 7. AI Integration Track
 
-Branch: `feature/ai-assisted-descriptions`
+Branch: follow-up `codex/...` slices as needed
 
 Owns:
 
 - `src-tauri/src/integrations/ai/`
 - internal prompt templates
-- Tauri commands for description generation, missing-info review, sub-task suggestions, and JQL generation
+- Tauri commands for description generation, missing-info review, sub-task
+  suggestions, and JQL generation
 
 Goal:
 
-- Add explicit user-triggered AI actions only.
+- Maintain explicit user-triggered AI actions only.
 - Keep prompts named and internal so they can become configurable later.
+- Continue QA and targeted polish for implemented JQL drafting and Assisted
+  Description generation/proposal review before adding broader AI planning.
 
 HITL:
 
@@ -401,10 +413,11 @@ HITL:
 3. Re-check native QA for settings, credential storage, connection test, JQL
    query, preflight, and Jira creation after the worker split.
 4. Test that Jira's admin CSV importer still works from exported files.
-5. Add sub-task creation as the next narrow Jira write slice.
-6. Add backup/import and attachment filesystem behavior as later slices under the accepted ADR contracts.
+5. Re-check sub-task creation and attachment upload in live QA against `JTFTEST`.
+6. Continue backup/import and attachment filesystem hardening under the accepted ADR contracts.
 7. Add categories/JQL favorites persistence if needed to support Jira read-only workflows.
-8. Add AI-assisted descriptions and JQL generation after settings/secrets are settled.
+8. Continue QA and polish for implemented AI-assisted descriptions and JQL
+   generation; add hardcoded 3D sub-task suggestions as a separate follow-up.
 
 ## HITL Gates
 
@@ -580,8 +593,8 @@ Goals:
 - Preserve the accepted ADR 0005 safety model while improving locality around
   Jira payload generation, post-create updates, audit events, and recovery
   outcomes.
-- Decide where the next useful test seams live before adding sub-task creation,
-  attachment upload, or AI provider calls.
+- Decide where the next useful test seams live before adding relationship sync,
+  attachment cleanup/compression hardening, or additional AI provider calls.
 - Add a real frontend test approach if the architecture pass finds UI behavior
   that should stop relying on manual QA only.
 - Include a focused security review of the surfaces that now matter most:
@@ -617,8 +630,8 @@ Initial deepening opportunities from the first pass:
    **Epic Mapping**, parent issue payloads, and post-create repair.
 
    Benefits: better Locality for Jira payload and metadata bugs, more Leverage
-   from small tests around accepted sync rules, and less risk before adding
-   sub-task creation.
+   from small tests around accepted sync rules, and less risk when maintaining
+   child-issue creation, attachment upload, and future Jira relationship sync.
 
 2. **Sync Audit Log detail Module**
 
