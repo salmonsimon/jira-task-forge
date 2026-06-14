@@ -51,6 +51,13 @@ npm run tauri dev
 npm run build
 ```
 
+## Internal Release Readiness
+
+Before using a new batch of PRs for daily internal work, run the concise
+readiness gate in [`docs/internal-release-readiness.md`](docs/internal-release-readiness.md).
+Use [`docs/live-qa.md`](docs/live-qa.md) for the longer native and live Jira QA
+procedure.
+
 ## Local Git Guard
 
 This repo uses a local Git hook to block direct pushes to `main` from this workspace.
