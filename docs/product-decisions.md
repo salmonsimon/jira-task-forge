@@ -290,6 +290,12 @@ This document captures the product scope decisions from the grill session. UI co
   traceability, not as the source of retry identity.
 - If the app cannot write or later confirm the remote marker, it should use the
   manual recovery flow instead of auto-creating a possible duplicate.
+- If local state is ambiguous after a crash, timeout, or partial failure, retry
+  should search for the remote marker before creating again. If that search
+  fails, the app should retry the search once with a short backoff. If the marker
+  still cannot be confirmed, block creation only for the affected task or
+  `Project + Area` group, continue healthy groups, and record sanitized audit
+  history. Do not allow blind retry that could duplicate Jira issues.
 
 ## Jira Cloud Test Boundary
 
@@ -364,13 +370,14 @@ This document captures the product scope decisions from the grill session. UI co
 - Assisted descriptions should render as Markdown when being read, while still
   allowing direct manual editing of the full description even when the task has
   no description yet.
-- AI proposal review should use the fixed Jira description sections rather than
-  asking which sections to complete. For Jira Task Forge, all required sections
-  are always in scope for a proposal.
-- The structured description model should keep every required SRS Lite section,
-  even when a section has empty content. The read view should hide empty
-  sections by default, while the edit/review view should expose them so Saimon
-  can fill them or intentionally clear a section back to empty.
+- AI proposal review should use the fixed Jira DTS description sections rather
+  than asking which sections to complete. For Jira Task Forge, all required
+  sections are always in scope for a proposal.
+- The structured description model should keep every required Jira DTS
+  description section, even when a section has empty content. The read view
+  should hide empty sections by default, while the edit/review view should
+  expose them so Saimon can fill them or intentionally clear a section back to
+  empty.
 - Description sections use the brainstorming-style `Raw` vs `Polished`
   distinction. Empty sections and unreviewed sections stay `Raw`. A section
   should become `Polished` only after accepting/editing meaningful content or
@@ -404,16 +411,18 @@ This document captures the product scope decisions from the grill session. UI co
   history but are not included in the Jira description.
 - Missing-description and missing-field review remains part of the existing
   preflight flow rather than a separate AI review feature in Personal v1.
-- Story descriptions use:
+- Story descriptions use the Jira DTS format:
   - a short user story intro
-  - then full SRS Lite sections
+  - context
+  - scope with `Includes` / `Does not include`
+  - acceptance criteria
 - Story description content should default to Spanish.
 - If the task/source content is clearly in another language, the app may suggest or use that language.
 - UI text remains English.
 - AI conversation and generated Jira content use the selected content language.
 - Default content language is configured globally in Settings, with per-task override in the advanced panel.
 
-## SRS Lite Story Format
+## Jira DTS Description Format
 
 Stories should begin with:
 
@@ -428,26 +437,33 @@ para [beneficio o resultado].
 Then include:
 
 ```markdown
-## SRS Lite
+## Contexto
 
-### 1. Problema
-### 2. Objetivo
-### 3. Alcance
-### 4. Fuera de alcance
-### 5. Flujos principales
-### 6. Requisitos funcionales
-### 7. Requisitos no funcionales relevantes
-### 8. Restricciones y dependencias
-### 9. Criterios de aceptacion de alto nivel
-### 10. Riesgos y preguntas abiertas
+## Alcance
+
+Incluye:
+
+- ...
+
+No incluye:
+
+- ...
+
+## Criterios de aceptacion
+
+- ...
 ```
 
-The AI should avoid inventing missing details and should leave uncertainty in
-the generated description when the source context is incomplete.
+Do not include mandatory `SRS Lite`, `SRE Lite`, validation, risk, rollback,
+observability, or open-question sections in the final Personal v1 Jira
+description. If information is missing and materially changes the scope or
+acceptance criteria, the app should ask targeted clarification questions before
+drafting instead of leaving a generic uncertainty section in the Jira
+description.
 
-Personal v1 refines the earlier "Crear descripciones de JIRA" chat format into
-a fixed internal template for AI description generation. Keep the implemented
-prompt shape and required sections aligned with the dedicated
+Personal v1 refines the current "Crear descripciones de JIRA" chat format into
+the fixed internal template captured in `docs/jira-description-format.md`. Keep
+the implemented prompt shape and required sections aligned with the dedicated
 `docs/assisted-description-context.md` context.
 - The Personal v1 clarification UX should be structured rather than chat-like:
   AI shows the targeted questions it needs answered, Saimon responds in a single
@@ -473,7 +489,10 @@ prompt shape and required sections aligned with the dedicated
   native file dialog, validates selected files, copies accepted files into
   managed storage, and returns metadata to React.
 - React should not pass arbitrary filesystem paths to a backend copy command.
-- Drag-and-drop attachment selection is out of scope for Personal v1.
+- Drag-and-drop attachment selection is out of scope for Personal v1 and is not
+  a priority afterward. If it is ever added, it should require a new
+  provenance/consent decision rather than reusing arbitrary frontend-provided
+  paths.
 - Jira-ready attachments larger than 25 MB should show a warning before sync.
 - Jira-ready attachments larger than 100 MB should be blocked, even if Jira's
   configured upload limit is higher.
@@ -489,13 +508,18 @@ prompt shape and required sections aligned with the dedicated
 - Images marked as Jira attachments are uploaded during Jira sync.
 - Images marked AI-only are used for context but are not uploaded.
 - After a Jira-ready attachment uploads successfully to Jira, the app should
-  delete the local managed attachment file and keep only metadata/audit history.
+  delete the local managed attachment file and keep only minimal metadata/audit
+  history: display filename, type, size, purpose, upload status, timestamp, and
+  Jira issue key or link when available.
 - `AI + Jira attachment` files should also be deleted locally after successful
   Jira upload; Jira becomes the durable copy for that asset.
 - `AI only` files are not uploaded to Jira during sync, but they should be
   deleted locally when the Local Task becomes `Created`; Jira Task Forge should
-  keep only metadata/audit history after the task is loaded to Jira.
-- Backups include images and attachment metadata.
+  keep only minimal metadata/audit history after the task is loaded to Jira.
+- Backups include attachment bytes only while those bytes still exist in managed
+  local storage. After successful Jira upload or automatic `AI only` cleanup on
+  task creation, backups should include only the remaining metadata/audit
+  history and must not retain hidden post-upload copies.
 - Personal v1 attachment support should prioritize uploading files/images to
   Jira from local tasks.
 - The app should attempt to store compressed copies of image attachments when it
@@ -515,9 +539,20 @@ prompt shape and required sections aligned with the dedicated
 - Preflight should clearly state how many sub-tasks will be created and allow
   Saimon to deselect the ones he does not want.
 - Accepted sub-tasks are created after their parent story/bug.
-- Sub-tasks do not use SRS Lite.
+- Sub-tasks do not use the Jira DTS description format.
 - Personal v1 does not require generated descriptions for sub-tasks.
-- V1 uses hardcoded sub-task templates only where useful, such as known 3D/modeling work.
+- V1 uses hardcoded sub-task templates only where useful, such as known
+  3D/modeling work. The initial 3D template titles are:
+  - `Recolectar referencias`
+  - `Bloquear forma/escala base`
+  - `Modelar asset principal`
+  - `Aplicar materiales/texturas base`
+  - `Integrar en escena`
+  - `Validar escala, lectura y colisiones en contexto`
+- Initial 3D sub-task proposals should appear for `3D`, `Modelos 3D`,
+  `Texturas`, and equivalent 3D/modeling categories. They are selected by
+  default, and Saimon can deselect, edit titles, or delete proposals before
+  Jira sync.
 - No sub-task template editor is needed in v1.
 
 ## JQL
@@ -566,16 +601,20 @@ prompt shape and required sections aligned with the dedicated
   the Settings UI allows saving it to the OS credential store.
 - Jira and AI provider credential controls should use the same action shape:
   `Save key`, `Remove key`, and `Test connection`.
-- Personal v1 currently keeps Jira Site URL, account email, and Jira creation
-  project key in Settings, but Site URL edits must be explicit: users can type a
-  full draft value and press `Save`; invalid values should show clear feedback
-  instead of silently normalizing or reverting while the user types.
 - The guided `Set Jira Connection` flow should become the only user-facing path
   for Site URL, account email, and Jira project key setup. Do not keep parallel
   manual fields or an advanced manual mode for those values, because that makes
-  connection state harder to reason about. The flow should validate the site,
-  verify credentials, and offer available Jira project keys before saving. API
-  token management should remain a separate Settings section. See issue #112.
+  connection state harder to reason about. Settings should show the saved Site
+  URL, account email, and Jira creation project key as read-only connection
+  state with a `Set Jira Connection` or `Change Jira Connection` action. The
+  flow should validate the site, verify credentials, and offer available Jira
+  project keys before saving. If project key discovery fails, the wizard may
+  allow a manual project key with a clear warning. The connection should be
+  saved only at the end of the wizard, after validation succeeds or the user
+  accepts the warned manual fallback. URL normalization or rejection should be
+  shown as explicit feedback in the wizard rather than silently changing fields
+  while the user types. API token management should remain a separate Settings
+  section. See issue #112.
 - AI provider credential controls should include a provider-specific
   `Create or manage key` link. Personal v1 routes OpenAI to
   `https://platform.openai.com/home`, Claude to
@@ -715,9 +754,11 @@ prompt shape and required sections aligned with the dedicated
   Jira description assistance. Hardcoded 3D sub-task suggestions are part of the
   v1 workflow, but broad AI-generated sub-task planning is not required.
   Silent background AI calls are out of scope.
-- Personal v1 is acceptable when the app can upload tasks with Jira descriptions
-  filled using the fixed internal description format and live QA has covered the
-  full creation flow.
+- Personal v1 is acceptable for daily work only after the automated baseline
+  passes and full live QA in `JTFTEST` covers the Jira create flow, sub-tasks,
+  attachments, backup/restore, and Settings behavior. A native smoke test alone
+  is not enough to declare Personal v1 ready, and real controlled use is a
+  follow-up confidence step rather than the readiness gate.
 - Personal v1 final QA should run full write coverage only against `JTFTEST`.
   Read-only QA against `DTS` is allowed for JQL, epic discovery, metadata
   assumptions, priorities, issue types, and real-work examples. `DTS` must not

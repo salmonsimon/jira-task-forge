@@ -66,11 +66,15 @@ must not be added to summaries, descriptions, or labels. A generic
 source of idempotency.
 If the current Jira account cannot use a remote correlation marker, Jira writes
 must remain behind an explicit HITL review with a documented fallback warning.
-If local state is ambiguous after a crash, timeout, or partial failure and the
-app cannot prove continuity with a remote correlation marker, retry must pause
-that local task for manual recovery instead of creating another Jira issue. The
-manual recovery path should let the user link the local task to an existing Jira
-issue or explicitly confirm a duplicate-risk create.
+If local state is ambiguous after a crash, timeout, or partial failure, retry
+must search for the remote correlation marker before creating another Jira
+issue. If the marker search fails, the app should retry that search once with a
+short backoff. If the marker still cannot be confirmed, retry must pause the
+affected local task or `Project + Area` group for manual recovery instead of
+creating another Jira issue. Healthy groups may continue. The manual recovery
+path should let the user link the local task to an existing Jira issue or
+explicitly confirm a duplicate-risk create. The audit log should record a
+sanitized marker-recovery failure without storing raw Jira response payloads.
 
 For v1, prefer single-issue creates with backend-managed local batching instead
 of Jira bulk create. This keeps audit, retry, and partial-success behavior
@@ -143,6 +147,10 @@ a new Jira issue.
 - 2026-05-23: Ambiguous Jira writes should recover manually. If the app cannot
   confirm whether a local task already became a Jira issue, it must pause that
   task instead of auto-creating a possible duplicate.
+- 2026-06-14: Remote marker recovery should retry marker search once with a
+  short backoff after an ambiguous sync failure. If marker confirmation still
+  fails, block only the affected task or `Project + Area` group, continue healthy
+  groups, and record sanitized audit history. Do not allow blind retry.
 - 2026-05-23: Epics are required for normal Jira sync. For every `Project +
   Area` represented in the tray, the app should search Jira for `[{Project}]
   {Area}` and create the missing epic before creating linked stories, bugs, or

@@ -18,8 +18,8 @@ Recent Personal v1 hardening merged since the older May checkpoint:
 - PR #108 added a reusable live QA evidence template and linked it from the live QA checklist.
 - PR #109 documented the local AFK worktree-thread workflow in `AGENTS.md`.
 - PR #110 added keyring recovery documentation for Jira and AI credentials.
-- PR #111 enforced strict Jira Cloud Site URL validation, hardened external Jira issue links against the configured site host, and made Site URL editing explicit with a `Save` action.
-- Issue #112 captures the next HITL product design for a guided `Set Jira Connection` flow.
+- PR #111 enforced strict Jira Cloud Site URL validation, hardened external Jira issue links against the configured site host, and made Site URL editing explicit with a `Save` action. The later HITL decision for #112 supersedes direct Settings edits with a guided connection flow.
+- Issue #112 captures the next guided `Set Jira Connection` implementation slice.
 
 Historical baseline from the first checkpoint:
 
@@ -141,10 +141,13 @@ internal daily-use readiness gate after a batch of PRs lands. Summary:
 - Export and import a JSON backup, confirming secrets are excluded and restored
   Jira links/audit history remain useful.
 - Visit `JQL`, `Categories`, and `Settings` and confirm navigation still works.
-- Edit Jira Site URL in Settings, press `Save`, and confirm valid standard
-  Atlassian Cloud site roots persist across app restart while invalid values
-  show explicit feedback and do not silently replace the field.
-- Save non-secret Jira settings and confirm they persist across app restart.
+- Confirm Settings shows Jira Site URL, account email, and Jira creation project
+  key as read-only connection state.
+- Use `Set Jira Connection` or `Change Jira Connection` to set a standard
+  Atlassian Cloud site root, account email, and `JTFTEST` project key; confirm
+  invalid URL shapes show explicit feedback and do not silently persist.
+- Save non-secret Jira connection state and confirm it persists across app
+  restart.
 - Save, delete, and re-save a Jira API token through the OS credential store.
 - Save, delete, and re-save an OpenAI API key through the OS credential store.
 - Test Jira connection from Settings after entering a real Jira site, email, and token.
@@ -461,7 +464,14 @@ These can usually run without interruption when acceptance criteria are clear:
 - non-destructive read-only domain helpers
 - mock adapters and fixtures
 - docs cleanup that does not change decisions
+- docs refresh that reconciles stale text with accepted decisions on `main`
+- initial Internal Release Readiness checklist
+- backup/restore drill using realistic local data
+- large-tray smoke scenario using 200 Local Tasks
+- factual Settings privacy copy that does not change privacy/security policy
+- minimal CSP while it does not open new frontend network access
 - tests for already accepted rules
+- tests and coverage around existing behavior
 - read-only Jira payload shape exploration without credentials
 - real Jira write QA against `JTFTEST` for already accepted Jira sync flows
 
@@ -488,7 +498,10 @@ Batch 1 status:
 - `#112` guided Jira Connection setup: design decision settled that `Set Jira
   Connection` should be the only user-facing path for Site URL, account email,
   and Jira project key setup. Do not keep parallel manual fields for those
-  values. API token management remains separate.
+  values. Settings should show those values as read-only connection state, the
+  wizard should save only at the end, and manual project-key fallback is allowed
+  only when discovery fails with a clear warning. API token management remains
+  separate.
 
 Batch 2 should follow after the first PRs are reviewed or when more worktree
 capacity is useful:
@@ -503,7 +516,9 @@ Batch 3 should avoid overlap with attachment work and should stay in separate
 PRs:
 
 - `#88` Sync Audit Log detail allowlist and redaction.
-- `#94` Remote Correlation Marker recovery for ambiguous Jira sync writes.
+- `#94` Remote Correlation Marker recovery for ambiguous Jira sync writes:
+  retry marker search once with a short backoff, then block only the affected
+  task or `Project + Area` group while healthy groups continue.
 
 Batch 4 is readiness polish after the relevant security/attachment slices land:
 
@@ -536,10 +551,11 @@ Deliverables:
 - Implement persistent Assisted Description proposal metadata and chronological
   proposal logs with backup/import support.
 - Build the brainstorming-style proposal review UX for Jira descriptions:
-  Markdown read view, fixed SRS Lite sections, hidden empty sections in read
-  mode, editable empty sections, `Raw`/`Polished` section states, paragraph
-  diffs that hide unchanged paragraphs, global and per-section request-changes,
-  and compact proposal-log cards.
+  Markdown read view, fixed Jira DTS sections from
+  `docs/jira-description-format.md`, hidden empty sections in read mode,
+  editable empty sections, `Raw`/`Polished` section states, paragraph diffs that
+  hide unchanged paragraphs, global and per-section request-changes, and compact
+  proposal-log cards.
 
 Reason:
 

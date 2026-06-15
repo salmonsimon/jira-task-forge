@@ -49,12 +49,18 @@ desktop session from the WSL environment.
 ## Settings And Credentials
 
 - Open `Settings`.
-- Set Jira site URL, account email, and Jira creation project key `JTFTEST`.
-- For Jira Site URL, confirm the field can be edited as a draft and only saves
-  after pressing `Save`. Valid standard Atlassian Cloud roots such as
-  `https://salmonsimondts.atlassian.net` should save; invalid paths, custom
-  hosts, ports, credentials, query strings, or surrounding whitespace should
-  show explicit feedback and not silently persist.
+- Confirm Jira site URL, account email, and Jira creation project key are shown
+  as read-only connection state.
+- Open `Set Jira Connection` or `Change Jira Connection`.
+- Set Jira site URL, account email, and Jira creation project key `JTFTEST`
+  through the guided flow.
+- Confirm valid standard Atlassian Cloud roots such as
+  `https://salmonsimondts.atlassian.net` are accepted, while invalid paths,
+  custom hosts, ports, credentials, query strings, or surrounding whitespace
+  show explicit feedback and do not silently persist.
+- If project key discovery is unavailable, confirm the guided flow allows a
+  warned manual `JTFTEST` project key fallback and saves only after the final
+  confirmation.
 - Save a Jira API token and confirm the saved state.
 - Delete the Jira API token and confirm the missing state.
 - Re-save the Jira API token.
@@ -65,7 +71,8 @@ desktop session from the WSL environment.
 - For each provider being smoke tested, save an API key and confirm the saved
   state, delete it and confirm the missing state, re-save it, and use the
   provider connection test when available.
-- Restart the app and confirm non-secret settings persist.
+- Restart the app and confirm non-secret connection state and AI provider
+  settings persist.
 - If saved-token state is unexpectedly missing after a Windows, WSL, Tauri, or
   worktree session change, follow the non-secret recovery steps in
   [Credential and Keyring Recovery](keyring-recovery.md).
