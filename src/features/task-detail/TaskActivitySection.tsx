@@ -10,7 +10,7 @@ export function TaskActivitySection({ task }: { task: LocalTask }) {
             <div className="rounded bg-[#22252a] p-2 text-xs" key={entry.id}>
               <div className="font-semibold text-[#f4f5f7]">{entry.timestamp}</div>
               <div>{entry.event}</div>
-              <div className="text-[#aeb3bd]">{entry.detail}</div>
+              <div className="line-clamp-3 text-[#aeb3bd]" title={entry.detail}>{entry.detail}</div>
             </div>
           ))}
         </div>
