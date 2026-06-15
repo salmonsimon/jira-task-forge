@@ -146,13 +146,21 @@ function formatSmokeDescription(project: string, template: TaskTemplate, taskNum
     `quiero preparar la tarea ${taskNumber} con contexto suficiente,`,
     "para revisar la bandeja antes de crear issues en Jira.",
     "",
-    "## SRS Lite",
+    "## Contexto",
     "",
-    "### 1. Problema",
     template.descriptionSeed,
     "",
-    "### 2. Objetivo",
-    "Mantener una descripcion realista que permita probar busqueda, detalle y preflight sin escribir en Jira."
+    "## Alcance",
+    "",
+    "Incluye:",
+    "- Mantener una descripcion realista que permita probar busqueda, detalle y preflight sin escribir en Jira.",
+    "",
+    "No incluye:",
+    "- Crear issues reales durante el smoke.",
+    "",
+    "## Criterios de aceptacion",
+    "",
+    "- La tarea conserva contexto suficiente para revisar la bandeja."
   ].join("\n");
 }
 

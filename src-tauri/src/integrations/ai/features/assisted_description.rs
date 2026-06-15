@@ -11,12 +11,7 @@ const ASSISTED_DESCRIPTION_REQUIRED_HEADINGS: &[&str] = &[
     "## Historia de usuario",
     "## Contexto",
     "## Alcance",
-    "## Criterios de aceptación",
-    "## SRE Lite",
-    "### Impacto esperado",
-    "### Riesgos",
-    "### Observabilidad / señales",
-    "### Rollback / mitigación",
+    "## Criterios de aceptacion",
 ];
 const ASSISTED_DESCRIPTION_TEMPLATE: &str = r#"## Historia de usuario
 
@@ -36,24 +31,10 @@ Incluye:
 No incluye:
 - ...
 
-## Criterios de aceptación
+## Criterios de aceptacion
 
 - ...
-
-## SRE Lite
-
-### Impacto esperado
-...
-
-### Riesgos
-- ...
-
-### Observabilidad / señales
-QA/Arte/Programacion/etc. debe validar:
-- ...
-
-### Rollback / mitigación
-..."#;
+"#;
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum AssistedDescriptionRequest {
@@ -131,11 +112,12 @@ fn task_description_generation_instructions() -> &'static str {
 Generated Jira task descriptions may be Spanish when the task language is Spanish. UI copy is not part of the response. \
 Use the exact Markdown section headings from the requested template. \
 Use the base context as user and project preference context, especially stack defaults. \
-Do not invent product behavior, implementation scope, acceptance criteria, risk, observability, or rollback detail. \
+Do not invent product behavior, implementation scope, or acceptance criteria. \
+Do not add validation, risk, rollback, observability, or open-question sections. \
 Prefer drafting over asking for clarification when the title, area, and user context describe a concrete problem or desired outcome. \
 Do not ask about known defaults from the base context, such as the engine or primary stack. \
 If the title and context are too thin to fill any useful section, return status needs_clarification with up to three concise questions in the task language and description null. \
-If only one section is uncertain, draft the useful sections and put a short explicit uncertainty note in that section instead of making facts up. \
+If missing information would materially change scope or acceptance criteria, return status needs_clarification with targeted questions instead of inventing Jira content. \
 Keep the description compact and Jira-ready. Do not include markdown fences."
 }
 
@@ -252,14 +234,14 @@ fn clarification_questions_for_language(language: &str) -> Vec<String> {
             "Who is affected, and what are they trying to accomplish?".to_string(),
             "What should change, including the most important in-scope and out-of-scope details?"
                 .to_string(),
-            "How should QA, art, programming, or another owner validate success?".to_string(),
+            "Which acceptance criteria would prove the change is complete?".to_string(),
         ];
     }
 
     vec![
         "Que usuario o persona se ve afectado, y que necesita lograr?".to_string(),
         "Que debe cambiar, incluyendo lo mas importante dentro y fuera de alcance?".to_string(),
-        "Como debe validar el exito QA, Arte, Programacion u otro responsable?".to_string(),
+        "Que criterios de aceptacion probarian que el cambio esta completo?".to_string(),
     ]
 }
 
@@ -348,11 +330,7 @@ mod tests {
                 "## Historia de usuario\n\nComo usuario,\nquiero algo,\npara lograr valor.\n\n\
 ## Contexto\n\nContexto claro.\n\n\
 ## Alcance\n\nIncluye:\n- A\n\nNo incluye:\n- B\n\n\
-## Criterios de aceptación\n\n- Criterio\n\n\
-## SRE Lite\n\n### Impacto esperado\nBajo\n\n\
-### Riesgos\n- Riesgo\n\n\
-### Observabilidad / señales\nQA/Arte/Programacion/etc. debe validar:\n- Senal\n\n\
-### Rollback / mitigación\nMitigar."
+## Criterios de aceptacion\n\n- Criterio"
                     .to_string(),
             ),
             clarification_questions: vec!["  ".to_string(), "extra".to_string()],

@@ -15,6 +15,7 @@ import {
   getAssistedDescriptionSectionLabel,
   hasAcceptedAssistedDescriptionProposalSections,
   hasMeaningfulAssistedDescriptionContent,
+  hasReviewableAssistedDescriptionProposalItems,
   insertAssistedDescriptionProposal,
   isAssistedDescriptionProposalItemStale,
   markAssistedDescriptionSectionPolished,
@@ -214,6 +215,12 @@ export function AssistedDescriptionSection({
         sectionIds,
         taskId: task.id
       });
+      if (!hasReviewableAssistedDescriptionProposalItems(proposal)) {
+        setDescriptionMessage("The proposal did not include changes to review. Add more context or ask for a specific modification.");
+        setProposalPanelOpen(true);
+        setPromptOpen(true);
+        return false;
+      }
       const savedProposal = onCreateProposal
         ? await onCreateProposal(toNewAssistedDescriptionProposal(proposal))
         : proposal;
@@ -693,7 +700,7 @@ function AssistedDescriptionSectionList({
       ))}
       {!showEmptySections && assistedDescriptionSectionDefinitions.some((section) => !sections[section.id].trim()) ? (
         <div className="rounded border border-dashed border-[#454852] bg-[#22252a] px-4 py-3 text-xs text-[#9aa0aa]">
-          Empty Jira/SRS Lite sections are hidden in read mode.
+          Empty Jira description sections are hidden in read mode.
         </div>
       ) : null}
     </div>
@@ -914,7 +921,7 @@ function AssistedDescriptionProposalPanel({
                         {proposal.title}
                       </span>
                       <span className="mt-1 block text-xs leading-relaxed text-[#aeb3bd]">
-                        {proposal.summary ?? "Review proposed Jira/SRS Lite description changes."}
+                        {proposal.summary ?? "Review proposed Jira description changes."}
                       </span>
                       <span className="mt-2 flex flex-wrap gap-2">
                         <ProposalStatusBadge status={proposal.status} />
@@ -939,11 +946,14 @@ function AssistedDescriptionProposalPanel({
 }
 
 function ProposalLogList({ entries }: { entries: DescriptionProposalLogEntry[] }) {
+  const visibleEntries = entries.filter((entry) => entry.eventType !== "description.proposal.created");
+  if (!visibleEntries.length) return null;
+
   return (
     <div className="border-t border-[#454852] p-4">
       <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[#9aa0aa]">Proposal log</div>
       <div className="space-y-2">
-        {[...entries].reverse().map((entry) => (
+        {[...visibleEntries].reverse().map((entry) => (
           <div className="rounded border border-[#3d4149] bg-[#202328] px-3 py-2" key={entry.id}>
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div className="min-w-0">
@@ -1192,7 +1202,7 @@ function AssistedDescriptionProposalReviewModal({
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-sm font-medium text-[#f4f5f7]">
-                  {proposal.summary ?? "Review proposed Jira/SRS Lite description changes."}
+                  {proposal.summary ?? "Review proposed Jira description changes."}
                 </p>
                 {proposal.userComment ? (
                   <p className="mt-1 text-xs leading-relaxed text-[#aeb3bd]">{proposal.userComment}</p>
@@ -1617,13 +1627,13 @@ function buildGenerationContext(changeRequest: string, sectionIds: AssistedDescr
   const sectionLabels = sectionIds.map((sectionId) => getAssistedDescriptionSectionLabel(sectionId)).join(", ");
   const scope =
     sectionIds.length === assistedDescriptionSectionDefinitions.length
-      ? "Generate a complete proposal for all fixed Jira/SRS Lite sections."
-      : `Revise only these fixed Jira/SRS Lite sections: ${sectionLabels}. Leave other sections unchanged.`;
+      ? "Generate a complete proposal for the fixed DTS Jira description sections."
+      : `Revise only these fixed DTS Jira description sections: ${sectionLabels}. Leave other sections unchanged.`;
 
   return [
     request,
     scope,
-    "Use these fixed sections: User story, Problem, Objective, Scope, Out of scope, Main flows, Functional requirements, Non-functional requirements, Constraints and dependencies, Acceptance criteria, Risks and open questions."
+    "Use only these fixed sections: User story, Context, Scope, Acceptance criteria. If missing information materially changes scope or acceptance criteria, ask targeted clarification questions instead of inventing Jira content."
   ].filter(Boolean).join("\n\n");
 }
 

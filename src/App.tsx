@@ -1945,7 +1945,6 @@ function createPreviewAssistedDescription(task: LocalTask, additionalContext: st
       ...createEmptyAssistedDescriptionSections(),
       user_story: `Como usuario de ${task.project},\nquiero ${task.title},\npara obtener un resultado claro y validable.`,
       problem: context || "Contexto pendiente de revisar con el responsable antes de crear la tarea en Jira.",
-      objective: `Preparar una tarea ${task.area} clara, validable y lista para Jira.`,
       scope: [
         "Incluye:",
         `- Preparar la tarea ${task.area} descrita en el titulo.`,
@@ -1954,16 +1953,10 @@ function createPreviewAssistedDescription(task: LocalTask, additionalContext: st
         "No incluye:",
         "- Cambios fuera del alcance confirmado para esta tarea."
       ].join("\n"),
-      out_of_scope: "Cambios no confirmados por el responsable del area.",
-      main_flows: "- Revisar el contexto.\n- Implementar o preparar el cambio.\n- Validar el resultado esperado.",
-      functional_requirements: `- La tarea ${task.area} debe quedar descrita con acciones verificables.`,
-      nonfunctional_requirements: "- Mantener el alcance acotado y comprensible para revision.",
-      constraints_dependencies: "- Confirmar dependencias si aparecen durante la implementacion.",
       acceptance_criteria: [
         "- La tarea queda implementada o preparada segun el alcance confirmado.",
         "- El responsable puede validar el resultado sin informacion adicional critica."
-      ].join("\n"),
-      risks_questions: "- Alcance incompleto si el titulo no captura restricciones o casos borde."
+      ].join("\n")
     })
   };
 }

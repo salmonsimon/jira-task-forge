@@ -8,6 +8,7 @@ import {
   buildResolveAssistedDescriptionProposalPatch,
   createEmptyAssistedDescriptionSectionStatuses,
   getAssistedDescriptionProposalItems,
+  hasReviewableAssistedDescriptionProposalItems,
   parseAssistedDescriptionMarkdown,
   reviseAssistedDescriptionProposal,
   serializeAssistedDescriptionSections,
@@ -15,41 +16,40 @@ import {
 } from "./assistedDescription";
 
 describe("assisted description domain helpers", () => {
-  it("parses the fixed 11 SRS Lite sections and keeps empty sections in the model", () => {
+  it("parses the fixed DTS sections and keeps empty sections in the model", () => {
     const sections = parseAssistedDescriptionMarkdown(`## Historia de usuario
 
 Como jugador, quiero ver el timer.
 
-## SRS Lite
-
-### 1. Problema
+## Contexto
 
 El timer no siempre termina.
 
-### 10. Riesgos y preguntas abiertas
+## Alcance
 
-Puede tapar informacion importante.`);
+Incluye:
+- Ajustar el cierre del timer.`);
 
     expect(sections.user_story).toBe("Como jugador, quiero ver el timer.");
     expect(sections.problem).toBe("El timer no siempre termina.");
-    expect(sections.risks_questions).toBe("Puede tapar informacion importante.");
-    expect(sections.objective).toBe("");
+    expect(sections.scope).toBe("Incluye:\n- Ajustar el cierre del timer.");
+    expect(sections.acceptance_criteria).toBe("");
     expect(Object.keys(sections)).toEqual(assistedDescriptionSectionDefinitions.map((section) => section.id));
   });
 
-  it("maps legacy prototype headings into canonical backend section ids", () => {
+  it("maps legacy prototype headings into DTS section ids", () => {
     const sections = parseAssistedDescriptionMarkdown(`## Contexto
 
 Contexto anterior.
 
 ## SRS Lite
 
-### Rollback / mitigacion
+### 2. Objetivo
 
-Plan de reversa.`);
+Objetivo anterior.`);
 
     expect(sections.problem).toBe("Contexto anterior.");
-    expect(sections.constraints_dependencies).toBe("Plan de reversa.");
+    expect(sections.scope).toBe("Objetivo anterior.");
   });
 
   it("serializes every fixed section even when a section is empty", () => {
@@ -60,8 +60,10 @@ Plan de reversa.`);
     });
 
     expect(markdown).toContain("## Historia de usuario\n\nComo usuario, quiero claridad.");
-    expect(markdown).toContain("### 1. Problema\n\n### 2. Objetivo");
-    expect(markdown).toContain("### 10. Riesgos y preguntas abiertas");
+    expect(markdown).toContain("## Contexto\n\n## Alcance");
+    expect(markdown).toContain("## Criterios de aceptacion\n\n- Se ve el resultado esperado.");
+    expect(markdown).not.toContain("SRS Lite");
+    expect(markdown).not.toContain("SRE Lite");
   });
 
   it("builds a paragraph-level diff without returning unchanged paragraphs", () => {
@@ -92,37 +94,51 @@ Plan de reversa.`);
     ]);
   });
 
-  it("builds persisted proposal payloads with all canonical sections", () => {
+  it("builds persisted proposal payloads with all DTS sections", () => {
     const currentSections = parseAssistedDescriptionMarkdown("## Historia de usuario\n\nRaw story");
     const proposal = buildAssistedDescriptionProposal({
-      changeRequest: "Improve the objective.",
+      changeRequest: "Improve the scope.",
       currentMarkdown: serializeAssistedDescriptionSections(currentSections),
       id: "proposal-1",
       model: "gpt-4.1",
       now: "2026-05-27T12:00:00.000Z",
       proposedMarkdown: serializeAssistedDescriptionSections({
         ...currentSections,
-        objective: "Clear objective"
+        scope: "Clear scope"
       }),
       provider: "OpenAI",
-      sectionIds: ["objective"],
+      sectionIds: ["scope"],
       taskId: "task-1"
     });
 
     expect(proposal.status).toBe("Pending");
-    expect(proposal.sections).toHaveLength(11);
+    expect(proposal.sections).toHaveLength(4);
     expect(proposal.sections.map((section) => section.sectionId)).toEqual(
       assistedDescriptionSectionDefinitions.map((section) => section.id)
     );
     expect(proposal.sections.find((section) => section.sectionId === "user_story")?.currentContent).toBe("Raw story");
     expect(proposal.sections.find((section) => section.sectionId === "user_story")?.proposedContent).toBe("");
-    expect(proposal.sections.find((section) => section.sectionId === "objective")?.proposedContent).toBe("Clear objective");
+    expect(proposal.sections.find((section) => section.sectionId === "scope")?.proposedContent).toBe("Clear scope");
     expect(toNewAssistedDescriptionProposal(proposal)).toMatchObject({
       taskId: "task-1",
-      title: "AI proposal: Objective",
+      title: "AI proposal: Scope",
       provider: "OpenAI",
       model: "gpt-4.1"
     });
+  });
+
+  it("identifies provider output with no reviewable changes", () => {
+    const currentSections = parseAssistedDescriptionMarkdown("## Historia de usuario\n\nRaw story");
+    const proposal = buildAssistedDescriptionProposal({
+      currentMarkdown: serializeAssistedDescriptionSections(currentSections),
+      id: "proposal-1",
+      now: "2026-05-27T12:00:00.000Z",
+      proposedMarkdown: serializeAssistedDescriptionSections(currentSections),
+      taskId: "task-1"
+    });
+
+    expect(getAssistedDescriptionProposalItems(proposal)).toEqual([]);
+    expect(hasReviewableAssistedDescriptionProposalItems(proposal)).toBe(false);
   });
 
   it("marks revised proposal sections with the reviewer request", () => {
@@ -134,34 +150,34 @@ Plan de reversa.`);
       now: "2026-05-27T12:00:00.000Z",
       proposedMarkdown: serializeAssistedDescriptionSections({
         ...currentSections,
-        objective: "Clear objective"
+        scope: "Clear scope"
       }),
-      sectionIds: ["objective"],
+      sectionIds: ["scope"],
       taskId: "task-1"
     });
     const revision = buildAssistedDescriptionProposal({
-      changeRequest: "Make the objective measurable.",
+      changeRequest: "Make the scope measurable.",
       currentMarkdown: serializeAssistedDescriptionSections(currentSections),
       id: "proposal-revision",
       now: "2026-05-27T12:05:00.000Z",
       proposedMarkdown: serializeAssistedDescriptionSections({
         ...currentSections,
-        objective: "Measurable objective"
+        scope: "Measurable scope"
       }),
-      sectionIds: ["objective"],
+      sectionIds: ["scope"],
       taskId: "task-1"
     });
 
     const revisedProposal = reviseAssistedDescriptionProposal(
       proposal,
       revision,
-      ["objective"],
+      ["scope"],
       "2026-05-27T12:06:00.000Z"
     );
-    const item = getAssistedDescriptionProposalItems(revisedProposal).find((candidate) => candidate.sectionId === "objective");
+    const item = getAssistedDescriptionProposalItems(revisedProposal).find((candidate) => candidate.sectionId === "scope");
 
-    expect(item?.proposedValue).toBe("Measurable objective");
-    expect(item?.reviewerComment).toBe("Make the objective measurable.");
+    expect(item?.proposedValue).toBe("Measurable scope");
+    expect(item?.reviewerComment).toBe("Make the scope measurable.");
   });
 
   it("keeps reviewer-requested empty proposal sections reviewable", () => {
@@ -173,7 +189,7 @@ Plan de reversa.`);
       now: "2026-05-27T12:00:00.000Z",
       proposedMarkdown: serializeAssistedDescriptionSections({
         ...currentSections,
-        problem: "Problem detail"
+        problem: "Context detail"
       }),
       sectionIds: ["problem"],
       taskId: "task-1"
