@@ -328,6 +328,12 @@ export function getAssistedDescriptionProposalItems(
     }));
 }
 
+export function hasReviewableAssistedDescriptionProposalItems(
+  proposal: AssistedDescriptionProposal
+): boolean {
+  return getAssistedDescriptionProposalItems(proposal).some((item) => item.status === "pending");
+}
+
 function isReviewableProposalSection(
   proposalStatus: AssistedDescriptionProposalStatus,
   section: AssistedDescriptionProposalSection

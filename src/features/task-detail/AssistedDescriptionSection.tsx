@@ -15,6 +15,7 @@ import {
   getAssistedDescriptionSectionLabel,
   hasAcceptedAssistedDescriptionProposalSections,
   hasMeaningfulAssistedDescriptionContent,
+  hasReviewableAssistedDescriptionProposalItems,
   insertAssistedDescriptionProposal,
   isAssistedDescriptionProposalItemStale,
   markAssistedDescriptionSectionPolished,
@@ -214,6 +215,12 @@ export function AssistedDescriptionSection({
         sectionIds,
         taskId: task.id
       });
+      if (!hasReviewableAssistedDescriptionProposalItems(proposal)) {
+        setDescriptionMessage("The proposal did not include changes to review. Add more context or ask for a specific modification.");
+        setProposalPanelOpen(true);
+        setPromptOpen(true);
+        return false;
+      }
       const savedProposal = onCreateProposal
         ? await onCreateProposal(toNewAssistedDescriptionProposal(proposal))
         : proposal;
@@ -939,11 +946,14 @@ function AssistedDescriptionProposalPanel({
 }
 
 function ProposalLogList({ entries }: { entries: DescriptionProposalLogEntry[] }) {
+  const visibleEntries = entries.filter((entry) => entry.eventType !== "description.proposal.created");
+  if (!visibleEntries.length) return null;
+
   return (
     <div className="border-t border-[#454852] p-4">
       <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[#9aa0aa]">Proposal log</div>
       <div className="space-y-2">
-        {[...entries].reverse().map((entry) => (
+        {[...visibleEntries].reverse().map((entry) => (
           <div className="rounded border border-[#3d4149] bg-[#202328] px-3 py-2" key={entry.id}>
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div className="min-w-0">

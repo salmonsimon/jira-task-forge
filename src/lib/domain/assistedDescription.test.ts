@@ -8,6 +8,7 @@ import {
   buildResolveAssistedDescriptionProposalPatch,
   createEmptyAssistedDescriptionSectionStatuses,
   getAssistedDescriptionProposalItems,
+  hasReviewableAssistedDescriptionProposalItems,
   parseAssistedDescriptionMarkdown,
   reviseAssistedDescriptionProposal,
   serializeAssistedDescriptionSections,
@@ -124,6 +125,20 @@ Objetivo anterior.`);
       provider: "OpenAI",
       model: "gpt-4.1"
     });
+  });
+
+  it("identifies provider output with no reviewable changes", () => {
+    const currentSections = parseAssistedDescriptionMarkdown("## Historia de usuario\n\nRaw story");
+    const proposal = buildAssistedDescriptionProposal({
+      currentMarkdown: serializeAssistedDescriptionSections(currentSections),
+      id: "proposal-1",
+      now: "2026-05-27T12:00:00.000Z",
+      proposedMarkdown: serializeAssistedDescriptionSections(currentSections),
+      taskId: "task-1"
+    });
+
+    expect(getAssistedDescriptionProposalItems(proposal)).toEqual([]);
+    expect(hasReviewableAssistedDescriptionProposalItems(proposal)).toBe(false);
   });
 
   it("marks revised proposal sections with the reviewer request", () => {
