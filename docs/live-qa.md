@@ -7,6 +7,10 @@ behavior, not new product decisions.
 Use `docs/live-qa-results/live-qa-evidence-template.md` to record repeatable
 evidence for PR or internal release QA runs.
 
+For the shorter daily-use release gate, start with
+[`Internal Release Readiness`](internal-release-readiness.md) and use this file
+for the detailed manual steps it links to.
+
 ## Safety Boundary
 
 - `DTS` is read-only reference data. Agents may run JQL against `DTS`, but must

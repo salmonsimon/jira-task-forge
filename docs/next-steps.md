@@ -125,7 +125,8 @@ npm run tauri dev
 ```
 
 Human QA to run before choosing the next implementation slice is captured in
-`docs/live-qa.md`. Summary:
+`docs/live-qa.md`. Use `docs/internal-release-readiness.md` as the shorter
+internal daily-use readiness gate after a batch of PRs lands. Summary:
 
 - Open `Trays`.
 - Create and rename a tray.
