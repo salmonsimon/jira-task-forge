@@ -174,6 +174,16 @@ Grow frontend coverage around behavior that reduces product risk:
 - Avoid brittle broad app-shell snapshots; test domain/workflow helpers and
   stable component contracts first.
 
+## Backup/Restore Drill Coverage
+
+Issue #101 added a focused backend seam test,
+`realistic_backup_restore_drill_keeps_local_data_useful_without_secrets`, that
+uses in-memory SQLite backup/import flow to cover realistic trays, Local Tasks,
+Jira links, JQL Favorites, attachment metadata, audit-summary export policy, and
+secret exclusion. Keep broader native dialog and attachment-byte restore checks
+in `docs/backup-restore-drill.md` until the future zip bundle format is
+implemented.
+
 ## Remaining Gaps
 
 - Frontend coverage reporting now exists, but there is no enforced frontend
