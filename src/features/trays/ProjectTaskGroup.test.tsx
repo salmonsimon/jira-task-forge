@@ -33,4 +33,24 @@ describe("ProjectTaskGroup", () => {
 
     expect(html.match(/<td class="min-w-0 overflow-visible px-3 py-2">/g)).toHaveLength(2);
   });
+
+  it("keeps editable inline selectors badge-sized instead of full cell width", () => {
+    const html = renderToStaticMarkup(
+      <ProjectTaskGroup
+        project="STT"
+        tasks={[{ ...task, area: "Bug", issueType: "Bug", priority: "Highest", syncStatus: "Failed" }]}
+        areas={["Bug", "3D"]}
+        selectedTaskId={null}
+        onOpenTask={() => undefined}
+        onUpdateTask={() => undefined}
+        onDuplicateTask={() => undefined}
+        onDeleteTask={() => undefined}
+        onOpenJiraIssue={() => undefined}
+      />
+    );
+
+    expect(html).toContain("relative inline-block max-w-full align-middle");
+    expect(html).toContain("inline-flex h-6 max-w-full items-center");
+    expect(html).not.toContain("inline-flex w-full max-w-full items-center");
+  });
 });

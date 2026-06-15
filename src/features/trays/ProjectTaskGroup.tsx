@@ -348,13 +348,13 @@ function InlineTaskSelect({
   }
 
   return (
-    <div className={cn("relative block max-w-full", isOpen && "z-[300]")} ref={containerRef} onClick={(event) => event.stopPropagation()}>
+    <div className={cn("relative inline-block max-w-full align-middle", isOpen && "z-[300]")} ref={containerRef} onClick={(event) => event.stopPropagation()}>
       <button
         aria-expanded={isOpen}
         aria-haspopup="listbox"
         aria-label={ariaLabel}
         className={cn(
-          "inline-flex w-full max-w-full items-center gap-1 rounded px-2 py-1 text-left text-xs font-medium outline-none transition hover:brightness-95 focus:ring-2 focus:ring-[#deebff]",
+          "inline-flex h-6 max-w-full items-center gap-1 rounded px-2 text-left text-xs font-medium leading-none outline-none transition hover:brightness-95 focus:ring-2 focus:ring-[#deebff]",
           getInlineSelectClasses(variant, value)
         )}
         onKeyDown={handleKeyDown}
