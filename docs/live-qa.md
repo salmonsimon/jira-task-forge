@@ -232,6 +232,8 @@ not invent or enforce a formal performance budget from this smoke scenario.
 
 ## Export And Backup QA
 
+- For the repeatable recovery path and current implementation gaps, use
+  [Backup/Restore Drill](backup-restore-drill.md).
 - Export CSV from a tray through the native save dialog.
 - Confirm exported local tasks move to `Exported`.
 - Inspect the CSV enough to confirm it remains plausible for Jira admin import.

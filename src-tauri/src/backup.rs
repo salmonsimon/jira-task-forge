@@ -16,17 +16,20 @@ pub use format::{
 
 #[cfg(test)]
 mod tests {
+    use rusqlite::params;
+
     use super::{
         export_backup, import_backup, AttachmentBackup, AttachmentVariantBackup,
         AuditSummaryBackup, EpicMappingBackup,
     };
     use crate::db::open_in_memory_database;
     use crate::models::{
-        AssistedDescriptionProposalSection, DescriptionSectionStatus,
+        AppSettings, AssistedDescriptionProposalSection, DescriptionSectionStatus,
         NewAssistedDescriptionProposal, NewTask, NewTray,
     };
     use crate::repositories::{
-        AssistedDescriptionProposalRepository, TaskRepository, TrayRepository,
+        AssistedDescriptionProposalRepository, JqlFavoriteRepository, SettingsRepository,
+        SyncRepository, TaskRepository, TrayRepository,
     };
 
     #[test]
@@ -99,6 +102,165 @@ mod tests {
             TaskRepository::new(&target).list_all().expect("tasks list")[0].title,
             "Imported task"
         );
+    }
+
+    #[test]
+    fn realistic_backup_restore_drill_keeps_local_data_useful_without_secrets() {
+        let source = open_in_memory_database().expect("source database opens");
+        SettingsRepository::new(&source)
+            .update_app_settings(AppSettings {
+                theme_mode: "Dark".to_string(),
+                jira_site_url: "https://salmonsimondts.atlassian.net".to_string(),
+                jira_account_email: "qa@example.com".to_string(),
+                jira_auth_method: "api_token".to_string(),
+                jira_creation_project_key: "JTFTEST".to_string(),
+                ai_provider: "OpenAI".to_string(),
+                ai_model: "gpt-4.1-mini".to_string(),
+                default_content_language: "Spanish".to_string(),
+            })
+            .expect("settings save");
+        let tray = TrayRepository::new(&source)
+            .create(NewTray {
+                name: "Backup restore drill 2026-06-14".to_string(),
+            })
+            .expect("tray creates");
+        let created_task = TaskRepository::new(&source)
+            .create(NewTask {
+                tray_id: tray.id.clone(),
+                project: "STT".to_string(),
+                area: "Bug".to_string(),
+                title: "Preserve Jira-created bug link".to_string(),
+                priority: "High".to_string(),
+                issue_type: "Bug".to_string(),
+                content_language: "Spanish".to_string(),
+            })
+            .expect("created task creates");
+        TaskRepository::new(&source)
+            .mark_jira_created(
+                &created_task.id,
+                "JTFTEST-101",
+                "https://salmonsimondts.atlassian.net/browse/JTFTEST-101",
+                "JTFTEST-88",
+            )
+            .expect("created task is marked");
+        let pending_task = TaskRepository::new(&source)
+            .create(NewTask {
+                tray_id: tray.id.clone(),
+                project: "PilotLab".to_string(),
+                area: "3D".to_string(),
+                title: "Keep local attachment metadata".to_string(),
+                priority: "Medium".to_string(),
+                issue_type: "Story".to_string(),
+                content_language: "Spanish".to_string(),
+            })
+            .expect("pending task creates");
+        JqlFavoriteRepository::new(&source)
+            .create(
+                "Recently created JTFTEST",
+                "project = JTFTEST ORDER BY created DESC",
+            )
+            .expect("favorite creates");
+        source
+            .execute(
+                "
+                INSERT INTO attachments (
+                    id, task_id, display_filename, mime_type, purpose,
+                    original_size_bytes, original_relative_path, file_hash,
+                    restore_status, created_at, updated_at
+                )
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, NULL, ?9, ?9)
+                ",
+                params![
+                    "attachment-drill-1",
+                    pending_task.id,
+                    "metro-panel-reference.png",
+                    "image/png",
+                    "AI + Jira attachment",
+                    2048_i64,
+                    "attachments/originals/attachment-drill-1/metro-panel-reference.png",
+                    "sha256-test-hash",
+                    "2026-06-14T12:00:00Z"
+                ],
+            )
+            .expect("attachment metadata inserts");
+        let attempt_id = SyncRepository::new(&source)
+            .start_attempt(&tray.id, "manual_drill")
+            .expect("sync attempt starts");
+        SyncRepository::new(&source)
+            .record_event(
+                &attempt_id,
+                &tray.id,
+                Some(&created_task.id),
+                "jira.issue_created",
+                "success",
+                "create_issue",
+                serde_json::json!({
+                    "jiraKey": "JTFTEST-101",
+                    "authorization": "SECRET-JIRA-TOKEN",
+                    "aiApiKey": "sk-live-secret"
+                }),
+            )
+            .expect("audit event records");
+
+        let backup = export_backup(&source, Some("0.1.0-test".to_string()))
+            .expect("realistic backup exports");
+        let serialized = serde_json::to_string(&backup).expect("backup serializes");
+
+        assert!(!backup.manifest.secrets_included);
+        assert_eq!(backup.data.trays.len(), 1);
+        assert_eq!(backup.data.tasks.len(), 2);
+        assert_eq!(backup.data.attachment_metadata.len(), 1);
+        assert_eq!(backup.data.audit_summaries.len(), 1);
+        assert!(backup
+            .data
+            .tasks
+            .iter()
+            .any(|task| task.jira_key.as_deref() == Some("JTFTEST-101")));
+        assert!(backup
+            .data
+            .jql_favorites
+            .iter()
+            .any(|favorite| favorite.name == "Recently created JTFTEST"));
+        assert!(!serialized.contains("SECRET-JIRA-TOKEN"));
+        assert!(!serialized.contains("sk-live-secret"));
+
+        let mut target = open_in_memory_database().expect("target database opens");
+        let import_result = import_backup(&mut target, backup).expect("realistic backup imports");
+
+        assert_eq!(import_result.imported_counts["trays"], 1);
+        assert_eq!(import_result.imported_counts["tasks"], 2);
+        assert_eq!(import_result.imported_counts["jqlFavorites"], 1);
+        assert_eq!(import_result.imported_counts["attachmentMetadata"], 1);
+        assert_eq!(import_result.skipped_counts["auditSummaries"], 1);
+        assert_eq!(
+            import_result.warnings,
+            vec!["Audit summaries were reviewed but are not imported into local audit tables yet."]
+        );
+        let restored_tasks = TaskRepository::new(&target)
+            .list_all()
+            .expect("restored tasks list");
+        assert!(restored_tasks
+            .iter()
+            .any(|task| task.jira_key.as_deref() == Some("JTFTEST-101")
+                && task.jira_url.as_deref()
+                    == Some("https://salmonsimondts.atlassian.net/browse/JTFTEST-101")));
+        assert_eq!(
+            JqlFavoriteRepository::new(&target)
+                .list()
+                .expect("favorites restore")
+                .iter()
+                .filter(|favorite| favorite.name == "Recently created JTFTEST")
+                .count(),
+            1
+        );
+        let restored_attachment_count: i64 = target
+            .query_row(
+                "SELECT COUNT(*) FROM attachments WHERE display_filename = ?1 AND purpose = ?2",
+                ["metro-panel-reference.png", "AI + Jira attachment"],
+                |row| row.get(0),
+            )
+            .expect("attachment metadata count reads");
+        assert_eq!(restored_attachment_count, 1);
     }
 
     #[test]

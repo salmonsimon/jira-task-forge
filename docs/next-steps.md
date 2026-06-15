@@ -4,12 +4,12 @@ This document is the default execution path for the repo. It is meant to support
 
 ## Current Checkpoint
 
-Date: 2026-06-11
+Date: 2026-06-15
 
 Main is up to date through:
 
 ```text
-#111 Harden Jira URL validation
+#120 Add Windows-native dialog smoke evidence
 ```
 
 Recent Personal v1 hardening merged since the older May checkpoint:
@@ -19,6 +19,19 @@ Recent Personal v1 hardening merged since the older May checkpoint:
 - PR #109 documented the local AFK worktree-thread workflow in `AGENTS.md`.
 - PR #110 added keyring recovery documentation for Jira and AI credentials.
 - PR #111 enforced strict Jira Cloud Site URL validation, hardened external Jira issue links against the configured site host, and made Site URL editing explicit with a `Save` action. The later HITL decision for #112 supersedes direct Settings edits with a guided connection flow.
+- PR #115 refreshed the live QA checklist for the current capability set.
+- PR #116 synced docs with current capabilities after the URL-hardening and
+  guided-connection decisions.
+- PR #117 added the internal release readiness gate for daily-use checks.
+- PR #118 documented current HITL product decisions, including the Jira
+  description format direction and guided connection setup.
+- PR #119 added the repeatable 200-task large-tray smoke scenario for local
+  performance/usability checks without mutating `DTS`.
+- PR #120 recorded Windows-native backup/import dialog smoke evidence,
+  including Computer Use/Tauri limitations and the Windows-native setup path.
+- Issue #101's backup/restore drill is implemented on
+  `codex/backup-restore-drill`; it documents realistic local recovery coverage
+  and adds a focused backend seam test.
 - Issue #112 captures the next guided `Set Jira Connection` implementation slice.
 
 Historical baseline from the first checkpoint:
@@ -77,12 +90,12 @@ Current validation:
   dependencies are part of the current checkpoint.
 - `npm run build` passes on `main` after dependencies are installed.
 - `cargo fmt -- --check` passes after installing Rust/Cargo with rustup.
-- `cargo test` passes in the current WSL checkout. As of PR #47, the Rust suite
-  has 82 tests covering SQLite schema/repositories, settings defaults, Jira URL
-  and error helpers, guarded Jira parent issue sync, Jira credential debug
-  redaction, sync audit error redaction/capping, backend delete protection for
-  created tasks, command/model/db helper behavior, service-layer local-first
-  workflows, backup behavior, and OpenAI integration helpers.
+- `cargo test` passes in the current WSL checkout. As of the current checkpoint,
+  the Rust suite has 171 tests covering SQLite schema/repositories, settings
+  defaults, Jira URL and error helpers, guarded Jira parent/sub-task sync, Jira
+  credential debug redaction, sync audit error redaction/capping, backend delete
+  protection for created tasks, command/model/db helper behavior, service-layer
+  local-first workflows, backup behavior, and OpenAI integration helpers.
 - Rust coverage is measured with `npm run coverage:rust`. The current
   Rust line coverage is 80.40%; see `docs/coverage-report.md`.
 - `npm test` passes in WSL with 93 frontend tests across 23 files. The script pins
@@ -92,6 +105,11 @@ Current validation:
   Vitest/V8. It is advisory-only for Personal v1; current all-files frontend
   line coverage is 20.53%.
 - Playwright screenshots are blocked in the current WSL environment by missing Chromium runtime library `libnspr4.so`.
+- Computer Use can inspect text for the Windows-native Tauri app, but direct
+  screenshot/click automation for native Save/Open dialogs failed in the
+  2026-06-14 smoke with `SetIsBorderRequired failed: Interfaz no compatible
+  (0x80004002)`. Treat native dialog automation as manual/HITL unless a future
+  preflight proves screenshot capture works.
 - The prototype runs with `npm run dev` at:
 
 ```text
@@ -140,6 +158,8 @@ internal daily-use readiness gate after a batch of PRs lands. Summary:
 - Export CSV from a tray and confirm exported local tasks move to `Exported` status.
 - Export and import a JSON backup, confirming secrets are excluded and restored
   Jira links/audit history remain useful.
+- For a repeatable backup/restore drill with realistic local data, use
+  `docs/backup-restore-drill.md`.
 - Visit `JQL`, `Categories`, and `Settings` and confirm navigation still works.
 - Confirm Settings shows Jira Site URL, account email, and Jira creation project
   key as read-only connection state.
@@ -173,15 +193,21 @@ Expected limitations right now:
   sub-tasks, and selected Jira-ready attachments. Live QA should continue to
   cover partial failure and retry behavior for these child operations.
 - `Export CSV` is wired and opens a native save dialog.
+- JSON backup export/import is wired and the issue #101 drill covers realistic
+  trays, Local Tasks, Jira links, JQL favorites, attachment metadata, audit
+  summary export policy, and secret exclusion. Current JSON backups do not yet
+  copy attachment bytes or restore audit summaries into local audit tables.
 - SQLite persistence exists for trays, local tasks, and non-secret app settings.
 - Jira API token storage exists through the OS credential store.
 - Jira connection testing exists through `/rest/api/3/myself`.
 - Read-only JQL queries are wired through Jira Cloud REST API v3.
 - JQL favorites persistence, session JQL history, backup/import, sync progress,
   task sync audit activity, OpenAI settings, and Ask AI JQL drafting are wired.
-- Categories persistence, audit log UI, guided Jira Connection setup, and broader
-  Jira issue relationship sync are not fully implemented. Per-task assisted
-  description structure/proposal logs, local sub-task editing, managed
+- Categories persistence, audit log UI, guided Jira Connection setup, broader
+  Jira issue relationship sync, local data cleanup/storage inventory, minimal
+  Tauri CSP, remote correlation marker recovery, sync audit detail allowlist,
+  and attachment source validation remain open roadmap slices. Per-task
+  assisted description structure/proposal logs, local sub-task editing, managed
   attachment ingestion, and Jira attachment upload have landed and still need
   regular native/live QA coverage.
 - Task detail `Details` supports editable project, area, and priority for editable non-archived tasks. Auto-generated epic and labels remain visible but muted/read-only.
@@ -196,8 +222,15 @@ Near-term decided follow-ups:
 
 Recommended next implementation:
 
-- Re-check native QA after the stabilization, backup, audit, JQL, and Ask AI
-  changes.
+- Implement the guided Jira Connection setup flow from issue #112 as the next
+  HITL/product slice.
+- Finish or close the remaining AFK hardening issues: #102 visible Settings
+  privacy copy, #103 local data cleanup/storage inventory, #93 minimal Tauri
+  CSP, #94 remote correlation marker recovery, #88 sync audit detail allowlist,
+  and #95 attachment file grants/source validation.
+- Keep using `docs/internal-release-readiness.md`, `docs/live-qa.md`,
+  `docs/backup-restore-drill.md`, and the large-tray smoke fixture as the
+  repeatable QA gates after each batch.
 - Keep backend coverage above 80% while adding focused tests for new security
   and sync behavior.
 - Expand frontend workflow tests around JQL recent history, backup notices,
