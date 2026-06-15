@@ -45,12 +45,18 @@ desktop session from the WSL environment.
 ## Settings And Credentials
 
 - Open `Settings`.
-- Set Jira site URL, account email, and Jira creation project key `JTFTEST`.
-- For Jira Site URL, confirm the field can be edited as a draft and only saves
-  after pressing `Save`. Valid standard Atlassian Cloud roots such as
-  `https://salmonsimondts.atlassian.net` should save; invalid paths, custom
-  hosts, ports, credentials, query strings, or surrounding whitespace should
-  show explicit feedback and not silently persist.
+- Confirm Jira site URL, account email, and Jira creation project key are shown
+  as read-only connection state.
+- Open `Set Jira Connection` or `Change Jira Connection`.
+- Set Jira site URL, account email, and Jira creation project key `JTFTEST`
+  through the guided flow.
+- Confirm valid standard Atlassian Cloud roots such as
+  `https://salmonsimondts.atlassian.net` are accepted, while invalid paths,
+  custom hosts, ports, credentials, query strings, or surrounding whitespace
+  show explicit feedback and do not silently persist.
+- If project key discovery is unavailable, confirm the guided flow allows a
+  warned manual `JTFTEST` project key fallback and saves only after the final
+  confirmation.
 - Save a Jira API token and confirm the saved state.
 - Delete the Jira API token and confirm the missing state.
 - Re-save the Jira API token.
@@ -60,7 +66,7 @@ desktop session from the WSL environment.
 - Re-save the OpenAI API key.
 - Use the OpenAI connection test and confirm the loading state resolves
   successfully.
-- Restart the app and confirm non-secret settings persist.
+- Restart the app and confirm non-secret connection state persists.
 - If saved-token state is unexpectedly missing after a Windows, WSL, Tauri, or
   worktree session change, follow the non-secret recovery steps in
   [Credential and Keyring Recovery](keyring-recovery.md).

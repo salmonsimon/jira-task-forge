@@ -105,7 +105,8 @@ As of the merged PR #111 Jira URL hardening checkpoint, the app includes:
 - Persisted non-secret settings.
 - Jira API token storage through the OS credential store.
 - Jira connection test using the configured site, account email, and saved token.
-- Strict Jira Cloud Site URL validation for Personal v1, explicit Site URL saving
+- Strict Jira Cloud Site URL validation for Personal v1, now routed through the
+  guided `Set Jira Connection` flow instead of direct Settings field edits
   in Settings, and hardened external Jira issue-link opening against the
   configured Jira site host.
 - `Create in Jira` preflight, including credential/project/task validation and a configurable Jira creation project key.
@@ -130,6 +131,9 @@ Still pending:
 - Categories persistence in the UI.
 - Per-task assisted descriptions, attachments, sub-task creation, attachment
   upload, and audit log UI.
+- Replace the current implementation's SRS/SRE Lite assisted-description
+  scaffolding with the Jira DTS description format in
+  `/home/saimon/Development/jira-task-forge/docs/jira-description-format.md`.
 - Full native QA in an environment with the Linux system dependencies needed by Tauri/keyring.
 - Manual Jira admin CSV import fallback validation after the API create flow works.
 - Keep Rust backend line coverage above 80%; it is currently 80.40% in
@@ -138,7 +142,10 @@ Still pending:
   helper coverage, especially around Settings and preflight flows.
 - Implement the guided `Set Jira Connection` flow captured in issue #112 as the
   only user-facing path for Jira Site URL, account email, and project key setup.
-  Keep API token management in its separate Settings section.
+  Settings should show those values as read-only connection state, the wizard
+  should save only at the end, and manual project-key fallback is allowed only
+  when discovery fails with a clear warning. Keep API token management in its
+  separate Settings section.
 
 ## Open Grill Area
 

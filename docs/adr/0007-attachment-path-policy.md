@@ -47,9 +47,10 @@ paths into a copy command. The Rust/Tauri command should open the native file
 dialog, validate the selected files, copy accepted files into managed storage,
 and return attachment metadata to the UI.
 
-Drag-and-drop attachment selection is out of scope for v1. If added later, it
-must go through a new backend-owned selection flow or a deliberately designed
-short-lived file grant model before any frontend-provided path can be copied.
+Drag-and-drop attachment selection is out of scope for v1 and is not a
+near-term priority. If added later, it must go through a new backend-owned
+selection flow or a deliberately designed short-lived file grant model before
+any frontend-provided path can be copied.
 
 Jira-ready attachments should use product-level size guardrails in addition to
 Jira's configured upload limit. Files over 25 MB should be allowed with a
@@ -95,16 +96,22 @@ in v1 and should not trigger Jira attachment deletion.
 
 After a Jira-ready attachment uploads successfully to Jira, the app should delete
 the local managed attachment file to avoid permanent duplicate asset storage.
-The Local Task may keep redacted metadata and audit history such as display
-filename, size, purpose, Jira issue key, and upload result, but the managed bytes
-should not remain local after successful Jira upload. This applies to both Jira
-attachment and AI + Jira attachment purposes once the Jira upload succeeds.
+The Local Task may keep only minimal redacted metadata and audit history such as
+display filename, file type, size, purpose, upload status, timestamp, Jira issue
+key or link, and upload result, but the managed bytes should not remain local
+after successful Jira upload. This applies to both Jira attachment and AI + Jira
+attachment purposes once the Jira upload succeeds.
 
 `AI only` attachments are not uploaded to Jira during sync, but they should not
 remain as durable duplicate asset storage after the Local Task becomes `Created`.
 When a Local Task becomes `Created`, the app should delete any remaining managed
 AI-only attachment bytes and keep only metadata/audit history needed to explain
 what was prepared.
+
+Backup exports include attachment bytes only while those bytes still exist in
+managed local storage. After Jira upload cleanup or automatic AI-only cleanup on
+task creation, backups should include only the remaining metadata/audit history
+and must not retain hidden post-upload file copies.
 
 Import should continue when individual attachments are missing, corrupt, or fail
 to copy. The imported task may still be restored, while the attachment is either
@@ -139,8 +146,8 @@ available; otherwise it should use the original managed file.
   filesystem services.
 - Sending files to Jira or AI remains an explicit high-risk integration gate.
 - Frontend code does not become a trusted source of attachment filesystem paths.
-- Drag-and-drop is intentionally deferred until there is a dedicated provenance
-  model for it.
+- Drag-and-drop is not a follow-up priority; it remains blocked unless a future
+  provenance/consent decision gives it a dedicated model.
 
 ## HITL Decisions Still Needed
 
