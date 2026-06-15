@@ -12,6 +12,7 @@ use crate::models::{
     NewAssistedDescriptionProposal, NewSubtask, NewTask, NewTaskAttachment, NewTray,
     SyncAuditEvent, TaskAttachment, Tray, TrayState,
 };
+use crate::sync_audit::SyncAuditDetail;
 
 const APP_SETTINGS_KEY: &str = "app_settings";
 const DEFAULT_PROJECT_CATEGORIES: &[(&str, bool)] = &[
@@ -1677,11 +1678,11 @@ impl<'connection> SyncRepository<'connection> {
         event_type: &str,
         outcome: &str,
         operation: &str,
-        detail: Value,
+        detail: SyncAuditDetail,
     ) -> DbResult<()> {
         let event_id = Uuid::new_v4().to_string();
         let occurred_at = utc_now_string()?;
-        let detail_json = serde_json::to_string(&detail)
+        let detail_json = serde_json::to_string(detail.as_value())
             .map_err(|error| DbError::InvalidData(error.to_string()))?;
 
         self.connection.execute(
@@ -3565,6 +3566,8 @@ mod tests {
 
     #[test]
     fn records_sync_attempts_and_audit_events() {
+        use crate::sync_audit::metadata_preflight_detail;
+
         let connection = open_in_memory_database().expect("database opens");
         let tray_repository = TrayRepository::new(&connection);
         let tray = tray_repository
@@ -3596,10 +3599,7 @@ mod tests {
                 "jira.sync.started",
                 "succeeded",
                 "create-parent-issues",
-                serde_json::json!({
-                    "jiraProjectKey": "JTFTEST",
-                    "taskCount": 2
-                }),
+                metadata_preflight_detail("JTFTEST", vec!["Story".to_string()], 2),
             )
             .expect("event records");
         repository
@@ -3640,6 +3640,67 @@ mod tests {
         assert_eq!(task_events[0].event_type, "jira.sync.started");
         assert_eq!(task_events[0].outcome, "succeeded");
         assert_eq!(task_events[0].detail["jiraProjectKey"], "JTFTEST");
+    }
+
+    #[test]
+    fn redacts_and_caps_sync_audit_detail_before_persistence() {
+        use crate::sync_audit::audit_error_detail;
+
+        let connection = open_in_memory_database().expect("database opens");
+        let tray = TrayRepository::new(&connection)
+            .create(NewTray {
+                name: "Audit redaction".to_string(),
+            })
+            .expect("tray creates");
+        let task = TaskRepository::new(&connection)
+            .create(NewTask {
+                tray_id: tray.id.clone(),
+                project: "STT".to_string(),
+                area: "Bug".to_string(),
+                title: "Audit redaction task".to_string(),
+                priority: "High".to_string(),
+                issue_type: "Bug".to_string(),
+                content_language: "Spanish".to_string(),
+            })
+            .expect("task creates");
+        let repository = SyncRepository::new(&connection);
+        let attempt_id = repository
+            .start_attempt(&tray.id, "create-in-jira")
+            .expect("attempt starts");
+
+        repository
+            .record_event(
+                &attempt_id,
+                &tray.id,
+                Some(&task.id),
+                "jira.issue.create",
+                "failed",
+                "create-parent-issues",
+                audit_error_detail(&format!(
+                    "Authorization: Basic secret-token request body: {}",
+                    "x".repeat(900)
+                )),
+            )
+            .expect("event records");
+
+        let detail_json: String = connection
+            .query_row(
+                "
+                SELECT detail_json
+                FROM sync_audit_events
+                WHERE sync_attempt_id = ?1
+                ",
+                [attempt_id.as_str()],
+                |row| row.get(0),
+            )
+            .expect("detail reads");
+        let detail: serde_json::Value =
+            serde_json::from_str(&detail_json).expect("detail json parses");
+        let message = detail["message"].as_str().expect("message persists");
+
+        assert!(message.contains("Basic <redacted>"));
+        assert!(!message.contains("secret-token"));
+        assert!(message.chars().count() <= 500);
     }
 
     #[test]

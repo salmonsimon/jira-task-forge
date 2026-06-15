@@ -20,7 +20,11 @@ use crate::models::{
     JiraCreatedIssueResult, JiraMyself, JqlSearchResponse, LocalTask, TaskAttachment,
 };
 use crate::repositories::{TaskRepository, TrayRepository};
-use crate::sync_audit::audit_error_message;
+use crate::sync_audit::{
+    attachment_error_detail, attachment_uploaded_detail, jira_epic_detail,
+    jira_epic_resolved_detail, jira_issue_created_detail, jira_priority_detail,
+    jira_priority_error_detail, jira_subtask_created_detail,
+};
 
 use attempt_recorder::SyncAttemptRecorder;
 use planning::{
@@ -449,11 +453,7 @@ where
                             Some(&task.id),
                             "jira.issue.created",
                             "succeeded",
-                            json!({
-                                "jiraKey": created_key.clone(),
-                                "epicKey": epic_key,
-                                "issueType": task.issue_type,
-                            }),
+                            jira_issue_created_detail(&created_key, &epic_key, &task.issue_type),
                         )?;
                         if issue_type.field("priority").is_none() {
                             match update_issue_priority_after_create(
@@ -585,11 +585,11 @@ where
                             Some(&subtask.id),
                             "jira.subtask.created",
                             "succeeded",
-                            json!({
-                                "jiraKey": created_key.clone(),
-                                "parentJiraKey": parent_jira_key,
-                                "issueType": subtask.issue_type,
-                            }),
+                            jira_subtask_created_detail(
+                                &created_key,
+                                parent_jira_key,
+                                &subtask.issue_type,
+                            ),
                         )?;
                         result.created_issue_count += 1;
                         result.created_issues.push(JiraCreatedIssueResult {
@@ -656,11 +656,7 @@ where
             None,
             "jira.epic.resolved",
             "succeeded",
-            json!({
-                "jiraKey": existing_epic.key,
-                "summary": epic_summary,
-                "source": "search",
-            }),
+            jira_epic_resolved_detail(&existing_epic.key, epic_summary, "search"),
         )?;
         return Ok(existing_epic.key);
     }
@@ -679,10 +675,7 @@ where
         None,
         "jira.epic.created",
         "succeeded",
-        json!({
-            "jiraKey": created_epic.key,
-            "summary": epic_summary,
-        }),
+        jira_epic_detail(&created_epic.key, epic_summary),
     )?;
     Ok(created_epic.key)
 }
@@ -876,11 +869,7 @@ where
                 Some(&task.id),
                 "jira.issue.priority.updated",
                 "succeeded",
-                json!({
-                    "jiraKey": jira_key,
-                    "priority": task.priority,
-                    "source": "post-create",
-                }),
+                jira_priority_detail(jira_key, &task.priority, "post-create"),
             )?;
             Ok(())
         }
@@ -889,11 +878,7 @@ where
                 Some(&task.id),
                 "jira.issue.priority.update_failed",
                 "failed",
-                json!({
-                    "jiraKey": jira_key,
-                    "priority": task.priority,
-                    "message": audit_error_message(&message),
-                }),
+                jira_priority_error_detail(jira_key, &task.priority, &message),
             )?;
             Err(message)
         }
@@ -1033,11 +1018,7 @@ where
                 Some(&task.id),
                 "jira.attachment.upload_failed",
                 "failed",
-                json!({
-                    "jiraKey": jira_key,
-                    "filename": filename,
-                    "message": audit_error_message(message),
-                }),
+                attachment_error_detail(jira_key, &filename, message),
             )?;
             result.messages.push(format!(
                 "{jira_key} attachment upload skipped for {}: {message}",
@@ -1058,11 +1039,7 @@ where
                     Some(&task.id),
                     "jira.attachment.upload_failed",
                     "failed",
-                    json!({
-                        "jiraKey": jira_key,
-                        "filename": filename,
-                        "message": audit_error_message(&message),
-                    }),
+                    attachment_error_detail(jira_key, &filename, &message),
                 )?;
                 result.messages.push(format!(
                     "{jira_key} attachment {filename} could not be uploaded: {message}"
@@ -1079,11 +1056,7 @@ where
                     Some(&task.id),
                     "jira.attachment.upload_failed",
                     "failed",
-                    json!({
-                        "jiraKey": jira_key,
-                        "filename": filename,
-                        "message": audit_error_message(&message),
-                    }),
+                    attachment_error_detail(jira_key, &filename, &message),
                 )?;
                 result.messages.push(format!(
                     "{jira_key} attachment {filename} could not be uploaded: {message}"
@@ -1099,12 +1072,12 @@ where
                     Some(&task.id),
                     "jira.attachment.uploaded",
                     "succeeded",
-                    json!({
-                        "jiraKey": jira_key,
-                        "filename": filename,
-                        "purpose": attachment.purpose,
-                        "sizeBytes": managed_file.size_bytes,
-                    }),
+                    attachment_uploaded_detail(
+                        jira_key,
+                        &filename,
+                        &attachment.purpose,
+                        managed_file.size_bytes,
+                    ),
                 )?;
             }
             Err(message) => {
@@ -1113,11 +1086,7 @@ where
                     Some(&task.id),
                     "jira.attachment.upload_failed",
                     "failed",
-                    json!({
-                        "jiraKey": jira_key,
-                        "filename": filename,
-                        "message": audit_error_message(&message),
-                    }),
+                    attachment_error_detail(jira_key, &filename, &message),
                 )?;
                 result.messages.push(format!(
                     "{jira_key} attachment {filename} could not be uploaded: {message}"

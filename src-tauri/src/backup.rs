@@ -31,6 +31,7 @@ mod tests {
         AssistedDescriptionProposalRepository, JqlFavoriteRepository, SettingsRepository,
         SyncRepository, TaskRepository, TrayRepository,
     };
+    use crate::sync_audit::jira_issue_created_detail;
 
     #[test]
     fn exports_backup_without_secrets() {
@@ -194,11 +195,7 @@ mod tests {
                 "jira.issue_created",
                 "success",
                 "create_issue",
-                serde_json::json!({
-                    "jiraKey": "JTFTEST-101",
-                    "authorization": "SECRET-JIRA-TOKEN",
-                    "aiApiKey": "sk-live-secret"
-                }),
+                jira_issue_created_detail("JTFTEST-101", "JTFTEST-100", "Story"),
             )
             .expect("audit event records");
 
