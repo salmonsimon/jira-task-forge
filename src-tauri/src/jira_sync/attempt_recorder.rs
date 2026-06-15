@@ -1,10 +1,11 @@
-use serde_json::{json, Value};
-
 use rusqlite::Connection;
 
 use crate::models::{JiraCreateIssuesResult, JiraCreateProgress, JiraFailedTaskResult, LocalTask};
 use crate::repositories::{SyncRepository, TaskRepository};
-use crate::sync_audit::{audit_error_detail, audit_error_messages_detail};
+use crate::sync_audit::{
+    audit_error_detail, audit_error_messages_detail, metadata_preflight_detail,
+    sync_started_detail, SyncAuditDetail,
+};
 
 const JIRA_PROVIDER_OPERATION: &str = "create-parent-issues";
 
@@ -58,13 +59,13 @@ where
             None,
             "jira.sync.started",
             "succeeded",
-            json!({
-                "trayId": tray_id,
-                "trayName": tray_name,
-                "jiraProjectKey": jira_project_key,
-                "includeExportedTasks": include_exported_tasks,
-                "includeMissingDescriptionTasks": include_missing_description_tasks,
-            }),
+            sync_started_detail(
+                tray_id,
+                tray_name,
+                jira_project_key,
+                include_exported_tasks,
+                include_missing_description_tasks,
+            ),
         )?;
 
         Ok(recorder)
@@ -112,7 +113,7 @@ where
         task_id: Option<&str>,
         event_type: &str,
         outcome: &str,
-        detail: Value,
+        detail: SyncAuditDetail,
     ) -> Result<(), String> {
         self.sync_repository
             .record_event(
@@ -137,11 +138,7 @@ where
             None,
             "jira.metadata.preflight",
             "succeeded",
-            json!({
-                "jiraProjectKey": jira_project_key,
-                "issueTypes": issue_types,
-                "taskCount": task_count,
-            }),
+            metadata_preflight_detail(jira_project_key, issue_types, task_count),
         )
     }
 
