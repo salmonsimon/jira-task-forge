@@ -172,7 +172,6 @@ export default function App() {
   const [appSettings, setAppSettings] = useState<AppSettings>(defaultAppSettings);
   const [systemPrefersDark, setSystemPrefersDark] = useState(false);
   const [usesTauriPersistence, setUsesTauriPersistence] = useState(false);
-  const [csvExportMessage, setCsvExportMessage] = useState<string | null>(null);
   const [csvExportNotice, setCsvExportNotice] = useState<CsvExportNotice | null>(null);
   const [jiraCreationNotice, setJiraCreationNotice] = useState<JiraCreationNotice | null>(null);
   const [hasJiraApiToken, setHasJiraApiToken] = useState(false);
@@ -371,7 +370,6 @@ export default function App() {
   }, [openPanel, selectedTaskId, usesTauriPersistence]);
 
   useEffect(() => {
-    setCsvExportMessage(null);
     setCsvExportNotice(null);
   }, [selectedTrayId]);
 
@@ -1014,16 +1012,10 @@ export default function App() {
   }
 
   async function exportTrayCsv(tray: Tray) {
-    setCsvExportMessage(null);
     setCsvExportNotice(null);
 
     const csvExportOptions = { includeExported: true };
     if (!canExportTrayCsv(tray, csvExportOptions)) {
-      setCsvExportMessage(
-        tray.state === "Completed"
-          ? "Completed Jira trays cannot be exported to CSV."
-          : "No pending, failed, or exported tasks to export."
-      );
       return;
     }
     const exportableTasks = tray.tasks.filter((task) => isEligibleForCsvExport(task, csvExportOptions));
@@ -1048,14 +1040,13 @@ export default function App() {
     const path = await save(saveOptions);
 
     if (!path) {
-      setCsvExportMessage("CSV export cancelled.");
       return;
     }
 
     try {
       await saveCsvFile(path, `\uFEFF${csv}`);
     } catch (error) {
-      setCsvExportMessage(formatUnknownError(error, "CSV could not be saved."));
+      console.warn(formatUnknownError(error, "CSV could not be saved."));
       return;
     }
 
@@ -1076,7 +1067,7 @@ export default function App() {
         currentTray.tasks.map((task) => exportedTasksById.get(task.id) ?? task)
       );
     } catch {
-      setCsvExportMessage("CSV downloaded, but task status could not be updated.");
+      console.warn("CSV downloaded, but task status could not be updated.");
       return;
     }
 
@@ -1347,7 +1338,6 @@ export default function App() {
               onDeleteTray={trayWorkspace.requestDeleteTray}
               onExportCsv={exportTrayCsv}
               onCreateInJira={createInJiraPreflight}
-              csvExportMessage={csvExportMessage}
               isRunningJiraPreflight={isRunningJiraPreflight}
               showArchived={showArchivedTrays}
               onToggleArchived={trayWorkspace.toggleArchivedTrays}

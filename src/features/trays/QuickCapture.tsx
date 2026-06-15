@@ -159,7 +159,7 @@ function CaptureSelect({
 
       {isOpen ? (
         <div
-          className="absolute left-0 top-[calc(100%+4px)] z-30 max-h-60 w-full overflow-y-auto overscroll-contain rounded border border-[#5c606a] bg-[#2b2d31] py-1 text-sm text-[#f4f5f7] shadow-xl"
+          className="app-select-menu absolute left-0 top-[calc(100%+4px)] z-30 max-h-60 w-full overflow-y-auto overscroll-contain rounded border border-[#5c606a] bg-[#2b2d31] py-1 text-sm text-[#f4f5f7] shadow-xl"
           role="listbox"
         >
           {options.map((option) => {
@@ -167,7 +167,7 @@ function CaptureSelect({
             return (
               <button
                 aria-selected={isSelected}
-                className={`flex h-8 w-full items-center justify-between px-3 text-left hover:bg-[#1d355c] ${
+                className={`app-select-option flex h-8 w-full items-center justify-between px-3 text-left hover:bg-[#1d355c] ${
                   isSelected ? "bg-[#0c66e4] text-white" : "text-[#dfe1e6]"
                 }`}
                 key={option}

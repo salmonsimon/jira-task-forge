@@ -19,7 +19,6 @@ export function TraysView({
   onDeleteTray,
   onExportCsv,
   onCreateInJira,
-  csvExportMessage,
   isRunningJiraPreflight,
   showArchived,
   onToggleArchived,
@@ -44,7 +43,6 @@ export function TraysView({
   onDeleteTray: (trayId: string) => void;
   onExportCsv: (tray: Tray) => void | Promise<void>;
   onCreateInJira: (tray: Tray) => void | Promise<void>;
-  csvExportMessage: string | null;
   isRunningJiraPreflight: boolean;
   showArchived: boolean;
   onToggleArchived: () => void;
@@ -106,7 +104,7 @@ export function TraysView({
           </div>
           <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
             {canExportCsv ? (
-              <Button variant="secondary" icon={<Download size={14} />} onClick={() => onExportCsv(selectedTray)}>
+              <Button className="app-action-secondary" variant="secondary" icon={<Download size={14} />} onClick={() => onExportCsv(selectedTray)}>
                 Export CSV
               </Button>
             ) : null}
@@ -116,7 +114,7 @@ export function TraysView({
               </Button>
             ) : (
               <>
-                <Button variant="secondary" icon={<Archive size={14} />} onClick={() => onArchiveTray(selectedTray.id)}>
+                <Button className="app-action-secondary" variant="secondary" icon={<Archive size={14} />} onClick={() => onArchiveTray(selectedTray.id)}>
                   Archive
                 </Button>
                 <Button
@@ -134,11 +132,6 @@ export function TraysView({
             )}
           </div>
         </div>
-        {csvExportMessage ? (
-          <p className="max-w-[720px] text-xs leading-relaxed text-[#6b778c]" role="status">
-            {csvExportMessage}
-          </p>
-        ) : null}
       </div>
 
       <QuickCapture disabled={isArchived} projects={projects} areas={areas} onAddTask={onAddTask} />

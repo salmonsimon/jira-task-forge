@@ -12,6 +12,7 @@ use crate::models::{
     NewAssistedDescriptionProposal, NewSubtask, NewTask, NewTaskAttachment, NewTray,
     SyncAuditEvent, TaskAttachment, Tray, TrayState,
 };
+use crate::sync_audit::SyncAuditDetail;
 
 const APP_SETTINGS_KEY: &str = "app_settings";
 const DEFAULT_PROJECT_CATEGORIES: &[(&str, bool)] = &[
@@ -102,8 +103,11 @@ impl<'connection> SettingsRepository<'connection> {
     }
 
     pub fn update_app_settings(&self, mut settings: AppSettings) -> DbResult<AppSettings> {
-        settings.jira_site_url =
-            normalize_jira_site_url(&settings.jira_site_url).map_err(DbError::InvalidData)?;
+        let current_settings = self.get_app_settings()?;
+        if settings.jira_site_url != current_settings.jira_site_url {
+            settings.jira_site_url =
+                normalize_jira_site_url(&settings.jira_site_url).map_err(DbError::InvalidData)?;
+        }
         let updated_at = utc_now_string()?;
         let value_json = serde_json::to_string(&settings)
             .map_err(|error| DbError::InvalidData(error.to_string()))?;
@@ -1658,11 +1662,11 @@ impl<'connection> SyncRepository<'connection> {
         event_type: &str,
         outcome: &str,
         operation: &str,
-        detail: Value,
+        detail: SyncAuditDetail,
     ) -> DbResult<()> {
         let event_id = Uuid::new_v4().to_string();
         let occurred_at = utc_now_string()?;
-        let detail_json = serde_json::to_string(&detail)
+        let detail_json = serde_json::to_string(detail.as_value())
             .map_err(|error| DbError::InvalidData(error.to_string()))?;
 
         self.connection.execute(
@@ -3500,7 +3504,50 @@ mod tests {
     }
 
     #[test]
+    fn updates_unrelated_settings_when_existing_jira_site_url_is_legacy() {
+        let connection = open_in_memory_database().expect("database opens");
+        connection
+            .execute(
+                "
+                INSERT INTO settings (key, value_json, updated_at)
+                VALUES ('app_settings', ?1, '2026-06-15T00:00:00Z')
+                ",
+                [serde_json::json!({
+                    "themeMode": "dark",
+                    "jiraSiteUrl": "https://legacy.example.com/path",
+                    "jiraAccountEmail": "saimon@example.com",
+                    "jiraAuthMethod": "api-token",
+                    "jiraCreationProjectKey": "JTFTEST",
+                    "aiProvider": "OpenAI",
+                    "aiModel": "gpt-4.1",
+                    "defaultContentLanguage": "Spanish"
+                })
+                .to_string()],
+            )
+            .expect("legacy settings inserted");
+        let repository = SettingsRepository::new(&connection);
+
+        let updated = repository
+            .update_app_settings(AppSettings {
+                theme_mode: "light".to_string(),
+                jira_site_url: "https://legacy.example.com/path".to_string(),
+                jira_account_email: "saimon@example.com".to_string(),
+                jira_auth_method: "api-token".to_string(),
+                jira_creation_project_key: "JTFTEST".to_string(),
+                ai_provider: "OpenAI".to_string(),
+                ai_model: "gpt-4.1".to_string(),
+                default_content_language: "Spanish".to_string(),
+            })
+            .expect("unrelated setting updates");
+
+        assert_eq!(updated.theme_mode, "light");
+        assert_eq!(updated.jira_site_url, "https://legacy.example.com/path");
+    }
+
+    #[test]
     fn records_sync_attempts_and_audit_events() {
+        use crate::sync_audit::metadata_preflight_detail;
+
         let connection = open_in_memory_database().expect("database opens");
         let tray_repository = TrayRepository::new(&connection);
         let tray = tray_repository
@@ -3532,10 +3579,7 @@ mod tests {
                 "jira.sync.started",
                 "succeeded",
                 "create-parent-issues",
-                serde_json::json!({
-                    "jiraProjectKey": "JTFTEST",
-                    "taskCount": 2
-                }),
+                metadata_preflight_detail("JTFTEST", vec!["Story".to_string()], 2),
             )
             .expect("event records");
         repository
@@ -3576,6 +3620,67 @@ mod tests {
         assert_eq!(task_events[0].event_type, "jira.sync.started");
         assert_eq!(task_events[0].outcome, "succeeded");
         assert_eq!(task_events[0].detail["jiraProjectKey"], "JTFTEST");
+    }
+
+    #[test]
+    fn redacts_and_caps_sync_audit_detail_before_persistence() {
+        use crate::sync_audit::audit_error_detail;
+
+        let connection = open_in_memory_database().expect("database opens");
+        let tray = TrayRepository::new(&connection)
+            .create(NewTray {
+                name: "Audit redaction".to_string(),
+            })
+            .expect("tray creates");
+        let task = TaskRepository::new(&connection)
+            .create(NewTask {
+                tray_id: tray.id.clone(),
+                project: "STT".to_string(),
+                area: "Bug".to_string(),
+                title: "Audit redaction task".to_string(),
+                priority: "High".to_string(),
+                issue_type: "Bug".to_string(),
+                content_language: "Spanish".to_string(),
+            })
+            .expect("task creates");
+        let repository = SyncRepository::new(&connection);
+        let attempt_id = repository
+            .start_attempt(&tray.id, "create-in-jira")
+            .expect("attempt starts");
+
+        repository
+            .record_event(
+                &attempt_id,
+                &tray.id,
+                Some(&task.id),
+                "jira.issue.create",
+                "failed",
+                "create-parent-issues",
+                audit_error_detail(&format!(
+                    "Authorization: Basic secret-token request body: {}",
+                    "x".repeat(900)
+                )),
+            )
+            .expect("event records");
+
+        let detail_json: String = connection
+            .query_row(
+                "
+                SELECT detail_json
+                FROM sync_audit_events
+                WHERE sync_attempt_id = ?1
+                ",
+                [attempt_id.as_str()],
+                |row| row.get(0),
+            )
+            .expect("detail reads");
+        let detail: serde_json::Value =
+            serde_json::from_str(&detail_json).expect("detail json parses");
+        let message = detail["message"].as_str().expect("message persists");
+
+        assert!(message.contains("Basic <redacted>"));
+        assert!(!message.contains("secret-token"));
+        assert!(message.chars().count() <= 500);
     }
 
     #[test]
