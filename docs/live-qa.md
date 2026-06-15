@@ -109,6 +109,52 @@ Expected result: issues render in the table.
 - Archive, restore, and delete trays, including risk-aware delete confirmation
   copy.
 
+## Large Tray Smoke QA
+
+Use this scenario for issue #105-style local performance and usability smoke
+checks. It is a repeatable synthetic tray with 200 Local Tasks, including
+sub-tasks, mixed sync statuses, Projects, Areas, priorities, descriptions,
+draft notes, missing descriptions, JTFTEST-style created links, sync logs, and
+attachment metadata only. It must not write to `DTS`.
+
+Automated simulation:
+
+```bash
+npm test -- largeTraySmoke
+```
+
+Preview-mode UI simulation:
+
+```bash
+npm run dev
+```
+
+Open `http://127.0.0.1:1420` in a browser without native Tauri persistence.
+Select `Large tray smoke - 200 Local Tasks` from the tray list. Native persisted
+data replaces preview fixtures, so use the automated simulation above if the
+desktop app already has local data.
+
+Workflow checks:
+
+- List/render: open the large tray and confirm project groups, status badges,
+  priority controls, created links, and attachment indicators remain readable.
+- Search/filter: search for terms from titles, descriptions, Projects, Areas,
+  Jira keys, and sub-task titles such as `referencias`; matching parent tasks
+  should remain in original tray order.
+- Task detail: open a pending task, a failed task, an exported task, and a
+  created task. Confirm editable/read-only behavior, descriptions, notes,
+  attachments, and sync log sections are understandable.
+- Preflight open: open `Create in Jira` only as a local preflight review unless
+  deliberately testing against `JTFTEST`. Confirm missing descriptions, missing
+  epics, failed retries, and exported duplicate-risk warnings are grouped well
+  enough to review.
+- Tray save/restore: export a backup, import it, and confirm the restored large
+  tray keeps task counts, created JTFTEST links, sub-task parent relationships,
+  attachment metadata, and audit/sync history useful.
+
+Record observed behavior or rough timings in QA evidence when useful, but do
+not invent or enforce a formal performance budget from this smoke scenario.
+
 ## Export And Backup QA
 
 - Export CSV from a tray through the native save dialog.
