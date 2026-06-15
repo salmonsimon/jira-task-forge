@@ -56,14 +56,8 @@ fn platform_open_command(url: &str) -> Result<Command, String> {
 
     if cfg!(target_os = "linux") {
         if is_wsl() {
-            let mut command = Command::new("powershell.exe");
-            command.args([
-                "-NoProfile",
-                "-NonInteractive",
-                "-Command",
-                "Start-Process -FilePath $args[0]",
-                url,
-            ]);
+            let mut command = Command::new("/mnt/c/Windows/System32/cmd.exe");
+            command.args(["/C", "start", "", url]);
             return Ok(command);
         }
 
@@ -176,7 +170,9 @@ mod tests {
             assert!(command.get_args().any(|arg| arg == "https://example.test"));
         } else if cfg!(target_os = "linux") {
             if is_wsl() {
-                assert_eq!(command.get_program(), "powershell.exe");
+                assert_eq!(command.get_program(), "/mnt/c/Windows/System32/cmd.exe");
+                assert!(command.get_args().any(|arg| arg == "/C"));
+                assert!(command.get_args().any(|arg| arg == "start"));
             } else {
                 assert_eq!(command.get_program(), "xdg-open");
             }

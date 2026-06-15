@@ -19,7 +19,6 @@ export function TraysView({
   onDeleteTray,
   onExportCsv,
   onCreateInJira,
-  csvExportMessage,
   isRunningJiraPreflight,
   showArchived,
   onToggleArchived,
@@ -44,7 +43,6 @@ export function TraysView({
   onDeleteTray: (trayId: string) => void;
   onExportCsv: (tray: Tray) => void | Promise<void>;
   onCreateInJira: (tray: Tray) => void | Promise<void>;
-  csvExportMessage: string | null;
   isRunningJiraPreflight: boolean;
   showArchived: boolean;
   onToggleArchived: () => void;
@@ -134,11 +132,6 @@ export function TraysView({
             )}
           </div>
         </div>
-        {csvExportMessage ? (
-          <p className="max-w-[720px] text-xs leading-relaxed text-[#6b778c]" role="status">
-            {csvExportMessage}
-          </p>
-        ) : null}
       </div>
 
       <QuickCapture disabled={isArchived} projects={projects} areas={areas} onAddTask={onAddTask} />
