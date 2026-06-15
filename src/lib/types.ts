@@ -13,15 +13,8 @@ export type AssistedDescriptionProposalStatus = "Pending" | "Accepted" | "Reject
 export type AssistedDescriptionSectionId =
   | "user_story"
   | "problem"
-  | "objective"
   | "scope"
-  | "out_of_scope"
-  | "main_flows"
-  | "functional_requirements"
-  | "nonfunctional_requirements"
-  | "constraints_dependencies"
-  | "acceptance_criteria"
-  | "risks_questions";
+  | "acceptance_criteria";
 export type PreflightWarningSeverity = "blocking" | "resolvable";
 export type PreflightWarningCode =
   | "empty-tray"

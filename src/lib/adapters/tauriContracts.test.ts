@@ -158,11 +158,11 @@ describe("Tauri command contract mappers", () => {
       id: "proposal-1",
       taskId: "task-1",
       title: "Timer proposal",
-      summary: "SRS Lite draft",
+      summary: "DTS Jira draft",
       status: "Pending",
       provider: "OpenAI",
       model: "gpt-4.1",
-      userComment: "Focus risk notes.",
+      userComment: "Focus context notes.",
       sections: [
         {
           sectionId: "user_story",
@@ -183,12 +183,12 @@ describe("Tauri command contract mappers", () => {
       proposalId: "proposal-1",
       eventType: "description.proposal.created",
       title: "Timer proposal",
-      summary: "SRS Lite draft",
+      summary: "DTS Jira draft",
       status: "Pending",
       provider: "OpenAI",
       model: "gpt-4.1",
       userComment: null,
-      detail: { sectionCount: 11 },
+      detail: { sectionCount: 4 },
       occurredAt: "2026-05-27T12:01:00Z"
     };
 

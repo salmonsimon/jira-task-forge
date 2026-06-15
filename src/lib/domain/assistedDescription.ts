@@ -11,28 +11,9 @@ export type { AssistedDescriptionSectionId, DescriptionSectionStatus } from "../
 
 export const assistedDescriptionSectionDefinitions = [
   { id: "user_story", label: "User story", markdownHeading: "Historia de usuario" },
-  { id: "problem", label: "Problem", markdownHeading: "1. Problema" },
-  { id: "objective", label: "Objective", markdownHeading: "2. Objetivo" },
-  { id: "scope", label: "Scope", markdownHeading: "3. Alcance" },
-  { id: "out_of_scope", label: "Out of scope", markdownHeading: "4. Fuera de alcance" },
-  { id: "main_flows", label: "Main flows", markdownHeading: "5. Flujos principales" },
-  { id: "functional_requirements", label: "Functional requirements", markdownHeading: "6. Requisitos funcionales" },
-  {
-    id: "nonfunctional_requirements",
-    label: "Non-functional requirements",
-    markdownHeading: "7. Requisitos no funcionales relevantes"
-  },
-  {
-    id: "constraints_dependencies",
-    label: "Constraints and dependencies",
-    markdownHeading: "8. Restricciones y dependencias"
-  },
-  {
-    id: "acceptance_criteria",
-    label: "Acceptance criteria",
-    markdownHeading: "9. Criterios de aceptacion de alto nivel"
-  },
-  { id: "risks_questions", label: "Risks and open questions", markdownHeading: "10. Riesgos y preguntas abiertas" }
+  { id: "problem", label: "Context", markdownHeading: "Contexto" },
+  { id: "scope", label: "Scope", markdownHeading: "Alcance" },
+  { id: "acceptance_criteria", label: "Acceptance criteria", markdownHeading: "Criterios de aceptacion" }
 ] as const satisfies readonly {
   id: AssistedDescriptionSectionId;
   label: string;
@@ -73,36 +54,44 @@ export type AssistedDescriptionParagraphDiff = {
 const sectionAliases: Record<AssistedDescriptionSectionId, string[]> = {
   user_story: ["historia de usuario", "user story"],
   problem: ["problema", "problem", "contexto", "context"],
-  objective: ["objetivo", "objective", "goal", "expected impact", "impacto esperado", "impacto"],
-  scope: ["alcance", "scope"],
-  out_of_scope: ["fuera de alcance", "out of scope", "no incluye", "not included"],
-  main_flows: ["flujos principales", "main flows", "flows", "flujo principal"],
-  functional_requirements: ["requisitos funcionales", "functional requirements"],
-  nonfunctional_requirements: [
+  scope: [
+    "alcance",
+    "scope",
+    "objetivo",
+    "objective",
+    "goal",
+    "expected impact",
+    "impacto esperado",
+    "impacto",
+    "fuera de alcance",
+    "out of scope",
+    "no incluye",
+    "not included",
+    "flujos principales",
+    "main flows",
+    "flows",
+    "flujo principal",
+    "requisitos funcionales",
+    "functional requirements",
     "requisitos no funcionales relevantes",
     "requisitos no funcionales",
     "non functional requirements",
-    "nonfunctional requirements"
-  ],
-  constraints_dependencies: [
+    "nonfunctional requirements",
     "restricciones y dependencias",
     "constraints and dependencies",
-    "constraints dependencies",
-    "rollback mitigacion",
-    "rollback mitigation",
-    "rollback",
-    "mitigacion",
-    "observabilidad senales",
-    "observability signals",
-    "observabilidad"
+    "constraints dependencies"
   ],
   acceptance_criteria: [
     "criterios de aceptacion de alto nivel",
     "criterios de aceptacion",
     "acceptance criteria",
-    "criterios de acceptance"
-  ],
-  risks_questions: ["riesgos y preguntas abiertas", "riesgos", "risks", "open questions", "preguntas abiertas"]
+    "criterios de acceptance",
+    "riesgos y preguntas abiertas",
+    "riesgos",
+    "risks",
+    "open questions",
+    "preguntas abiertas"
+  ]
 };
 
 const sectionIdByNormalizedHeading = buildSectionAliasIndex();
@@ -159,12 +148,8 @@ export function parseAssistedDescriptionMarkdown(markdown: string | null | undef
 
 export function serializeAssistedDescriptionSections(sections: AssistedDescriptionSections): string {
   const lines: string[] = [];
-  const [userStory, ...srsSections] = assistedDescriptionSectionDefinitions;
-
-  appendSerializedSection(lines, 2, userStory.markdownHeading, sections[userStory.id]);
-  lines.push("## SRS Lite", "");
-  for (const section of srsSections) {
-    appendSerializedSection(lines, 3, section.markdownHeading, sections[section.id]);
+  for (const section of assistedDescriptionSectionDefinitions) {
+    appendSerializedSection(lines, 2, section.markdownHeading, sections[section.id]);
   }
 
   return lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
@@ -622,7 +607,7 @@ function buildProposalSummary(sectionIds: AssistedDescriptionSectionId[], change
   const request = changeRequest.trim();
   if (request) return `Requested adjustment: ${truncateSummary(request)}`;
   if (sectionIds.length === 1) return `Review proposed changes to ${getAssistedDescriptionSectionLabel(sectionIds[0])}.`;
-  return "Review proposed Jira/SRS Lite description changes.";
+  return "Review proposed Jira description changes.";
 }
 
 function truncateSummary(value: string): string {

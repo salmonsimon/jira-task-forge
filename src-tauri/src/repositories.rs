@@ -47,25 +47,9 @@ const DEFAULT_JQL_FAVORITES: &[(&str, &str)] = &[
 ];
 const ASSISTED_DESCRIPTION_SECTION_DEFINITIONS: &[(&str, &str)] = &[
     ("user_story", "Historia de usuario"),
-    ("problem", "1. Problema"),
-    ("objective", "2. Objetivo"),
-    ("scope", "3. Alcance"),
-    ("out_of_scope", "4. Fuera de alcance"),
-    ("main_flows", "5. Flujos principales"),
-    ("functional_requirements", "6. Requisitos funcionales"),
-    (
-        "nonfunctional_requirements",
-        "7. Requisitos no funcionales relevantes",
-    ),
-    (
-        "constraints_dependencies",
-        "8. Restricciones y dependencias",
-    ),
-    (
-        "acceptance_criteria",
-        "9. Criterios de aceptacion de alto nivel",
-    ),
-    ("risks_questions", "10. Riesgos y preguntas abiertas"),
+    ("problem", "Contexto"),
+    ("scope", "Alcance"),
+    ("acceptance_criteria", "Criterios de aceptacion"),
 ];
 
 pub struct TrayRepository<'connection> {
@@ -2066,7 +2050,6 @@ fn render_assisted_description_from_sections(
         }
     }
 
-    let mut srs_parts = Vec::new();
     for (section_id, heading) in ASSISTED_DESCRIPTION_SECTION_DEFINITIONS
         .iter()
         .filter(|(section_id, _)| *section_id != "user_story")
@@ -2080,11 +2063,7 @@ fn render_assisted_description_from_sections(
         let Some(content) = accepted_or_current_section_content(section) else {
             continue;
         };
-        srs_parts.push(format!("### {heading}\n\n{content}"));
-    }
-
-    if !srs_parts.is_empty() {
-        parts.push(format!("## SRS Lite\n\n{}", srs_parts.join("\n\n")));
+        parts.push(format!("## {heading}\n\n{content}"));
     }
 
     parts.join("\n\n")
@@ -3243,10 +3222,10 @@ mod tests {
             .create(NewAssistedDescriptionProposal {
                 task_id: task.id.clone(),
                 title: Some("Timer description pass".to_string()),
-                summary: Some("Draft SRS Lite description".to_string()),
+                summary: Some("Draft DTS Jira description".to_string()),
                 provider: Some("OpenAI".to_string()),
                 model: Some("gpt-4.1".to_string()),
-                user_comment: Some("Focus on validation risk.".to_string()),
+                user_comment: Some("Focus on context and scope.".to_string()),
                 sections: vec![
                     proposal_section(
                         "user_story",
@@ -3261,12 +3240,12 @@ mod tests {
             .expect("proposal creates");
 
         assert_eq!(proposal.status, AssistedDescriptionProposalStatus::Pending);
-        assert_eq!(proposal.sections.len(), 11);
+        assert_eq!(proposal.sections.len(), 4);
         assert_eq!(proposal.provider.as_deref(), Some("OpenAI"));
         assert!(proposal
             .sections
             .iter()
-            .any(|section| section.section_id == "objective"
+            .any(|section| section.section_id == "scope"
                 && section.proposed_content.is_empty()
                 && section.status == DescriptionSectionStatus::Raw));
 
@@ -3276,7 +3255,7 @@ mod tests {
                 "problem",
                 Some("El timer puede seguir activo despues de completar el flujo y confundir el cierre de QA."),
                 Some(DescriptionSectionStatus::Raw),
-                Some("Make the risk concrete."),
+                Some("Make the context concrete."),
                 false,
             )
             .expect("proposal section updates")
@@ -3288,7 +3267,7 @@ mod tests {
             .expect("problem section exists");
         assert_eq!(
             revised_problem.reviewer_comment.as_deref(),
-            Some("Make the risk concrete.")
+            Some("Make the context concrete.")
         );
 
         let accepted = repository
@@ -3309,8 +3288,9 @@ mod tests {
             .expect("task exists");
         let description = task.description.expect("description applied");
         assert!(description.contains("## Historia de usuario"));
-        assert!(description.contains("## SRS Lite"));
-        assert!(description.contains("### 1. Problema"));
+        assert!(description.contains("## Contexto"));
+        assert!(!description.contains("SRS Lite"));
+        assert!(!description.contains("SRE Lite"));
         assert!(!description.contains("OpenAI"));
 
         let log = repository

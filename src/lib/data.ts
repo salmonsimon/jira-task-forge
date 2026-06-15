@@ -45,7 +45,7 @@ export const trays: Tray[] = [
         jiraKey: "DTS-901",
         epic: "DTS-831 [STT] Bug",
         description:
-          "## Historia de usuario\n\nYo como usuario de STT,\nquiero que el timer se detenga correctamente al completar objetivos,\npara evitar estados inconsistentes durante la experiencia.\n\n## SRS Lite\n\n### 1. Problema\nEl timer puede seguir corriendo cuando el flujo ya deberia haber cerrado el objetivo.\n\n### 2. Objetivo\nAsegurar que el timer refleje correctamente el estado de avance.",
+          "## Historia de usuario\n\nYo como usuario de STT,\nquiero que el timer se detenga correctamente al completar objetivos,\npara evitar estados inconsistentes durante la experiencia.\n\n## Contexto\n\nEl timer puede seguir corriendo cuando el flujo ya deberia haber cerrado el objetivo.\n\n## Alcance\n\nIncluye:\n- Asegurar que el timer refleje correctamente el estado de avance.\n\nNo incluye:\n- Cambios a objetivos no relacionados.\n\n## Criterios de aceptacion\n\n- El timer se detiene al completar objetivos.",
         attachments: [
           {
             id: "att-timer",

@@ -22,10 +22,10 @@ describe("Tauri persistence assisted description proposals", () => {
     const payload: NewAssistedDescriptionProposal = {
       taskId: "task-1",
       title: "Timer proposal",
-      summary: "Draft SRS Lite description",
+      summary: "Draft DTS Jira description",
       provider: "OpenAI",
       model: "gpt-4.1",
-      userComment: "Focus risk notes.",
+      userComment: "Focus context notes.",
       sections: [
         {
           sectionId: "user_story",
@@ -95,7 +95,7 @@ function proposalFixture(
     id: "proposal-1",
     taskId: patch.taskId,
     title: "Timer proposal",
-    summary: "Draft SRS Lite description",
+    summary: "Draft DTS Jira description",
     status: patch.status ?? "Pending",
     provider: "OpenAI",
     model: "gpt-4.1",
