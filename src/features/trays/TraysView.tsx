@@ -104,7 +104,7 @@ export function TraysView({
           </div>
           <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
             {canExportCsv ? (
-              <Button variant="secondary" icon={<Download size={14} />} onClick={() => onExportCsv(selectedTray)}>
+              <Button className="app-action-secondary" variant="secondary" icon={<Download size={14} />} onClick={() => onExportCsv(selectedTray)}>
                 Export CSV
               </Button>
             ) : null}
@@ -114,7 +114,7 @@ export function TraysView({
               </Button>
             ) : (
               <>
-                <Button variant="secondary" icon={<Archive size={14} />} onClick={() => onArchiveTray(selectedTray.id)}>
+                <Button className="app-action-secondary" variant="secondary" icon={<Archive size={14} />} onClick={() => onArchiveTray(selectedTray.id)}>
                   Archive
                 </Button>
                 <Button
