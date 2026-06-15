@@ -80,8 +80,9 @@ High-level shape:
 - Global chips: `Categories` and `Settings`.
 - Multiple named tray drafts.
 - Jira API is primary; CSV is minimal fallback.
-- AI is manually triggered. The current implemented AI slice drafts JQL from a
-  prompt; per-task assisted descriptions remain product scope for a later slice.
+- AI is manually triggered. Implemented AI slices now draft JQL and generate
+  per-task Assisted Description drafts through the Tauri backend, with local
+  proposal review and logs before accepted content becomes the Jira description.
 - Epics follow `[{Project}] {Area}` and are synced from Jira to avoid duplicates.
 - Local SQLite persistence, backup/export without secrets, and sync audit logs are part of v1 scope.
 - Technical stack is Tauri + React + TypeScript + shadcn/ui + Tailwind + SQLite.
@@ -110,7 +111,11 @@ As of the merged PR #111 Jira URL hardening checkpoint, the app includes:
   in Settings, and hardened external Jira issue-link opening against the
   configured Jira site host.
 - `Create in Jira` preflight, including credential/project/task validation and a configurable Jira creation project key.
-- First Jira write slice behind preflight: creation metadata validation, epic search/create by `[{Project}] {Area}`, parent Story/Bug creation, local Jira key/link persistence, remote correlation markers through Jira issue properties, sync audit events, and partial recovery via moving failed tasks to a recovery tray.
+- Jira write path behind preflight: creation metadata validation, epic
+  search/create by `[{Project}] {Area}`, parent Story/Bug creation, accepted
+  sub-task creation, selected Jira-ready attachment upload, local Jira key/link
+  persistence, remote correlation markers through Jira issue properties, sync
+  audit events, and partial recovery via moving failed tasks to a recovery tray.
 - A reusable backend Jira client and read-only JQL query command wired to the JQL panel.
 - Persisted JQL favorites, session recent JQL history, and honest empty/error/loading states in the JQL panel.
 - OpenAI key storage, connection testing, and AI-assisted JQL draft generation through the Rust/Tauri backend.
@@ -129,8 +134,9 @@ Still pending:
 - Re-check native QA after the post-PR command-worker, backup, audit, JQL, and
   Ask AI changes.
 - Categories persistence in the UI.
-- Per-task assisted descriptions, attachments, sub-task creation, attachment
-  upload, and audit log UI.
+- Audit log UI, guided Jira Connection setup, broader Jira issue relationship
+  sync, and remaining native/live QA hardening around assisted descriptions,
+  sub-tasks, and attachment upload.
 - Replace the current implementation's SRS/SRE Lite assisted-description
   scaffolding with the Jira DTS description format in
   `/home/saimon/Development/jira-task-forge/docs/jira-description-format.md`.
@@ -167,11 +173,12 @@ Recommended stack to work next:
   preflight, and visible sync/audit behavior.
 - Run live QA for Jira issue creation against `JTFTEST`: missing description
   confirmation, metadata preflight, epic reuse/create, parent Story/Bug
-  creation, partial failure, and recovery tray movement.
+  creation, accepted sub-task creation, selected Jira-ready attachment upload,
+  partial failure, and recovery tray movement.
 - Raise backend coverage above 80% by targeting `commands.rs` and
   `integrations/jira.rs`, then add useful frontend workflow tests.
-- Keep sub-task creation as the next narrow Jira write slice; keep attachment
-  upload for a later slice.
+- Keep remaining Jira write work narrow, with Jira issue relationship sync and
+  attachment cleanup/compression hardening treated as separate slices.
 - After API creation works, verify that Jira's admin CSV importer can still use
   exported files manually.
 
