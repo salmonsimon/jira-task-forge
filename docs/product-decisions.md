@@ -402,10 +402,10 @@ This document captures the product scope decisions from the grill session. UI co
 - Proposal metadata and the chronological iteration log should persist locally
   with the task, similar to the brainstorming app's proposal metadata. This
   history is for local review and backup, not Jira upload.
-- The first AFK implementation pass may add a SQLite migration for assisted
-  description proposals and proposal-log entries. The migration should keep this
-  metadata attached to the local task, include it in local backup/import, and
-  avoid changing the Jira payload except through the accepted final description.
+- Assisted description proposals and proposal-log entries now persist through a
+  SQLite migration. This metadata stays attached to the local task, is included
+  in local backup/import, and does not change the Jira payload except through the
+  accepted final description.
 - Accepting or manually editing a proposed section updates the task's final
   Assisted Description. Rejected proposal sections remain in local proposal
   history but are not included in the Jira description.
