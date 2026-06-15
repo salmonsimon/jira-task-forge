@@ -210,6 +210,10 @@ Expected limitations right now:
   assisted description structure/proposal logs, local sub-task editing, managed
   attachment ingestion, and Jira attachment upload have landed and still need
   regular native/live QA coverage.
+- Assisted Description still has a focused polish gap: remove remaining SRS/SRE
+  Lite references from UI copy and AI prompt helpers, and keep the proposal flow
+  aligned to the practical DTS Jira format through acceptance criteria as
+  captured in `docs/jira-description-format.md`.
 - Task detail `Details` supports editable project, area, and priority for editable non-archived tasks. Auto-generated epic and labels remain visible but muted/read-only.
 
 Near-term decided follow-ups:
@@ -223,11 +227,13 @@ Near-term decided follow-ups:
 Recommended next implementation:
 
 - Implement the guided Jira Connection setup flow from issue #112 as the next
-  HITL/product slice.
-- Finish or close the remaining AFK hardening issues: #102 visible Settings
-  privacy copy, #103 local data cleanup/storage inventory, #93 minimal Tauri
-  CSP, #94 remote correlation marker recovery, #88 sync audit detail allowlist,
-  and #95 attachment file grants/source validation.
+  HITL/product slice when Saimon wants the connection UX branch to move forward.
+- Launch the current AFK Batch 1 first when using parallel project-flow work:
+  #93 minimal Tauri CSP, #88 sync audit detail allowlist/redaction, and Assisted
+  Description DTS-format polish.
+- Finish or close the later AFK hardening issues after Batch 1: #102 visible
+  Settings privacy copy, #103 local data cleanup/storage inventory, #94 remote
+  correlation marker recovery, and #95 attachment file grants/source validation.
 - Keep using `docs/internal-release-readiness.md`, `docs/live-qa.md`,
   `docs/backup-restore-drill.md`, and the large-tray smoke fixture as the
   repeatable QA gates after each batch.
@@ -525,9 +531,16 @@ Batch 1 status:
   requires explicit review.
 - `#99` keyring/token recovery docs: merged in PR #110.
 - `#104` live QA evidence templates: merged in PR #108.
-- `#93` Minimal Tauri Content Security Policy: still open and remains a good
-  AFK slice. Keep the scope to Tauri config and any small supporting security
-  note.
+- `#93` Minimal Tauri Content Security Policy: open and ready for an AFK slice.
+  Keep the scope to Tauri config and any small supporting security note.
+- `#88` Sync Audit Log detail allowlist and redaction: open and ready for an AFK
+  backend/tests slice. Keep it independent from Remote Correlation Marker
+  recovery so the audit boundary is reviewable on its own.
+- Assisted Description DTS-format polish: ready for an AFK UI/prompt-copy slice.
+  Persistence, proposal logs, backup/import, and review UI already landed, so do
+  not recreate those branches. Remove remaining SRS/SRE Lite labels/copy/prompt
+  helpers and align generated proposal guidance to the DTS Jira description
+  format through acceptance criteria in `docs/jira-description-format.md`.
 - `#112` guided Jira Connection setup: design decision settled that `Set Jira
   Connection` should be the only user-facing path for Site URL, account email,
   and Jira project key setup. Do not keep parallel manual fields for those
@@ -539,25 +552,27 @@ Batch 1 status:
 Batch 2 should follow after the first PRs are reviewed or when more worktree
 capacity is useful:
 
-- `#95` attachment provenance/source validation as a dedicated PR. Do not run it
-  in parallel with sync/audit internals.
-- `#100` Internal Release Readiness checklist.
-- `#101` backup/restore drill with realistic local data.
-- `#105` large-tray performance smoke scenario using 200 Local Tasks.
-
-Batch 3 should avoid overlap with attachment work and should stay in separate
-PRs:
-
-- `#88` Sync Audit Log detail allowlist and redaction.
 - `#94` Remote Correlation Marker recovery for ambiguous Jira sync writes:
   retry marker search once with a short backoff, then block only the affected
-  task or `Project + Area` group while healthy groups continue.
+  task or `Project + Area` group while healthy groups continue. Prefer starting
+  this after #88 so the recovery audit events use the centralized detail module.
+- `#102` visible Settings privacy copy. Prefer starting this after #88, #89, and
+  #93 so the copy reflects implemented audit, dependency-audit, and CSP
+  boundaries.
 
-Batch 4 is readiness polish after the relevant security/attachment slices land:
+Batch 3 should avoid overlap with sync/audit work and should stay in separate
+PRs:
 
+- `#95` attachment provenance/source validation as a dedicated PR. Do not run it
+  in parallel with sync/audit internals.
 - `#103` local data cleanup and storage inventory note, ideally after `#95`.
-- `#102` visible Settings privacy copy, ideally after `#88`, `#89`, and `#93` so
-  copy reflects the implemented boundaries.
+
+Already landed from the earlier batch plan:
+
+- `#100` Internal Release Readiness checklist: merged in PR #117.
+- `#101` backup/restore drill with realistic local data: merged in PR #121.
+- `#105` large-tray performance smoke scenario using 200 Local Tasks: merged in
+  PR #119.
 
 ## Next Slice
 
@@ -565,38 +580,27 @@ Recommended next implementation slice:
 
 Branch family:
 
-- `codex/afk-polish-ui-preflight`
-- `codex/afk-description-proposal-persistence`
-- `codex/afk-description-proposal-ui`
+- `codex/minimal-tauri-csp`
+- `codex/audit-detail-allowlist`
+- `codex/assisted-description-dts-polish`
 
 Deliverables:
 
-- Polish the live Jira preparation workflow before adding larger Jira feature
-  expansion.
-- Add focused tray ergonomics: contextual `Ctrl+Enter`, tray-local search,
-  long-title truncation, `Transversal` pinned first, and focused-window title
-  editing for editable tasks.
-- Make JQL result keys open Jira externally through the existing safe external
-  link path.
-- Contain scroll inside dropdowns, popovers, and internal overlay lists.
-- Tighten Jira preflight presentation by resolving sub-task parents from the
-  full tray and grouping epic-resolution review by `[{Project}] {Area}` target.
-- Implement persistent Assisted Description proposal metadata and chronological
-  proposal logs with backup/import support.
-- Build the brainstorming-style proposal review UX for Jira descriptions:
-  Markdown read view, fixed Jira DTS sections from
-  `docs/jira-description-format.md`, hidden empty sections in read mode,
-  editable empty sections, `Raw`/`Polished` section states, paragraph diffs that
-  hide unchanged paragraphs, global and per-section request-changes, and compact
-  proposal-log cards.
+- #93: set a minimal production Tauri CSP, document any dev-only allowances, and
+  prove the app still builds and boots.
+- #88: centralize sync audit detail shaping behind typed builders or a small
+  allowlisted redaction module, then add tests for secret-shaped and oversized
+  payloads.
+- Assisted Description DTS-format polish: replace remaining SRS/SRE Lite UI copy
+  and AI prompt helper language with the practical DTS Jira format; generated
+  descriptions should stop at user story, context, scope, and acceptance
+  criteria, with missing information handled as targeted clarification questions.
 
 Reason:
 
-- Live QA showed Jira creation works, but regular task preparation still has
-  friction around review, editing, preflight density, and assisted-description
-  iteration. This polish pass should make the current Personal v1 workflow
-  comfortable before adding standalone feature surfaces such as Jira issue
-  relationships or broader category sync.
+- These slices are independent enough for visible AFK worktrees, align with the
+  current security/readiness track, and clear stale roadmap language before
+  larger Jira relationship or guided-connection work.
 
 ## Following Slice
 

@@ -137,9 +137,12 @@ Still pending:
 - Audit log UI, guided Jira Connection setup, broader Jira issue relationship
   sync, and remaining native/live QA hardening around assisted descriptions,
   sub-tasks, and attachment upload.
-- Replace the current implementation's SRS/SRE Lite assisted-description
-  scaffolding with the Jira DTS description format in
-  `/home/saimon/Development/jira-task-forge/docs/jira-description-format.md`.
+- Assisted Description proposal persistence, proposal logs, backup/import, and
+  review UI have landed. The remaining near-term polish is to remove lingering
+  SRS/SRE Lite UI copy and prompt-helper language, then align generated task
+  description proposals to the Jira DTS format in
+  `/home/saimon/Development/jira-task-forge/docs/jira-description-format.md`
+  through acceptance criteria.
 - Full native QA in an environment with the Linux system dependencies needed by Tauri/keyring.
 - Manual Jira admin CSV import fallback validation after the API create flow works.
 - Keep Rust backend line coverage above 80%; it is currently 80.40% in
