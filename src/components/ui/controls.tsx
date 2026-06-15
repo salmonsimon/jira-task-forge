@@ -5,7 +5,7 @@ import { cn } from "../../lib/utils";
 export function TopChip({ icon, label, onClick }: { icon: ReactNode; label: string; onClick: () => void }) {
   return (
     <button
-      className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[#dfe1e6] bg-white px-3 text-xs font-medium text-[#42526e] hover:bg-[#f4f5f7]"
+      className="app-top-chip inline-flex h-8 items-center gap-1.5 rounded-full border border-[#dfe1e6] bg-white px-3 text-xs font-medium text-[#42526e] hover:bg-[#f4f5f7]"
       onClick={onClick}
     >
       {icon}

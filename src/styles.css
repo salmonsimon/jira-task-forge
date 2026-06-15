@@ -152,6 +152,198 @@ button {
   background-color: #2b2f36 !important;
 }
 
+.app-top-chip {
+  background-color: #f4f8ff;
+  border-color: #b6c2cf;
+  color: #172b4d;
+}
+
+.app-top-chip:hover {
+  background-color: #deebff;
+  border-color: #85b8ff;
+  color: #0052cc;
+}
+
+.app-action-secondary,
+.settings-button-secondary {
+  background-color: #f4f8ff;
+  border-color: #b6c2cf;
+  color: #172b4d;
+}
+
+.app-action-secondary:hover,
+.settings-button-secondary:hover {
+  background-color: #deebff;
+  border-color: #85b8ff;
+  color: #0052cc;
+}
+
+.settings-button-primary {
+  background-color: #0052cc;
+  border-color: #0052cc;
+  color: #ffffff;
+}
+
+.settings-button-primary:hover {
+  background-color: #0747a6;
+  border-color: #0747a6;
+}
+
+.settings-button-primary:disabled {
+  background-color: #ebf1f8;
+  border-color: #d5dde8;
+  color: #7a869a;
+  opacity: 1;
+}
+
+.settings-button-danger {
+  background-color: #fff4f2;
+  border-color: #ffbdad;
+  color: #bf2600;
+}
+
+.settings-button-danger:hover {
+  background-color: #ffebe6;
+  border-color: #ff8f73;
+  color: #ae2a19;
+}
+
+.settings-button-danger:disabled {
+  background-color: #f4f5f7;
+  border-color: #dfe1e6;
+  color: #8993a4;
+  opacity: 1;
+}
+
+.settings-button-test {
+  background-color: #deebff;
+  border-color: #85b8ff;
+  color: #0747a6;
+}
+
+.settings-button-test:hover {
+  background-color: #cce0ff;
+  border-color: #579dff;
+  color: #0052cc;
+}
+
+.settings-button-test:disabled {
+  background-color: #eef4ff;
+  border-color: #d5e4ff;
+  color: #7a869a;
+  opacity: 1;
+}
+
+.app-select-menu {
+  background-color: #ffffff !important;
+  border-color: #b6c2cf !important;
+  box-shadow: 0 12px 28px rgba(9, 30, 66, 0.18);
+  color: #172b4d !important;
+}
+
+.app-select-option {
+  color: #172b4d !important;
+}
+
+.app-select-option:hover {
+  background-color: #f4f8ff !important;
+}
+
+.app-select-option[aria-selected="true"] {
+  background-color: #deebff !important;
+  color: #0052cc !important;
+}
+
+.theme-dark .app-top-chip {
+  background-color: #1d1f23;
+  border-color: #34373d;
+  color: #dfe1e6;
+}
+
+.theme-dark .app-top-chip:hover {
+  background-color: #2b2f36;
+  border-color: #5c606a;
+  color: #85b8ff;
+}
+
+.theme-dark .app-action-secondary,
+.theme-dark .settings-button-secondary {
+  background-color: #1d1f23;
+  border-color: #5c606a;
+  color: #dfe1e6;
+}
+
+.theme-dark .app-action-secondary:hover,
+.theme-dark .settings-button-secondary:hover {
+  background-color: #2b2f36;
+  border-color: #5c606a;
+  color: #dfe1e6;
+}
+
+.theme-dark .settings-button-primary {
+  background-color: #0c66e4;
+  border-color: #0c66e4;
+  color: #ffffff;
+}
+
+.theme-dark .settings-button-primary:hover {
+  background-color: #0052cc;
+  border-color: #0052cc;
+}
+
+.theme-dark .settings-button-primary:disabled,
+.theme-dark .settings-button-danger:disabled,
+.theme-dark .settings-button-test:disabled {
+  background-color: #22252a;
+  border-color: #454852;
+  color: #7f858f;
+  opacity: 1;
+}
+
+.theme-dark .settings-button-danger {
+  background-color: #301c1a;
+  border-color: #5d1f1a;
+  color: #ff9c8f;
+}
+
+.theme-dark .settings-button-danger:hover {
+  background-color: #3b211e;
+  border-color: #8f2f22;
+  color: #ffb8ad;
+}
+
+.theme-dark .settings-button-test {
+  background-color: #1d355c;
+  border-color: #3f5f96;
+  color: #deebff;
+}
+
+.theme-dark .settings-button-test:hover {
+  background-color: #25436f;
+  border-color: #85b8ff;
+  color: #ffffff;
+}
+
+.theme-dark .app-select-menu {
+  background-color: #2b2d31 !important;
+  border-color: #5c606a !important;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.36);
+  color: #f4f5f7 !important;
+}
+
+.theme-dark .app-select-option {
+  color: #dfe1e6 !important;
+}
+
+.theme-dark .app-select-option:hover {
+  background-color: #1d355c !important;
+}
+
+.theme-dark .app-select-option[aria-selected="true"] {
+  background-color: #0c66e4 !important;
+  color: #ffffff !important;
+}
+
 .preflight-disclosure > summary::-webkit-details-marker {
   display: none;
 }

@@ -251,7 +251,12 @@ export function SettingsPanel({
                   }
                 }}
               />
-              <Button disabled={!jiraSiteUrlDirty || jiraSiteUrlStatus === "saving"} variant="secondary" onClick={saveJiraSiteUrlDraft}>
+              <Button
+                className="settings-button-primary"
+                disabled={!jiraSiteUrlDirty || jiraSiteUrlStatus === "saving"}
+                variant="secondary"
+                onClick={saveJiraSiteUrlDraft}
+              >
                 {jiraSiteUrlStatus === "saving" ? "Saving..." : "Save"}
               </Button>
             </div>
@@ -311,14 +316,24 @@ export function SettingsPanel({
               onChange={updateJiraApiTokenDraft}
             />
             <div className="grid grid-cols-2 gap-2">
-              <Button disabled={!jiraTokenDraftControls.canSaveDraft} variant="secondary" onClick={saveJiraToken}>
+              <Button
+                className="settings-button-primary"
+                disabled={!jiraTokenDraftControls.canSaveDraft}
+                variant="secondary"
+                onClick={saveJiraToken}
+              >
                 Save key
               </Button>
-              <Button disabled={!hasJiraApiToken} variant="secondary" onClick={onDeleteJiraApiToken}>
+              <Button
+                className="settings-button-danger"
+                disabled={!hasJiraApiToken}
+                variant="secondary"
+                onClick={onDeleteJiraApiToken}
+              >
                 Remove key
               </Button>
               <Button
-                className="col-span-2 min-w-0 whitespace-nowrap"
+                className="settings-button-test col-span-2 min-w-0 whitespace-nowrap"
                 disabled={!jiraTokenDraftControls.canTestConnection}
                 icon={jiraTokenDraftTestStatus === "testing" ? <LoadingOrb size="xs" /> : undefined}
                 variant="secondary"
@@ -380,14 +395,24 @@ export function SettingsPanel({
               onChange={updateAiProviderApiKeyDraft}
             />
             <div className="grid grid-cols-2 gap-2">
-              <Button className="min-w-0 whitespace-nowrap" disabled={!isAiProviderSelected || !aiProviderKeyDraftControls.canSaveDraft} variant="secondary" onClick={saveAiProviderKey}>
+              <Button
+                className="settings-button-primary min-w-0 whitespace-nowrap"
+                disabled={!isAiProviderSelected || !aiProviderKeyDraftControls.canSaveDraft}
+                variant="secondary"
+                onClick={saveAiProviderKey}
+              >
                 Save key
               </Button>
-              <Button className="min-w-0 whitespace-nowrap" disabled={!isAiProviderSelected || !hasAiProviderApiKey} variant="secondary" onClick={onDeleteAiProviderApiKey}>
+              <Button
+                className="settings-button-danger min-w-0 whitespace-nowrap"
+                disabled={!isAiProviderSelected || !hasAiProviderApiKey}
+                variant="secondary"
+                onClick={onDeleteAiProviderApiKey}
+              >
                 Remove key
               </Button>
               <Button
-                className="col-span-2 min-w-0 whitespace-nowrap"
+                className="settings-button-test col-span-2 min-w-0 whitespace-nowrap"
                 disabled={!isAiProviderSelected || !aiProviderKeyDraftControls.canTestConnection}
                 icon={isTestingAiProviderConnection ? <LoadingOrb size="xs" /> : undefined}
                 variant="secondary"
@@ -415,10 +440,10 @@ export function SettingsPanel({
             JSON backups include trays, tasks, categories, epic mappings, JQL favorites, settings, and attachment metadata. Secrets are excluded.
           </p>
           <div className="flex gap-2">
-            <Button variant="secondary" icon={<Download size={14} />} onClick={onExportBackup}>
+            <Button className="settings-button-secondary" variant="secondary" icon={<Download size={14} />} onClick={onExportBackup}>
               Export backup
             </Button>
-            <Button variant="secondary" icon={<UploadCloud size={14} />} onClick={onImportBackup}>
+            <Button className="settings-button-secondary" variant="secondary" icon={<UploadCloud size={14} />} onClick={onImportBackup}>
               Import backup
             </Button>
           </div>

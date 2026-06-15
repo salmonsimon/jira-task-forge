@@ -369,7 +369,7 @@ function InlineTaskSelect({
       {isOpen ? (
         <div
           className={cn(
-            "absolute left-0 z-[400] max-h-56 min-w-[150px] overflow-y-auto overscroll-contain rounded border border-[#5c606a] bg-[#2b2d31] py-1 text-sm text-[#f4f5f7] shadow-xl",
+            "app-select-menu absolute left-0 z-[400] max-h-56 min-w-[150px] overflow-y-auto overscroll-contain rounded border border-[#5c606a] bg-[#2b2d31] py-1 text-sm text-[#f4f5f7] shadow-xl",
             opensUp ? "bottom-[calc(100%+4px)]" : "top-[calc(100%+4px)]"
           )}
           role="listbox"
@@ -379,7 +379,7 @@ function InlineTaskSelect({
             return (
               <button
                 aria-selected={isSelected}
-                className={`flex h-8 w-full items-center justify-between px-3 text-left hover:bg-[#1d355c] ${
+                className={`app-select-option flex h-8 w-full items-center justify-between px-3 text-left hover:bg-[#1d355c] ${
                   isSelected ? "bg-[#0c66e4] text-white" : "text-[#dfe1e6]"
                 }`}
                 key={option}

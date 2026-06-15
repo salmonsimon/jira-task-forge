@@ -118,8 +118,11 @@ impl<'connection> SettingsRepository<'connection> {
     }
 
     pub fn update_app_settings(&self, mut settings: AppSettings) -> DbResult<AppSettings> {
-        settings.jira_site_url =
-            normalize_jira_site_url(&settings.jira_site_url).map_err(DbError::InvalidData)?;
+        let current_settings = self.get_app_settings()?;
+        if settings.jira_site_url != current_settings.jira_site_url {
+            settings.jira_site_url =
+                normalize_jira_site_url(&settings.jira_site_url).map_err(DbError::InvalidData)?;
+        }
         let updated_at = utc_now_string()?;
         let value_json = serde_json::to_string(&settings)
             .map_err(|error| DbError::InvalidData(error.to_string()))?;
@@ -3517,6 +3520,47 @@ mod tests {
         assert!(error
             .to_string()
             .contains("Jira site URL must use an Atlassian Cloud host."));
+    }
+
+    #[test]
+    fn updates_unrelated_settings_when_existing_jira_site_url_is_legacy() {
+        let connection = open_in_memory_database().expect("database opens");
+        connection
+            .execute(
+                "
+                INSERT INTO settings (key, value_json, updated_at)
+                VALUES ('app_settings', ?1, '2026-06-15T00:00:00Z')
+                ",
+                [serde_json::json!({
+                    "themeMode": "dark",
+                    "jiraSiteUrl": "https://legacy.example.com/path",
+                    "jiraAccountEmail": "saimon@example.com",
+                    "jiraAuthMethod": "api-token",
+                    "jiraCreationProjectKey": "JTFTEST",
+                    "aiProvider": "OpenAI",
+                    "aiModel": "gpt-4.1",
+                    "defaultContentLanguage": "Spanish"
+                })
+                .to_string()],
+            )
+            .expect("legacy settings inserted");
+        let repository = SettingsRepository::new(&connection);
+
+        let updated = repository
+            .update_app_settings(AppSettings {
+                theme_mode: "light".to_string(),
+                jira_site_url: "https://legacy.example.com/path".to_string(),
+                jira_account_email: "saimon@example.com".to_string(),
+                jira_auth_method: "api-token".to_string(),
+                jira_creation_project_key: "JTFTEST".to_string(),
+                ai_provider: "OpenAI".to_string(),
+                ai_model: "gpt-4.1".to_string(),
+                default_content_language: "Spanish".to_string(),
+            })
+            .expect("unrelated setting updates");
+
+        assert_eq!(updated.theme_mode, "light");
+        assert_eq!(updated.jira_site_url, "https://legacy.example.com/path");
     }
 
     #[test]
