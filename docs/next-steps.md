@@ -18,8 +18,8 @@ Recent Personal v1 hardening merged since the older May checkpoint:
 - PR #108 added a reusable live QA evidence template and linked it from the live QA checklist.
 - PR #109 documented the local AFK worktree-thread workflow in `AGENTS.md`.
 - PR #110 added keyring recovery documentation for Jira and AI credentials.
-- PR #111 enforced strict Jira Cloud Site URL validation, hardened external Jira issue links against the configured site host, and made Site URL editing explicit with a `Save` action.
-- Issue #112 captures the next HITL product design for a guided `Set Jira Connection` flow.
+- PR #111 enforced strict Jira Cloud Site URL validation, hardened external Jira issue links against the configured site host, and made Site URL editing explicit with a `Save` action. The later HITL decision for #112 supersedes direct Settings edits with a guided connection flow.
+- Issue #112 captures the next guided `Set Jira Connection` implementation slice.
 
 Historical baseline from the first checkpoint:
 
@@ -125,7 +125,8 @@ npm run tauri dev
 ```
 
 Human QA to run before choosing the next implementation slice is captured in
-`docs/live-qa.md`. Summary:
+`docs/live-qa.md`. Use `docs/internal-release-readiness.md` as the shorter
+internal daily-use readiness gate after a batch of PRs lands. Summary:
 
 - Open `Trays`.
 - Create and rename a tray.
@@ -140,10 +141,13 @@ Human QA to run before choosing the next implementation slice is captured in
 - Export and import a JSON backup, confirming secrets are excluded and restored
   Jira links/audit history remain useful.
 - Visit `JQL`, `Categories`, and `Settings` and confirm navigation still works.
-- Edit Jira Site URL in Settings, press `Save`, and confirm valid standard
-  Atlassian Cloud site roots persist across app restart while invalid values
-  show explicit feedback and do not silently replace the field.
-- Save non-secret Jira settings and confirm they persist across app restart.
+- Confirm Settings shows Jira Site URL, account email, and Jira creation project
+  key as read-only connection state.
+- Use `Set Jira Connection` or `Change Jira Connection` to set a standard
+  Atlassian Cloud site root, account email, and `JTFTEST` project key; confirm
+  invalid URL shapes show explicit feedback and do not silently persist.
+- Save non-secret Jira connection state and confirm it persists across app
+  restart.
 - Save, delete, and re-save a Jira API token through the OS credential store.
 - Save, delete, and re-save an OpenAI API key through the OS credential store.
 - Test Jira connection from Settings after entering a real Jira site, email, and token.
@@ -152,7 +156,10 @@ Human QA to run before choosing the next implementation slice is captured in
 - Save, rename, delete, and reuse a JQL favorite.
 - Use Ask AI in the JQL tab and confirm it drafts a query without running it automatically.
 - Open `Create in Jira` preflight and confirm missing credentials, missing creation project, and missing task fields produce blocking warnings.
-- Against `JTFTEST`, confirm preflight can create missing epics, create parent Story/Bug issues, persist Jira keys locally, and move failed tasks to a recovery tray without duplicating them.
+- Against `JTFTEST`, confirm preflight can create missing epics, create parent
+  Story/Bug issues, create accepted sub-tasks, upload selected Jira-ready
+  attachments, persist Jira keys locally, and move failed tasks to a recovery
+  tray without duplicating them.
 - Re-check that Settings token actions, Settings connection test, direct JQL,
   and Create in Jira show loading before blocking work and remain responsive
   enough after the command worker split.
@@ -162,7 +169,9 @@ Human QA to run before choosing the next implementation slice is captured in
 
 Expected limitations right now:
 
-- `Create in Jira` creates required epics and parent Story/Bug issues only. Sub-tasks and attachments are intentionally still out of scope.
+- `Create in Jira` creates required epics, parent Story/Bug issues, accepted
+  sub-tasks, and selected Jira-ready attachments. Live QA should continue to
+  cover partial failure and retry behavior for these child operations.
 - `Export CSV` is wired and opens a native save dialog.
 - SQLite persistence exists for trays, local tasks, and non-secret app settings.
 - Jira API token storage exists through the OS credential store.
@@ -170,9 +179,11 @@ Expected limitations right now:
 - Read-only JQL queries are wired through Jira Cloud REST API v3.
 - JQL favorites persistence, session JQL history, backup/import, sync progress,
   task sync audit activity, OpenAI settings, and Ask AI JQL drafting are wired.
-- Categories persistence, per-task assisted descriptions, audit log UI, sub-task
-  creation, guided Jira Connection setup, and attachment upload are not fully
-  implemented.
+- Categories persistence, audit log UI, guided Jira Connection setup, and broader
+  Jira issue relationship sync are not fully implemented. Per-task assisted
+  description structure/proposal logs, local sub-task editing, managed
+  attachment ingestion, and Jira attachment upload have landed and still need
+  regular native/live QA coverage.
 - Task detail `Details` supports editable project, area, and priority for editable non-archived tasks. Auto-generated epic and labels remain visible but muted/read-only.
 
 Near-term decided follow-ups:
@@ -192,7 +203,9 @@ Recommended next implementation:
 - Expand frontend workflow tests around JQL recent history, backup notices,
   Settings state, guided Jira Connection setup, and preflight/progress view
   models.
-- Next write slices should stay narrow: sub-task creation first, attachment upload later.
+- Next write slices should stay narrow around remaining Jira mutation surfaces,
+  especially Jira issue relationship sync and any attachment cleanup/compression
+  hardening that changes filesystem behavior.
 - If QA reveals product/UI friction, do a small frontend-only fix branch before expanding integration writes.
 
 ## Working Model
@@ -355,18 +368,21 @@ HITL:
 
 ### 7. AI Integration Track
 
-Branch: `feature/ai-assisted-descriptions`
+Branch: follow-up `codex/...` slices as needed
 
 Owns:
 
 - `src-tauri/src/integrations/ai/`
 - internal prompt templates
-- Tauri commands for description generation, missing-info review, sub-task suggestions, and JQL generation
+- Tauri commands for description generation, missing-info review, sub-task
+  suggestions, and JQL generation
 
 Goal:
 
-- Add explicit user-triggered AI actions only.
+- Maintain explicit user-triggered AI actions only.
 - Keep prompts named and internal so they can become configurable later.
+- Continue QA and targeted polish for implemented JQL drafting and Assisted
+  Description generation/proposal review before adding broader AI planning.
 
 HITL:
 
@@ -401,10 +417,11 @@ HITL:
 3. Re-check native QA for settings, credential storage, connection test, JQL
    query, preflight, and Jira creation after the worker split.
 4. Test that Jira's admin CSV importer still works from exported files.
-5. Add sub-task creation as the next narrow Jira write slice.
-6. Add backup/import and attachment filesystem behavior as later slices under the accepted ADR contracts.
+5. Re-check sub-task creation and attachment upload in live QA against `JTFTEST`.
+6. Continue backup/import and attachment filesystem hardening under the accepted ADR contracts.
 7. Add categories/JQL favorites persistence if needed to support Jira read-only workflows.
-8. Add AI-assisted descriptions and JQL generation after settings/secrets are settled.
+8. Continue QA and polish for implemented AI-assisted descriptions and JQL
+   generation; add hardcoded 3D sub-task suggestions as a separate follow-up.
 
 ## HITL Gates
 
@@ -447,7 +464,14 @@ These can usually run without interruption when acceptance criteria are clear:
 - non-destructive read-only domain helpers
 - mock adapters and fixtures
 - docs cleanup that does not change decisions
+- docs refresh that reconciles stale text with accepted decisions on `main`
+- initial Internal Release Readiness checklist
+- backup/restore drill using realistic local data
+- large-tray smoke scenario using 200 Local Tasks
+- factual Settings privacy copy that does not change privacy/security policy
+- minimal CSP while it does not open new frontend network access
 - tests for already accepted rules
+- tests and coverage around existing behavior
 - read-only Jira payload shape exploration without credentials
 - real Jira write QA against `JTFTEST` for already accepted Jira sync flows
 
@@ -474,7 +498,10 @@ Batch 1 status:
 - `#112` guided Jira Connection setup: design decision settled that `Set Jira
   Connection` should be the only user-facing path for Site URL, account email,
   and Jira project key setup. Do not keep parallel manual fields for those
-  values. API token management remains separate.
+  values. Settings should show those values as read-only connection state, the
+  wizard should save only at the end, and manual project-key fallback is allowed
+  only when discovery fails with a clear warning. API token management remains
+  separate.
 
 Batch 2 should follow after the first PRs are reviewed or when more worktree
 capacity is useful:
@@ -489,7 +516,9 @@ Batch 3 should avoid overlap with attachment work and should stay in separate
 PRs:
 
 - `#88` Sync Audit Log detail allowlist and redaction.
-- `#94` Remote Correlation Marker recovery for ambiguous Jira sync writes.
+- `#94` Remote Correlation Marker recovery for ambiguous Jira sync writes:
+  retry marker search once with a short backoff, then block only the affected
+  task or `Project + Area` group while healthy groups continue.
 
 Batch 4 is readiness polish after the relevant security/attachment slices land:
 
@@ -522,10 +551,11 @@ Deliverables:
 - Implement persistent Assisted Description proposal metadata and chronological
   proposal logs with backup/import support.
 - Build the brainstorming-style proposal review UX for Jira descriptions:
-  Markdown read view, fixed SRS Lite sections, hidden empty sections in read
-  mode, editable empty sections, `Raw`/`Polished` section states, paragraph
-  diffs that hide unchanged paragraphs, global and per-section request-changes,
-  and compact proposal-log cards.
+  Markdown read view, fixed Jira DTS sections from
+  `docs/jira-description-format.md`, hidden empty sections in read mode,
+  editable empty sections, `Raw`/`Polished` section states, paragraph diffs that
+  hide unchanged paragraphs, global and per-section request-changes, and compact
+  proposal-log cards.
 
 Reason:
 
@@ -580,8 +610,8 @@ Goals:
 - Preserve the accepted ADR 0005 safety model while improving locality around
   Jira payload generation, post-create updates, audit events, and recovery
   outcomes.
-- Decide where the next useful test seams live before adding sub-task creation,
-  attachment upload, or AI provider calls.
+- Decide where the next useful test seams live before adding relationship sync,
+  attachment cleanup/compression hardening, or additional AI provider calls.
 - Add a real frontend test approach if the architecture pass finds UI behavior
   that should stop relying on manual QA only.
 - Include a focused security review of the surfaces that now matter most:
@@ -617,8 +647,8 @@ Initial deepening opportunities from the first pass:
    **Epic Mapping**, parent issue payloads, and post-create repair.
 
    Benefits: better Locality for Jira payload and metadata bugs, more Leverage
-   from small tests around accepted sync rules, and less risk before adding
-   sub-task creation.
+   from small tests around accepted sync rules, and less risk when maintaining
+   child-issue creation, attachment upload, and future Jira relationship sync.
 
 2. **Sync Audit Log detail Module**
 

@@ -1,3 +1,4 @@
+import { largeTraySmokeScenario } from "./fixtures/largeTraySmoke";
 import type { Category, JqlFavorite, JqlResult, Tray } from "./types";
 
 export const projects: Category[] = [
@@ -543,7 +544,8 @@ export const trays: Tray[] = [
     summary: "12 created",
     updatedAt: "May 10",
     tasks: []
-  }
+  },
+  largeTraySmokeScenario
 ];
 
 export const jqlFavorites: JqlFavorite[] = [
