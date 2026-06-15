@@ -10,10 +10,11 @@ The app now has SQLite-backed local trays/tasks, persisted non-secret settings,
 CSV export, JSON backup/restore without secrets, Jira API token storage through
 the OS credential store, Jira connection testing, read-only JQL search with
 favorites/recent history, AI-assisted JQL drafting through the Tauri backend,
-sync audit activity, Jira-admin-import-friendly CSV export, and a guarded
-`Create in Jira` flow that creates required epics plus parent Story/Bug issues.
-
-It does not yet create sub-tasks or upload real attachments.
+sync audit activity, Jira-admin-import-friendly CSV export, task detail
+sub-tasks, local issue relationship drafts, attachment metadata and managed-file
+ingestion, assisted description sections/proposals, and a guarded `Create in
+Jira` flow that creates required epics, parent Story/Bug issues, accepted
+sub-tasks, and selected Jira-ready attachments.
 
 ## Stack
 
@@ -50,6 +51,13 @@ npm run tauri dev
 ```bash
 npm run build
 ```
+
+## Internal Release Readiness
+
+Before using a new batch of PRs for daily internal work, run the concise
+readiness gate in [`docs/internal-release-readiness.md`](docs/internal-release-readiness.md).
+Use [`docs/live-qa.md`](docs/live-qa.md) for the longer native and live Jira QA
+procedure.
 
 ## Local Git Guard
 

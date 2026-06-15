@@ -67,11 +67,11 @@ La urgencia de una tarea expresada con valores Jira: Lowest, Low, Medium, High o
 _Avoid_: Stars
 
 **Assisted Description**:
-Una descripcion de Jira generada con ayuda de IA para una **Local Task**, usando historia de usuario y SRS Lite.
+Una descripcion de Jira generada con ayuda de IA para una **Local Task**, usando el formato Jira DTS: historia de usuario, contexto, alcance y criterios de aceptacion.
 _Avoid_: freeform notes only
 
 **Assisted Description Proposal**:
-Una propuesta local para cambiar una **Assisted Description**, separada por secciones SRS Lite para aceptar, rechazar, editar o pedir iteraciones antes de convertirla en descripcion final.
+Una propuesta local para cambiar una **Assisted Description**, separada por secciones del formato Jira DTS para aceptar, rechazar, editar o pedir iteraciones antes de convertirla en descripcion final.
 _Avoid_: final Jira description
 
 **Description Proposal Log**:

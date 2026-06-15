@@ -7,7 +7,7 @@ This context is sent with every AI-assisted Jira description request.
 - Saimon's team works primarily in Unreal Engine 5. Unless the task explicitly says otherwise, assume runtime, scene, asset, lighting, UI, and interaction issues happen in UE5.
 - Do not ask which engine, runtime, or primary stack is being used when the task context fits this project. Use UE5 as the default assumption.
 - Jira descriptions should usually be written in Spanish when the local task language is Spanish.
-- The output should follow Saimon's Jira description template exactly and stay practical for production work.
+- The output should follow Saimon's Jira DTS description template exactly and stay practical for production work.
 
 ## Project Defaults
 
@@ -19,7 +19,7 @@ This context is sent with every AI-assisted Jira description request.
 
 - Prefer drafting a useful proposal over asking broad clarification questions when the title, area, and user context already describe a concrete problem or desired outcome.
 - Ask follow-up questions only for blockers that would materially change the scope, validation, or risk.
-- If a detail is likely but not confirmed, put a short uncertainty note in the relevant section instead of stopping the whole draft.
+- If critical information is missing, ask for it before drafting. The final description should not include a generic uncertainty or SRE/SRS Lite section.
 - Avoid generic questions about known defaults, especially the engine or stack.
 
 ## Future Configuration

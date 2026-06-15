@@ -53,6 +53,57 @@ live Jira write validation.
 - Status: Pass / Fail / Blocked
 - Backup path:
 - Import source:
+- Secret exclusion checked:
+- Sub-task relationship evidence:
+- Attachment metadata/file evidence:
+- Evidence / notes:
+- Follow-up:
+
+## Settings And Credential Boundary
+
+- Status: Pass / Fail / Blocked
+- Jira site URL / account / creation project:
+- Jira API token save/delete/test:
+- AI provider/model/key save/delete/test:
+- Backup secret exclusion notes:
+- Keyring recovery needed:
+- Evidence / notes:
+- Follow-up:
+
+## Assisted Descriptions
+
+- Status: Pass / Fail / Blocked
+- Provider/model:
+- Draft/generate path:
+- Clarification path:
+- Manual edit / Markdown render:
+- Proposal log / local-only evidence:
+- Missing-description preflight evidence:
+- Evidence / notes:
+- Follow-up:
+
+## Sub-Tasks
+
+- Status: Pass / Fail / Blocked
+- Parent task(s):
+- Local sub-task create/delete evidence:
+- Preflight grouping evidence:
+- Jira sub-task issue keys:
+- Parent relationship evidence:
+- Backup/import evidence:
+- Evidence / notes:
+- Follow-up:
+
+## Attachments
+
+- Status: Pass / Fail / Blocked
+- Files selected:
+- Managed storage / metadata evidence:
+- Purpose counts:
+- Jira-ready preflight evidence:
+- Jira uploaded attachment evidence:
+- AI-only non-upload evidence:
+- Local cleanup expectation observed:
 - Evidence / notes:
 - Follow-up:
 
@@ -60,6 +111,12 @@ live Jira write validation.
 
 - Status: Pass / Fail / Blocked
 - Relevant settings:
+- Blocking warning groups:
+- Review warning groups:
+- Missing-description choice:
+- Exported task inclusion choice:
+- Epic grouping evidence:
+- Metadata blocker evidence:
 - Evidence / notes:
 - Follow-up:
 
@@ -67,6 +124,12 @@ live Jira write validation.
 
 - Status: Pass / Fail / Blocked
 - JTFTEST issue keys:
+- Parent issue keys:
+- Sub-task issue keys:
+- Epic keys:
+- Attachment upload evidence:
+- Sync audit evidence:
+- Recovery tray evidence:
 - Evidence / notes:
 - Follow-up:
 
