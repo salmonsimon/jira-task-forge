@@ -2,7 +2,9 @@ use super::credentials::{JIRA_API_TOKEN_ACCOUNT, JIRA_CREDENTIAL_SERVICE};
 use super::AppServices;
 use crate::integrations::jira::{normalize_jira_site_url, JiraClient, JiraCredentials};
 use crate::jira_sync::JiraSyncRunner;
-use crate::models::{JiraConnectionTestResult, JiraCreateIssuesResult, JiraCreateProgress};
+use crate::models::{
+    JiraConnectionTestResult, JiraCreateIssuesResult, JiraCreateProgress, JiraProjectOption,
+};
 
 impl AppServices {
     pub fn test_jira_connection(&self) -> JiraConnectionTestResult {
@@ -26,6 +28,33 @@ impl AppServices {
         };
 
         self.test_jira_client(client)
+    }
+
+    pub fn test_jira_connection_settings(
+        &self,
+        site_url: &str,
+        account_email: &str,
+    ) -> JiraConnectionTestResult {
+        let api_token = match self.jira_api_token() {
+            Ok(token) => token,
+            Err(message) => return failed_result(message),
+        };
+        let client = match self.jira_client_from_raw_parts(site_url, account_email, &api_token) {
+            Ok(client) => client,
+            Err(message) => return failed_result(message),
+        };
+
+        self.test_jira_client(client)
+    }
+
+    pub fn list_jira_projects_for_connection(
+        &self,
+        site_url: &str,
+        account_email: &str,
+    ) -> Result<Vec<JiraProjectOption>, String> {
+        let api_token = self.jira_api_token()?;
+        let client = self.jira_client_from_raw_parts(site_url, account_email, &api_token)?;
+        client.list_projects()
     }
 
     fn test_jira_client(&self, client: JiraClient) -> JiraConnectionTestResult {
@@ -132,6 +161,21 @@ impl AppServices {
             account_email,
             api_token: api_token.to_string(),
         }))
+    }
+
+    fn jira_client_from_raw_parts(
+        &self,
+        site_url: &str,
+        account_email: &str,
+        api_token: &str,
+    ) -> Result<JiraClient, String> {
+        let site_url = normalize_jira_site_url(site_url)?;
+        let account_email = account_email.trim();
+        if account_email.is_empty() {
+            return Err("Jira account email is required.".to_string());
+        }
+
+        self.jira_client_from_parts(site_url, account_email.to_string(), api_token)
     }
 
     fn jira_api_token(&self) -> Result<String, String> {

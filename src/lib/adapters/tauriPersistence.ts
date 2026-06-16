@@ -12,6 +12,7 @@ import type {
   JqlAiDraft,
   JiraCreateIssuesResult,
   JiraConnectionTestResult,
+  JiraProjectOption,
   JqlFavorite,
   JqlQueryResult,
   LocalTask,
@@ -210,6 +211,20 @@ export async function testPersistedJiraConnection(): Promise<JiraConnectionTestR
 
 export async function testPersistedJiraApiToken(token: string): Promise<JiraConnectionTestResult> {
   return invoke<JiraConnectionTestResult>("test_jira_api_token", { token });
+}
+
+export async function testPersistedJiraConnectionSettings(
+  siteUrl: string,
+  accountEmail: string
+): Promise<JiraConnectionTestResult> {
+  return invoke<JiraConnectionTestResult>("test_jira_connection_settings", { siteUrl, accountEmail });
+}
+
+export async function listPersistedJiraProjectsForConnection(
+  siteUrl: string,
+  accountEmail: string
+): Promise<JiraProjectOption[]> {
+  return invoke<JiraProjectOption[]>("list_jira_projects_for_connection", { siteUrl, accountEmail });
 }
 
 export async function runPersistedJqlQuery(jql: string, maxResults = 50): Promise<JqlQueryResult> {

@@ -1,7 +1,7 @@
 use tauri::{AppHandle, Emitter, State};
 
 use super::worker::run_blocking_result;
-use crate::models::{JiraConnectionTestResult, JiraCreateIssuesResult};
+use crate::models::{JiraConnectionTestResult, JiraCreateIssuesResult, JiraProjectOption};
 use crate::services::AppServices;
 
 #[tauri::command]
@@ -23,6 +23,32 @@ pub async fn test_jira_api_token(
     let services = services.inner().clone();
     run_blocking_result("Jira connection worker", move || {
         Ok(services.test_jira_connection_with_api_token(&token))
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn test_jira_connection_settings(
+    services: State<'_, AppServices>,
+    site_url: String,
+    account_email: String,
+) -> Result<JiraConnectionTestResult, String> {
+    let services = services.inner().clone();
+    run_blocking_result("Jira connection worker", move || {
+        Ok(services.test_jira_connection_settings(&site_url, &account_email))
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn list_jira_projects_for_connection(
+    services: State<'_, AppServices>,
+    site_url: String,
+    account_email: String,
+) -> Result<Vec<JiraProjectOption>, String> {
+    let services = services.inner().clone();
+    run_blocking_result("Jira project discovery worker", move || {
+        services.list_jira_projects_for_connection(&site_url, &account_email)
     })
     .await
 }

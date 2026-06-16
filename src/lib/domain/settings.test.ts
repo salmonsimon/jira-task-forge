@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getCredentialDraftControls } from "./settings";
+import { getCredentialDraftControls, validateJiraSiteUrlDraft } from "./settings";
 
 describe("settings domain helpers", () => {
   it("requires a successful connection test before saving a new credential", () => {
@@ -44,5 +44,25 @@ describe("settings domain helpers", () => {
         keyDraft: "new-key"
       }).canTestConnection
     ).toBe(false);
+  });
+
+  it("normalizes standard Atlassian Cloud site roots", () => {
+    expect(validateJiraSiteUrlDraft("https://DTS.atlassian.net/")).toEqual({
+      ok: true,
+      value: "https://dts.atlassian.net",
+      changed: true,
+      message: "This will be saved as https://dts.atlassian.net."
+    });
+  });
+
+  it("rejects non-root or non-standard Jira URLs", () => {
+    expect(validateJiraSiteUrlDraft("https://dts.atlassian.net/browse/DTS-1")).toMatchObject({
+      ok: false,
+      message: "Use the site root only, without paths, query strings, or fragments."
+    });
+    expect(validateJiraSiteUrlDraft("https://jira.example.com")).toMatchObject({
+      ok: false,
+      message: "Use a standard Atlassian Cloud host, for example https://your-site.atlassian.net."
+    });
   });
 });

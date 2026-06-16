@@ -36,6 +36,7 @@ import {
   listPersistedAssistedDescriptionProposals,
   listPersistedDescriptionProposalLog,
   listPersistedJqlFavorites,
+  listPersistedJiraProjectsForConnection,
   listPersistedTaskSyncLog,
   listPersistedTrays,
   markPersistedTasksCsvExported,
@@ -50,6 +51,7 @@ import {
   testPersistedAiProviderConnection,
   testPersistedJiraApiToken,
   testPersistedJiraConnection,
+  testPersistedJiraConnectionSettings,
   transitionPersistedAssistedDescriptionProposal,
   updatePersistedAppSettings,
   updatePersistedAssistedDescriptionProposalSection,
@@ -742,6 +744,48 @@ export default function App() {
     }
   }
 
+  async function testJiraConnectionSettings(siteUrl: string, accountEmail: string): Promise<JiraConnectionTestResult> {
+    flushSync(() => {
+      setIsTestingJiraConnection(true);
+      setJiraCredentialMessage(null);
+    });
+    const loadingStartedAt = performance.now();
+    await waitForNextPaint();
+    await delay(500);
+
+    try {
+      const result = usesTauriPersistence
+        ? await testPersistedJiraConnectionSettings(siteUrl, accountEmail)
+        : {
+            ok: true,
+            message: "Preview connection succeeded.",
+            accountDisplayName: "Preview user",
+            accountEmail
+          };
+      return result;
+    } catch (error) {
+      const result = {
+        ok: false,
+        message: formatUnknownError(error, "Could not test Jira connection.")
+      };
+      return result;
+    } finally {
+      await waitForMinimumElapsed(loadingStartedAt, 800);
+      setIsTestingJiraConnection(false);
+    }
+  }
+
+  async function listJiraProjectsForConnection(siteUrl: string, accountEmail: string) {
+    if (!usesTauriPersistence) {
+      return [
+        { key: "JTFTEST", name: "Jira Task Forge Test" },
+        { key: "DTS", name: "DTS" }
+      ];
+    }
+
+    return listPersistedJiraProjectsForConnection(siteUrl, accountEmail);
+  }
+
   async function testJiraApiToken(token: string): Promise<JiraConnectionTestResult> {
     flushSync(() => {
       setIsTestingJiraConnection(true);
@@ -762,6 +806,36 @@ export default function App() {
       };
       showJiraConnectionNotice(result);
       return result;
+    } finally {
+      await waitForMinimumElapsed(loadingStartedAt, 800);
+      setIsTestingJiraConnection(false);
+    }
+  }
+
+  async function testJiraApiTokenQuiet(token: string): Promise<JiraConnectionTestResult> {
+    flushSync(() => {
+      setIsTestingJiraConnection(true);
+      setJiraCredentialMessage(null);
+    });
+    const loadingStartedAt = performance.now();
+    await waitForNextPaint();
+    await delay(500);
+
+    try {
+      if (!usesTauriPersistence) {
+        return {
+          ok: true,
+          message: "Preview token test succeeded.",
+          accountDisplayName: "Preview user",
+          accountEmail: appSettings.jiraAccountEmail
+        };
+      }
+      return await testPersistedJiraApiToken(token);
+    } catch (error) {
+      return {
+        ok: false,
+        message: formatUnknownError(error, "Could not test Jira connection.")
+      };
     } finally {
       await waitForMinimumElapsed(loadingStartedAt, 800);
       setIsTestingJiraConnection(false);
@@ -1428,7 +1502,6 @@ export default function App() {
             settings={appSettings}
             hasJiraApiToken={hasJiraApiToken}
             hasAiProviderApiKey={hasAiProviderApiKey}
-            jiraCredentialMessage={jiraCredentialMessage}
             aiCredentialMessage={aiCredentialMessage}
             isTestingJiraConnection={isTestingJiraConnection}
             isTestingAiProviderConnection={isTestingAiProviderConnection}
@@ -1439,8 +1512,9 @@ export default function App() {
             onDeleteAiProviderApiKey={deleteAiProviderApiKey}
             onTestAiProviderConnection={testAiProviderConnection}
             onTestAiProviderApiKey={testAiProviderApiKey}
-            onTestJiraConnection={testJiraConnection}
-            onTestJiraApiToken={testJiraApiToken}
+            onTestJiraApiTokenQuiet={testJiraApiTokenQuiet}
+            onTestJiraConnectionSettings={testJiraConnectionSettings}
+            onListJiraProjectsForConnection={listJiraProjectsForConnection}
             onOpenJiraApiTokens={openJiraApiTokensPage}
             onOpenAiProviderApiKeys={openAiProviderApiKeysPage}
             onExportBackup={exportBackup}

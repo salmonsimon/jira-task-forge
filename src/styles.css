@@ -80,6 +80,10 @@ button {
   background-color: #533f04 !important;
 }
 
+.theme-dark [class*="bg-[#fff7d6]"] {
+  background-color: #3f3414 !important;
+}
+
 .theme-dark [class*="bg-[#ffebe6]"] {
   background-color: #5d1f1a !important;
 }
@@ -197,9 +201,9 @@ button {
 }
 
 .settings-button-primary:disabled {
-  background-color: #ebf1f8;
-  border-color: #d5dde8;
-  color: #7a869a;
+  background-color: #f1f2f4;
+  border-color: #dfe1e6;
+  color: #8993a4;
   opacity: 1;
 }
 
@@ -235,9 +239,9 @@ button {
 }
 
 .settings-button-test:disabled {
-  background-color: #eef4ff;
-  border-color: #d5e4ff;
-  color: #7a869a;
+  background-color: #f1f2f4;
+  border-color: #dfe1e6;
+  color: #8993a4;
   opacity: 1;
 }
 
@@ -301,10 +305,16 @@ button {
 .theme-dark .settings-button-primary:disabled,
 .theme-dark .settings-button-danger:disabled,
 .theme-dark .settings-button-test:disabled {
-  background-color: #22252a;
-  border-color: #454852;
-  color: #7f858f;
-  opacity: 1;
+  background-color: #1d1f23;
+  border-color: #3a3d43;
+  color: #aeb3bd;
+  opacity: 0.45;
+}
+
+.theme-dark .settings-button-primary:disabled svg,
+.theme-dark .settings-button-danger:disabled svg,
+.theme-dark .settings-button-test:disabled svg {
+  color: #aeb3bd;
 }
 
 .theme-dark .settings-button-danger {

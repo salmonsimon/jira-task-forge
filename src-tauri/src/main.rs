@@ -66,6 +66,8 @@ pub fn run() {
             commands::ai::test_ai_provider_api_key,
             commands::jira::test_jira_connection,
             commands::jira::test_jira_api_token,
+            commands::jira::test_jira_connection_settings,
+            commands::jira::list_jira_projects_for_connection,
             commands::jql::run_jql_query,
             commands::jql::draft_jql_with_ai,
             commands::ai::generate_task_description,
