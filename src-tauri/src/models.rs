@@ -167,6 +167,20 @@ pub struct JiraConnectionTestResult {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct JiraProjectOption {
+    pub key: String,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JiraProjectSearchResponse {
+    #[serde(default)]
+    pub values: Vec<JiraProjectOption>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct JiraMyself {
     pub account_id: Option<String>,
     pub display_name: Option<String>,

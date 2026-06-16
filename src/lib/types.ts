@@ -220,6 +220,11 @@ export type JiraConnectionTestResult = {
   accountEmail?: string | null;
 };
 
+export type JiraProjectOption = {
+  key: string;
+  name: string;
+};
+
 export type CredentialConnectionTestResult = {
   ok: boolean;
   message: string;

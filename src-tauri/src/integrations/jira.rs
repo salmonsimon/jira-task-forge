@@ -11,7 +11,8 @@ use super::jira_mapping::{
 };
 use crate::models::{
     JiraAttachmentSettings, JiraCreateIssueResponse, JiraCreateIssueTypeMetadata,
-    JiraCreateMetadata, JiraMyself, JqlSearchResponse,
+    JiraCreateMetadata, JiraMyself, JiraProjectOption, JiraProjectSearchResponse,
+    JqlSearchResponse,
 };
 use crate::redaction::redact_secret_fragments;
 
@@ -82,6 +83,25 @@ impl JiraClient {
             "Jira attachment settings",
             None,
         )
+    }
+
+    pub fn list_projects(&self) -> Result<Vec<JiraProjectOption>, String> {
+        let response: JiraProjectSearchResponse = self.get_json_with_retry(
+            "/rest/api/3/project/search?maxResults=100",
+            "Jira project discovery",
+        )?;
+        let mut projects = response
+            .values
+            .into_iter()
+            .filter(|project| !project.key.trim().is_empty())
+            .map(|project| JiraProjectOption {
+                key: project.key.trim().to_ascii_uppercase(),
+                name: project.name.trim().to_string(),
+            })
+            .collect::<Vec<_>>();
+        projects.sort_by(|left, right| left.key.cmp(&right.key));
+        projects.dedup_by(|left, right| left.key == right.key);
+        Ok(projects)
     }
 
     pub fn search_jql(&self, jql: &str, max_results: usize) -> Result<JqlSearchResponse, String> {

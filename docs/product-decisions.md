@@ -12,6 +12,15 @@ This document captures the product scope decisions from the grill session. UI co
 - The app starts on the `Trays` tab with the tray selector. It does not reopen the last used tray automatically.
 - Main tabs are `Trays` and `JQL`.
 - Global chip-style actions are `Categories` and `Settings`.
+- Settings should stay compact after Personal v1 hardening. Jira Site URL,
+  account email, Jira creation project key, and Jira API token setup are
+  configured through a guided `Set Connection` flow, then shown as read-only
+  connection state in Settings. Settings should not offer a second manual Jira
+  token editor.
+- The guided Jira connection flow should surface a compact
+  `Privacy & Diagnostics` warning/link that opens a secondary in-app detail
+  view. Personal v1 should not send users to an external web page for this
+  explanation.
 
 ## Roadmap Milestones
 

@@ -3,7 +3,8 @@ import { useEffect, useRef, useState } from "react";
 import { Button, DetailBlock, LoadingOrb, PanelHeader, SegmentedControl } from "../../components/ui";
 import { appOverlayLayers, useAppOverlay } from "../../lib/app-overlays";
 import { getCredentialDraftControls, type CredentialDraftTestStatus } from "../../lib/domain";
-import type { AiProvider, AppSettings, CredentialConnectionTestResult, JiraConnectionTestResult, ThemeMode } from "../../lib/types";
+import type { AiProvider, AppSettings, CredentialConnectionTestResult, JiraConnectionTestResult, JiraProjectOption, ThemeMode } from "../../lib/types";
+import { JiraConnectionGuide } from "./JiraConnectionGuide";
 
 const aiProviderOptions: Array<{ label: string; value: AiProvider }> = [
   { label: "OpenAI", value: "OpenAI" },
@@ -34,7 +35,6 @@ export function SettingsPanel({
   settings,
   hasJiraApiToken,
   hasAiProviderApiKey,
-  jiraCredentialMessage,
   aiCredentialMessage,
   isTestingJiraConnection,
   isTestingAiProviderConnection,
@@ -45,8 +45,9 @@ export function SettingsPanel({
   onDeleteAiProviderApiKey,
   onTestAiProviderConnection,
   onTestAiProviderApiKey,
-  onTestJiraConnection,
-  onTestJiraApiToken,
+  onTestJiraApiTokenQuiet,
+  onTestJiraConnectionSettings,
+  onListJiraProjectsForConnection,
   onOpenJiraApiTokens,
   onOpenAiProviderApiKeys,
   onExportBackup,
@@ -56,7 +57,6 @@ export function SettingsPanel({
   settings: AppSettings;
   hasJiraApiToken: boolean;
   hasAiProviderApiKey: boolean;
-  jiraCredentialMessage: string | null;
   aiCredentialMessage: string | null;
   isTestingJiraConnection: boolean;
   isTestingAiProviderConnection: boolean;
@@ -67,8 +67,9 @@ export function SettingsPanel({
   onDeleteAiProviderApiKey: () => void;
   onTestAiProviderConnection: () => Promise<CredentialConnectionTestResult>;
   onTestAiProviderApiKey: (apiKey: string) => Promise<CredentialConnectionTestResult>;
-  onTestJiraConnection: () => Promise<JiraConnectionTestResult>;
-  onTestJiraApiToken: (token: string) => Promise<JiraConnectionTestResult>;
+  onTestJiraApiTokenQuiet: (token: string) => Promise<JiraConnectionTestResult>;
+  onTestJiraConnectionSettings: (siteUrl: string, accountEmail: string) => Promise<JiraConnectionTestResult>;
+  onListJiraProjectsForConnection: (siteUrl: string, accountEmail: string) => Promise<JiraProjectOption[]>;
   onOpenJiraApiTokens: () => void;
   onOpenAiProviderApiKeys: () => void;
   onExportBackup: () => void;
@@ -76,13 +77,8 @@ export function SettingsPanel({
   onClose: () => void;
 }) {
   const panelRef = useRef<HTMLElement | null>(null);
-  const jiraApiTokenDraftRef = useRef("");
   const aiProviderApiKeyDraftRef = useRef("");
-  const [jiraApiTokenDraft, setJiraApiTokenDraft] = useState("");
-  const [jiraTokenDraftTestStatus, setJiraTokenDraftTestStatus] = useState<CredentialDraftTestStatus>("idle");
-  const [jiraSiteUrlDraft, setJiraSiteUrlDraft] = useState(settings.jiraSiteUrl);
-  const [jiraSiteUrlDirty, setJiraSiteUrlDirty] = useState(false);
-  const [jiraSiteUrlStatus, setJiraSiteUrlStatus] = useState<"idle" | "saving" | "saved" | "failed">("idle");
+  const [isJiraConnectionGuideOpen, setIsJiraConnectionGuideOpen] = useState(false);
   const [aiProviderApiKeyDraft, setAiProviderApiKeyDraft] = useState("");
   const [aiProviderKeyDraftTestStatus, setAiProviderKeyDraftTestStatus] = useState<CredentialDraftTestStatus>("idle");
   const selectedAiProvider = settings.aiProvider === "None" ? "OpenAI" : settings.aiProvider;
@@ -93,13 +89,12 @@ export function SettingsPanel({
     : hasAiProviderApiKey
     ? "Enter a new key to replace it"
     : aiProviderKeyPlaceholders[selectedAiProvider];
-  const jiraTokenDraftControls = getCredentialDraftControls({
-    hasConnectionSettings: Boolean(settings.jiraSiteUrl.trim() && settings.jiraAccountEmail.trim()),
-    hasSavedCredential: hasJiraApiToken,
-    isTestingConnection: isTestingJiraConnection,
-    keyDraft: jiraApiTokenDraft,
-    keyTestStatus: jiraTokenDraftTestStatus
-  });
+  const isJiraConnectionComplete = Boolean(
+    settings.jiraSiteUrl.trim() &&
+    settings.jiraAccountEmail.trim() &&
+    settings.jiraCreationProjectKey.trim() &&
+    hasJiraApiToken
+  );
   const aiProviderKeyDraftControls = getCredentialDraftControls({
     hasConnectionSettings: isAiProviderSelected,
     hasSavedCredential: hasAiProviderApiKey,
@@ -116,43 +111,6 @@ export function SettingsPanel({
     surfaceRef: panelRef
   });
 
-  useEffect(() => {
-    if (jiraSiteUrlDirty) return;
-    setJiraSiteUrlDraft(settings.jiraSiteUrl);
-  }, [jiraSiteUrlDirty, settings.jiraSiteUrl]);
-
-  function updateJiraSiteUrlDraft(value: string) {
-    setJiraSiteUrlDraft(value);
-    setJiraSiteUrlDirty(value !== settings.jiraSiteUrl);
-    setJiraSiteUrlStatus("idle");
-  }
-
-  async function saveJiraSiteUrlDraft() {
-    const nextSiteUrl = jiraSiteUrlDraft.trim();
-    if (!nextSiteUrl || nextSiteUrl === settings.jiraSiteUrl) {
-      setJiraSiteUrlDraft(settings.jiraSiteUrl);
-      setJiraSiteUrlDirty(false);
-      setJiraSiteUrlStatus("idle");
-      return;
-    }
-
-    setJiraSiteUrlStatus("saving");
-    const saved = await onChange({ jiraSiteUrl: nextSiteUrl });
-    if (saved) {
-      setJiraSiteUrlDirty(false);
-      setJiraSiteUrlStatus("saved");
-      return;
-    }
-
-    setJiraSiteUrlStatus("failed");
-  }
-
-  function updateJiraApiTokenDraft(value: string) {
-    jiraApiTokenDraftRef.current = value;
-    setJiraApiTokenDraft(value);
-    setJiraTokenDraftTestStatus("idle");
-  }
-
   function updateAiProviderApiKeyDraft(value: string) {
     aiProviderApiKeyDraftRef.current = value;
     setAiProviderApiKeyDraft(value);
@@ -168,16 +126,6 @@ export function SettingsPanel({
     });
   }
 
-  async function testJiraTokenConnection() {
-    if (!jiraTokenDraftControls.canTestConnection) return;
-
-    const tokenUnderTest = jiraApiTokenDraft;
-    setJiraTokenDraftTestStatus("testing");
-    const result = tokenUnderTest ? await onTestJiraApiToken(tokenUnderTest) : await onTestJiraConnection();
-    if (jiraApiTokenDraftRef.current !== tokenUnderTest) return;
-    setJiraTokenDraftTestStatus(result.ok ? "success" : "failed");
-  }
-
   async function testAiProviderKeyConnection() {
     if (!aiProviderKeyDraftControls.canTestConnection) return;
 
@@ -186,16 +134,6 @@ export function SettingsPanel({
     const result = apiKeyUnderTest ? await onTestAiProviderApiKey(apiKeyUnderTest) : await onTestAiProviderConnection();
     if (aiProviderApiKeyDraftRef.current !== apiKeyUnderTest) return;
     setAiProviderKeyDraftTestStatus(result.ok ? "success" : "failed");
-  }
-
-  async function saveJiraToken() {
-    if (!jiraTokenDraftControls.canSaveDraft) return;
-
-    const saved = await onSaveJiraApiToken(jiraApiTokenDraft);
-    if (saved) {
-      updateJiraApiTokenDraft("");
-      setJiraTokenDraftTestStatus("idle");
-    }
   }
 
   async function saveAiProviderKey() {
@@ -209,17 +147,27 @@ export function SettingsPanel({
   }
 
   useEffect(() => {
-    if (!jiraApiTokenDraft) return;
-    setJiraTokenDraftTestStatus("idle");
-  }, [settings.jiraAccountEmail, settings.jiraSiteUrl, jiraApiTokenDraft]);
-
-  useEffect(() => {
     if (!aiProviderApiKeyDraft) return;
     setAiProviderKeyDraftTestStatus("idle");
   }, [settings.aiProvider, aiProviderApiKeyDraft]);
 
   return (
     <aside ref={panelRef} className="fixed right-0 top-0 z-30 flex h-screen w-[420px] flex-col overscroll-contain border-l border-[#dfe1e6] bg-white shadow-xl">
+      {isJiraConnectionGuideOpen ? (
+        <JiraConnectionGuide
+          settings={settings}
+          hasJiraApiToken={hasJiraApiToken}
+          isTestingJiraConnection={isTestingJiraConnection}
+          onSave={onChange}
+          onSaveJiraApiToken={onSaveJiraApiToken}
+          onDeleteJiraApiToken={onDeleteJiraApiToken}
+          onTestConnection={onTestJiraConnectionSettings}
+          onTestJiraApiToken={onTestJiraApiTokenQuiet}
+          onListProjects={onListJiraProjectsForConnection}
+          onOpenJiraApiTokens={onOpenJiraApiTokens}
+          onClose={() => setIsJiraConnectionGuideOpen(false)}
+        />
+      ) : null}
       <PanelHeader title="Settings" subtitle="Local configuration without secrets in backups" onClose={onClose} />
       <div className="flex-1 overflow-y-auto overscroll-contain p-4">
         <DetailBlock icon={<Settings size={15} />} title="Appearance">
@@ -235,123 +183,54 @@ export function SettingsPanel({
           />
         </DetailBlock>
 
-        <DetailBlock icon={<KeyRound size={15} />} title="Jira connection">
-          <div className="mb-3">
-            <div className="mb-1 text-xs font-medium text-[#6b778c]">Site URL</div>
-            <div className="flex gap-2">
-              <input
-                className="h-9 min-w-0 flex-1 rounded border border-[#c1c7d0] bg-white px-2 text-sm outline-none focus:border-[#4c9aff] focus:ring-2 focus:ring-[#deebff]"
-                placeholder="https://your-site.atlassian.net"
-                type="text"
-                value={jiraSiteUrlDraft}
-                onChange={(event) => updateJiraSiteUrlDraft(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.currentTarget.blur();
-                  }
-                }}
-              />
-              <Button
-                className="settings-button-primary"
-                disabled={!jiraSiteUrlDirty || jiraSiteUrlStatus === "saving"}
-                variant="secondary"
-                onClick={saveJiraSiteUrlDraft}
+        <div className="mt-4 rounded border border-[#dfe1e6] p-3">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-sm font-semibold">
+              <KeyRound size={15} />
+              Jira connection
+              <span
+                aria-label={isJiraConnectionComplete ? "Jira connection complete" : "Jira connection needs setup"}
+                className={`inline-flex shrink-0 items-center justify-center ${
+                  isJiraConnectionComplete ? "text-[#36b37e]" : "text-[#ffab00]"
+                }`}
+                title={isJiraConnectionComplete ? "Jira connection complete" : "Jira connection needs setup"}
               >
-                {jiraSiteUrlStatus === "saving" ? "Saving..." : "Save"}
-              </Button>
+                {isJiraConnectionComplete ? (
+                  <span className="inline-flex h-[18px] w-[18px] items-center justify-center rounded-full bg-[#4caf50] text-white">
+                    <Check size={14} strokeWidth={3} />
+                  </span>
+                ) : (
+                  <span className="relative inline-flex h-[18px] w-[18px] items-center justify-center">
+                    <span className="absolute inset-0 bg-[#ffab00] [clip-path:polygon(50%_5%,96%_90%,4%_90%)]" />
+                    <span className="relative top-[1px] text-[12px] font-black leading-none text-white">!</span>
+                  </span>
+                )}
+              </span>
             </div>
-            {jiraSiteUrlStatus === "failed" ? (
-              <p className="mt-1 text-xs text-[#bf2600]">Use a standard Atlassian Cloud site root, for example https://your-site.atlassian.net.</p>
-            ) : jiraSiteUrlStatus === "saved" ? (
-              <p className="mt-1 text-xs text-[#006644]">Site URL saved.</p>
-            ) : (
-              <p className="mt-1 text-xs text-[#6b778c]">Save a standard Atlassian Cloud site root. Paths, ports, credentials, and custom domains are rejected.</p>
-            )}
+            <Button className="settings-button-primary" variant="secondary" onClick={() => setIsJiraConnectionGuideOpen(true)}>
+              Set Connection
+            </Button>
           </div>
-          <SettingsInput
-            label="Account email"
-            placeholder="name@example.com"
-            value={settings.jiraAccountEmail}
-            onChange={(jiraAccountEmail) => onChange({ jiraAccountEmail })}
-          />
+          <div className="mb-3 rounded border border-[#dfe1e6] bg-[#f7f8fa] p-3">
+            <div className="mb-3">
+              <div className="text-sm font-semibold text-[#172b4d]">Connection state</div>
+              <p className="text-xs leading-relaxed text-[#6b778c]">
+                Site URL, account email, and project key are configured through the guided setup.
+              </p>
+            </div>
+            <SettingsReadOnlyRows
+              rows={[
+                ["Site URL", settings.jiraSiteUrl || "Not set"],
+                ["Account email", settings.jiraAccountEmail || "Not set"],
+                ["Creation project", settings.jiraCreationProjectKey || "Not set"],
+                ["API token", hasJiraApiToken ? "Saved" : "Missing"]
+              ]}
+            />
+          </div>
           <p className="mt-2 text-xs leading-relaxed text-[#6b778c]">
             Jira uses API tokens for now. Tokens are never stored in SQLite or backups. The backend stores the token in the OS credential store.
           </p>
-          <div className="mt-3 rounded border border-[#dfe1e6] bg-[#f7f8fa] p-3">
-            <SettingsInput
-              label="Jira project key for creation"
-              placeholder="JTFTEST"
-              value={settings.jiraCreationProjectKey}
-              onChange={(jiraCreationProjectKey) => onChange({ jiraCreationProjectKey: jiraCreationProjectKey.toUpperCase() })}
-            />
-            <p className="text-xs leading-relaxed text-[#6b778c]">
-              Every Jira upload uses this single project key for the whole tray. Internal app projects remain preparation categories.
-            </p>
-          </div>
-          <div className="mt-3 rounded border border-[#dfe1e6] bg-[#f7f8fa] p-3">
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <div>
-                <div className="text-xs font-medium text-[#6b778c]">API token</div>
-                <div className="text-sm font-medium text-[#172b4d]">
-                  {hasJiraApiToken ? "Credential saved" : "No credential saved"}
-                </div>
-                <button
-                  className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-[#0052cc] hover:underline"
-                  onClick={onOpenJiraApiTokens}
-                  type="button"
-                >
-                  Create or manage token
-                  <ExternalLink size={11} />
-                </button>
-              </div>
-              <span className={`rounded px-2 py-1 text-xs font-medium ${hasJiraApiToken ? "bg-[#e3fcef] text-[#006644]" : "bg-[#f4f5f7] text-[#6b778c]"}`}>
-                {hasJiraApiToken ? "Saved" : "Missing"}
-              </span>
-            </div>
-            <SettingsInput
-              label="New API token"
-              masked
-              placeholder={hasJiraApiToken ? "Enter a new token to replace it" : "Paste API token"}
-              value={jiraApiTokenDraft}
-              onChange={updateJiraApiTokenDraft}
-            />
-            <div className="grid grid-cols-2 gap-2">
-              <Button
-                className="settings-button-primary"
-                disabled={!jiraTokenDraftControls.canSaveDraft}
-                variant="secondary"
-                onClick={saveJiraToken}
-              >
-                Save key
-              </Button>
-              <Button
-                className="settings-button-danger"
-                disabled={!hasJiraApiToken}
-                variant="secondary"
-                onClick={onDeleteJiraApiToken}
-              >
-                Remove key
-              </Button>
-              <Button
-                className="settings-button-test col-span-2 min-w-0 whitespace-nowrap"
-                disabled={!jiraTokenDraftControls.canTestConnection}
-                icon={jiraTokenDraftTestStatus === "testing" ? <LoadingOrb size="xs" /> : undefined}
-                variant="secondary"
-                onClick={testJiraTokenConnection}
-              >
-                {jiraTokenDraftTestStatus === "testing" ? "Testing..." : "Test connection"}
-              </Button>
-            </div>
-            {jiraApiTokenDraft ? (
-              <p className="mt-2 text-xs leading-relaxed text-[#6b778c]">
-                {jiraTokenDraftStatusMessage(jiraTokenDraftTestStatus, jiraTokenDraftControls.hasConnectionSettings)}
-              </p>
-            ) : null}
-            {jiraCredentialMessage ? (
-              <p className="mt-2 text-xs leading-relaxed text-[#6b778c]">{jiraCredentialMessage}</p>
-            ) : null}
-          </div>
-        </DetailBlock>
+        </div>
 
         <DetailBlock icon={<Bot size={15} />} title="AI provider">
           <SettingsSelect
@@ -453,20 +332,25 @@ export function SettingsPanel({
   );
 }
 
-function jiraTokenDraftStatusMessage(status: CredentialDraftTestStatus, hasConnectionSettings: boolean): string {
-  if (!hasConnectionSettings) return "Add a Jira site URL and account email before testing this token.";
-  if (status === "success") return "This key passed Test connection and can be saved.";
-  if (status === "failed") return "Update this key or Jira settings, then test again before saving.";
-  if (status === "testing") return "Testing this token without saving it.";
-  return "Test this key before saving it.";
-}
-
 function aiProviderKeyDraftStatusMessage(status: CredentialDraftTestStatus, hasConnectionSettings: boolean): string {
   if (!hasConnectionSettings) return "Select an AI provider before testing this key.";
   if (status === "success") return "This key passed Test connection and can be saved.";
   if (status === "failed") return "Update this key, then test again before saving.";
   if (status === "testing") return "Testing this key without saving it.";
   return "Test this key before saving it.";
+}
+
+function SettingsReadOnlyRows({ rows }: { rows: Array<[string, string]> }) {
+  return (
+    <div className="rounded border border-[#dfe1e6] bg-white">
+      {rows.map(([label, value]) => (
+        <div className="border-b border-[#ebecf0] px-3 py-2.5 last:border-b-0" key={label}>
+          <div className="mb-1 text-xs font-semibold text-[#6b778c]">{label}</div>
+          <div className="min-w-0 break-words text-sm text-[#172b4d]">{value}</div>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function SettingsInput({
