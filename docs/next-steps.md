@@ -9,7 +9,7 @@ Date: 2026-06-15
 Main is up to date through:
 
 ```text
-#120 Add Windows-native dialog smoke evidence
+#126 Polish Assisted Description DTS format
 ```
 
 Recent Personal v1 hardening merged since the older May checkpoint:
@@ -29,9 +29,16 @@ Recent Personal v1 hardening merged since the older May checkpoint:
   performance/usability checks without mutating `DTS`.
 - PR #120 recorded Windows-native backup/import dialog smoke evidence,
   including Computer Use/Tauri limitations and the Windows-native setup path.
-- Issue #101's backup/restore drill is implemented on
-  `codex/backup-restore-drill`; it documents realistic local recovery coverage
-  and adds a focused backend seam test.
+- PR #121 added the realistic backup/restore drill and focused backend backup
+  seam coverage.
+- PR #124 added a minimal Tauri CSP and finished the related manual QA fixes
+  for Settings theme switching, external Settings help links, light-mode
+  button/dropdown presentation, and CSV export cancel feedback.
+- PR #125 centralized sync audit detail shaping behind allowlisted/redacted
+  builders and capped long activity details to keep failures readable.
+- PR #126 polished Assisted Description toward the DTS Jira format, removed
+  stale SRS/SRE Lite framing, hid proposal-created noise from the user-facing
+  proposal log, and kept no-change AI proposals from being persisted.
 - Issue #112 captures the next guided `Set Jira Connection` implementation slice.
 
 Historical baseline from the first checkpoint:
@@ -204,16 +211,12 @@ Expected limitations right now:
 - JQL favorites persistence, session JQL history, backup/import, sync progress,
   task sync audit activity, OpenAI settings, and Ask AI JQL drafting are wired.
 - Categories persistence, audit log UI, guided Jira Connection setup, broader
-  Jira issue relationship sync, local data cleanup/storage inventory, minimal
-  Tauri CSP, remote correlation marker recovery, sync audit detail allowlist,
-  and attachment source validation remain open roadmap slices. Per-task
-  assisted description structure/proposal logs, local sub-task editing, managed
-  attachment ingestion, and Jira attachment upload have landed and still need
-  regular native/live QA coverage.
-- Assisted Description still has a focused polish gap: remove remaining SRS/SRE
-  Lite references from UI copy and AI prompt helpers, and keep the proposal flow
-  aligned to the practical DTS Jira format through acceptance criteria as
-  captured in `docs/jira-description-format.md`.
+  Jira issue relationship sync, remote correlation marker recovery, attachment
+  source validation, visible Settings privacy copy, and local data cleanup /
+  storage inventory remain open roadmap slices. Per-task assisted description
+  structure/proposal logs, local sub-task editing, managed attachment ingestion,
+  Jira attachment upload, minimal CSP, and sync audit detail allowlisting have
+  landed and still need regular native/live QA coverage.
 - Task detail `Details` supports editable project, area, and priority for editable non-archived tasks. Auto-generated epic and labels remain visible but muted/read-only.
 
 Near-term decided follow-ups:
@@ -228,12 +231,14 @@ Recommended next implementation:
 
 - Implement the guided Jira Connection setup flow from issue #112 as the next
   HITL/product slice when Saimon wants the connection UX branch to move forward.
-- Launch the current AFK Batch 1 first when using parallel project-flow work:
-  #93 minimal Tauri CSP, #88 sync audit detail allowlist/redaction, and Assisted
-  Description DTS-format polish.
-- Finish or close the later AFK hardening issues after Batch 1: #102 visible
-  Settings privacy copy, #103 local data cleanup/storage inventory, #94 remote
-  correlation marker recovery, and #95 attachment file grants/source validation.
+- Launch the next AFK batches from the current issue set only after this roadmap
+  refresh lands. Keep #94 and #95 out of the same parallel batch because #94
+  touches Jira sync/idempotency and #95 touches attachment filesystem safety.
+- Do not launch #102 as a standalone UI copy implementation yet. Treat it as a
+  `grill-with-docs` / HITL definition input for #112 so Settings can be
+  reorganized before adding more visible copy.
+- Treat #103 as documentation/inventory only until #95 lands; attachment
+  lifecycle details should be marked pending if #103 starts first.
 - Keep using `docs/internal-release-readiness.md`, `docs/live-qa.md`,
   `docs/backup-restore-drill.md`, and the large-tray smoke fixture as the
   repeatable QA gates after each batch.
@@ -479,7 +484,7 @@ Pause and ask before implementing or merging changes that:
 - finalize attachment path handling or filesystem cleanup behavior
 - change canonical domain language in `CONTEXT.md`
 - change accepted ADR decisions
-- ship real integrations while Tauri `csp` remains `null`
+- weaken the production Tauri CSP or add new frontend network permissions
 - add update/installer behavior
 - change branch protection, CI gates, release gates, or local Git guard behavior
 
@@ -508,7 +513,6 @@ These can usually run without interruption when acceptance criteria are clear:
 - backup/restore drill using realistic local data
 - large-tray smoke scenario using 200 Local Tasks
 - factual Settings privacy copy that does not change privacy/security policy
-- minimal CSP while it does not open new frontend network access
 - tests for already accepted rules
 - tests and coverage around existing behavior
 - read-only Jira payload shape exploration without credentials
@@ -531,16 +535,9 @@ Batch 1 status:
   requires explicit review.
 - `#99` keyring/token recovery docs: merged in PR #110.
 - `#104` live QA evidence templates: merged in PR #108.
-- `#93` Minimal Tauri Content Security Policy: open and ready for an AFK slice.
-  Keep the scope to Tauri config and any small supporting security note.
-- `#88` Sync Audit Log detail allowlist and redaction: open and ready for an AFK
-  backend/tests slice. Keep it independent from Remote Correlation Marker
-  recovery so the audit boundary is reviewable on its own.
-- Assisted Description DTS-format polish: ready for an AFK UI/prompt-copy slice.
-  Persistence, proposal logs, backup/import, and review UI already landed, so do
-  not recreate those branches. Remove remaining SRS/SRE Lite labels/copy/prompt
-  helpers and align generated proposal guidance to the DTS Jira description
-  format through acceptance criteria in `docs/jira-description-format.md`.
+- `#93` Minimal Tauri Content Security Policy: merged in PR #124.
+- `#88` Sync Audit Log detail allowlist and redaction: merged in PR #125.
+- Assisted Description DTS-format polish: merged in PR #126.
 - `#112` guided Jira Connection setup: design decision settled that `Set Jira
   Connection` should be the only user-facing path for Site URL, account email,
   and Jira project key setup. Do not keep parallel manual fields for those
@@ -549,23 +546,75 @@ Batch 1 status:
   only when discovery fails with a clear warning. API token management remains
   separate.
 
-Batch 2 should follow after the first PRs are reviewed or when more worktree
-capacity is useful:
+Settings definition before #102:
 
-- `#94` Remote Correlation Marker recovery for ambiguous Jira sync writes:
-  retry marker search once with a short backoff, then block only the affected
-  task or `Project + Area` group while healthy groups continue. Prefer starting
-  this after #88 so the recovery audit events use the centralized detail module.
-- `#102` visible Settings privacy copy. Prefer starting this after #88, #89, and
-  #93 so the copy reflects implemented audit, dependency-audit, and CSP
-  boundaries.
+Issue or source: `#102` visible Settings privacy copy.
+Status: hold as a `grill-with-docs` / HITL definition item before
+implementation.
+Accepted direction: do not add a permanent visible privacy-copy block to the
+current Settings panel. Surface the privacy/security explanation from the
+guided setup flow instead as a compact warning plus a `Privacy & Diagnostics`
+link near the step where the user connects Jira and AI credentials. For
+Personal v1, the link should open a small secondary in-app detail view rather
+than an external web page, so the setup works offline and stays synchronized
+with the app's actual behavior.
+Minimum content to carry forward: Jira actions can call Jira Cloud; AI actions
+can send selected task context to the configured provider; secrets stay in the
+OS credential store and are excluded from SQLite/backups/logs; manual
+`npm audit` sends dependency metadata to the configured npm registry; live Jira
+write QA is only for `JTFTEST`, while `DTS` stays read-only.
+Explicit out-of-scope for now: no visible privacy-copy UI PR before #112's
+Settings direction is settled, no new privacy policy, no auth changes, no new
+external calls, and no destructive cleanup controls.
+Future option: Distributable v1 may add a formal web privacy/security document,
+but the in-app detail view remains the canonical setup-time explanation.
 
-Batch 3 should avoid overlap with sync/audit work and should stay in separate
-PRs:
+Recommended Batch 2:
 
-- `#95` attachment provenance/source validation as a dedicated PR. Do not run it
-  in parallel with sync/audit internals.
-- `#103` local data cleanup and storage inventory note, ideally after `#95`.
+Issue or source: `#103` local data cleanup and storage inventory note.
+Branch: `codex/local-data-storage-inventory`.
+WSL worktree path: `/home/saimon/Development/jira-task-forge-storage-inventory`.
+Scope: documentation-only inventory of SQLite data, settings, backups,
+diagnostics/logs, managed attachments, generated files, automatic cleanup, and
+manual no-delete cautions.
+Explicit out-of-scope: no cleanup UI, no deletion commands, no migration, no
+attachment lifecycle implementation. If attachment behavior depends on `#95`,
+mark that part as pending instead of pretending it is final.
+Validation commands: `git diff --check`.
+Stop conditions: the note needs exact attachment lifecycle guarantees that are
+not implemented yet, or starts proposing destructive user controls.
+
+Recommended Batch 3:
+
+Issue or source: `#94` Remote Correlation Marker recovery.
+Branch: `codex/remote-correlation-recovery`.
+WSL worktree path: `/home/saimon/Development/jira-task-forge-correlation-recovery`.
+Scope: recover ambiguous Jira parent-create retries by querying Jira for the
+expected remote marker before creating another issue; reconcile found issues
+locally and record sanitized audit events.
+Explicit out-of-scope: attachment handling, relationship sync, UI redesign,
+credential UX, or changing the accepted Jira creation model.
+Validation commands: focused Rust tests for found-marker recovery, no-marker
+retry, marker-query failure, and `cargo test`.
+Stop conditions: the recovery behavior would require changing accepted ADR 0005,
+or live validation would need writes outside `JTFTEST`.
+
+Recommended Batch 4:
+
+Issue or source: `#95` attachment file grants and source validation.
+Branch: `codex/attachment-source-validation`.
+WSL worktree path: `/home/saimon/Development/jira-task-forge-attachment-validation`.
+Scope: implement the accepted attachment provenance policy so ingestion requires
+a backend-owned consent/grant signal, rejects unsafe sources, copies into
+managed storage, and persists only safe managed metadata.
+Explicit out-of-scope: remote Jira retry/idempotency changes, relationship sync,
+backup bundle redesign, or broad cleanup UI.
+Validation commands: focused Rust tests for valid granted files, arbitrary path
+rejection, directory rejection, symlink/escape rejection, oversized files, and
+internal app-directory rejection; then `cargo test`.
+Stop conditions: the accepted provenance policy from `#87` is ambiguous, file
+dialog/grant behavior differs between WSL and native Windows in a way that needs
+HITL, or the implementation would mutate existing managed attachments.
 
 Already landed from the earlier batch plan:
 
@@ -580,53 +629,45 @@ Recommended next implementation slice:
 
 Branch family:
 
-- `codex/minimal-tauri-csp`
-- `codex/audit-detail-allowlist`
-- `codex/assisted-description-dts-polish`
+- `codex/local-data-storage-inventory`
 
 Deliverables:
 
-- #93: set a minimal production Tauri CSP, document any dev-only allowances, and
-  prove the app still builds and boots.
-- #88: centralize sync audit detail shaping behind typed builders or a small
-  allowlisted redaction module, then add tests for secret-shaped and oversized
-  payloads.
-- Assisted Description DTS-format polish: replace remaining SRS/SRE Lite UI copy
-  and AI prompt helper language with the practical DTS Jira format; generated
-  descriptions should stop at user story, context, scope, and acceptance
-  criteria, with missing information handled as targeted clarification questions.
+- #103: add documentation-only storage inventory. Keep attachment lifecycle
+  details implementation-dependent until #95 lands.
+- #102: do not implement UI copy yet. Use #112 / `grill-with-docs` to decide
+  the Settings information architecture first, then bring the privacy copy back
+  as a focused UI slice.
 
 Reason:
 
-- These slices are independent enough for visible AFK worktrees, align with the
-  current security/readiness track, and clear stale roadmap language before
-  larger Jira relationship or guided-connection work.
+- The storage inventory is docs-only and low-risk. Settings privacy copy is
+  useful, but adding it before #112 risks making the current Settings surface
+  noisier instead of clearer.
 
 ## Following Slice
 
 Recommended following implementation slice:
 
-Branch: `codex/jira-issue-relationships`
+Branch: `codex/remote-correlation-recovery`
 
 Deliverables:
 
-- Add Jira issue relationship management such as `blocks` and `blocked by` as a
-  standalone model/sync feature.
-- Keep the accepted local-first and Jira duplicate-prevention model intact.
-- Treat relationship writes as separate Jira mutation scope from task creation.
+- Implement #94 ambiguous Jira sync recovery with Remote Correlation Markers.
+- Keep duplicate-prevention behavior narrow around parent issue creation.
+- Reuse the centralized sync audit detail module from PR #125.
 
 Reason:
 
-- Relationship links affect the local data model and Jira write behavior enough
-  that they should be designed and tested independently from the polish pass.
+- Duplicate Jira issue prevention is more important than relationship expansion
+  before trusting the app for daily Jira creation.
 
-Separate focused-window polish follow-up:
+Separate hardening follow-up:
 
-- Make focused-window sections independently collapsible in a later PR:
-  `Description`, `Attachments`, `Issue relationships`, `Sub-tasks`, and
-  `Activity`.
-- Keep that interaction polish separate from the Jira relationship model/sync
-  work so the relationship slice stays easy to review and test.
+- Implement #95 attachment source validation as its own PR after #94 or in a
+  separate non-overlapping batch.
+- Revisit Jira issue relationships after duplicate-prevention and attachment
+  filesystem safety are less ambiguous.
 
 ## Security And Reliability Tests To Add
 

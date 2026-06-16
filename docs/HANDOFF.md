@@ -96,7 +96,8 @@ High-level shape:
 
 ## Current Engineering Checkpoint
 
-As of the merged PR #111 Jira URL hardening checkpoint, the app includes:
+As of the merged PR #126 Assisted Description DTS-format polish checkpoint, the
+app includes:
 
 - Tauri + React shell with Jira-like styling.
 - SQLite-backed local trays and local tasks.
@@ -122,6 +123,12 @@ As of the merged PR #111 Jira URL hardening checkpoint, the app includes:
 - Visible sync progress steps and per-task sync audit activity.
 - Stabilization coverage work for backup, OpenAI, services, frontend domain
   helpers, frontend coverage reporting, and dependency audit documentation.
+- Minimal production Tauri CSP, with Jira and AI traffic kept behind backend
+  commands instead of direct frontend network calls.
+- Centralized sync audit detail allowlisting/redaction and capped long activity
+  details.
+- Assisted Description proposal review, proposal logs, backup/import behavior,
+  DTS-format prompt/copy polish, and no-change proposal handling.
 - Jira QA boundary: `JTFTEST` is the writable test project. Agents may freely
   mutate `JTFTEST` for implementation and QA. `DTS` is read-only reference data
   and must not be mutated by agents.
@@ -135,14 +142,10 @@ Still pending:
   Ask AI changes.
 - Categories persistence in the UI.
 - Audit log UI, guided Jira Connection setup, broader Jira issue relationship
-  sync, and remaining native/live QA hardening around assisted descriptions,
-  sub-tasks, and attachment upload.
-- Assisted Description proposal persistence, proposal logs, backup/import, and
-  review UI have landed. The remaining near-term polish is to remove lingering
-  SRS/SRE Lite UI copy and prompt-helper language, then align generated task
-  description proposals to the Jira DTS format in
-  `/home/saimon/Development/jira-task-forge/docs/jira-description-format.md`
-  through acceptance criteria.
+  sync, remote correlation marker recovery, attachment source validation,
+  visible Settings privacy copy, local data cleanup/storage inventory, and
+  remaining native/live QA hardening around assisted descriptions, sub-tasks,
+  and attachment upload.
 - Full native QA in an environment with the Linux system dependencies needed by Tauri/keyring.
 - Manual Jira admin CSV import fallback validation after the API create flow works.
 - Keep Rust backend line coverage above 80%; it is currently 80.40% in
@@ -155,6 +158,22 @@ Still pending:
   should save only at the end, and manual project-key fallback is allowed only
   when discovery fails with a clear warning. Keep API token management in its
   separate Settings section.
+- Keep issue #102 as a `grill-with-docs` / HITL definition item until #112
+  settles the Settings information architecture. The privacy copy should explain
+  Jira actions, AI actions, secret storage, manual `npm audit` metadata, and the
+  `JTFTEST` / `DTS` QA boundary, but it should not be added as a permanent copy
+  block in the current Settings surface. Prefer surfacing it from the guided
+  setup flow as a compact warning plus a `Privacy & Diagnostics` link that opens
+  a small secondary in-app detail view. Do not route Personal v1 users to an
+  external web page for this explanation; a formal web privacy/security document
+  can be considered later for Distributable v1.
+- Implement issue #94 as the next high-value Jira sync reliability slice:
+  recover ambiguous parent-create retries by querying Remote Correlation Markers
+  before creating another issue.
+- Implement issue #95 as a dedicated attachment provenance/source-validation
+  slice, separate from Jira sync internals.
+- Implement issue #103 as documentation-only storage inventory; if it lands
+  before #95, mark attachment lifecycle details as pending rather than final.
 
 ## Open Grill Area
 
@@ -178,10 +197,9 @@ Recommended stack to work next:
   confirmation, metadata preflight, epic reuse/create, parent Story/Bug
   creation, accepted sub-task creation, selected Jira-ready attachment upload,
   partial failure, and recovery tray movement.
-- Raise backend coverage above 80% by targeting `commands.rs` and
-  `integrations/jira.rs`, then add useful frontend workflow tests.
-- Keep remaining Jira write work narrow, with Jira issue relationship sync and
-  attachment cleanup/compression hardening treated as separate slices.
+- Keep remaining Jira write work narrow. Prioritize Remote Correlation Marker
+  recovery before broader Jira issue relationship sync.
+- Keep attachment provenance/source validation separate from sync/audit work.
 - After API creation works, verify that Jira's admin CSV importer can still use
   exported files manually.
 
