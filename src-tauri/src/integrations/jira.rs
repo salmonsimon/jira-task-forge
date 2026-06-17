@@ -12,7 +12,7 @@ use super::jira_mapping::{
 use crate::models::{
     JiraAttachmentSettings, JiraCreateIssueResponse, JiraCreateIssueTypeMetadata,
     JiraCreateMetadata, JiraMyself, JiraProjectOption, JiraProjectSearchResponse,
-    JqlSearchResponse,
+    JiraRemoteMarkerIssue, JqlSearchResponse,
 };
 use crate::redaction::redact_secret_fragments;
 
@@ -182,6 +182,43 @@ impl JiraClient {
             "Jira issue create",
             None,
         )
+    }
+
+    pub fn find_parent_issue_by_remote_marker(
+        &self,
+        project_key: &str,
+        property_key: &str,
+        local_task_id: &str,
+    ) -> Result<Option<JiraRemoteMarkerIssue>, String> {
+        let project_key = project_key.trim();
+        if project_key.is_empty() {
+            return Err("Jira creation project key is required.".to_string());
+        }
+        let local_task_id = local_task_id.trim();
+        if local_task_id.is_empty() {
+            return Err("Local task id is required.".to_string());
+        }
+        let property_key = property_key.trim();
+        if property_key.is_empty() {
+            return Err("Jira marker property key is required.".to_string());
+        }
+
+        let property = format!("issue.property[{}]", escape_jql_property_key(property_key));
+        let jql = format!(
+            "project = {} AND {}.source = \"jira-task-forge\" AND {}.kind = \"parent\" AND {}.localTaskId = \"{}\" ORDER BY created DESC",
+            escape_jql_identifier(project_key),
+            property,
+            property,
+            property,
+            escape_jql_string(local_task_id)
+        );
+        let response = self.search_jql(&jql, 1)?;
+
+        Ok(response
+            .results
+            .into_iter()
+            .next()
+            .map(|issue| JiraRemoteMarkerIssue { key: issue.key }))
     }
 
     pub fn update_issue_fields(&self, key: &str, payload: Value) -> Result<(), String> {
@@ -528,6 +565,25 @@ fn encode_path_segment(value: &str) -> String {
             _ => format!("%{byte:02X}").chars().collect(),
         })
         .collect()
+}
+
+fn escape_jql_identifier(value: &str) -> String {
+    if value
+        .chars()
+        .all(|character| character.is_ascii_alphanumeric() || character == '_')
+    {
+        value.to_string()
+    } else {
+        format!("\"{}\"", escape_jql_string(value))
+    }
+}
+
+fn escape_jql_property_key(value: &str) -> String {
+    value.replace('\\', "\\\\").replace(']', "\\]")
+}
+
+fn escape_jql_string(value: &str) -> String {
+    value.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
 fn is_retryable_jira_read_error(message: &str) -> bool {

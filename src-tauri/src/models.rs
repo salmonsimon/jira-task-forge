@@ -322,6 +322,12 @@ pub struct JqlResult {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct JiraRemoteMarkerIssue {
+    pub key: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SyncAuditEvent {
     pub id: String,
     pub sync_attempt_id: Option<String>,

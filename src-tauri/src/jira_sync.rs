@@ -4,6 +4,8 @@ mod planning;
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::thread;
+use std::time::Duration;
 
 use rusqlite::Connection;
 use serde_json::{json, Value};
@@ -17,13 +19,14 @@ use crate::integrations::jira::JiraClient;
 use crate::models::{
     JiraAttachmentSettings, JiraCreateAllowedValue, JiraCreateFieldMetadata,
     JiraCreateIssueResponse, JiraCreateIssuesResult, JiraCreateMetadata, JiraCreateProgress,
-    JiraCreatedIssueResult, JiraMyself, JqlSearchResponse, LocalTask, TaskAttachment,
+    JiraCreatedIssueResult, JiraMyself, JiraRemoteMarkerIssue, JqlSearchResponse, LocalTask,
+    TaskAttachment,
 };
 use crate::repositories::{TaskRepository, TrayRepository};
 use crate::sync_audit::{
     attachment_error_detail, attachment_uploaded_detail, jira_epic_detail,
     jira_epic_resolved_detail, jira_issue_created_detail, jira_priority_detail,
-    jira_priority_error_detail, jira_subtask_created_detail,
+    jira_priority_error_detail, jira_remote_marker_recovered_detail, jira_subtask_created_detail,
 };
 
 use attempt_recorder::SyncAttemptRecorder;
@@ -33,12 +36,19 @@ use planning::{
 };
 
 const JIRA_TASK_FORGE_PROPERTY_KEY: &str = "jira-task-forge-sync";
+const REMOTE_MARKER_LOOKUP_ATTEMPTS: usize = 2;
+const REMOTE_MARKER_LOOKUP_BACKOFF: Duration = Duration::from_millis(100);
 
 pub trait JiraIssueGateway {
     fn create_metadata(&mut self, project_key: &str) -> Result<JiraCreateMetadata, String>;
     fn attachment_settings(&mut self) -> Result<JiraAttachmentSettings, String>;
     fn current_user(&mut self) -> Result<JiraMyself, String>;
     fn search_jql(&mut self, jql: &str, max_results: usize) -> Result<JqlSearchResponse, String>;
+    fn find_parent_issue_by_remote_marker(
+        &mut self,
+        project_key: &str,
+        local_task_id: &str,
+    ) -> Result<Option<JiraRemoteMarkerIssue>, String>;
     fn create_issue(&mut self, payload: Value) -> Result<JiraCreateIssueResponse, String>;
     fn update_issue_fields(&mut self, key: &str, payload: Value) -> Result<(), String>;
     fn upload_attachment(
@@ -66,6 +76,19 @@ impl JiraIssueGateway for JiraClient {
 
     fn search_jql(&mut self, jql: &str, max_results: usize) -> Result<JqlSearchResponse, String> {
         JiraClient::search_jql(self, jql, max_results)
+    }
+
+    fn find_parent_issue_by_remote_marker(
+        &mut self,
+        project_key: &str,
+        local_task_id: &str,
+    ) -> Result<Option<JiraRemoteMarkerIssue>, String> {
+        JiraClient::find_parent_issue_by_remote_marker(
+            self,
+            project_key,
+            JIRA_TASK_FORGE_PROPERTY_KEY,
+            local_task_id,
+        )
     }
 
     fn create_issue(&mut self, payload: Value) -> Result<JiraCreateIssueResponse, String> {
@@ -397,10 +420,11 @@ where
             };
 
             for task in group_tasks {
+                let parent_summary = jira_parent_summary(&task);
                 recorder.progress(
                     "issue",
                     "Creating Jira issue",
-                    Some(&jira_parent_summary(&task)),
+                    Some(&parent_summary),
                     "running",
                 );
                 if let Some(existing_key) = task.jira_key.as_deref().filter(|key| !key.is_empty()) {
@@ -428,6 +452,74 @@ where
                     )?;
                     recorder.advance();
                     continue;
+                }
+
+                if should_check_remote_marker_before_parent_create(&task) {
+                    recorder.progress(
+                        "issue",
+                        "Checking Jira remote marker",
+                        Some(&parent_summary),
+                        "running",
+                    );
+                    match find_parent_issue_by_remote_marker_with_retry(
+                        self.gateway,
+                        &self.creation_project_key,
+                        &task.id,
+                    ) {
+                        Ok(Some(remote_issue)) => {
+                            let existing_key = remote_issue.key;
+                            let existing_url = self.gateway.issue_browse_url(&existing_key);
+                            TaskRepository::new(self.connection)
+                                .mark_jira_created(
+                                    &task.id,
+                                    &existing_key,
+                                    &existing_url,
+                                    &epic_key,
+                                )
+                                .map_err(db_error_message)?;
+                            recorder.record_event(
+                                Some(&task.id),
+                                "jira.issue.remote_marker_recovered",
+                                "succeeded",
+                                jira_remote_marker_recovered_detail(&existing_key, &epic_key),
+                            )?;
+                            result.skipped_issue_count += 1;
+                            result.messages.push(format!(
+                                "{} recovered existing Jira issue {existing_key} from its remote marker.",
+                                task.title
+                            ));
+                            parent_jira_keys.insert(task.id.clone(), existing_key.clone());
+                            had_non_blocking_warning |= upload_task_attachments(
+                                self.connection,
+                                self.app_data_dir.as_deref(),
+                                self.gateway,
+                                &mut recorder,
+                                task,
+                                &existing_key,
+                                &mut result,
+                            )?;
+                            recorder.advance();
+                            continue;
+                        }
+                        Ok(None) => {
+                            recorder.progress(
+                                "issue",
+                                "No Jira remote marker found",
+                                Some(&parent_summary),
+                                "running",
+                            );
+                        }
+                        Err(message) => {
+                            recorder.record_task_failure(
+                                &task,
+                                &message,
+                                &mut result,
+                                "jira.issue.remote_marker_lookup",
+                            )?;
+                            recorder.advance();
+                            continue;
+                        }
+                    }
                 }
 
                 let issue_type = plan
@@ -678,6 +770,45 @@ where
         jira_epic_detail(&created_epic.key, epic_summary),
     )?;
     Ok(created_epic.key)
+}
+
+fn should_check_remote_marker_before_parent_create(task: &LocalTask) -> bool {
+    task.sync_status == "Failed"
+        && task
+            .jira_key
+            .as_deref()
+            .is_none_or(|key| key.trim().is_empty())
+}
+
+fn find_parent_issue_by_remote_marker_with_retry<Gateway>(
+    gateway: &mut Gateway,
+    project_key: &str,
+    local_task_id: &str,
+) -> Result<Option<JiraRemoteMarkerIssue>, String>
+where
+    Gateway: JiraIssueGateway,
+{
+    let mut last_error = None;
+    for attempt in 1..=REMOTE_MARKER_LOOKUP_ATTEMPTS {
+        match gateway.find_parent_issue_by_remote_marker(project_key, local_task_id) {
+            Ok(issue) => return Ok(issue),
+            Err(message) if attempt < REMOTE_MARKER_LOOKUP_ATTEMPTS => {
+                last_error = Some(message);
+                thread::sleep(REMOTE_MARKER_LOOKUP_BACKOFF);
+            }
+            Err(message) => return Err(remote_marker_lookup_error(&message)),
+        }
+    }
+
+    Err(remote_marker_lookup_error(&last_error.unwrap_or_else(
+        || "Jira marker lookup could not reach Jira.".to_string(),
+    )))
+}
+
+fn remote_marker_lookup_error(message: &str) -> String {
+    format!(
+        "Could not confirm whether this failed task already exists in Jira via remote marker lookup: {message}"
+    )
 }
 
 fn build_epic_payload(
@@ -2213,6 +2344,183 @@ mod tests {
         assert_eq!(persisted_task.jira_key.as_deref(), Some("JTFTEST-3"));
     }
 
+    #[test]
+    fn recovers_failed_parent_issue_when_remote_marker_is_found() {
+        let connection = open_in_memory_database().expect("database opens");
+        let tray_repository = TrayRepository::new(&connection);
+        let task_repository = TaskRepository::new(&connection);
+        let tray = tray_repository
+            .create(NewTray {
+                name: "Remote marker recovery".to_string(),
+            })
+            .expect("tray creates");
+        let task = task_repository
+            .create(NewTask {
+                tray_id: tray.id.clone(),
+                project: "STT".to_string(),
+                area: "Bug".to_string(),
+                title: "Recover ambiguous parent".to_string(),
+                priority: "High".to_string(),
+                issue_type: "Story".to_string(),
+                content_language: "Spanish".to_string(),
+            })
+            .expect("task creates");
+        task_repository
+            .mark_jira_failed(&task.id)
+            .expect("task marked failed");
+        let mut gateway = FakeJiraGateway::new();
+        gateway.created_keys = vec!["JTFTEST-80".to_string()];
+        gateway.remote_marker_results = vec![Ok(Some(JiraRemoteMarkerIssue {
+            key: "JTFTEST-81".to_string(),
+        }))];
+
+        let mut runner = JiraSyncRunner::new(&connection, &mut gateway, "JTFTEST".to_string());
+        let result = runner
+            .create_parent_issues_from_tray(&tray.id, true)
+            .expect("sync succeeds");
+
+        assert_eq!(result.status, "succeeded");
+        assert_eq!(result.created_issue_count, 0);
+        assert_eq!(result.skipped_issue_count, 1);
+        assert_eq!(gateway.created_payloads.len(), 1);
+        assert_eq!(gateway.remote_marker_lookups.len(), 1);
+        assert_eq!(gateway.remote_marker_lookups[0].0, "JTFTEST");
+        assert_eq!(gateway.remote_marker_lookups[0].1, task.id);
+        let persisted_task = TaskRepository::new(&connection)
+            .list_for_tray(&tray.id)
+            .expect("tasks list")
+            .into_iter()
+            .find(|candidate| candidate.title == "Recover ambiguous parent")
+            .expect("task remains");
+        assert_eq!(persisted_task.sync_status, "Created");
+        assert_eq!(persisted_task.jira_key.as_deref(), Some("JTFTEST-81"));
+        assert_eq!(persisted_task.epic_key.as_deref(), Some("JTFTEST-80"));
+        let recovery_event_detail: String = connection
+            .query_row(
+                "
+                SELECT detail_json FROM sync_audit_events
+                WHERE event_type = 'jira.issue.remote_marker_recovered'
+                    AND outcome = 'succeeded'
+                ",
+                [],
+                |row| row.get(0),
+            )
+            .expect("recovery event detail reads");
+        assert!(recovery_event_detail.contains("JTFTEST-81"));
+        assert!(recovery_event_detail.contains("remote-correlation-marker"));
+    }
+
+    #[test]
+    fn recreates_failed_parent_issue_when_remote_marker_is_not_found() {
+        let connection = open_in_memory_database().expect("database opens");
+        let tray_repository = TrayRepository::new(&connection);
+        let task_repository = TaskRepository::new(&connection);
+        let tray = tray_repository
+            .create(NewTray {
+                name: "No marker retry".to_string(),
+            })
+            .expect("tray creates");
+        let task = task_repository
+            .create(NewTask {
+                tray_id: tray.id.clone(),
+                project: "STT".to_string(),
+                area: "Bug".to_string(),
+                title: "Create after marker miss".to_string(),
+                priority: "Medium".to_string(),
+                issue_type: "Story".to_string(),
+                content_language: "Spanish".to_string(),
+            })
+            .expect("task creates");
+        task_repository
+            .mark_jira_failed(&task.id)
+            .expect("task marked failed");
+        let mut gateway = FakeJiraGateway::new();
+        gateway.created_keys = vec!["JTFTEST-82".to_string(), "JTFTEST-83".to_string()];
+        gateway.remote_marker_results = vec![Ok(None)];
+
+        let mut runner = JiraSyncRunner::new(&connection, &mut gateway, "JTFTEST".to_string());
+        let result = runner
+            .create_parent_issues_from_tray(&tray.id, true)
+            .expect("sync succeeds");
+
+        assert_eq!(result.status, "succeeded");
+        assert_eq!(result.created_issue_count, 1);
+        assert_eq!(result.failed_issue_count, 0);
+        assert_eq!(gateway.remote_marker_lookups.len(), 1);
+        assert_eq!(gateway.created_payloads.len(), 2);
+        assert_eq!(
+            gateway.created_payloads[1]["fields"]["summary"],
+            json!("[Bug] Create after marker miss")
+        );
+        let persisted_task = TaskRepository::new(&connection)
+            .list_for_tray(&tray.id)
+            .expect("tasks list")
+            .into_iter()
+            .find(|candidate| candidate.id == task.id)
+            .expect("task remains");
+        assert_eq!(persisted_task.sync_status, "Created");
+        assert_eq!(persisted_task.jira_key.as_deref(), Some("JTFTEST-83"));
+    }
+
+    #[test]
+    fn fails_failed_parent_issue_without_create_when_remote_marker_lookup_fails() {
+        let connection = open_in_memory_database().expect("database opens");
+        let tray_repository = TrayRepository::new(&connection);
+        let task_repository = TaskRepository::new(&connection);
+        let tray = tray_repository
+            .create(NewTray {
+                name: "Marker lookup failure".to_string(),
+            })
+            .expect("tray creates");
+        let task = task_repository
+            .create(NewTask {
+                tray_id: tray.id.clone(),
+                project: "STT".to_string(),
+                area: "Bug".to_string(),
+                title: "Do not blindly retry".to_string(),
+                priority: "Highest".to_string(),
+                issue_type: "Story".to_string(),
+                content_language: "Spanish".to_string(),
+            })
+            .expect("task creates");
+        task_repository
+            .mark_jira_failed(&task.id)
+            .expect("task marked failed");
+        let mut gateway = FakeJiraGateway::new();
+        gateway.created_keys = vec!["JTFTEST-84".to_string()];
+        gateway.remote_marker_results = vec![
+            Err("lookup timed out with Basic first-secret".to_string()),
+            Err("lookup timed out with Basic second-secret".to_string()),
+        ];
+
+        let mut runner = JiraSyncRunner::new(&connection, &mut gateway, "JTFTEST".to_string());
+        let result = runner
+            .create_parent_issues_from_tray(&tray.id, true)
+            .expect("sync returns failure result");
+
+        assert_eq!(result.status, "failed");
+        assert_eq!(result.created_issue_count, 0);
+        assert_eq!(result.failed_issue_count, 1);
+        assert_eq!(gateway.remote_marker_lookups.len(), 2);
+        assert_eq!(gateway.created_payloads.len(), 1);
+        assert!(result.failed_tasks[0]
+            .message
+            .contains("Could not confirm whether this failed task already exists"));
+        let failure_event_detail: String = connection
+            .query_row(
+                "
+                SELECT detail_json FROM sync_audit_events
+                WHERE event_type = 'jira.issue.remote_marker_lookup'
+                    AND outcome = 'failed'
+                ",
+                [],
+                |row| row.get(0),
+            )
+            .expect("failure event detail reads");
+        assert!(failure_event_detail.contains("Basic <redacted>"));
+        assert!(!failure_event_detail.contains("second-secret"));
+    }
+
     struct FakeJiraGateway {
         metadata: JiraCreateMetadata,
         attachment_settings: Result<JiraAttachmentSettings, String>,
@@ -2224,6 +2532,8 @@ mod tests {
         create_failures: Vec<String>,
         update_failures: Vec<String>,
         attachment_failures: Vec<String>,
+        remote_marker_results: Vec<Result<Option<JiraRemoteMarkerIssue>, String>>,
+        remote_marker_lookups: Vec<(String, String)>,
     }
 
     impl FakeJiraGateway {
@@ -2242,6 +2552,8 @@ mod tests {
                 create_failures: Vec::new(),
                 update_failures: Vec::new(),
                 attachment_failures: Vec::new(),
+                remote_marker_results: Vec::new(),
+                remote_marker_lookups: Vec::new(),
             }
         }
     }
@@ -2277,6 +2589,20 @@ mod tests {
                 next_page_token: None,
                 warning_messages: Vec::new(),
             })
+        }
+
+        fn find_parent_issue_by_remote_marker(
+            &mut self,
+            project_key: &str,
+            local_task_id: &str,
+        ) -> Result<Option<JiraRemoteMarkerIssue>, String> {
+            self.remote_marker_lookups
+                .push((project_key.to_string(), local_task_id.to_string()));
+            if self.remote_marker_results.is_empty() {
+                return Ok(None);
+            }
+
+            self.remote_marker_results.remove(0)
         }
 
         fn create_issue(&mut self, payload: Value) -> Result<JiraCreateIssueResponse, String> {

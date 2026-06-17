@@ -75,6 +75,17 @@ pub(crate) fn jira_issue_created_detail(
     }))
 }
 
+pub(crate) fn jira_remote_marker_recovered_detail(
+    jira_key: &str,
+    epic_key: &str,
+) -> SyncAuditDetail {
+    SyncAuditDetail::from_allowed_value(json!({
+        "jiraKey": jira_key,
+        "epicKey": epic_key,
+        "source": "remote-correlation-marker",
+    }))
+}
+
 pub(crate) fn jira_subtask_created_detail(
     jira_key: &str,
     parent_jira_key: &str,
