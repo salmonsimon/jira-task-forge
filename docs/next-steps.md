@@ -4,12 +4,12 @@ This document is the default execution path for the repo. It is meant to support
 
 ## Current Checkpoint
 
-Date: 2026-06-15
+Date: 2026-06-16
 
 Main is up to date through:
 
 ```text
-#126 Polish Assisted Description DTS format
+#128 Add guided Jira connection setup
 ```
 
 Recent Personal v1 hardening merged since the older May checkpoint:
@@ -39,7 +39,14 @@ Recent Personal v1 hardening merged since the older May checkpoint:
 - PR #126 polished Assisted Description toward the DTS Jira format, removed
   stale SRS/SRE Lite framing, hid proposal-created noise from the user-facing
   proposal log, and kept no-change AI proposals from being persisted.
-- Issue #112 captures the next guided `Set Jira Connection` implementation slice.
+- PR #127 refreshed the roadmap after the first hardening batch.
+- PR #128 landed the guided `Set Connection` flow from issue #112: Settings now
+  shows Jira Site URL, account email, Jira creation project key, and token state
+  as read-only connection state; the wizard validates the Atlassian Cloud site
+  root with explicit feedback, verifies the saved token, discovers project keys
+  with manual fallback, saves connection fields together only at review, keeps
+  Jira API token handling separate, and exposes the in-app `Privacy &
+  Diagnostics` detail view.
 
 Historical baseline from the first checkpoint:
 
@@ -105,7 +112,7 @@ Current validation:
   local-first workflows, backup behavior, and OpenAI integration helpers.
 - Rust coverage is measured with `npm run coverage:rust`. The current
   Rust line coverage is 80.40%; see `docs/coverage-report.md`.
-- `npm test` passes in WSL with 93 frontend tests across 23 files. The script pins
+- `npm test` passes in WSL with 102 frontend tests across 25 files. The script pins
   `TMPDIR` to `/tmp` by default so Vitest does not inherit a Windows temp path
   that is not creatable from WSL.
 - Frontend coverage reporting exists through `npm run coverage:frontend` using
@@ -210,13 +217,14 @@ Expected limitations right now:
 - Read-only JQL queries are wired through Jira Cloud REST API v3.
 - JQL favorites persistence, session JQL history, backup/import, sync progress,
   task sync audit activity, OpenAI settings, and Ask AI JQL drafting are wired.
-- Categories persistence, audit log UI, guided Jira Connection setup, broader
-  Jira issue relationship sync, remote correlation marker recovery, attachment
-  source validation, visible Settings privacy copy, and local data cleanup /
-  storage inventory remain open roadmap slices. Per-task assisted description
-  structure/proposal logs, local sub-task editing, managed attachment ingestion,
-  Jira attachment upload, minimal CSP, and sync audit detail allowlisting have
-  landed and still need regular native/live QA coverage.
+- Categories persistence, audit log UI, broader Jira issue relationship sync,
+  remote correlation marker recovery, attachment source validation, remaining
+  `Privacy & Diagnostics` copy/test polish if review finds gaps, and local data
+  cleanup / storage inventory remain open roadmap slices. Guided Jira
+  Connection setup, per-task assisted description structure/proposal logs,
+  local sub-task editing, managed attachment ingestion, Jira attachment upload,
+  minimal CSP, and sync audit detail allowlisting have landed and still need
+  regular native/live QA coverage.
 - Task detail `Details` supports editable project, area, and priority for editable non-archived tasks. Auto-generated epic and labels remain visible but muted/read-only.
 
 Near-term decided follow-ups:
@@ -229,14 +237,13 @@ Near-term decided follow-ups:
 
 Recommended next implementation:
 
-- Implement the guided Jira Connection setup flow from issue #112 as the next
-  HITL/product slice when Saimon wants the connection UX branch to move forward.
 - Launch the next AFK batches from the current issue set only after this roadmap
   refresh lands. Keep #94 and #95 out of the same parallel batch because #94
   touches Jira sync/idempotency and #95 touches attachment filesystem safety.
-- Do not launch #102 as a standalone UI copy implementation yet. Treat it as a
-  `grill-with-docs` / HITL definition input for #112 so Settings can be
-  reorganized before adding more visible copy.
+- Do not launch #102 as a broad Settings copy implementation. The guided setup
+  now includes an in-app `Privacy & Diagnostics` detail view; leave only focused
+  copy, docs, or rendering-test follow-up if review finds the current text
+  insufficient.
 - Treat #103 as documentation/inventory only until #95 lands; attachment
   lifecycle details should be marked pending if #103 starts first.
 - Keep using `docs/internal-release-readiness.md`, `docs/live-qa.md`,
@@ -538,34 +545,29 @@ Batch 1 status:
 - `#93` Minimal Tauri Content Security Policy: merged in PR #124.
 - `#88` Sync Audit Log detail allowlist and redaction: merged in PR #125.
 - Assisted Description DTS-format polish: merged in PR #126.
-- `#112` guided Jira Connection setup: design decision settled that `Set Jira
-  Connection` should be the only user-facing path for Site URL, account email,
-  and Jira project key setup. Do not keep parallel manual fields for those
-  values. Settings should show those values as read-only connection state, the
-  wizard should save only at the end, and manual project-key fallback is allowed
-  only when discovery fails with a clear warning. API token management remains
-  separate.
+- `#112` guided Jira Connection setup: landed in PR #128. `Set Connection` is
+  now the user-facing path for Site URL, account email, and Jira project key
+  setup. Settings shows those values as read-only connection state, the wizard
+  saves only at review, manual project-key fallback exists when discovery is
+  unavailable, API token management remains separate, and `Privacy &
+  Diagnostics` is available inside the guide.
 
 Settings definition before #102:
 
 Issue or source: `#102` visible Settings privacy copy.
-Status: hold as a `grill-with-docs` / HITL definition item before
-implementation.
-Accepted direction: do not add a permanent visible privacy-copy block to the
-current Settings panel. Surface the privacy/security explanation from the
-guided setup flow instead as a compact warning plus a `Privacy & Diagnostics`
-link near the step where the user connects Jira and AI credentials. For
-Personal v1, the link should open a small secondary in-app detail view rather
-than an external web page, so the setup works offline and stays synchronized
-with the app's actual behavior.
-Minimum content to carry forward: Jira actions can call Jira Cloud; AI actions
-can send selected task context to the configured provider; secrets stay in the
-OS credential store and are excluded from SQLite/backups/logs; manual
-`npm audit` sends dependency metadata to the configured npm registry; live Jira
-write QA is only for `JTFTEST`, while `DTS` stays read-only.
-Explicit out-of-scope for now: no visible privacy-copy UI PR before #112's
-Settings direction is settled, no new privacy policy, no auth changes, no new
-external calls, and no destructive cleanup controls.
+Status: mostly landed through PR #128's guided setup. Treat remaining work as a
+focused review/copy/test follow-up, not as a broad new Settings block.
+Accepted direction now in app: `Privacy & Diagnostics` opens a small secondary
+in-app detail view from the guided setup. The current text covers Jira Cloud
+calls, user-triggered AI provider calls, OS credential-store secret handling,
+SQLite/backup/log exclusion, manual `npm audit` registry metadata, and the
+`JTFTEST` writable / `DTS` read-only QA boundary.
+Possible remaining work: tighten copy after manual review, add rendering tests
+if the frontend test harness covers this modal, or update docs if the boundary
+changes.
+Explicit out-of-scope for now: no permanent privacy-copy block in the main
+Settings panel, no new privacy policy, no auth changes, no new external calls,
+and no destructive cleanup controls.
 Future option: Distributable v1 may add a formal web privacy/security document,
 but the in-app detail view remains the canonical setup-time explanation.
 
@@ -635,15 +637,14 @@ Deliverables:
 
 - #103: add documentation-only storage inventory. Keep attachment lifecycle
   details implementation-dependent until #95 lands.
-- #102: do not implement UI copy yet. Use #112 / `grill-with-docs` to decide
-  the Settings information architecture first, then bring the privacy copy back
-  as a focused UI slice.
+- #102: review the landed `Privacy & Diagnostics` detail view from PR #128 and
+  leave only targeted copy/docs/test polish if something concrete is missing.
 
 Reason:
 
-- The storage inventory is docs-only and low-risk. Settings privacy copy is
-  useful, but adding it before #112 risks making the current Settings surface
-  noisier instead of clearer.
+- The storage inventory is docs-only and low-risk. The guided setup now carries
+  the Personal v1 privacy/diagnostics explanation, so any #102 follow-up should
+  be narrow and evidence-backed.
 
 ## Following Slice
 

@@ -96,7 +96,7 @@ High-level shape:
 
 ## Current Engineering Checkpoint
 
-As of the merged PR #126 Assisted Description DTS-format polish checkpoint, the
+As of the merged PR #128 guided Jira connection setup checkpoint, the
 app includes:
 
 - Tauri + React shell with Jira-like styling.
@@ -111,6 +111,11 @@ app includes:
   guided `Set Jira Connection` flow instead of direct Settings field edits
   in Settings, and hardened external Jira issue-link opening against the
   configured Jira site host.
+- Guided Jira connection setup launched from Settings as `Set Connection`,
+  covering Jira Site URL, account email, saved Jira API token verification,
+  Jira project discovery with manual fallback, review-before-save behavior,
+  read-only connection state in Settings, and the in-app `Privacy &
+  Diagnostics` detail view.
 - `Create in Jira` preflight, including credential/project/task validation and a configurable Jira creation project key.
 - Jira write path behind preflight: creation metadata validation, epic
   search/create by `[{Project}] {Area}`, parent Story/Bug creation, accepted
@@ -141,32 +146,26 @@ Still pending:
 - Re-check native QA after the post-PR command-worker, backup, audit, JQL, and
   Ask AI changes.
 - Categories persistence in the UI.
-- Audit log UI, guided Jira Connection setup, broader Jira issue relationship
-  sync, remote correlation marker recovery, attachment source validation,
-  visible Settings privacy copy, local data cleanup/storage inventory, and
-  remaining native/live QA hardening around assisted descriptions, sub-tasks,
-  and attachment upload.
+- Audit log UI, broader Jira issue relationship sync, remote correlation marker
+  recovery, attachment source validation, focused `Privacy & Diagnostics`
+  copy/test polish if review finds gaps, local data cleanup/storage inventory,
+  and remaining native/live QA hardening around assisted descriptions,
+  sub-tasks, and attachment upload.
 - Full native QA in an environment with the Linux system dependencies needed by Tauri/keyring.
 - Manual Jira admin CSV import fallback validation after the API create flow works.
 - Keep Rust backend line coverage above 80%; it is currently 80.40% in
   `docs/coverage-report.md`.
 - Continue growing frontend workflow tests beyond the current domain/workflow
   helper coverage, especially around Settings and preflight flows.
-- Implement the guided `Set Jira Connection` flow captured in issue #112 as the
-  only user-facing path for Jira Site URL, account email, and project key setup.
-  Settings should show those values as read-only connection state, the wizard
-  should save only at the end, and manual project-key fallback is allowed only
-  when discovery fails with a clear warning. Keep API token management in its
-  separate Settings section.
-- Keep issue #102 as a `grill-with-docs` / HITL definition item until #112
-  settles the Settings information architecture. The privacy copy should explain
-  Jira actions, AI actions, secret storage, manual `npm audit` metadata, and the
-  `JTFTEST` / `DTS` QA boundary, but it should not be added as a permanent copy
-  block in the current Settings surface. Prefer surfacing it from the guided
-  setup flow as a compact warning plus a `Privacy & Diagnostics` link that opens
-  a small secondary in-app detail view. Do not route Personal v1 users to an
-  external web page for this explanation; a formal web privacy/security document
-  can be considered later for Distributable v1.
+- Issue #112's guided `Set Connection` flow landed in PR #128. Keep Jira Site
+  URL, account email, and project key setup in that guided path; Settings should
+  continue to show those values as read-only connection state, save them only at
+  the wizard review step, allow manual project-key fallback only when discovery
+  is unavailable, and keep API token management separate.
+- Treat issue #102 as mostly satisfied by the guided setup's in-app `Privacy &
+  Diagnostics` detail view. Leave only focused copy, docs, or rendering-test
+  follow-up if review finds the current text insufficient. Do not add a
+  permanent privacy-copy block to the main Settings panel for Personal v1.
 - Implement issue #94 as the next high-value Jira sync reliability slice:
   recover ambiguous parent-create retries by querying Remote Correlation Markers
   before creating another issue.
