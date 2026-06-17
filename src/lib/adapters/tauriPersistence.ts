@@ -416,14 +416,12 @@ export async function updatePersistedTaskIssueRelationships(
   return updated ? mapTask(updated) : null;
 }
 
-export async function addPersistedTaskAttachmentsFromPaths(
+export async function choosePersistedTaskAttachmentFiles(
   taskId: string,
-  paths: string[],
   purpose: AttachmentPurpose
 ): Promise<LocalTask | null> {
-  const updated = await invoke<BackendTask | null>("add_task_attachments_from_paths", {
+  const updated = await invoke<BackendTask | null>("choose_task_attachment_files", {
     taskId,
-    paths,
     purpose
   });
   return updated ? mapTask(updated) : null;

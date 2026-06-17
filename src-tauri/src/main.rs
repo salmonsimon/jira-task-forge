@@ -80,6 +80,7 @@ pub fn run() {
             commands::tasks::update_task_description,
             commands::tasks::update_task_issue_relationships,
             commands::tasks::add_task_attachments_from_paths,
+            commands::tasks::choose_task_attachment_files,
             commands::tasks::update_task_attachment_purpose,
             commands::tasks::delete_task_attachment,
             commands::tasks::mark_tasks_csv_exported,

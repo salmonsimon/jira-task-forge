@@ -6,8 +6,20 @@ use uuid::Uuid;
 use crate::db::{DbError, DbResult};
 
 pub const JIRA_CLOUD_FALLBACK_ATTACHMENT_UPLOAD_LIMIT_BYTES: u64 = 1_000_000_000;
+pub const PERSONAL_V1_JIRA_ATTACHMENT_MAX_BYTES: u64 = 100 * 1024 * 1024;
 
 const ATTACHMENTS_DIR: &str = "attachments";
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AttachmentFileGrant {
+    source_path: PathBuf,
+}
+
+impl AttachmentFileGrant {
+    pub fn from_backend_file_dialog(source_path: PathBuf) -> Self {
+        Self { source_path }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ManagedAttachmentFile {
@@ -73,17 +85,14 @@ pub fn validate_managed_relative_path(relative_path: &str) -> DbResult<String> {
     Ok(parts.join("/"))
 }
 
-pub fn copy_into_managed_attachment(
+pub fn copy_granted_source_into_managed_attachment(
     app_data_dir: &Path,
-    source_path: &Path,
+    grant: &AttachmentFileGrant,
     task_id: &str,
+    purpose: &str,
 ) -> DbResult<(String, String, u64)> {
-    let metadata = fs::metadata(source_path)?;
-    if !metadata.is_file() {
-        return Err(DbError::InvalidData(
-            "Only files can be attached.".to_string(),
-        ));
-    }
+    let source_path = grant.source_path.as_path();
+    let metadata = validate_attachment_source(app_data_dir, source_path, purpose)?;
 
     let filename = source_path
         .file_name()
@@ -99,6 +108,50 @@ pub fn copy_into_managed_attachment(
     fs::copy(source_path, &absolute_path)?;
 
     Ok((filename.to_string(), relative_path, metadata.len()))
+}
+
+fn validate_attachment_source(
+    app_data_dir: &Path,
+    source_path: &Path,
+    purpose: &str,
+) -> DbResult<fs::Metadata> {
+    let source_metadata = fs::symlink_metadata(source_path)?;
+    if source_metadata.file_type().is_symlink() {
+        return Err(DbError::InvalidData(
+            "Attachment source must not be a symbolic link.".to_string(),
+        ));
+    }
+    if !source_metadata.is_file() {
+        return Err(DbError::InvalidData(
+            "Only files can be attached.".to_string(),
+        ));
+    }
+    if source_metadata.len() == 0 {
+        return Err(DbError::InvalidData(
+            "Attachment file cannot be empty.".to_string(),
+        ));
+    }
+    if is_jira_ready_attachment_purpose(purpose)
+        && source_metadata.len() > PERSONAL_V1_JIRA_ATTACHMENT_MAX_BYTES
+    {
+        return Err(DbError::InvalidData(format!(
+            "Jira-ready attachments must be 100 MB or smaller."
+        )));
+    }
+
+    let canonical_app_data_dir = app_data_dir.canonicalize()?;
+    let canonical_source = source_path.canonicalize()?;
+    if canonical_source.starts_with(&canonical_app_data_dir) {
+        return Err(DbError::InvalidData(
+            "Attachment source must not be inside Jira Task Forge app data.".to_string(),
+        ));
+    }
+
+    Ok(source_metadata)
+}
+
+fn is_jira_ready_attachment_purpose(purpose: &str) -> bool {
+    matches!(purpose.trim(), "Jira attachment" | "AI + Jira attachment")
 }
 
 pub fn resolve_existing_managed_attachment_file(

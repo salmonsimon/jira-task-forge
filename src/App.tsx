@@ -14,7 +14,7 @@ import { TraysView, useTrayWorkspace } from "./features/trays";
 import { mockAppDataAdapter } from "./lib/adapters";
 import { appOverlayLayers, useAppOverlay } from "./lib/app-overlays";
 import {
-  addPersistedTaskAttachmentsFromPaths,
+  choosePersistedTaskAttachmentFiles,
   createPersistedCategory,
   createPersistedJiraParentIssues,
   createPersistedJqlFavorite,
@@ -429,14 +429,7 @@ export default function App() {
     if (!usesTauriPersistence) {
       throw new Error("Attachment storage requires the desktop app.");
     }
-    const selectedPaths = await open({
-      directory: false,
-      multiple: true
-    });
-    const paths = Array.isArray(selectedPaths) ? selectedPaths : selectedPaths ? [selectedPaths] : [];
-    if (!paths.length) return;
-
-    const updatedTask = await addPersistedTaskAttachmentsFromPaths(taskId, paths, "AI + Jira attachment");
+    const updatedTask = await choosePersistedTaskAttachmentFiles(taskId, "AI + Jira attachment");
     if (updatedTask) trayWorkspace.replaceTask(updatedTask);
   }
 
