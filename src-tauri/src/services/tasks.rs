@@ -1,8 +1,9 @@
 use super::AppServices;
 use crate::attachment_storage::{
-    copy_into_managed_attachment, remove_managed_attachment_file, validate_managed_relative_path,
+    copy_granted_source_into_managed_attachment, remove_managed_attachment_file,
+    validate_managed_relative_path, AttachmentFileGrant,
 };
-use crate::db::DbResult;
+use crate::db::{DbError, DbResult};
 use crate::models::{
     LocalIssueRelationship, LocalTask, NewSubtask, NewTask, NewTaskAttachment, NewTray, Tray,
 };
@@ -84,14 +85,30 @@ impl AppServices {
         paths: &[String],
         purpose: &str,
     ) -> DbResult<Option<LocalTask>> {
-        if paths.is_empty() {
+        let _ = (task_id, paths, purpose);
+        Err(DbError::InvalidData(
+            "Attachment selection requires a backend file grant.".to_string(),
+        ))
+    }
+
+    pub fn add_task_attachments_from_file_grants(
+        &self,
+        task_id: &str,
+        grants: &[AttachmentFileGrant],
+        purpose: &str,
+    ) -> DbResult<Option<LocalTask>> {
+        if grants.is_empty() {
             return Ok(self.find_task(task_id)?);
         }
 
-        for path in paths {
-            let source_path = Path::new(path);
+        for grant in grants {
             let (filename, relative_path, size_bytes) =
-                copy_into_managed_attachment(self.app_data_dir(), source_path, task_id)?;
+                copy_granted_source_into_managed_attachment(
+                    self.app_data_dir(),
+                    grant,
+                    task_id,
+                    purpose,
+                )?;
 
             let create_result = {
                 let connection = self.connection();

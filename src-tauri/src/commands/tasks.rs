@@ -1,5 +1,7 @@
-use tauri::State;
+use tauri::{AppHandle, State};
+use tauri_plugin_dialog::DialogExt;
 
+use crate::attachment_storage::AttachmentFileGrant;
 use crate::models::{LocalIssueRelationship, LocalTask, NewSubtask, NewTask, SyncAuditEvent, Tray};
 use crate::services::AppServices;
 
@@ -113,6 +115,33 @@ pub fn add_task_attachments_from_paths(
 ) -> Result<Option<LocalTask>, String> {
     services
         .add_task_attachments_from_paths(&task_id, &paths, &purpose)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn choose_task_attachment_files(
+    app: AppHandle,
+    services: State<'_, AppServices>,
+    task_id: String,
+    purpose: String,
+) -> Result<Option<LocalTask>, String> {
+    let selected_files = app
+        .dialog()
+        .file()
+        .blocking_pick_files()
+        .unwrap_or_default();
+    let grants = selected_files
+        .into_iter()
+        .map(|file_path| {
+            file_path
+                .into_path()
+                .map(AttachmentFileGrant::from_backend_file_dialog)
+                .map_err(|error| format!("Attachment source path could not be read: {error}"))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+
+    services
+        .add_task_attachments_from_file_grants(&task_id, &grants, &purpose)
         .map_err(|error| error.to_string())
 }
 

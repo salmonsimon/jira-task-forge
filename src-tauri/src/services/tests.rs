@@ -1,10 +1,35 @@
 use super::AppServices;
+use crate::attachment_storage::{AttachmentFileGrant, PERSONAL_V1_JIRA_ATTACHMENT_MAX_BYTES};
 use crate::db::open_in_memory_database;
 use crate::integrations::ai::{ai_model_or_default, AiProvider};
-use crate::models::{AppSettings, NewSubtask, NewTask, NewTray, TrayState};
+use crate::models::{AppSettings, LocalTask, NewSubtask, NewTask, NewTray, TrayState};
 use crate::repositories::{TaskRepository, TrayRepository};
 use std::fs;
+use std::path::Path;
 use uuid::Uuid;
+
+fn attachment_grant(source_path: &Path) -> AttachmentFileGrant {
+    AttachmentFileGrant::from_backend_file_dialog(source_path.to_path_buf())
+}
+
+fn create_attachment_test_task(services: &AppServices) -> LocalTask {
+    let tray = services
+        .create_tray(NewTray {
+            name: "Attachment validation tray".to_string(),
+        })
+        .expect("tray creates");
+    services
+        .create_task(NewTask {
+            tray_id: tray.id,
+            project: "STT".to_string(),
+            area: "Bug".to_string(),
+            title: "Attachment validation task".to_string(),
+            priority: "Medium".to_string(),
+            issue_type: "Bug".to_string(),
+            content_language: "Spanish".to_string(),
+        })
+        .expect("task creates")
+}
 
 #[test]
 fn manages_tray_lifecycle_through_services() {
@@ -102,8 +127,13 @@ fn stores_task_attachments_as_app_managed_files() {
         "jira-task-forge-attachment-test-{}",
         Uuid::new_v4()
     ));
+    let source_dir = std::env::temp_dir().join(format!(
+        "jira-task-forge-attachment-source-test-{}",
+        Uuid::new_v4()
+    ));
     fs::create_dir_all(&app_data_dir).expect("temp app data creates");
-    let source_path = app_data_dir.join("source image.png");
+    fs::create_dir_all(&source_dir).expect("source dir creates");
+    let source_path = source_dir.join("source image.png");
     fs::write(&source_path, b"source attachment").expect("source file writes");
     let services = AppServices::new_with_app_data_dir(
         open_in_memory_database().expect("database opens"),
@@ -127,9 +157,9 @@ fn stores_task_attachments_as_app_managed_files() {
         .expect("task creates");
 
     let after_path_add = services
-        .add_task_attachments_from_paths(
+        .add_task_attachments_from_file_grants(
             &task.id,
-            &[source_path.to_string_lossy().to_string()],
+            &[attachment_grant(&source_path)],
             "AI + Jira attachment",
         )
         .expect("attachment adds from path")
@@ -163,6 +193,182 @@ fn stores_task_attachments_as_app_managed_files() {
     assert!(!stored_path.exists());
 
     let _ = fs::remove_dir_all(&app_data_dir);
+    let _ = fs::remove_dir_all(&source_dir);
+}
+
+#[test]
+fn rejects_arbitrary_attachment_paths_without_backend_grant() {
+    let app_data_dir = std::env::temp_dir().join(format!(
+        "jira-task-forge-ungranted-attachment-test-{}",
+        Uuid::new_v4()
+    ));
+    let source_dir = std::env::temp_dir().join(format!(
+        "jira-task-forge-ungranted-attachment-source-test-{}",
+        Uuid::new_v4()
+    ));
+    fs::create_dir_all(&app_data_dir).expect("temp app data creates");
+    fs::create_dir_all(&source_dir).expect("source dir creates");
+    let source_path = source_dir.join("ungranted.txt");
+    fs::write(&source_path, b"ungranted attachment").expect("source file writes");
+    let services = AppServices::new_with_app_data_dir(
+        open_in_memory_database().expect("database opens"),
+        app_data_dir.clone(),
+    );
+    let task = create_attachment_test_task(&services);
+
+    let error = services
+        .add_task_attachments_from_paths(
+            &task.id,
+            &[source_path.to_string_lossy().to_string()],
+            "Jira attachment",
+        )
+        .expect_err("ungranted paths reject");
+
+    assert!(error.to_string().contains("backend file grant"));
+    assert!(services
+        .list_tasks()
+        .expect("tasks list")
+        .into_iter()
+        .find(|candidate| candidate.id == task.id)
+        .expect("task exists")
+        .attachments
+        .is_empty());
+    let _ = fs::remove_dir_all(&app_data_dir);
+    let _ = fs::remove_dir_all(&source_dir);
+}
+
+#[test]
+fn rejects_attachment_directories() {
+    let app_data_dir = std::env::temp_dir().join(format!(
+        "jira-task-forge-directory-attachment-test-{}",
+        Uuid::new_v4()
+    ));
+    let source_dir = std::env::temp_dir().join(format!(
+        "jira-task-forge-directory-attachment-source-test-{}",
+        Uuid::new_v4()
+    ));
+    let selected_directory = source_dir.join("not-a-file");
+    fs::create_dir_all(&app_data_dir).expect("temp app data creates");
+    fs::create_dir_all(&selected_directory).expect("selected directory creates");
+    let services = AppServices::new_with_app_data_dir(
+        open_in_memory_database().expect("database opens"),
+        app_data_dir.clone(),
+    );
+    let task = create_attachment_test_task(&services);
+
+    let error = services
+        .add_task_attachments_from_file_grants(
+            &task.id,
+            &[attachment_grant(&selected_directory)],
+            "Jira attachment",
+        )
+        .expect_err("directory source rejects");
+
+    assert!(error.to_string().contains("Only files"));
+    let _ = fs::remove_dir_all(&app_data_dir);
+    let _ = fs::remove_dir_all(&source_dir);
+}
+
+#[cfg(unix)]
+#[test]
+fn rejects_attachment_symlinks_before_copying() {
+    use std::os::unix::fs::symlink;
+
+    let app_data_dir = std::env::temp_dir().join(format!(
+        "jira-task-forge-symlink-attachment-test-{}",
+        Uuid::new_v4()
+    ));
+    let source_dir = std::env::temp_dir().join(format!(
+        "jira-task-forge-symlink-attachment-source-test-{}",
+        Uuid::new_v4()
+    ));
+    fs::create_dir_all(&app_data_dir).expect("temp app data creates");
+    fs::create_dir_all(&source_dir).expect("source dir creates");
+    let real_file = source_dir.join("real.txt");
+    let symlink_path = source_dir.join("linked.txt");
+    fs::write(&real_file, b"real attachment").expect("real file writes");
+    symlink(&real_file, &symlink_path).expect("symlink creates");
+    let services = AppServices::new_with_app_data_dir(
+        open_in_memory_database().expect("database opens"),
+        app_data_dir.clone(),
+    );
+    let task = create_attachment_test_task(&services);
+
+    let error = services
+        .add_task_attachments_from_file_grants(
+            &task.id,
+            &[attachment_grant(&symlink_path)],
+            "Jira attachment",
+        )
+        .expect_err("symlink source rejects");
+
+    assert!(error.to_string().contains("symbolic link"));
+    let _ = fs::remove_dir_all(&app_data_dir);
+    let _ = fs::remove_dir_all(&source_dir);
+}
+
+#[test]
+fn rejects_oversized_jira_ready_attachment_sources() {
+    let app_data_dir = std::env::temp_dir().join(format!(
+        "jira-task-forge-oversized-attachment-test-{}",
+        Uuid::new_v4()
+    ));
+    let source_dir = std::env::temp_dir().join(format!(
+        "jira-task-forge-oversized-attachment-source-test-{}",
+        Uuid::new_v4()
+    ));
+    fs::create_dir_all(&app_data_dir).expect("temp app data creates");
+    fs::create_dir_all(&source_dir).expect("source dir creates");
+    let source_path = source_dir.join("too-large.bin");
+    let source_file = fs::File::create(&source_path).expect("source file creates");
+    source_file
+        .set_len(PERSONAL_V1_JIRA_ATTACHMENT_MAX_BYTES + 1)
+        .expect("source file sizes");
+    let services = AppServices::new_with_app_data_dir(
+        open_in_memory_database().expect("database opens"),
+        app_data_dir.clone(),
+    );
+    let task = create_attachment_test_task(&services);
+
+    let error = services
+        .add_task_attachments_from_file_grants(
+            &task.id,
+            &[attachment_grant(&source_path)],
+            "AI + Jira attachment",
+        )
+        .expect_err("oversized source rejects");
+
+    assert!(error.to_string().contains("100 MB or smaller"));
+    let _ = fs::remove_dir_all(&app_data_dir);
+    let _ = fs::remove_dir_all(&source_dir);
+}
+
+#[test]
+fn rejects_attachment_sources_inside_internal_app_data() {
+    let app_data_dir = std::env::temp_dir().join(format!(
+        "jira-task-forge-internal-attachment-test-{}",
+        Uuid::new_v4()
+    ));
+    let internal_logs_dir = app_data_dir.join("logs");
+    fs::create_dir_all(&internal_logs_dir).expect("internal logs dir creates");
+    let source_path = internal_logs_dir.join("diagnostic.txt");
+    fs::write(&source_path, b"internal diagnostics").expect("internal source writes");
+    let services = AppServices::new_with_app_data_dir(
+        open_in_memory_database().expect("database opens"),
+        app_data_dir.clone(),
+    );
+    let task = create_attachment_test_task(&services);
+
+    let error = services
+        .add_task_attachments_from_file_grants(
+            &task.id,
+            &[attachment_grant(&source_path)],
+            "Jira attachment",
+        )
+        .expect_err("internal source rejects");
+
+    assert!(error.to_string().contains("app data"));
+    let _ = fs::remove_dir_all(&app_data_dir);
 }
 
 #[test]
@@ -171,9 +377,14 @@ fn deleting_task_removes_managed_attachment_files_for_task_graph() {
         "jira-task-forge-delete-attachment-test-{}",
         Uuid::new_v4()
     ));
+    let source_dir = std::env::temp_dir().join(format!(
+        "jira-task-forge-delete-attachment-source-test-{}",
+        Uuid::new_v4()
+    ));
     fs::create_dir_all(&app_data_dir).expect("temp app data creates");
-    let parent_source_path = app_data_dir.join("parent.txt");
-    let child_source_path = app_data_dir.join("child.txt");
+    fs::create_dir_all(&source_dir).expect("source dir creates");
+    let parent_source_path = source_dir.join("parent.txt");
+    let child_source_path = source_dir.join("child.txt");
     fs::write(&parent_source_path, b"parent attachment").expect("parent source writes");
     fs::write(&child_source_path, b"child attachment").expect("child source writes");
     let services = AppServices::new_with_app_data_dir(
@@ -203,17 +414,17 @@ fn deleting_task_removes_managed_attachment_files_for_task_graph() {
         })
         .expect("subtask creates");
     let parent_with_attachment = services
-        .add_task_attachments_from_paths(
+        .add_task_attachments_from_file_grants(
             &parent.id,
-            &[parent_source_path.to_string_lossy().to_string()],
+            &[attachment_grant(&parent_source_path)],
             "Jira attachment",
         )
         .expect("parent attachment adds")
         .expect("parent exists");
     let child_with_attachment = services
-        .add_task_attachments_from_paths(
+        .add_task_attachments_from_file_grants(
             &child.id,
-            &[child_source_path.to_string_lossy().to_string()],
+            &[attachment_grant(&child_source_path)],
             "Jira attachment",
         )
         .expect("child attachment adds")
@@ -230,6 +441,7 @@ fn deleting_task_removes_managed_attachment_files_for_task_graph() {
     assert!(!parent_stored_path.exists());
     assert!(!child_stored_path.exists());
     let _ = fs::remove_dir_all(&app_data_dir);
+    let _ = fs::remove_dir_all(&source_dir);
 }
 
 #[test]
@@ -238,8 +450,13 @@ fn deleting_tray_removes_managed_attachment_files() {
         "jira-task-forge-delete-tray-attachment-test-{}",
         Uuid::new_v4()
     ));
+    let source_dir = std::env::temp_dir().join(format!(
+        "jira-task-forge-delete-tray-attachment-source-test-{}",
+        Uuid::new_v4()
+    ));
     fs::create_dir_all(&app_data_dir).expect("temp app data creates");
-    let source_path = app_data_dir.join("tray-file.txt");
+    fs::create_dir_all(&source_dir).expect("source dir creates");
+    let source_path = source_dir.join("tray-file.txt");
     fs::write(&source_path, b"tray attachment").expect("source writes");
     let services = AppServices::new_with_app_data_dir(
         open_in_memory_database().expect("database opens"),
@@ -262,9 +479,9 @@ fn deleting_tray_removes_managed_attachment_files() {
         })
         .expect("task creates");
     let task_with_attachment = services
-        .add_task_attachments_from_paths(
+        .add_task_attachments_from_file_grants(
             &task.id,
-            &[source_path.to_string_lossy().to_string()],
+            &[attachment_grant(&source_path)],
             "Jira attachment",
         )
         .expect("attachment adds")
@@ -277,6 +494,7 @@ fn deleting_tray_removes_managed_attachment_files() {
 
     assert!(!stored_path.exists());
     let _ = fs::remove_dir_all(&app_data_dir);
+    let _ = fs::remove_dir_all(&source_dir);
 }
 
 #[test]
