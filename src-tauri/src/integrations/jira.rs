@@ -2,6 +2,7 @@ use std::time::Duration;
 
 use base64::Engine;
 use serde::de::DeserializeOwned;
+use serde::Deserialize;
 use serde_json::{json, Value};
 use uuid::Uuid;
 
@@ -12,7 +13,7 @@ use super::jira_mapping::{
 use crate::models::{
     JiraAttachmentSettings, JiraCreateIssueResponse, JiraCreateIssueTypeMetadata,
     JiraCreateMetadata, JiraMyself, JiraProjectOption, JiraProjectSearchResponse,
-    JqlSearchResponse,
+    JiraRemoteMarkerIssue, JqlSearchResponse,
 };
 use crate::redaction::redact_secret_fragments;
 
@@ -184,6 +185,65 @@ impl JiraClient {
         )
     }
 
+    pub fn find_parent_issue_by_remote_marker(
+        &self,
+        project_key: &str,
+        property_key: &str,
+        issue_type: &str,
+        summary: &str,
+        local_task_id: &str,
+    ) -> Result<Option<JiraRemoteMarkerIssue>, String> {
+        let project_key = project_key.trim();
+        if project_key.is_empty() {
+            return Err("Jira creation project key is required.".to_string());
+        }
+        let issue_type = issue_type.trim();
+        if issue_type.is_empty() {
+            return Err("Jira issue type is required.".to_string());
+        }
+        let summary = summary.trim();
+        if summary.is_empty() {
+            return Err("Jira issue summary is required.".to_string());
+        }
+        let local_task_id = local_task_id.trim();
+        if local_task_id.is_empty() {
+            return Err("Local task id is required.".to_string());
+        }
+        let property_key = property_key.trim();
+        if property_key.is_empty() {
+            return Err("Jira marker property key is required.".to_string());
+        }
+
+        let jql = format!(
+            "project = {} AND summary ~ \"{}\" ORDER BY created DESC",
+            escape_jql_identifier(project_key),
+            escape_jql_string(summary)
+        );
+        let response = self.search_jql(&jql, 20)?;
+        let mut matches = Vec::new();
+
+        for issue in response.results.into_iter().filter(|issue| {
+            issue.summary == summary && issue.issue_type.eq_ignore_ascii_case(issue_type)
+        }) {
+            let Some(marker) = self.get_issue_property_value(&issue.key, property_key)? else {
+                continue;
+            };
+            if remote_marker_matches_parent_local_task(&marker, local_task_id) {
+                matches.push(issue.key);
+            }
+        }
+
+        match matches.len() {
+            0 => Ok(None),
+            1 => Ok(Some(JiraRemoteMarkerIssue {
+                key: matches.remove(0),
+            })),
+            count => Err(format!(
+                "Remote marker lookup found {count} Jira issues matching the same Local Task."
+            )),
+        }
+    }
+
     pub fn update_issue_fields(&self, key: &str, payload: Value) -> Result<(), String> {
         let key = key.trim();
         if key.is_empty() {
@@ -268,6 +328,41 @@ impl JiraClient {
             .set("Content-Type", "application/json")
             .set("Authorization", &self.authorization_header)
             .timeout(WRITE_REQUEST_TIMEOUT)
+    }
+
+    fn get_issue_property_value(
+        &self,
+        issue_key: &str,
+        property_key: &str,
+    ) -> Result<Option<Value>, String> {
+        let response = self
+            .get(&format!(
+                "/rest/api/3/issue/{}/properties/{}",
+                encode_path_segment(issue_key),
+                encode_path_segment(property_key)
+            ))
+            .call();
+
+        match response {
+            Ok(response) => {
+                let property =
+                    response
+                        .into_json::<JiraIssuePropertyResponse>()
+                        .map_err(|error| {
+                            redact_secret_fragments(&format!(
+                                "Jira issue property read returned an unexpected payload: {error}"
+                            ))
+                        })?;
+                Ok(Some(property.value))
+            }
+            Err(ureq::Error::Status(404, _)) => Ok(None),
+            Err(error) => parse_response::<JiraIssuePropertyResponse>(
+                Err(error),
+                "Jira issue property read",
+                None,
+            )
+            .map(|property| Some(property.value)),
+        }
     }
 
     fn url(&self, path: &str) -> String {
@@ -530,6 +625,21 @@ fn encode_path_segment(value: &str) -> String {
         .collect()
 }
 
+fn escape_jql_identifier(value: &str) -> String {
+    if value
+        .chars()
+        .all(|character| character.is_ascii_alphanumeric() || character == '_')
+    {
+        value.to_string()
+    } else {
+        format!("\"{}\"", escape_jql_string(value))
+    }
+}
+
+fn escape_jql_string(value: &str) -> String {
+    value.replace('\\', "\\\\").replace('"', "\\\"")
+}
+
 fn is_retryable_jira_read_error(message: &str) -> bool {
     message.contains("could not reach Jira")
         && (message.contains("timed out")
@@ -537,6 +647,17 @@ fn is_retryable_jira_read_error(message: &str) -> bool {
             || message.contains("Connection Failed")
             || message.contains("connection reset")
             || message.contains("connection closed"))
+}
+
+#[derive(Debug, Deserialize)]
+struct JiraIssuePropertyResponse {
+    value: Value,
+}
+
+fn remote_marker_matches_parent_local_task(marker: &Value, local_task_id: &str) -> bool {
+    marker.get("source").and_then(Value::as_str) == Some("jira-task-forge")
+        && marker.get("kind").and_then(Value::as_str) == Some("parent")
+        && marker.get("localTaskId").and_then(Value::as_str) == Some(local_task_id)
 }
 
 #[cfg(test)]

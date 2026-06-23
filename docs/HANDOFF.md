@@ -146,9 +146,8 @@ Still pending:
 - Re-check native QA after the post-PR command-worker, backup, audit, JQL, and
   Ask AI changes.
 - Categories persistence in the UI.
-- Audit log UI, broader Jira issue relationship sync, remote correlation marker
-  recovery, attachment source validation, focused `Privacy & Diagnostics`
-  copy/test polish if review finds gaps, local data cleanup/storage inventory,
+- Audit log UI, broader Jira issue relationship sync, attachment source validation,
+  focused `Privacy & Diagnostics` copy/test polish if review finds gaps, local data cleanup/storage inventory,
   and remaining native/live QA hardening around assisted descriptions,
   sub-tasks, and attachment upload.
 - Full native QA in an environment with the Linux system dependencies needed by Tauri/keyring.
@@ -166,9 +165,10 @@ Still pending:
   Diagnostics` detail view. Leave only focused copy, docs, or rendering-test
   follow-up if review finds the current text insufficient. Do not add a
   permanent privacy-copy block to the main Settings panel for Personal v1.
-- Implement issue #94 as the next high-value Jira sync reliability slice:
-  recover ambiguous parent-create retries by querying Remote Correlation Markers
-  before creating another issue.
+- Issue #94 has landed as a Jira sync reliability slice: failed parent tasks
+  without a local Jira key query Remote Correlation Markers before retrying
+  creation, recover the local Jira link when a match exists, and fail safely
+  without creating when marker lookup cannot be confirmed.
 - Implement issue #95 as a dedicated attachment provenance/source-validation
   slice, separate from Jira sync internals.
 - Implement issue #103 as documentation-only storage inventory; if it lands
