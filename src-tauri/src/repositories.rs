@@ -2,6 +2,7 @@ use rusqlite::{params, Connection};
 use serde_json::Value;
 use uuid::Uuid;
 
+use crate::area_catalog::OFFICIAL_AREAS;
 use crate::attachment_storage::validate_managed_relative_path;
 use crate::db::{utc_now_string, DbError, DbResult};
 use crate::integrations::jira::normalize_jira_site_url;
@@ -21,20 +22,6 @@ const DEFAULT_PROJECT_CATEGORIES: &[(&str, bool)] = &[
     ("MR Studio", false),
     ("Transversal", false),
     ("Legacy Sandbox", true),
-];
-const DEFAULT_AREA_CATEGORIES: &[(&str, bool)] = &[
-    ("Bug", false),
-    ("3D", false),
-    ("Polish", false),
-    ("Programacion", false),
-    ("Iluminacion", false),
-    ("Texturas", false),
-    ("Localizacion", false),
-    ("Refactorizacion", false),
-    ("Tutorial", false),
-    ("Feeling", false),
-    ("Diseno", false),
-    ("Deprecated", true),
 ];
 const DEFAULT_JQL_FAVORITES: &[(&str, &str)] = &[
     (
@@ -169,6 +156,11 @@ impl<'connection> CategoryRepository<'connection> {
 
     pub fn create(&self, category_type: &str, name: &str) -> DbResult<Category> {
         validate_category_type(category_type)?;
+        if category_type == "area" {
+            return Err(DbError::InvalidData(
+                "Areas are managed by the official catalog sync.".to_string(),
+            ));
+        }
         let name = normalize_display_name(name)?;
         let normalized_name = normalize_name(&name);
         let now = utc_now_string()?;
@@ -203,6 +195,11 @@ impl<'connection> CategoryRepository<'connection> {
         let Some(current) = self.find_by_id(id)? else {
             return Ok(None);
         };
+        if current.category_type == "area" && name.is_some() {
+            return Err(DbError::InvalidData(
+                "Areas are managed by the official catalog sync.".to_string(),
+            ));
+        }
         let next_name = match name {
             Some(name) => normalize_display_name(name)?,
             None => current.name,
@@ -230,10 +227,57 @@ impl<'connection> CategoryRepository<'connection> {
     }
 
     pub fn delete(&self, id: &str) -> DbResult<bool> {
+        let Some(current) = self.find_by_id(id)? else {
+            return Ok(false);
+        };
+        if current.category_type == "area" {
+            return Err(DbError::InvalidData(
+                "Areas are managed by the official catalog sync.".to_string(),
+            ));
+        }
         let changed = self
             .connection
             .execute("DELETE FROM categories WHERE id = ?1", [id])?;
         Ok(changed > 0)
+    }
+
+    pub fn sync_area_catalog(&self) -> DbResult<Vec<Category>> {
+        let now = utc_now_string()?;
+        self.connection.execute(
+            "
+            UPDATE categories
+            SET ignored = 1, updated_at = ?1
+            WHERE category_type = 'area'
+            ",
+            [now.as_str()],
+        )?;
+
+        for catalog_area in OFFICIAL_AREAS {
+            let id = Uuid::new_v4().to_string();
+            let normalized_name = normalize_name(catalog_area.area_display_name);
+            self.connection.execute(
+                "
+                INSERT INTO categories (
+                    id, category_type, name, normalized_name, source, hidden, ignored, created_at, updated_at
+                )
+                VALUES (?1, 'area', ?2, ?3, 'catalog', 0, 0, ?4, ?4)
+                ON CONFLICT(category_type, normalized_name) DO UPDATE SET
+                    name = excluded.name,
+                    source = 'catalog',
+                    hidden = 0,
+                    ignored = 0,
+                    updated_at = excluded.updated_at
+                ",
+                (
+                    id.as_str(),
+                    catalog_area.area_display_name,
+                    normalized_name.as_str(),
+                    now.as_str(),
+                ),
+            )?;
+        }
+
+        self.list(Some("area"))
     }
 
     fn find_by_id(&self, id: &str) -> DbResult<Option<Category>> {
@@ -255,7 +299,7 @@ impl<'connection> CategoryRepository<'connection> {
 
     fn ensure_defaults_seeded(&self) -> DbResult<()> {
         self.seed_category_type_if_empty("project", DEFAULT_PROJECT_CATEGORIES)?;
-        self.seed_category_type_if_empty("area", DEFAULT_AREA_CATEGORIES)?;
+        self.seed_catalog_area_categories_if_empty()?;
         Ok(())
     }
 
@@ -290,6 +334,39 @@ impl<'connection> CategoryRepository<'connection> {
                     *name,
                     normalized_name.as_str(),
                     bool_to_db(*hidden),
+                    now.as_str(),
+                ),
+            )?;
+        }
+
+        Ok(())
+    }
+
+    fn seed_catalog_area_categories_if_empty(&self) -> DbResult<()> {
+        let count: i64 = self.connection.query_row(
+            "SELECT COUNT(*) FROM categories WHERE category_type = 'area'",
+            [],
+            |row| row.get(0),
+        )?;
+        if count > 0 {
+            return Ok(());
+        }
+
+        let now = utc_now_string()?;
+        for catalog_area in OFFICIAL_AREAS {
+            let id = Uuid::new_v4().to_string();
+            let normalized_name = normalize_name(catalog_area.area_display_name);
+            self.connection.execute(
+                "
+                INSERT OR IGNORE INTO categories (
+                    id, category_type, name, normalized_name, source, hidden, ignored, created_at, updated_at
+                )
+                VALUES (?1, 'area', ?2, ?3, 'catalog', 0, 0, ?4, ?4)
+                ",
+                (
+                    id.as_str(),
+                    catalog_area.area_display_name,
+                    normalized_name.as_str(),
                     now.as_str(),
                 ),
             )?;
@@ -2262,35 +2339,73 @@ mod tests {
             .any(|category| category.name == "Legacy Sandbox" && category.hidden));
 
         let created = repository
-            .create("area", "  Gameplay   UX  ")
-            .expect("category creates");
+            .create("project", "  Gameplay   UX  ")
+            .expect("project category creates");
         assert_eq!(created.name, "Gameplay UX");
-        assert_eq!(created.category_type, "area");
+        assert_eq!(created.category_type, "project");
         assert_eq!(created.source, "local");
         assert!(!created.hidden);
 
         let updated = repository
             .update(&created.id, Some("UX Polish"), Some(true))
-            .expect("category updates")
-            .expect("category exists");
+            .expect("project category updates")
+            .expect("project category exists");
         assert_eq!(updated.name, "UX Polish");
         assert!(updated.hidden);
 
-        assert!(repository.delete(&updated.id).expect("category deletes"));
+        assert!(repository
+            .delete(&updated.id)
+            .expect("project category deletes"));
         assert!(!repository
             .delete(&updated.id)
             .expect("missing delete is false"));
-        assert!(!repository
-            .list(Some("area"))
-            .expect("areas list")
-            .iter()
-            .any(|category| category.id == updated.id));
+    }
 
-        let recreated = repository
-            .create("area", "UX Polish")
-            .expect("category name can be reused after delete");
-        assert_eq!(recreated.name, "UX Polish");
-        assert_ne!(recreated.id, updated.id);
+    #[test]
+    fn manages_areas_from_official_catalog_only() {
+        let connection = open_in_memory_database().expect("database opens");
+        let repository = CategoryRepository::new(&connection);
+
+        let areas = repository.list(Some("area")).expect("area categories list");
+        assert!(areas
+            .iter()
+            .any(|category| category.name == "Programación" && category.source == "catalog"));
+        assert!(areas
+            .iter()
+            .any(|category| category.name == "Selección Recurso" && category.source == "catalog"));
+        assert!(!areas.iter().any(|category| category.name == "Compra"));
+
+        assert!(matches!(
+            repository.create("area", "Compra"),
+            Err(DbError::InvalidData(_))
+        ));
+
+        let bug = areas
+            .iter()
+            .find(|category| category.name == "Bug")
+            .expect("Bug exists");
+        assert!(matches!(
+            repository.update(&bug.id, Some("Error"), None),
+            Err(DbError::InvalidData(_))
+        ));
+        assert!(matches!(
+            repository.delete(&bug.id),
+            Err(DbError::InvalidData(_))
+        ));
+
+        let hidden = repository
+            .update(&bug.id, None, Some(true))
+            .expect("catalog area visibility updates")
+            .expect("catalog area exists");
+        assert!(hidden.hidden);
+
+        let synced = repository
+            .sync_area_catalog()
+            .expect("catalog sync succeeds");
+        assert!(synced
+            .iter()
+            .any(|category| category.name == "Bug" && !category.hidden));
+        assert!(synced.iter().all(|category| category.source == "catalog"));
     }
 
     #[test]

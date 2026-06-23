@@ -36,6 +36,17 @@ describe("preflight domain helpers", () => {
     expect(warnings.every((warning) => warning.severity === "blocking")).toBe(true);
   });
 
+  it("blocks non-official catalog areas", () => {
+    const warnings = classifyTaskPreflightWarnings(task({ area: "Compra" }));
+
+    expect(warnings).toContainEqual({
+      code: "invalid-area",
+      severity: "blocking",
+      taskId: "task-1",
+      message: "Choose an official catalog area before creating this task in Jira."
+    });
+  });
+
   it("classifies missing description, epic, and failed retry as resolvable", () => {
     const warnings = classifyTaskPreflightWarnings(
       task({ descriptionStatus: "Missing", epic: undefined, syncStatus: "Failed" })

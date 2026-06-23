@@ -1,6 +1,7 @@
 use serde_json::{json, Value};
 
 use super::{strip_json_fence, JsonFeatureRequest};
+use crate::area_catalog::catalog_context_for_area;
 use crate::integrations::ai::AiProvider;
 use crate::models::{AssistedDescriptionDraft, LocalTask};
 
@@ -136,6 +137,7 @@ fn task_description_generation_context(task: &LocalTask, additional_context: &st
 
     format!(
         "Base context:\n{base_context}\n\n\
+{catalog_context}\n\n\
 Local Task context:\n\
 - Project: {project}\n\
 - Area: {area}\n\
@@ -147,6 +149,13 @@ Local Task context:\n\
 - Additional user context: {additional_context}\n\n\
 Target Markdown format:\n{template}",
         base_context = ASSISTED_DESCRIPTION_BASE_CONTEXT.trim(),
+        catalog_context = catalog_context_for_area(
+            &task.area,
+            &format!(
+                "{}\n{}\n{}",
+                task.title, additional_context, existing_description
+            )
+        ),
         project = task.project,
         area = task.area,
         issue_type = task.issue_type,
@@ -289,6 +298,39 @@ mod tests {
         assert!(context.contains("Unreal Engine 5"));
         assert!(context.contains("Do not ask which engine"));
         assert!(context.contains("Additional user context: mesa aparece sin patas"));
+    }
+
+    #[test]
+    fn task_description_context_includes_catalog_guidance_for_area() {
+        let task = LocalTask {
+            area: "Programacion".to_string(),
+            issue_type: "Story".to_string(),
+            ..task_with_title("Implementar cooldown de habilidad")
+        };
+        let context = task_description_generation_context(
+            &task,
+            "La habilidad puede dispararse muchas veces seguidas.",
+        );
+
+        assert!(context.contains("Official catalog context:"));
+        assert!(context.contains("- Official area display name: Programación"));
+        assert!(context.contains("- Jira label: programacion"));
+        assert!(context.contains("- Delivery format: Implementación técnica"));
+        assert!(context.contains("- Issue type derivation: Story"));
+        assert!(context.contains("Use the official area display name in visible summaries"));
+    }
+
+    #[test]
+    fn task_description_context_separates_area_display_name_from_jira_label() {
+        let task = LocalTask {
+            area: "Selección Recurso".to_string(),
+            issue_type: "Story".to_string(),
+            ..task_with_title("Elegir asset base")
+        };
+        let context = task_description_generation_context(&task, "Seleccionar el recurso base.");
+
+        assert!(context.contains("- Official area display name: Selección Recurso"));
+        assert!(context.contains("- Jira label: Selección-Recurso"));
     }
 
     #[test]

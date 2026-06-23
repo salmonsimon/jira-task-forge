@@ -72,7 +72,7 @@ export type BackendCategory = {
   id: string;
   category_type: "project" | "area";
   name: string;
-  source: "local" | "jira";
+  source: "local" | "jira" | "catalog";
   hidden: boolean;
   ignored: boolean;
   created_at: string;

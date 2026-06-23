@@ -47,6 +47,7 @@ import {
   saveCsvFile,
   savePersistedAiProviderApiKey,
   savePersistedJiraApiToken,
+  syncPersistedAreaCatalog,
   testPersistedAiProviderApiKey,
   testPersistedAiProviderConnection,
   testPersistedJiraApiToken,
@@ -514,6 +515,17 @@ export default function App() {
     }
 
     setCategories((currentCategories) => currentCategories.filter((category) => category.id !== categoryId));
+  }
+
+  async function syncAreaCatalog() {
+    const syncedAreas = usesTauriPersistence
+      ? await syncPersistedAreaCatalog()
+      : appData.listAreas().map((area) => ({ ...area, source: "catalog" as const }));
+
+    setCategories((currentCategories) => [
+      ...currentCategories.filter((category) => category.categoryType !== "area"),
+      ...syncedAreas
+    ]);
   }
 
   async function openJiraIssue(url: string) {
@@ -1487,6 +1499,7 @@ export default function App() {
             onCreateCategory={createCategory}
             onUpdateCategory={updateCategory}
             onDeleteCategory={deleteCategory}
+            onSyncAreaCatalog={syncAreaCatalog}
             onClose={() => setOpenPanel(null)}
           />
         ) : null}

@@ -42,3 +42,10 @@ pub fn delete_category(services: State<'_, AppServices>, id: String) -> Result<b
         .delete_category(&id)
         .map_err(|error| error.to_string())
 }
+
+#[tauri::command]
+pub fn sync_area_catalog(services: State<'_, AppServices>) -> Result<Vec<Category>, String> {
+    services
+        .sync_area_catalog()
+        .map_err(|error| error.to_string())
+}

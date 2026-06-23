@@ -128,6 +128,11 @@ export async function deletePersistedCategory(id: string): Promise<boolean> {
   return invoke<boolean>("delete_category", { id });
 }
 
+export async function syncPersistedAreaCatalog(): Promise<Category[]> {
+  const categories = await invoke<BackendCategory[]>("sync_area_catalog");
+  return categories.map(mapCategory);
+}
+
 export async function listPersistedJqlFavorites(): Promise<JqlFavorite[]> {
   return (await invoke<BackendJqlFavorite[]>("list_jql_favorites")).map(mapJqlFavorite);
 }

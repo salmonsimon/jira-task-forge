@@ -28,4 +28,9 @@ impl AppServices {
         let connection = self.connection();
         CategoryRepository::new(&connection).delete(id)
     }
+
+    pub fn sync_area_catalog(&self) -> DbResult<Vec<Category>> {
+        let connection = self.connection();
+        CategoryRepository::new(&connection).sync_area_catalog()
+    }
 }

@@ -23,6 +23,7 @@ export type PreflightWarningCode =
   | "missing-creation-project"
   | "missing-project"
   | "missing-area"
+  | "invalid-area"
   | "missing-title"
   | "missing-parent-task"
   | "missing-description"
@@ -88,7 +89,7 @@ export type Category = {
   categoryType: "project" | "area";
   name: string;
   hidden?: boolean;
-  source: "local" | "jira";
+  source: "local" | "jira" | "catalog";
 };
 
 export type JqlFavorite = {

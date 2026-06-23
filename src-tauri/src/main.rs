@@ -1,3 +1,4 @@
+mod area_catalog;
 mod attachment_storage;
 mod backup;
 mod commands;
@@ -44,6 +45,7 @@ pub fn run() {
             commands::settings::get_app_settings,
             commands::settings::update_app_settings,
             commands::categories::list_categories,
+            commands::categories::sync_area_catalog,
             commands::categories::create_category,
             commands::categories::update_category,
             commands::categories::delete_category,

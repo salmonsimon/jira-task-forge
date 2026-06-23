@@ -10,6 +10,7 @@ use std::time::Duration;
 use rusqlite::Connection;
 use serde_json::{json, Value};
 
+use crate::area_catalog::{catalog_area_display_name, catalog_jira_label};
 use crate::attachment_storage::{
     resolve_existing_managed_attachment_file, sanitize_attachment_audit_name,
     JIRA_CLOUD_FALLBACK_ATTACHMENT_UPLOAD_LIMIT_BYTES,
@@ -1265,12 +1266,12 @@ fn format_byte_size_u64(size_bytes: u64) -> String {
 
 fn jira_parent_summary(task: &LocalTask) -> String {
     let title = task.title.trim();
-    let area_code = task.area.trim();
-    if area_code.is_empty() {
+    let area_display_name = catalog_area_display_name(&task.area).unwrap_or(task.area.trim());
+    if area_display_name.is_empty() {
         return title.to_string();
     }
 
-    let prefix = format!("[{area_code}]");
+    let prefix = format!("[{area_display_name}]");
     let normalized_title = title.to_lowercase();
     let normalized_prefix = prefix.to_lowercase();
     if normalized_title == normalized_prefix
@@ -1320,15 +1321,15 @@ fn allowed_value_matches(allowed_value: &JiraCreateAllowedValue, local_priority:
 }
 
 fn labels_for_area(area: &str) -> Vec<String> {
-    [area].into_iter().filter_map(sanitize_jira_label).fold(
-        Vec::<String>::new(),
-        |mut labels, label| {
+    [catalog_jira_label(area).unwrap_or(area)]
+        .into_iter()
+        .filter_map(sanitize_jira_label)
+        .fold(Vec::<String>::new(), |mut labels, label| {
             if !labels.iter().any(|existing| existing == &label) {
                 labels.push(label);
             }
             labels
-        },
-    )
+        })
 }
 
 fn sanitize_jira_label(value: &str) -> Option<String> {
@@ -1433,7 +1434,7 @@ mod tests {
         );
         assert_eq!(
             gateway.created_payloads[0]["fields"]["labels"],
-            json!(["Bug"])
+            json!(["bug"])
         );
         assert_eq!(
             gateway.created_payloads[1]["fields"]["parent"]["key"],
@@ -1441,7 +1442,7 @@ mod tests {
         );
         assert_eq!(
             gateway.created_payloads[1]["fields"]["labels"],
-            json!(["Bug"])
+            json!(["bug"])
         );
         assert_eq!(
             gateway.created_payloads[1]["fields"]["priority"]["id"],
@@ -2094,6 +2095,41 @@ mod tests {
         };
 
         assert_eq!(jira_parent_summary(&task), "[Bug] Fix timer drift");
+    }
+
+    #[test]
+    fn uses_display_area_for_summary_and_jira_label_for_labels() {
+        let task = LocalTask {
+            id: "task-1".to_string(),
+            tray_id: "tray-1".to_string(),
+            project: "DTS".to_string(),
+            area: "Selección Recurso".to_string(),
+            title: "Elegir asset base".to_string(),
+            priority: "Medium".to_string(),
+            issue_type: "Story".to_string(),
+            sync_status: "Pending".to_string(),
+            description_status: "Missing".to_string(),
+            description: None,
+            content_language: "Spanish".to_string(),
+            jira_key: None,
+            jira_url: None,
+            epic_key: None,
+            parent_task_id: None,
+            issue_relationships: Vec::new(),
+            attachments: Vec::new(),
+            task_order: 0,
+            created_at: "2026-05-24T00:00:00Z".to_string(),
+            updated_at: "2026-05-24T00:00:00Z".to_string(),
+        };
+
+        assert_eq!(
+            jira_parent_summary(&task),
+            "[Selección Recurso] Elegir asset base"
+        );
+        assert_eq!(
+            labels_for_area(&task.area),
+            vec!["Selección-Recurso".to_string()]
+        );
     }
 
     #[test]

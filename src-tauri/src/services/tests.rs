@@ -641,11 +641,11 @@ fn manages_categories_and_jql_favorites_through_services() {
     let services = AppServices::new(open_in_memory_database().expect("database opens"));
 
     let category = services
-        .create_category("area", "Animation")
+        .create_category("project", "Animation")
         .expect("category creates");
     assert_eq!(category.name, "Animation");
     assert!(services
-        .list_categories(Some("area"))
+        .list_categories(Some("project"))
         .expect("categories list")
         .iter()
         .any(|candidate| candidate.id == category.id));

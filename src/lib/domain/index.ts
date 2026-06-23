@@ -1,5 +1,6 @@
 export * from "./backup";
 export * from "./attachments";
+export * from "./catalog";
 export * from "./csvExport";
 export * from "./errors";
 export * from "./jql";

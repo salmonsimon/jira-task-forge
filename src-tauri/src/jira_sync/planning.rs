@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
+use crate::area_catalog::{resolve_catalog_area, CatalogAreaResolution};
 use crate::models::{
     JiraCreateFieldMetadata, JiraCreateIssueTypeMetadata, JiraCreateMetadata, LocalTask,
 };
@@ -481,6 +482,14 @@ fn validate_local_preflight(
         }
         if task.area.trim().is_empty() {
             messages.push(format!("{} is missing an area.", task.title));
+        } else if matches!(
+            resolve_catalog_area(&task.area),
+            CatalogAreaResolution::Blocked
+        ) {
+            messages.push(format!(
+                "{} uses a non-official catalog area. Choose an official area before creating it in Jira.",
+                task.title
+            ));
         }
         if task.title.trim().is_empty() {
             messages.push("A task is missing a title.".to_string());
@@ -911,6 +920,35 @@ mod tests {
             plan.missing_description_blockers,
             vec![
                 "Needs description is missing a description, and Jira requires Description for Historia."
+                    .to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn blocks_tasks_with_non_official_catalog_area() {
+        let tasks = vec![local_task(
+            "task-1",
+            "STT",
+            "Compra",
+            "Buy asset",
+            "Story",
+            "Pending",
+        )];
+        let scope = JiraCreationTaskScope::from_tasks(
+            &tasks,
+            JiraCreationPlanningOptions {
+                creation_project_key: "JTFTEST",
+                allow_missing_descriptions: true,
+                include_exported_tasks: false,
+                include_missing_description_tasks: true,
+            },
+        );
+
+        assert_eq!(
+            scope.local_blockers,
+            vec![
+                "Buy asset uses a non-official catalog area. Choose an official area before creating it in Jira."
                     .to_string()
             ]
         );

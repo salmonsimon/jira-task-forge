@@ -1,4 +1,4 @@
-import { Check, Eye, EyeOff, Pencil, Plus, Tags, Trash2, X } from "lucide-react";
+import { Check, Eye, EyeOff, Pencil, Plus, RefreshCw, Tags, Trash2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button, PanelHeader } from "../../components/ui";
 import type { Category } from "../../lib/types";
@@ -10,13 +10,15 @@ export function CategoriesPanel({
   onCreateCategory,
   onUpdateCategory,
   onDeleteCategory,
+  onSyncAreaCatalog,
   onClose
 }: {
   projects: Category[];
   areas: Category[];
-  onCreateCategory: (categoryType: "project" | "area", name: string) => void | Promise<void>;
+  onCreateCategory: (categoryType: "project", name: string) => void | Promise<void>;
   onUpdateCategory: (categoryId: string, patch: Partial<Pick<Category, "hidden" | "name">>) => void | Promise<void>;
   onDeleteCategory: (categoryId: string) => void | Promise<void>;
+  onSyncAreaCatalog: () => void | Promise<void>;
   onClose: () => void;
 }) {
   const panelRef = useRef<HTMLElement | null>(null);
@@ -29,6 +31,16 @@ export function CategoriesPanel({
 
     window.addEventListener("pointerdown", handlePointerDown);
     return () => window.removeEventListener("pointerdown", handlePointerDown);
+  }, [onClose]);
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      onClose();
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, [onClose]);
 
   return (
@@ -47,9 +59,11 @@ export function CategoriesPanel({
           categoryType="area"
           title="Areas"
           categories={areas}
+          isCatalogManaged
           onCreateCategory={onCreateCategory}
           onUpdateCategory={onUpdateCategory}
           onDeleteCategory={onDeleteCategory}
+          onSyncAreaCatalog={onSyncAreaCatalog}
         />
       </div>
     </aside>
@@ -62,37 +76,68 @@ function CategoryList({
   categories,
   onCreateCategory,
   onUpdateCategory,
-  onDeleteCategory
+  onDeleteCategory,
+  onSyncAreaCatalog,
+  isCatalogManaged = false
 }: {
   categoryType: "project" | "area";
   title: string;
   categories: Category[];
-  onCreateCategory: (categoryType: "project" | "area", name: string) => void | Promise<void>;
+  isCatalogManaged?: boolean;
+  onCreateCategory: (categoryType: "project", name: string) => void | Promise<void>;
   onUpdateCategory: (categoryId: string, patch: Partial<Pick<Category, "hidden" | "name">>) => void | Promise<void>;
   onDeleteCategory: (categoryId: string) => void | Promise<void>;
+  onSyncAreaCatalog?: () => void | Promise<void>;
 }) {
   const [isAdding, setIsAdding] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [newName, setNewName] = useState("");
 
   async function createCategory() {
     const nextName = newName.trim();
     if (!nextName) return;
 
+    if (categoryType !== "project") return;
     await onCreateCategory(categoryType, nextName);
     setNewName("");
     setIsAdding(false);
+  }
+
+  async function syncCatalog() {
+    if (!onSyncAreaCatalog || isSyncing) return;
+
+    setIsSyncing(true);
+    const startedAt = performance.now();
+    try {
+      await onSyncAreaCatalog();
+      await waitForMinimumElapsed(startedAt, 650);
+    } finally {
+      setIsSyncing(false);
+    }
   }
 
   return (
     <div className="mb-4">
       <div className="mb-2 flex items-center justify-between">
         <h3 className="text-sm font-semibold">{title}</h3>
-        <Button variant="ghost" icon={<Plus size={13} />} onClick={() => setIsAdding(true)}>
-          New
-        </Button>
+        {isCatalogManaged ? (
+          <Button
+            variant="ghost"
+            icon={<RefreshCw size={13} className={isSyncing ? "animate-spin" : undefined} />}
+            disabled={isSyncing}
+            onClick={() => void syncCatalog()}
+            title="Update official area catalog"
+          >
+            {isSyncing ? "Updating..." : "Update"}
+          </Button>
+        ) : (
+          <Button variant="ghost" icon={<Plus size={13} />} onClick={() => setIsAdding(true)}>
+            New
+          </Button>
+        )}
       </div>
       <div className="overflow-hidden rounded border border-[#dfe1e6]">
-        {isAdding ? (
+        {isAdding && !isCatalogManaged ? (
           <div className="flex items-center gap-2 border-b border-[#ebecf0] bg-[#f7f8fa] px-3 py-2">
             <Tags size={14} className="shrink-0 text-[#6b778c]" />
             <input
@@ -134,6 +179,7 @@ function CategoryList({
           <CategoryRow
             category={category}
             key={category.id}
+            isCatalogManaged={isCatalogManaged}
             onDeleteCategory={onDeleteCategory}
             onUpdateCategory={onUpdateCategory}
           />
@@ -143,12 +189,21 @@ function CategoryList({
   );
 }
 
+async function waitForMinimumElapsed(startedAt: number, minimumMs: number): Promise<void> {
+  const remainingMs = minimumMs - (performance.now() - startedAt);
+  if (remainingMs > 0) {
+    await new Promise((resolve) => window.setTimeout(resolve, remainingMs));
+  }
+}
+
 function CategoryRow({
   category,
   onDeleteCategory,
-  onUpdateCategory
+  onUpdateCategory,
+  isCatalogManaged = false
 }: {
   category: Category;
+  isCatalogManaged?: boolean;
   onDeleteCategory: (categoryId: string) => void | Promise<void>;
   onUpdateCategory: (categoryId: string, patch: Partial<Pick<Category, "hidden" | "name">>) => void | Promise<void>;
 }) {
@@ -215,14 +270,16 @@ function CategoryRow({
           </>
         ) : (
           <>
-            <button
-              className="inline-flex h-7 w-7 items-center justify-center rounded text-[#42526e] opacity-0 transition hover:bg-[#ebecf0] group-hover:opacity-100 focus:opacity-100"
-              onClick={() => setIsEditing(true)}
-              title={`Rename ${category.name}`}
-              type="button"
-            >
-              <Pencil size={14} />
-            </button>
+            {!isCatalogManaged ? (
+              <button
+                className="inline-flex h-7 w-7 items-center justify-center rounded text-[#42526e] opacity-0 transition hover:bg-[#ebecf0] group-hover:opacity-100 focus:opacity-100"
+                onClick={() => setIsEditing(true)}
+                title={`Rename ${category.name}`}
+                type="button"
+              >
+                <Pencil size={14} />
+              </button>
+            ) : null}
             <button
               className="inline-flex h-7 w-7 items-center justify-center rounded text-[#42526e] transition hover:bg-[#ebecf0]"
               onClick={() => void onUpdateCategory(category.id, { hidden: !category.hidden })}
@@ -231,14 +288,16 @@ function CategoryRow({
             >
               {category.hidden ? <Eye size={14} /> : <EyeOff size={14} />}
             </button>
-            <button
-              className="inline-flex h-7 w-7 items-center justify-center rounded text-[#42526e] opacity-0 transition hover:bg-[#ffebe6] hover:text-[#bf2600] group-hover:opacity-100 focus:opacity-100"
-              onClick={() => void onDeleteCategory(category.id)}
-              title={`Delete ${category.name}`}
-              type="button"
-            >
-              <Trash2 size={14} />
-            </button>
+            {!isCatalogManaged ? (
+              <button
+                className="inline-flex h-7 w-7 items-center justify-center rounded text-[#42526e] opacity-0 transition hover:bg-[#ffebe6] hover:text-[#bf2600] group-hover:opacity-100 focus:opacity-100"
+                onClick={() => void onDeleteCategory(category.id)}
+                title={`Delete ${category.name}`}
+                type="button"
+              >
+                <Trash2 size={14} />
+              </button>
+            ) : null}
           </>
         )}
       </div>

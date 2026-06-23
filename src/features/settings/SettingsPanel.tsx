@@ -106,6 +106,7 @@ export function SettingsPanel({
   useAppOverlay({
     layer: appOverlayLayers.sidePanel,
     onDismiss: onClose,
+    dismissOnEscape: true,
     dismissOnOutsidePointer: true,
     lockScroll: true,
     surfaceRef: panelRef
