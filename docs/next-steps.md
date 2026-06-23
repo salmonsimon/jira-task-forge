@@ -4,12 +4,12 @@ This document is the default execution path for the repo. It is meant to support
 
 ## Current Checkpoint
 
-Date: 2026-06-16
+Date: 2026-06-23
 
 Main is up to date through:
 
 ```text
-#128 Add guided Jira connection setup
+#130 Recover Jira parent retries with remote markers
 ```
 
 Recent Personal v1 hardening merged since the older May checkpoint:
@@ -47,6 +47,11 @@ Recent Personal v1 hardening merged since the older May checkpoint:
   with manual fallback, saves connection fields together only at review, keeps
   Jira API token handling separate, and exposes the in-app `Privacy &
   Diagnostics` detail view.
+- PR #129 refreshed the roadmap after the guided connection checkpoint.
+- PR #131 added attachment source validation for Jira-ready uploads.
+- PR #130 added safer Jira parent retry recovery through remote correlation
+  markers, candidate issue search, REST property verification, and safe failure
+  when a retry cannot be reconciled confidently.
 
 Historical baseline from the first checkpoint:
 
@@ -237,27 +242,51 @@ Near-term decided follow-ups:
 
 Recommended next implementation:
 
-- Launch the next AFK batches from the current issue set only after this roadmap
-  refresh lands. Keep #94 and #95 out of the same parallel batch because #94
-  touches Jira sync/idempotency and #95 touches attachment filesystem safety.
-- Do not launch #102 as a broad Settings copy implementation. The guided setup
-  now includes an in-app `Privacy & Diagnostics` detail view; leave only focused
-  copy, docs, or rendering-test follow-up if review finds the current text
-  insufficient.
-- Treat #103 as documentation/inventory only until #95 lands; attachment
-  lifecycle details should be marked pending if #103 starts first.
-- Keep using `docs/internal-release-readiness.md`, `docs/live-qa.md`,
-  `docs/backup-restore-drill.md`, and the large-tray smoke fixture as the
-  repeatable QA gates after each batch.
-- Keep backend coverage above 80% while adding focused tests for new security
-  and sync behavior.
-- Expand frontend workflow tests around JQL recent history, backup notices,
-  Settings state, guided Jira Connection setup, and preflight/progress view
-  models.
-- Next write slices should stay narrow around remaining Jira mutation surfaces,
-  especially Jira issue relationship sync and any attachment cleanup/compression
-  hardening that changes filesystem behavior.
-- If QA reveals product/UI friction, do a small frontend-only fix branch before expanding integration writes.
+- Launch the next work from the current workflow issues after this roadmap
+  refresh lands. The near-term workflow plan intentionally excludes the
+  Regularizacion flow: Issue #135 is the single owner for adding that product
+  behavior later, and no other issue or batch should be considered incomplete
+  because Regularizacion is not implemented yet.
+- Batch 1: catalog foundation and normalization. Include Issue #141 except the
+  Regularizacion-specific acceptance item owned by Issue #135. Add an internal
+  versioned catalog for official areas, allowed labels, aliases, deprecated
+  labels, delivery-format mappings, conditional format rules, and issue-type
+  derivation. Validate safe normalization, deprecated labels, ambiguous labels,
+  direct mappings, conditional mappings, and Bug-as-Bug / all-other-areas-as-
+  Story issue type derivation.
+- Batch 2: description templates and Architecture intent. Include Issue #134,
+  Issue #137, and Issue #136. Separate Story and Bug templates, add frequent
+  task-type templates, and keep Arquitectura as one area/tag while
+  distinguishing Arquitectura - Brief and Arquitectura - Propuesta Final
+  through task intent, title, description, minimum deliverable, and checklist.
+  Architecture must not create automatic subtasks or require both Brief and
+  Final Proposal as default deliverables in one Story.
+- Single task: Epic Scope model. Include Issue #132. Move epic resolution and
+  creation from Project + Area to Project + Area + Scope while preserving
+  compatibility with legacy epics named `[{Project}] {Area}`. Keep this
+  separate because it touches local modeling, preflight grouping, Jira epic
+  search/create, and sync tests.
+- Single task: tray selector nested button fix. Include Issue #140. Fix invalid
+  nested interactive markup and add focused regression coverage if practical.
+  This can run independently because it is frontend markup debt, not workflow
+  product logic.
+- Documentation batch: Include Issue #138 after the implementation shape is
+  settled. Update product decisions, Jira description format, live QA, and
+  handoff docs to match the implemented catalog, templates, Architecture rules,
+  and Epic Scope behavior. Keep Regularizacion documented only as a future flow
+  owned by Issue #135 until that issue is implemented.
+- Live QA batch: Include Issue #139 after the implementation batches land. Use
+  `JTFTEST` only for writes and DTS only as read-only reference material.
+  Record evidence under `docs/live-qa-results/`. Verify new epic naming,
+  Story/Bug templates, Architecture Brief/Final Proposal stories without
+  automatic subtasks, explicit non-Architecture subtasks, area labels, review
+  checklist, local sync audit, and duplicate-epic prevention.
+- Continue using `docs/internal-release-readiness.md`, `docs/live-qa.md`,
+  `docs/backup-restore-drill.md`, and the large-tray smoke fixture as
+  repeatable QA gates after each batch. Keep backend coverage above 80% while
+  adding focused tests for new catalog, template, sync, and Jira behavior. If
+  QA reveals product/UI friction, do a small frontend-only fix branch before
+  expanding integration writes.
 
 ## Working Model
 
