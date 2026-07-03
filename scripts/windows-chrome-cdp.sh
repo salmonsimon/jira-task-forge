@@ -17,9 +17,16 @@ Commands:
   launch
   version
   list
+  info
+  navigate <url>
+  open <url>
   inspect
+  controls [filter]
+  controls-top
+  click-text <filter>
   eval <javascript-expression>
   click <x> <y>
+  key <key> [windowsVirtualKeyCode]
   type <x> <y> <text>
   screenshot <windows-output-path>
 

@@ -53,8 +53,26 @@ Use it like this:
    scripts/windows-chrome-cdp.sh inspect
    ```
 
-4. Use `eval`, `click`, `type`, or `screenshot` for narrow browser-control
-   actions:
+4. Prefer the bounded commands over raw `eval`/`inspect` when working on
+   authenticated pages:
+
+   ```bash
+   scripts/windows-chrome-cdp.sh info
+   scripts/windows-chrome-cdp.sh open https://app.notion.com/p/<page-id>
+   scripts/windows-chrome-cdp.sh controls-top
+   scripts/windows-chrome-cdp.sh click-text share
+   scripts/windows-chrome-cdp.sh key Escape
+   ```
+
+   `open` creates a fresh target through Chrome's `/json/new` endpoint and is
+   useful when an existing Notion tab still appears in `/json/list` but times
+   out on `Runtime.enable` or `Page.enable`. `controls` and `controls-top`
+   redact token-looking strings before printing output, but they still must not
+   be used on pages where the surrounding authenticated UI is itself sensitive
+   unless Saimon has explicitly approved that risk.
+
+5. Use `click`, `type`, or `screenshot` for narrow browser-control actions when
+   coordinates are already known:
 
    ```bash
    scripts/windows-chrome-cdp.sh click 840 168
@@ -71,3 +89,12 @@ Constraints:
 - Do not automate login credentials.
 - Confirm immediately before persistent browser-side changes such as creating
   API tokens, changing cloud permissions, or sharing pages with integrations.
+
+2026-07-03 follow-up: the fallback successfully created a dedicated Chrome
+Notion Developers connection named `Jira Task Forge` and safely opened the
+`JTF Sync Catalog` Notion page. A newly created Notion connection page can show
+secret-bearing token UI; broad DOM inspection of that page was rejected and
+should stay blocked unless the user explicitly accepts credential-disclosure
+risk for that specific action. Safer commands (`info`, `open`, `controls-top`,
+`click-text`, and `key`) were added so future agents can navigate authenticated
+Chrome state without defaulting to raw page dumps.
