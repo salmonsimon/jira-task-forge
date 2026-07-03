@@ -48,6 +48,7 @@ import {
   savePersistedAiProviderApiKey,
   savePersistedJiraApiToken,
   syncPersistedAreaCatalog,
+  syncPersistedAreaCatalogFromSource,
   testPersistedAiProviderApiKey,
   testPersistedAiProviderConnection,
   testPersistedJiraApiToken,
@@ -93,6 +94,7 @@ import type {
   AssistedDescriptionDraft,
   AiProvider,
   BackupOperationNotice,
+  CatalogSyncResult,
   Category,
   CredentialConnectionTestResult,
   JqlAiDraft,
@@ -120,7 +122,9 @@ const defaultAppSettings: AppSettings = {
   jiraCreationProjectKey: "",
   aiProvider: "OpenAI",
   aiModel: "gpt-4.1",
-  defaultContentLanguage: "Spanish"
+  defaultContentLanguage: "Spanish",
+  catalogSourceMode: "public-exportable",
+  catalogSourceUrl: ""
 };
 const defaultJqlPrompt = "Show me high and highest open bugs for STT, sorted by priority";
 const atlassianApiTokensUrl = "https://id.atlassian.com/manage-profile/security/api-tokens";
@@ -517,7 +521,27 @@ export default function App() {
     setCategories((currentCategories) => currentCategories.filter((category) => category.id !== categoryId));
   }
 
-  async function syncAreaCatalog() {
+  async function syncAreaCatalog(sourceUrl?: string): Promise<CatalogSyncResult | null> {
+    const requestedSourceUrl = sourceUrl?.trim() || appSettings.catalogSourceUrl.trim();
+    const shouldUseCatalogSource = Boolean(sourceUrl?.trim()) || appSettings.catalogSourceMode !== "manual";
+
+    if (usesTauriPersistence && requestedSourceUrl && shouldUseCatalogSource) {
+      const result = await syncPersistedAreaCatalogFromSource(requestedSourceUrl);
+      if (!result.ok) return result;
+
+      setCategories((currentCategories) => [
+        ...currentCategories.filter((category) => category.categoryType !== "area"),
+        ...result.areas.map((area) => ({
+          id: `catalog-${area.areaDisplayName}`,
+          categoryType: "area" as const,
+          name: area.areaDisplayName,
+          source: "catalog" as const
+        }))
+      ]);
+      await updateAppSettings({ catalogSourceMode: "public-exportable", catalogSourceUrl: result.sourceUrl });
+      return result;
+    }
+
     const syncedAreas = usesTauriPersistence
       ? await syncPersistedAreaCatalog()
       : appData.listAreas().map((area) => ({ ...area, source: "catalog" as const }));
@@ -526,6 +550,7 @@ export default function App() {
       ...currentCategories.filter((category) => category.categoryType !== "area"),
       ...syncedAreas
     ]);
+    return null;
   }
 
   async function openJiraIssue(url: string) {
@@ -1496,9 +1521,12 @@ export default function App() {
           <CategoriesPanel
             projects={projectCategories}
             areas={areaCategories}
+            catalogSourceMode={appSettings.catalogSourceMode}
+            catalogSourceUrl={appSettings.catalogSourceUrl}
             onCreateCategory={createCategory}
             onUpdateCategory={updateCategory}
             onDeleteCategory={deleteCategory}
+            onChangeCatalogSettings={updateAppSettings}
             onSyncAreaCatalog={syncAreaCatalog}
             onClose={() => setOpenPanel(null)}
           />

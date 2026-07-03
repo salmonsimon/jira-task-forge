@@ -1,3 +1,6 @@
+use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CatalogArea {
     pub area_display_name: &'static str,
@@ -19,6 +22,67 @@ pub struct OfficialAreaOption {
     pub jira_label: &'static str,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CatalogSyncResult {
+    pub ok: bool,
+    pub source_url: String,
+    pub synced_area_count: usize,
+    pub delivery_format_count: usize,
+    pub rule_count: usize,
+    pub warnings: Vec<String>,
+    pub errors: Vec<String>,
+    pub areas: Vec<SyncedCatalogArea>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportableCatalog {
+    #[serde(default)]
+    pub areas: Vec<SyncedCatalogArea>,
+    #[serde(default)]
+    pub delivery_formats: Vec<SyncedDeliveryFormat>,
+    #[serde(default)]
+    pub area_format_rules: Vec<SyncedAreaFormatRule>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncedCatalogArea {
+    pub area_display_name: String,
+    pub jira_label: String,
+    #[serde(rename = "enabledInJTF", alias = "enabledInJtf")]
+    pub enabled_in_jtf: bool,
+    pub issue_type: String,
+    pub default_delivery_format: String,
+    #[serde(default)]
+    pub safe_aliases: Vec<String>,
+    #[serde(default)]
+    pub notes: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncedDeliveryFormat {
+    pub format_name: String,
+    pub issue_type: String,
+    #[serde(default)]
+    pub story_headings: Vec<String>,
+    pub minimum_deliverable: String,
+    #[serde(default)]
+    pub review_checklist: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncedAreaFormatRule {
+    pub area_display_name: String,
+    pub priority: i64,
+    pub condition: String,
+    pub delivery_format: String,
+    pub blocking: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CatalogAreaResolution {
     Official {
@@ -33,98 +97,334 @@ pub enum CatalogAreaResolution {
 }
 
 pub const CATALOG_SOURCE_URL: &str = "https://app.notion.com/p/387c335aece481c292baf6991a86a5c3";
-pub const CATALOG_SYNCED_AT: &str = "2026-06-23";
-pub const CATALOG_VERSION: &str = "2026.06.23-catalog-foundation";
+pub const CATALOG_SYNCED_AT: &str = "2026-07-03";
+pub const CATALOG_VERSION: &str = "2026.07.03-jtf-sync-catalog";
 pub const CATALOG_MAINTENANCE_NOTE: &str =
-    "Internal v1 catalog for Jira Task Forge Issue #141. Notion remains the documentary source; this file is the runtime source.";
+    "Fallback catalog for Jira Task Forge Issue #141. Public/exportable catalog sync is the preferred runtime source.";
 
 const ARCHITECTURE_CONDITIONAL_FORMATS: &[CatalogConditionalDeliveryFormat] = &[
     CatalogConditionalDeliveryFormat {
-        format: "Brief técnico",
+        format: "Arquitectura - Brief",
         matches: &["brief", "requerimiento", "contexto inicial"],
     },
     CatalogConditionalDeliveryFormat {
-        format: "Propuesta final",
+        format: "Arquitectura - Propuesta Final",
         matches: &["propuesta final", "decision final", "cerrar propuesta"],
     },
 ];
 
 pub const OFFICIAL_AREAS: &[CatalogArea] = &[
-    area("Bug", "bug", &[], "Reporte de bug", &[]),
-    area(
-        "3D",
-        "3d",
-        &["Modelos 3D", "Modelo 3D"],
-        "Asset 3D integrado",
-        &[],
-    ),
-    area("Polish", "polish", &["Pulido"], "Ajuste de polish", &[]),
+    area("Bug", "Bug", &["bug"], "Bug", &[]),
     area(
         "Programación",
-        "programacion",
+        "Programación",
         &["Programacion"],
-        "Implementación técnica",
+        "Feature de Programación",
         &[],
     ),
     area(
         "Integración",
-        "integracion",
+        "Integración",
         &["Integracion"],
-        "Integración técnica",
-        &[],
-    ),
-    area("Diseño", "diseno", &["Diseno"], "Diseño funcional", &[]),
-    area(
-        "Animación",
-        "animacion",
-        &["Animacion"],
-        "Animación implementada",
-        &[],
-    ),
-    area(
-        "Iluminación",
-        "iluminacion",
-        &["Iluminacion"],
-        "Iluminación integrada",
-        &[],
-    ),
-    area("Texturas", "texturas", &[], "Texturas aplicadas", &[]),
-    area(
-        "Localización",
-        "localizacion",
-        &["Localizacion"],
-        "Contenido localizado",
+        "Integración",
         &[],
     ),
     area(
         "Refactorización",
-        "refactorizacion",
+        "Refactorización",
         &["Refactorizacion"],
-        "Refactor técnico",
+        "Feature de Programación",
+        &[],
+    ),
+    area(
+        "3D",
+        "3D",
+        &["Modelos 3D", "Modelo 3D"],
+        "Arte Integrado",
+        &[],
+    ),
+    area(
+        "Animación",
+        "Animación",
+        &["Animacion"],
+        "Arte Integrado",
+        &[],
+    ),
+    area("Texturas", "Texturas", &[], "Arte Integrado", &[]),
+    area(
+        "Iluminación",
+        "Iluminación",
+        &["Iluminacion"],
+        "Arte Integrado",
+        &[],
+    ),
+    area("VFX", "VFX", &[], "Arte Integrado", &[]),
+    area("SFX", "SFX", &[], "Integración", &[]),
+    area("UI", "UI", &[], "Integración", &[]),
+    area("Feeling", "Feeling", &[], "Feature de Programación", &[]),
+    area("Diseño", "Diseño", &["Diseno"], "Decisión de Diseño", &[]),
+    area("Concept", "Concept", &[], "Concept Art", &[]),
+    area(
+        "Localización",
+        "Localización",
+        &["Localizacion"],
+        "Integración",
+        &[],
+    ),
+    area(
+        "Polish",
+        "Polish",
+        &["Pulido"],
+        "Feature de Programación",
         &[],
     ),
     area(
         "Investigación",
-        "investigacion",
+        "Investigación",
         &["Investigacion"],
-        "Informe de investigación",
+        "Investigación",
+        &[],
+    ),
+    area(
+        "Arquitectura",
+        "Arquitectura",
+        &[],
+        "Arquitectura - Brief",
+        ARCHITECTURE_CONDITIONAL_FORMATS,
+    ),
+    area("QA", "QA", &[], "QA", &[]),
+    area(
+        "Build",
+        "Build",
+        &["Build / Release"],
+        "Build / Release",
+        &[],
+    ),
+    area(
+        "Producción",
+        "Producción",
+        &["Produccion"],
+        "Producción Audiovisual",
+        &[],
+    ),
+    area(
+        "Documentación",
+        "Documentación",
+        &["Documentacion"],
+        "Story base documental",
+        &[],
+    ),
+    area(
+        "Capacitación",
+        "Capacitación",
+        &["Capacitacion"],
+        "Curso / Capacitación",
+        &[],
+    ),
+    area(
+        "Housekeeping",
+        "Housekeeping",
+        &[],
+        "Feature de Programación",
         &[],
     ),
     area(
         "Selección Recurso",
         "Selección-Recurso",
         &["Seleccion Recurso"],
-        "Recurso seleccionado",
+        "Selección Recurso",
         &[],
-    ),
-    area(
-        "Arquitectura",
-        "arquitectura",
-        &[],
-        "Decisión técnica",
-        ARCHITECTURE_CONDITIONAL_FORMATS,
     ),
 ];
+
+pub fn sync_exportable_catalog_from_url(source_url: &str) -> Result<CatalogSyncResult, String> {
+    let source_url = source_url.trim();
+    if source_url.is_empty() {
+        return Err("Catalog source URL is required.".to_string());
+    }
+
+    let response = ureq::get(source_url)
+        .set("Accept", "application/json, text/plain;q=0.8, */*;q=0.5")
+        .timeout(std::time::Duration::from_secs(20))
+        .call()
+        .map_err(|error| format!("Could not read catalog source: {error}"))?;
+    let body = response
+        .into_string()
+        .map_err(|error| format!("Could not read catalog response body: {error}"))?;
+
+    if body.trim_start().starts_with("<!DOCTYPE html")
+        || body.trim_start().starts_with("<html")
+        || body.contains("notion.so/eap")
+    {
+        return Err(
+            "This looks like a rendered Notion page, not an exportable JSON catalog. Publish or export the JTF Sync Catalog as JSON and use that URL."
+                .to_string(),
+        );
+    }
+
+    parse_exportable_catalog_json(source_url, &body)
+}
+
+pub fn parse_exportable_catalog_json(
+    source_url: &str,
+    body: &str,
+) -> Result<CatalogSyncResult, String> {
+    let catalog: ExportableCatalog = serde_json::from_str(body)
+        .map_err(|error| format!("Catalog source must be valid JSON: {error}"))?;
+    validate_exportable_catalog(source_url, catalog)
+}
+
+pub fn validate_exportable_catalog(
+    source_url: &str,
+    catalog: ExportableCatalog,
+) -> Result<CatalogSyncResult, String> {
+    let mut warnings = Vec::new();
+    let mut errors = Vec::new();
+    let formats: HashSet<String> = catalog
+        .delivery_formats
+        .iter()
+        .map(|format| normalize_catalog_key(&format.format_name))
+        .collect();
+    let mut area_keys = HashSet::new();
+    let mut label_keys = HashSet::new();
+    let mut bug_areas = Vec::new();
+    let mut enabled_areas = Vec::new();
+
+    for area in &catalog.areas {
+        if !area.enabled_in_jtf {
+            if area.area_display_name.trim().is_empty() {
+                warnings.push("Disabled catalog area is missing areaDisplayName.".to_string());
+            }
+            continue;
+        }
+
+        if area.area_display_name.trim().is_empty() {
+            errors.push("Enabled area is missing areaDisplayName.".to_string());
+        }
+        if area.jira_label.trim().is_empty() {
+            errors.push(format!("{} is missing jiraLabel.", area.area_display_name));
+        }
+        if !matches!(area.issue_type.trim(), "Story" | "Bug") {
+            errors.push(format!(
+                "{} has unsupported issueType {}.",
+                area.area_display_name, area.issue_type
+            ));
+        }
+        if area.default_delivery_format.trim().is_empty() {
+            errors.push(format!(
+                "{} is missing defaultDeliveryFormat.",
+                area.area_display_name
+            ));
+        } else if !formats.contains(&normalize_catalog_key(&area.default_delivery_format)) {
+            errors.push(format!(
+                "{} references unknown delivery format {}.",
+                area.area_display_name, area.default_delivery_format
+            ));
+        }
+
+        if !area_keys.insert(normalize_catalog_key(&area.area_display_name)) {
+            errors.push(format!(
+                "Duplicate normalized areaDisplayName {}.",
+                area.area_display_name
+            ));
+        }
+        if !label_keys.insert(normalize_catalog_key(&area.jira_label)) {
+            errors.push(format!(
+                "Duplicate normalized jiraLabel {}.",
+                area.jira_label
+            ));
+        }
+        if area.issue_type.trim() == "Bug" {
+            bug_areas.push(area.area_display_name.clone());
+        }
+        if normalize_catalog_key(&area.area_display_name) == "regularizacion" {
+            errors.push("Regularización must remain disabled until Issue #135.".to_string());
+        }
+        enabled_areas.push(area.clone());
+    }
+
+    for format in &catalog.delivery_formats {
+        if format.format_name.trim().is_empty() {
+            errors.push("Delivery format is missing formatName.".to_string());
+        }
+        if !matches!(format.issue_type.trim(), "Story" | "Bug") {
+            errors.push(format!(
+                "{} has unsupported issueType {}.",
+                format.format_name, format.issue_type
+            ));
+        }
+        if format.story_headings.is_empty() {
+            errors.push(format!("{} is missing storyHeadings.", format.format_name));
+        }
+        if format.minimum_deliverable.trim().is_empty() {
+            errors.push(format!(
+                "{} is missing minimumDeliverable.",
+                format.format_name
+            ));
+        }
+        if format.review_checklist.is_empty() {
+            errors.push(format!(
+                "{} is missing reviewChecklist.",
+                format.format_name
+            ));
+        }
+    }
+
+    let enabled_area_keys: HashSet<String> = enabled_areas
+        .iter()
+        .map(|area| normalize_catalog_key(&area.area_display_name))
+        .collect();
+    for rule in &catalog.area_format_rules {
+        if !enabled_area_keys.contains(&normalize_catalog_key(&rule.area_display_name))
+            && normalize_catalog_key(&rule.area_display_name) != "regularizacion"
+        {
+            errors.push(format!(
+                "Rule references unknown enabled area {}.",
+                rule.area_display_name
+            ));
+        }
+        if !formats.contains(&normalize_catalog_key(&rule.delivery_format)) {
+            errors.push(format!(
+                "Rule for {} references unknown delivery format {}.",
+                rule.area_display_name, rule.delivery_format
+            ));
+        }
+        if !rule.blocking && rule.condition.trim().len() > 80 {
+            warnings.push(format!(
+                "Rule for {} has a broad condition that should be reviewed.",
+                rule.area_display_name
+            ));
+        }
+    }
+
+    if bug_areas.as_slice() != ["Bug"] {
+        errors.push("Bug must be the only enabled area deriving issueType Bug.".to_string());
+    }
+
+    if !errors.is_empty() {
+        return Ok(CatalogSyncResult {
+            ok: false,
+            source_url: source_url.to_string(),
+            synced_area_count: 0,
+            delivery_format_count: catalog.delivery_formats.len(),
+            rule_count: catalog.area_format_rules.len(),
+            warnings,
+            errors,
+            areas: Vec::new(),
+        });
+    }
+
+    Ok(CatalogSyncResult {
+        ok: true,
+        source_url: source_url.to_string(),
+        synced_area_count: enabled_areas.len(),
+        delivery_format_count: catalog.delivery_formats.len(),
+        rule_count: catalog.area_format_rules.len(),
+        warnings,
+        errors,
+        areas: enabled_areas,
+    })
+}
 
 pub fn resolve_catalog_area(input: &str) -> CatalogAreaResolution {
     let trimmed_input = input.trim();
@@ -320,7 +620,8 @@ fn normalize_catalog_char(ch: char) -> char {
 mod tests {
     use super::{
         catalog_context_for_area, derive_issue_type_from_area, official_area_options,
-        resolve_catalog_area, CatalogAreaResolution, OfficialAreaOption, OFFICIAL_AREAS,
+        parse_exportable_catalog_json, resolve_catalog_area, CatalogAreaResolution,
+        OfficialAreaOption, OFFICIAL_AREAS,
     };
 
     #[test]
@@ -329,7 +630,7 @@ mod tests {
             resolve_catalog_area("Programacion"),
             CatalogAreaResolution::Normalized {
                 area_display_name: "Programación",
-                jira_label: "programacion"
+                jira_label: "Programación"
             }
         );
     }
@@ -364,7 +665,7 @@ mod tests {
     fn uses_conditional_delivery_formats() {
         let context = catalog_context_for_area("Arquitectura", "Preparar brief tecnico");
 
-        assert!(context.contains("- Delivery format: Brief técnico"));
+        assert!(context.contains("- Delivery format: Arquitectura - Brief"));
     }
 
     #[test]
@@ -393,11 +694,15 @@ mod tests {
 
         assert!(options.contains(&OfficialAreaOption {
             area_display_name: "Programación",
-            jira_label: "programacion"
+            jira_label: "Programación"
         }));
         assert!(options.contains(&OfficialAreaOption {
             area_display_name: "Integración",
-            jira_label: "integracion"
+            jira_label: "Integración"
+        }));
+        assert!(options.contains(&OfficialAreaOption {
+            area_display_name: "Producción",
+            jira_label: "Producción"
         }));
         assert!(options.contains(&OfficialAreaOption {
             area_display_name: "Selección Recurso",
@@ -411,5 +716,111 @@ mod tests {
             area_display_name: "Compra",
             jira_label: "compra"
         }));
+    }
+
+    #[test]
+    fn validates_exportable_catalog_source() {
+        let result = parse_exportable_catalog_json(
+            "https://example.test/jtf-sync-catalog.json",
+            r#"{
+              "areas": [
+                {
+                  "areaDisplayName": "Bug",
+                  "jiraLabel": "Bug",
+                  "enabledInJTF": true,
+                  "issueType": "Bug",
+                  "defaultDeliveryFormat": "Bug",
+                  "safeAliases": []
+                },
+                {
+                  "areaDisplayName": "Programación",
+                  "jiraLabel": "Programación",
+                  "enabledInJTF": true,
+                  "issueType": "Story",
+                  "defaultDeliveryFormat": "Feature de Programación",
+                  "safeAliases": ["Programacion"]
+                }
+              ],
+              "deliveryFormats": [
+                {
+                  "formatName": "Bug",
+                  "issueType": "Bug",
+                  "storyHeadings": ["Historia de usuario"],
+                  "minimumDeliverable": "Bug reproducible.",
+                  "reviewChecklist": ["Pasos de reproducción incluidos."]
+                },
+                {
+                  "formatName": "Feature de Programación",
+                  "issueType": "Story",
+                  "storyHeadings": ["Historia de usuario"],
+                  "minimumDeliverable": "PR/MR creado.",
+                  "reviewChecklist": ["PR/MR creado."]
+                }
+              ],
+              "areaFormatRules": [
+                {
+                  "areaDisplayName": "Programación",
+                  "priority": 1,
+                  "condition": "fallback",
+                  "deliveryFormat": "Feature de Programación",
+                  "blocking": false
+                }
+              ]
+            }"#,
+        )
+        .expect("catalog should parse");
+
+        assert!(result.ok);
+        assert_eq!(result.synced_area_count, 2);
+        assert_eq!(result.delivery_format_count, 2);
+        assert!(result.errors.is_empty());
+    }
+
+    #[test]
+    fn rejects_exportable_catalog_with_non_bug_bug_issue_type() {
+        let result = parse_exportable_catalog_json(
+            "https://example.test/jtf-sync-catalog.json",
+            r#"{
+              "areas": [
+                {
+                  "areaDisplayName": "Bug",
+                  "jiraLabel": "Bug",
+                  "enabledInJTF": true,
+                  "issueType": "Bug",
+                  "defaultDeliveryFormat": "Bug"
+                },
+                {
+                  "areaDisplayName": "Programación",
+                  "jiraLabel": "Programación",
+                  "enabledInJTF": true,
+                  "issueType": "Bug",
+                  "defaultDeliveryFormat": "Feature de Programación"
+                }
+              ],
+              "deliveryFormats": [
+                {
+                  "formatName": "Bug",
+                  "issueType": "Bug",
+                  "storyHeadings": ["Historia de usuario"],
+                  "minimumDeliverable": "Bug reproducible.",
+                  "reviewChecklist": ["Pasos de reproducción incluidos."]
+                },
+                {
+                  "formatName": "Feature de Programación",
+                  "issueType": "Story",
+                  "storyHeadings": ["Historia de usuario"],
+                  "minimumDeliverable": "PR/MR creado.",
+                  "reviewChecklist": ["PR/MR creado."]
+                }
+              ],
+              "areaFormatRules": []
+            }"#,
+        )
+        .expect("catalog should parse");
+
+        assert!(!result.ok);
+        assert!(result
+            .errors
+            .contains(&"Bug must be the only enabled area deriving issueType Bug.".to_string()));
     }
 }

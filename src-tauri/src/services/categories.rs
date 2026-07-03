@@ -1,7 +1,8 @@
 use super::AppServices;
+use crate::area_catalog::{sync_exportable_catalog_from_url, CatalogSyncResult};
 use crate::db::DbResult;
 use crate::models::Category;
-use crate::repositories::CategoryRepository;
+use crate::repositories::{CategoryRepository, SettingsRepository};
 
 impl AppServices {
     pub fn list_categories(&self, category_type: Option<&str>) -> DbResult<Vec<Category>> {
@@ -32,5 +33,30 @@ impl AppServices {
     pub fn sync_area_catalog(&self) -> DbResult<Vec<Category>> {
         let connection = self.connection();
         CategoryRepository::new(&connection).sync_area_catalog()
+    }
+
+    pub fn sync_area_catalog_from_source(
+        &self,
+        source_url: &str,
+    ) -> Result<CatalogSyncResult, String> {
+        let result = sync_exportable_catalog_from_url(source_url)?;
+        if !result.ok {
+            return Ok(result);
+        }
+
+        let connection = self.connection();
+        CategoryRepository::new(&connection)
+            .sync_area_catalog_entries(&result.areas)
+            .map_err(|error| error.to_string())?;
+        let mut settings = SettingsRepository::new(&connection)
+            .get_app_settings()
+            .map_err(|error| error.to_string())?;
+        settings.catalog_source_mode = "public-exportable".to_string();
+        settings.catalog_source_url = result.source_url.clone();
+        SettingsRepository::new(&connection)
+            .update_app_settings(settings)
+            .map_err(|error| error.to_string())?;
+
+        Ok(result)
     }
 }

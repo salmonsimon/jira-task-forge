@@ -1434,7 +1434,7 @@ mod tests {
         );
         assert_eq!(
             gateway.created_payloads[0]["fields"]["labels"],
-            json!(["bug"])
+            json!(["Bug"])
         );
         assert_eq!(
             gateway.created_payloads[1]["fields"]["parent"]["key"],
@@ -1442,7 +1442,7 @@ mod tests {
         );
         assert_eq!(
             gateway.created_payloads[1]["fields"]["labels"],
-            json!(["bug"])
+            json!(["Bug"])
         );
         assert_eq!(
             gateway.created_payloads[1]["fields"]["priority"]["id"],

@@ -1,27 +1,35 @@
-import { Check, Eye, EyeOff, Pencil, Plus, RefreshCw, Tags, Trash2, X } from "lucide-react";
+import { AlertTriangle, Check, CheckCircle2, Copy, Eye, EyeOff, Pencil, Plus, RefreshCw, Tags, Trash2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button, PanelHeader } from "../../components/ui";
-import type { Category } from "../../lib/types";
+import type { AppSettings, CatalogSyncResult, Category } from "../../lib/types";
 import { cn } from "../../lib/utils";
 
 export function CategoriesPanel({
   projects,
   areas,
+  catalogSourceMode,
+  catalogSourceUrl,
   onCreateCategory,
   onUpdateCategory,
   onDeleteCategory,
+  onChangeCatalogSettings,
   onSyncAreaCatalog,
   onClose
 }: {
   projects: Category[];
   areas: Category[];
+  catalogSourceMode: AppSettings["catalogSourceMode"];
+  catalogSourceUrl: string;
   onCreateCategory: (categoryType: "project", name: string) => void | Promise<void>;
   onUpdateCategory: (categoryId: string, patch: Partial<Pick<Category, "hidden" | "name">>) => void | Promise<void>;
   onDeleteCategory: (categoryId: string) => void | Promise<void>;
-  onSyncAreaCatalog: () => void | Promise<void>;
+  onChangeCatalogSettings: (settings: Partial<AppSettings>) => Promise<boolean>;
+  onSyncAreaCatalog: (sourceUrl?: string) => Promise<CatalogSyncResult | null>;
   onClose: () => void;
 }) {
   const panelRef = useRef<HTMLElement | null>(null);
+  const [isCatalogSetupOpen, setIsCatalogSetupOpen] = useState(false);
+  const [catalogNotice, setCatalogNotice] = useState<CatalogSyncResult | null>(null);
 
   useEffect(() => {
     function handlePointerDown(event: PointerEvent) {
@@ -60,12 +68,27 @@ export function CategoriesPanel({
           title="Areas"
           categories={areas}
           isCatalogManaged
+          catalogSourceMode={catalogSourceMode}
+          catalogSourceUrl={catalogSourceUrl}
           onCreateCategory={onCreateCategory}
           onUpdateCategory={onUpdateCategory}
           onDeleteCategory={onDeleteCategory}
           onSyncAreaCatalog={onSyncAreaCatalog}
+          onOpenCatalogSetup={() => setIsCatalogSetupOpen(true)}
+          onSyncResult={setCatalogNotice}
         />
       </div>
+      {catalogNotice ? <CatalogSyncNotice result={catalogNotice} onClose={() => setCatalogNotice(null)} /> : null}
+      {isCatalogSetupOpen ? (
+        <CatalogSetupModal
+          catalogSourceMode={catalogSourceMode}
+          catalogSourceUrl={catalogSourceUrl}
+          onChangeCatalogSettings={onChangeCatalogSettings}
+          onClose={() => setIsCatalogSetupOpen(false)}
+          onSyncAreaCatalog={onSyncAreaCatalog}
+          onSyncResult={setCatalogNotice}
+        />
+      ) : null}
     </aside>
   );
 }
@@ -78,16 +101,24 @@ function CategoryList({
   onUpdateCategory,
   onDeleteCategory,
   onSyncAreaCatalog,
+  onOpenCatalogSetup,
+  onSyncResult,
+  catalogSourceMode = "public-exportable",
+  catalogSourceUrl = "",
   isCatalogManaged = false
 }: {
   categoryType: "project" | "area";
   title: string;
   categories: Category[];
   isCatalogManaged?: boolean;
+  catalogSourceMode?: AppSettings["catalogSourceMode"];
+  catalogSourceUrl?: string;
   onCreateCategory: (categoryType: "project", name: string) => void | Promise<void>;
   onUpdateCategory: (categoryId: string, patch: Partial<Pick<Category, "hidden" | "name">>) => void | Promise<void>;
   onDeleteCategory: (categoryId: string) => void | Promise<void>;
-  onSyncAreaCatalog?: () => void | Promise<void>;
+  onSyncAreaCatalog?: (sourceUrl?: string) => Promise<CatalogSyncResult | null>;
+  onOpenCatalogSetup?: () => void;
+  onSyncResult?: (result: CatalogSyncResult | null) => void;
 }) {
   const [isAdding, setIsAdding] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -105,12 +136,17 @@ function CategoryList({
 
   async function syncCatalog() {
     if (!onSyncAreaCatalog || isSyncing) return;
+    if (catalogSourceMode !== "manual" && !catalogSourceUrl.trim()) {
+      onOpenCatalogSetup?.();
+      return;
+    }
 
     setIsSyncing(true);
     const startedAt = performance.now();
     try {
-      await onSyncAreaCatalog();
+      const result = await onSyncAreaCatalog();
       await waitForMinimumElapsed(startedAt, 650);
+      onSyncResult?.(result);
     } finally {
       setIsSyncing(false);
     }
@@ -128,7 +164,7 @@ function CategoryList({
             onClick={() => void syncCatalog()}
             title="Update official area catalog"
           >
-            {isSyncing ? "Updating..." : "Update"}
+            {isSyncing ? "Syncing..." : "Sync"}
           </Button>
         ) : (
           <Button variant="ghost" icon={<Plus size={13} />} onClick={() => setIsAdding(true)}>
@@ -188,6 +224,204 @@ function CategoryList({
     </div>
   );
 }
+
+function CatalogSyncNotice({ result, onClose }: { result: CatalogSyncResult; onClose: () => void }) {
+  const isOk = result.ok;
+  return (
+    <div className="fixed bottom-4 right-4 z-50 w-[360px] rounded border border-[#dfe1e6] bg-white p-3 shadow-xl">
+      <div className="mb-2 flex items-start justify-between gap-3">
+        <div className="flex items-center gap-2 text-sm font-semibold">
+          {isOk ? <CheckCircle2 size={16} className="text-[#1f845a]" /> : <AlertTriangle size={16} className="text-[#e56910]" />}
+          {isOk ? "Catalog sync completed" : "Catalog sync needs attention"}
+        </div>
+        <button className="text-[#6b778c] hover:text-[#172b4d]" onClick={onClose} title="Close" type="button">
+          <X size={16} />
+        </button>
+      </div>
+      {isOk ? (
+        <p className="text-xs text-[#42526e]">
+          {result.syncedAreaCount} areas, {result.deliveryFormatCount} delivery formats, and {result.ruleCount} rules validated.
+        </p>
+      ) : (
+        <ul className="max-h-40 list-disc overflow-y-auto pl-5 text-xs text-[#42526e]">
+          {result.errors.map((error) => (
+            <li key={error}>{error}</li>
+          ))}
+        </ul>
+      )}
+      {result.warnings.length > 0 ? (
+        <ul className="mt-2 max-h-24 list-disc overflow-y-auto pl-5 text-xs text-[#6b778c]">
+          {result.warnings.map((warning) => (
+            <li key={warning}>{warning}</li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
+function CatalogSetupModal({
+  catalogSourceMode,
+  catalogSourceUrl,
+  onChangeCatalogSettings,
+  onClose,
+  onSyncAreaCatalog,
+  onSyncResult
+}: {
+  catalogSourceMode: AppSettings["catalogSourceMode"];
+  catalogSourceUrl: string;
+  onChangeCatalogSettings: (settings: Partial<AppSettings>) => Promise<boolean>;
+  onClose: () => void;
+  onSyncAreaCatalog: (sourceUrl?: string) => Promise<CatalogSyncResult | null>;
+  onSyncResult: (result: CatalogSyncResult | null) => void;
+}) {
+  const [step, setStep] = useState<"guide" | "connect" | "sync">("guide");
+  const [mode, setMode] = useState<AppSettings["catalogSourceMode"]>(catalogSourceMode);
+  const [sourceUrl, setSourceUrl] = useState(catalogSourceUrl);
+  const [isTesting, setIsTesting] = useState(false);
+  const [testResult, setTestResult] = useState<CatalogSyncResult | null>(null);
+
+  async function copyTemplate() {
+    await navigator.clipboard?.writeText(CATALOG_SOURCE_TEMPLATE);
+  }
+
+  async function testSource() {
+    setIsTesting(true);
+    const startedAt = performance.now();
+    try {
+      await onChangeCatalogSettings({ catalogSourceMode: mode, catalogSourceUrl: sourceUrl.trim() });
+      const result = mode === "manual" ? null : await onSyncAreaCatalog(sourceUrl.trim());
+      await waitForMinimumElapsed(startedAt, 650);
+      setTestResult(result);
+      onSyncResult(result);
+      if (result?.ok || mode === "manual") setStep("sync");
+    } finally {
+      setIsTesting(false);
+    }
+  }
+
+  async function finish() {
+    await onChangeCatalogSettings({ catalogSourceMode: mode, catalogSourceUrl: sourceUrl.trim() });
+    onClose();
+  }
+
+  return (
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-[#091e42]/45 p-6">
+      <div className="flex max-h-[88vh] w-[760px] max-w-full flex-col rounded border border-[#dfe1e6] bg-white shadow-2xl">
+        <div className="flex items-start justify-between border-b border-[#dfe1e6] p-4">
+          <div>
+            <h2 className="text-base font-semibold">Catalog setup</h2>
+            <p className="text-sm text-[#6b778c]">Configure a public/exportable catalog source or keep manual categories.</p>
+          </div>
+          <button className="text-[#6b778c] hover:text-[#172b4d]" onClick={onClose} title="Close" type="button">
+            <X size={18} />
+          </button>
+        </div>
+        <div className="flex gap-2 border-b border-[#dfe1e6] px-4 py-3">
+          {(["guide", "connect", "sync"] as const).map((item, index) => (
+            <button
+              className={cn(
+                "h-8 flex-1 rounded border px-3 text-sm",
+                step === item ? "border-[#0c66e4] bg-[#0c66e4] text-white" : "border-[#dfe1e6] text-[#42526e]"
+              )}
+              key={item}
+              onClick={() => setStep(item)}
+              type="button"
+            >
+              {index + 1}. {item === "guide" ? "Guide" : item === "connect" ? "Connect" : "Sync"}
+            </button>
+          ))}
+        </div>
+        <div className="flex-1 overflow-y-auto p-4">
+          {step === "guide" ? (
+            <div className="space-y-4">
+              <p className="text-sm text-[#42526e]">
+                Use a public/exportable JSON source. A normal public Notion page renders app HTML and cannot be parsed by JTF.
+              </p>
+              <pre className="max-h-72 overflow-auto rounded bg-[#f7f8fa] p-3 text-xs text-[#172b4d]">{CATALOG_SOURCE_TEMPLATE}</pre>
+              <Button icon={<Copy size={14} />} onClick={() => void copyTemplate()}>
+                Copy template
+              </Button>
+            </div>
+          ) : null}
+          {step === "connect" ? (
+            <div className="space-y-4">
+              <label className="block text-sm font-semibold">Catalog mode</label>
+              <select className="h-9 w-full rounded border border-[#dfe1e6] px-2 text-sm" value={mode} onChange={(event) => setMode(event.target.value as AppSettings["catalogSourceMode"])}>
+                <option value="public-exportable">Sync with public/exportable source</option>
+                <option value="manual">Manual catalog</option>
+              </select>
+              {mode !== "manual" ? (
+                <>
+                  <label className="block text-sm font-semibold">Source URL</label>
+                  <input
+                    className="h-9 w-full rounded border border-[#dfe1e6] px-2 text-sm"
+                    placeholder="https://..."
+                    value={sourceUrl}
+                    onChange={(event) => setSourceUrl(event.target.value)}
+                  />
+                </>
+              ) : null}
+              <Button className="settings-button-test" disabled={isTesting || (mode !== "manual" && !sourceUrl.trim())} icon={isTesting ? <RefreshCw size={14} className="animate-spin" /> : <CheckCircle2 size={14} />} onClick={() => void testSource()}>
+                {isTesting ? "Testing..." : mode === "manual" ? "Use manual catalog" : "Test source"}
+              </Button>
+              {testResult ? <CatalogSyncNotice result={testResult} onClose={() => setTestResult(null)} /> : null}
+            </div>
+          ) : null}
+          {step === "sync" ? (
+            <div className="space-y-3 text-sm text-[#42526e]">
+              <p>{mode === "manual" ? "Manual catalog mode is configured. Projects remain manually editable and areas use the local fallback catalog." : "The source was validated and synchronized. Future Sync clicks will use the saved URL directly."}</p>
+              {testResult?.ok ? (
+                <p>
+                  Synced {testResult.syncedAreaCount} areas, {testResult.deliveryFormatCount} delivery formats, and {testResult.ruleCount} rules.
+                </p>
+              ) : null}
+              <Button className="settings-button-primary" icon={<Check size={14} />} onClick={() => void finish()}>
+                Finish
+              </Button>
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const CATALOG_SOURCE_TEMPLATE = JSON.stringify(
+  {
+    areas: [
+      {
+        areaDisplayName: "Programación",
+        jiraLabel: "Programación",
+        enabledInJTF: true,
+        issueType: "Story",
+        defaultDeliveryFormat: "Feature de Programación",
+        safeAliases: ["Programacion"],
+        notes: "Implementación técnica, código, Blueprints, sistemas, features."
+      }
+    ],
+    deliveryFormats: [
+      {
+        formatName: "Feature de Programación",
+        issueType: "Story",
+        storyHeadings: ["Historia de usuario", "Contexto", "Alcance", "Criterios de aceptación", "Entregable mínimo", "Checklist antes de Review"],
+        minimumDeliverable: "PR/MR al proyecto o plugin correspondiente.",
+        reviewChecklist: ["PR/MR creado.", "Rama correcta.", "Si toca Blueprints, Snapshot Unreal exportado y linkeado."]
+      }
+    ],
+    areaFormatRules: [
+      {
+        areaDisplayName: "Programación",
+        priority: 1,
+        condition: "fallback",
+        deliveryFormat: "Feature de Programación",
+        blocking: false
+      }
+    ]
+  },
+  null,
+  2
+);
 
 async function waitForMinimumElapsed(startedAt: number, minimumMs: number): Promise<void> {
   const remainingMs = minimumMs - (performance.now() - startedAt);

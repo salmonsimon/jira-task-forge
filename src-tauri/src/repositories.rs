@@ -2,7 +2,7 @@ use rusqlite::{params, Connection};
 use serde_json::Value;
 use uuid::Uuid;
 
-use crate::area_catalog::OFFICIAL_AREAS;
+use crate::area_catalog::{SyncedCatalogArea, OFFICIAL_AREAS};
 use crate::attachment_storage::validate_managed_relative_path;
 use crate::db::{utc_now_string, DbError, DbResult};
 use crate::integrations::jira::normalize_jira_site_url;
@@ -242,6 +242,29 @@ impl<'connection> CategoryRepository<'connection> {
     }
 
     pub fn sync_area_catalog(&self) -> DbResult<Vec<Category>> {
+        let areas = OFFICIAL_AREAS
+            .iter()
+            .map(|area| SyncedCatalogArea {
+                area_display_name: area.area_display_name.to_string(),
+                jira_label: area.jira_label.to_string(),
+                enabled_in_jtf: true,
+                issue_type: "Story".to_string(),
+                default_delivery_format: area.delivery_format.to_string(),
+                safe_aliases: area
+                    .aliases
+                    .iter()
+                    .map(|alias| (*alias).to_string())
+                    .collect(),
+                notes: String::new(),
+            })
+            .collect::<Vec<_>>();
+        self.sync_area_catalog_entries(&areas)
+    }
+
+    pub fn sync_area_catalog_entries(
+        &self,
+        areas: &[SyncedCatalogArea],
+    ) -> DbResult<Vec<Category>> {
         let now = utc_now_string()?;
         self.connection.execute(
             "
@@ -252,9 +275,9 @@ impl<'connection> CategoryRepository<'connection> {
             [now.as_str()],
         )?;
 
-        for catalog_area in OFFICIAL_AREAS {
+        for catalog_area in areas {
             let id = Uuid::new_v4().to_string();
-            let normalized_name = normalize_name(catalog_area.area_display_name);
+            let normalized_name = normalize_name(&catalog_area.area_display_name);
             self.connection.execute(
                 "
                 INSERT INTO categories (
@@ -270,7 +293,7 @@ impl<'connection> CategoryRepository<'connection> {
                 ",
                 (
                     id.as_str(),
-                    catalog_area.area_display_name,
+                    catalog_area.area_display_name.as_str(),
                     normalized_name.as_str(),
                     now.as_str(),
                 ),
@@ -3557,6 +3580,7 @@ mod tests {
                 ai_provider: "OpenAI".to_string(),
                 ai_model: "gpt-4.1-mini".to_string(),
                 default_content_language: "Spanish".to_string(),
+                ..AppSettings::default()
             })
             .expect("settings update");
 
@@ -3582,6 +3606,7 @@ mod tests {
                 ai_provider: "OpenAI".to_string(),
                 ai_model: "gpt-4.1-mini".to_string(),
                 default_content_language: "Spanish".to_string(),
+                ..AppSettings::default()
             })
             .expect("settings update");
 
@@ -3610,6 +3635,7 @@ mod tests {
                 ai_provider: "OpenAI".to_string(),
                 ai_model: "gpt-4.1-mini".to_string(),
                 default_content_language: "Spanish".to_string(),
+                ..AppSettings::default()
             })
             .expect_err("custom hosts should fail");
 
@@ -3652,6 +3678,7 @@ mod tests {
                 ai_provider: "OpenAI".to_string(),
                 ai_model: "gpt-4.1".to_string(),
                 default_content_language: "Spanish".to_string(),
+                ..AppSettings::default()
             })
             .expect("unrelated setting updates");
 

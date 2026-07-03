@@ -118,6 +118,7 @@ mod tests {
                 ai_provider: "OpenAI".to_string(),
                 ai_model: "gpt-4.1-mini".to_string(),
                 default_content_language: "Spanish".to_string(),
+                ..AppSettings::default()
             })
             .expect("settings save");
         let tray = TrayRepository::new(&source)

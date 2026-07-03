@@ -212,6 +212,27 @@ export type AppSettings = {
   aiProvider: AiProvider;
   aiModel: string;
   defaultContentLanguage: "Spanish" | "English";
+  catalogSourceMode: "public-exportable" | "manual";
+  catalogSourceUrl: string;
+};
+
+export type CatalogSyncResult = {
+  ok: boolean;
+  sourceUrl: string;
+  syncedAreaCount: number;
+  deliveryFormatCount: number;
+  ruleCount: number;
+  warnings: string[];
+  errors: string[];
+  areas: Array<{
+    areaDisplayName: string;
+    jiraLabel: string;
+    enabledInJTF: boolean;
+    issueType: "Story" | "Bug";
+    defaultDeliveryFormat: string;
+    safeAliases: string[];
+    notes: string;
+  }>;
 };
 
 export type JiraConnectionTestResult = {

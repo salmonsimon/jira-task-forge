@@ -12,17 +12,17 @@ describe("official area catalog", () => {
     expect(resolveCatalogArea(" programacion ")).toMatchObject({
       kind: "normalized",
       areaDisplayName: "Programación",
-      jiraLabel: "programacion"
+      jiraLabel: "Programación"
     });
     expect(resolveCatalogArea("Refactorizacion")).toMatchObject({
       kind: "normalized",
       areaDisplayName: "Refactorización",
-      jiraLabel: "refactorizacion"
+      jiraLabel: "Refactorización"
     });
     expect(resolveCatalogArea("Diseno")).toMatchObject({
       kind: "normalized",
       areaDisplayName: "Diseño",
-      jiraLabel: "diseno"
+      jiraLabel: "Diseño"
     });
   });
 
@@ -58,17 +58,17 @@ describe("official area catalog", () => {
     expect(getDeliveryFormatForArea("Programación")).toMatchObject({
       kind: "direct",
       areaDisplayName: "Programación",
-      format: "Implementación técnica"
+      format: "Feature de Programación"
     });
     expect(getDeliveryFormatForArea("Arquitectura", "Preparar brief tecnico para UI")).toMatchObject({
       kind: "conditional",
       areaDisplayName: "Arquitectura",
-      format: "Brief técnico"
+      format: "Arquitectura - Brief"
     });
     expect(getDeliveryFormatForArea("Arquitectura", "Cerrar propuesta final de navegación")).toMatchObject({
       kind: "conditional",
       areaDisplayName: "Arquitectura",
-      format: "Propuesta final"
+      format: "Arquitectura - Propuesta Final"
     });
   });
 
@@ -83,8 +83,9 @@ describe("official area catalog", () => {
   it("exposes only official final area and label options", () => {
     const options = getOfficialAreaOptions();
 
-    expect(options).toContainEqual({ areaDisplayName: "Programación", jiraLabel: "programacion" });
-    expect(options).toContainEqual({ areaDisplayName: "Integración", jiraLabel: "integracion" });
+    expect(options).toContainEqual({ areaDisplayName: "Programación", jiraLabel: "Programación" });
+    expect(options).toContainEqual({ areaDisplayName: "Integración", jiraLabel: "Integración" });
+    expect(options).toContainEqual({ areaDisplayName: "Producción", jiraLabel: "Producción" });
     expect(options).toContainEqual({ areaDisplayName: "Selección Recurso", jiraLabel: "Selección-Recurso" });
     expect(options).not.toContainEqual({ areaDisplayName: "Implementación", jiraLabel: "implementacion" });
     expect(options).not.toContainEqual({ areaDisplayName: "Compra", jiraLabel: "compra" });

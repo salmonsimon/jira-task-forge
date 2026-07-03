@@ -1,5 +1,6 @@
 use tauri::State;
 
+use crate::area_catalog::CatalogSyncResult;
 use crate::models::Category;
 use crate::services::AppServices;
 
@@ -48,4 +49,12 @@ pub fn sync_area_catalog(services: State<'_, AppServices>) -> Result<Vec<Categor
     services
         .sync_area_catalog()
         .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn sync_area_catalog_from_source(
+    services: State<'_, AppServices>,
+    source_url: String,
+) -> Result<CatalogSyncResult, String> {
+    services.sync_area_catalog_from_source(&source_url)
 }

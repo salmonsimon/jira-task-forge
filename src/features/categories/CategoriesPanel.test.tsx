@@ -23,10 +23,13 @@ describe("CategoriesPanel", () => {
       <CategoriesPanel
         projects={[project]}
         areas={[area]}
+        catalogSourceMode="public-exportable"
+        catalogSourceUrl=""
         onCreateCategory={() => undefined}
         onDeleteCategory={() => undefined}
         onUpdateCategory={() => undefined}
-        onSyncAreaCatalog={() => undefined}
+        onChangeCatalogSettings={() => Promise.resolve(true)}
+        onSyncAreaCatalog={async () => null}
         onClose={() => undefined}
       />
     );
@@ -41,15 +44,18 @@ it("shows catalog-managed areas as refreshable instead of manually creatable", (
     <CategoriesPanel
       projects={[project]}
       areas={[{ ...area, source: "catalog" }]}
+      catalogSourceMode="public-exportable"
+      catalogSourceUrl=""
       onCreateCategory={() => undefined}
       onDeleteCategory={() => undefined}
       onUpdateCategory={() => undefined}
-      onSyncAreaCatalog={() => undefined}
+      onChangeCatalogSettings={() => Promise.resolve(true)}
+      onSyncAreaCatalog={async () => null}
       onClose={() => undefined}
     />
   );
 
-  expect(html).toContain(">Update<");
+  expect(html).toContain(">Sync<");
   expect(html).toContain("title=\"Update official area catalog\"");
   expect(html.match(/>New</g)).toHaveLength(1);
   expect(html).not.toContain("Rename Bug");

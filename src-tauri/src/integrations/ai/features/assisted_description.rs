@@ -314,8 +314,8 @@ mod tests {
 
         assert!(context.contains("Official catalog context:"));
         assert!(context.contains("- Official area display name: Programación"));
-        assert!(context.contains("- Jira label: programacion"));
-        assert!(context.contains("- Delivery format: Implementación técnica"));
+        assert!(context.contains("- Jira label: Programación"));
+        assert!(context.contains("- Delivery format: Feature de Programación"));
         assert!(context.contains("- Issue type derivation: Story"));
         assert!(context.contains("Use the official area display name in visible summaries"));
     }

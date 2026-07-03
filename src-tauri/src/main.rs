@@ -46,6 +46,7 @@ pub fn run() {
             commands::settings::update_app_settings,
             commands::categories::list_categories,
             commands::categories::sync_area_catalog,
+            commands::categories::sync_area_catalog_from_source,
             commands::categories::create_category,
             commands::categories::update_category,
             commands::categories::delete_category,

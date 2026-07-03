@@ -58,28 +58,39 @@ export type CatalogOfficialAreaOption = {
 export const officialAreaCatalog = {
   metadata: {
     sourceUrl: "https://app.notion.com/p/387c335aece481c292baf6991a86a5c3",
-    syncedAt: "2026-06-23",
-    version: "2026.06.23-catalog-foundation",
-    maintenanceNote: "Internal v1 catalog for Jira Task Forge Issue #141. Notion remains the documentary source; this file is the runtime source."
+    syncedAt: "2026-07-03",
+    version: "2026.07.03-jtf-sync-catalog",
+    maintenanceNote: "Fallback catalog for Jira Task Forge Issue #141. Public/exportable catalog sync is the preferred runtime source."
   },
   areas: [
-    area("Bug", "bug", [], "Reporte de bug"),
-    area("3D", "3d", ["Modelos 3D", "Modelo 3D"], "Asset 3D integrado"),
-    area("Polish", "polish", ["Pulido"], "Ajuste de polish"),
-    area("Programación", "programacion", ["Programacion"], "Implementación técnica"),
-    area("Integración", "integracion", ["Integracion"], "Integración técnica"),
-    area("Diseño", "diseno", ["Diseno"], "Diseño funcional"),
-    area("Animación", "animacion", ["Animacion"], "Animación implementada"),
-    area("Iluminación", "iluminacion", ["Iluminacion"], "Iluminación integrada"),
-    area("Texturas", "texturas", [], "Texturas aplicadas"),
-    area("Localización", "localizacion", ["Localizacion"], "Contenido localizado"),
-    area("Refactorización", "refactorizacion", ["Refactorizacion"], "Refactor técnico"),
-    area("Investigación", "investigacion", ["Investigacion"], "Informe de investigación"),
-    area("Selección Recurso", "Selección-Recurso", ["Seleccion Recurso"], "Recurso seleccionado"),
-    area("Arquitectura", "arquitectura", [], "Decisión técnica", [
-      { format: "Brief técnico", match: ["brief", "requerimiento", "contexto inicial"] },
-      { format: "Propuesta final", match: ["propuesta final", "decision final", "cerrar propuesta"] }
-    ])
+    area("Bug", "Bug", ["bug"], "Bug"),
+    area("Programación", "Programación", ["Programacion"], "Feature de Programación"),
+    area("Integración", "Integración", ["Integracion"], "Integración"),
+    area("Refactorización", "Refactorización", ["Refactorizacion"], "Feature de Programación"),
+    area("3D", "3D", ["Modelos 3D", "Modelo 3D"], "Arte Integrado"),
+    area("Animación", "Animación", ["Animacion"], "Arte Integrado"),
+    area("Texturas", "Texturas", [], "Arte Integrado"),
+    area("Iluminación", "Iluminación", ["Iluminacion"], "Arte Integrado"),
+    area("VFX", "VFX", [], "Arte Integrado"),
+    area("SFX", "SFX", [], "Integración"),
+    area("UI", "UI", [], "Integración"),
+    area("Feeling", "Feeling", [], "Feature de Programación"),
+    area("Diseño", "Diseño", ["Diseno"], "Decisión de Diseño"),
+    area("Concept", "Concept", [], "Concept Art"),
+    area("Localización", "Localización", ["Localizacion"], "Integración"),
+    area("Polish", "Polish", ["Pulido"], "Feature de Programación"),
+    area("Investigación", "Investigación", ["Investigacion"], "Investigación"),
+    area("Arquitectura", "Arquitectura", [], "Arquitectura - Brief", [
+      { format: "Arquitectura - Brief", match: ["brief", "requerimiento", "contexto inicial"] },
+      { format: "Arquitectura - Propuesta Final", match: ["propuesta final", "decision final", "cerrar propuesta"] }
+    ]),
+    area("QA", "QA", [], "QA"),
+    area("Build", "Build", ["Build / Release"], "Build / Release"),
+    area("Producción", "Producción", ["Produccion"], "Producción Audiovisual"),
+    area("Documentación", "Documentación", ["Documentacion"], "Story base documental"),
+    area("Capacitación", "Capacitación", ["Capacitacion"], "Curso / Capacitación"),
+    area("Housekeeping", "Housekeeping", [], "Feature de Programación"),
+    area("Selección Recurso", "Selección-Recurso", ["Seleccion Recurso"], "Selección Recurso")
   ]
 } as const satisfies OfficialAreaCatalog;
 

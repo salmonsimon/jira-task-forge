@@ -623,6 +623,7 @@ fn reads_and_updates_settings_through_services() {
             ai_provider: "OpenAI".to_string(),
             ai_model: "gpt-4.1".to_string(),
             default_content_language: "Spanish".to_string(),
+            ..AppSettings::default()
         })
         .expect("settings update");
 

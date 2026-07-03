@@ -6,6 +6,7 @@ import type {
   AssistedDescriptionDraft,
   AssistedDescriptionProposal,
   AssistedDescriptionProposalStatus,
+  CatalogSyncResult,
   Category,
   DescriptionProposalLogEntry,
   DescriptionSectionStatus,
@@ -131,6 +132,10 @@ export async function deletePersistedCategory(id: string): Promise<boolean> {
 export async function syncPersistedAreaCatalog(): Promise<Category[]> {
   const categories = await invoke<BackendCategory[]>("sync_area_catalog");
   return categories.map(mapCategory);
+}
+
+export async function syncPersistedAreaCatalogFromSource(sourceUrl: string): Promise<CatalogSyncResult> {
+  return invoke<CatalogSyncResult>("sync_area_catalog_from_source", { sourceUrl });
 }
 
 export async function listPersistedJqlFavorites(): Promise<JqlFavorite[]> {
@@ -487,6 +492,8 @@ function normalizeAppSettings(settings: AppSettings): AppSettings {
 
   return {
     ...settings,
-    jiraCreationProjectKey: settings.jiraCreationProjectKey ?? legacySettings.jiraSandboxProjectKey ?? ""
+    jiraCreationProjectKey: settings.jiraCreationProjectKey ?? legacySettings.jiraSandboxProjectKey ?? "",
+    catalogSourceMode: settings.catalogSourceMode ?? "public-exportable",
+    catalogSourceUrl: settings.catalogSourceUrl ?? ""
   };
 }
