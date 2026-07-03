@@ -59,14 +59,19 @@ Use it like this:
    ```bash
    scripts/windows-chrome-cdp.sh info
    scripts/windows-chrome-cdp.sh open https://app.notion.com/p/<page-id>
-   scripts/windows-chrome-cdp.sh controls-top
-   scripts/windows-chrome-cdp.sh click-text share
-   scripts/windows-chrome-cdp.sh key Escape
+   scripts/windows-chrome-cdp.sh controls-top --target <target-id>
+   scripts/windows-chrome-cdp.sh controls --target <target-id> share
+   scripts/windows-chrome-cdp.sh click-text --target <target-id> share
+   scripts/windows-chrome-cdp.sh key --target <target-id> Escape
+   scripts/windows-chrome-cdp.sh close <target-id>
    ```
 
    `open` creates a fresh target through Chrome's `/json/new` endpoint and is
    useful when an existing Notion tab still appears in `/json/list` but times
-   out on `Runtime.enable` or `Page.enable`. `controls` and `controls-top`
+   out on `Runtime.enable` or `Page.enable`. Use the returned target id with
+   `--target` before command-specific arguments, e.g.
+   `controls --target <target-id> share`, so multiple Notion tabs do not cause
+   the helper to operate the wrong page. `controls` and `controls-top`
    redact token-looking strings before printing output, but they still must not
    be used on pages where the surrounding authenticated UI is itself sensitive
    unless Saimon has explicitly approved that risk.
@@ -95,6 +100,9 @@ Notion Developers connection named `Jira Task Forge` and safely opened the
 `JTF Sync Catalog` Notion page. A newly created Notion connection page can show
 secret-bearing token UI; broad DOM inspection of that page was rejected and
 should stay blocked unless the user explicitly accepts credential-disclosure
-risk for that specific action. Safer commands (`info`, `open`, `controls-top`,
-`click-text`, and `key`) were added so future agents can navigate authenticated
-Chrome state without defaulting to raw page dumps.
+risk for that specific action. Safer commands (`info`, `open`, `controls`,
+`controls-top`,
+`click-text`, `key`, and `close`) were added so future agents can navigate
+authenticated Chrome state without defaulting to raw page dumps. A follow-up
+validated explicit target selection with `controls --target <target-id> share`
+and validated `close <target-id>` against a duplicate `JTF Sync Catalog` tab.

@@ -20,6 +20,7 @@ Commands:
   info
   navigate <url>
   open <url>
+  close <target-id|title-or-url-substring>
   inspect
   controls [filter]
   controls-top
@@ -32,6 +33,7 @@ Commands:
 
 Environment:
   JTF_CDP_PORT defaults to 9335.
+  Page commands accept optional: --target <target-id|title-or-url-substring>
 USAGE
 }
 

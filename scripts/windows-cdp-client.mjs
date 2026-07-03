@@ -1,4 +1,5 @@
-const [commandName, portArg, ...restArgs] = process.argv.slice(2);
+const [commandName, portArg, ...initialRestArgs] = process.argv.slice(2);
+const restArgs = [...initialRestArgs];
 const port = Number(portArg || "9335");
 
 if (!commandName || !Number.isFinite(port)) {
@@ -7,6 +8,12 @@ if (!commandName || !Number.isFinite(port)) {
 }
 
 const endpoint = `http://127.0.0.1:${port}`;
+
+let targetSelector = null;
+if (restArgs[0] === "--target") {
+  targetSelector = restArgs[1];
+  restArgs.splice(0, 2);
+}
 
 function usage() {
   console.error("Usage: node windows-cdp-client.mjs <command> <port> [args...]");
@@ -17,6 +24,7 @@ function usage() {
   console.error("  info");
   console.error("  navigate <url>");
   console.error("  open <url>");
+  console.error("  close <target-id|title-or-url-substring>");
   console.error("  inspect");
   console.error("  controls [filter]");
   console.error("  controls-top");
@@ -26,6 +34,8 @@ function usage() {
   console.error("  key <key> [windowsVirtualKeyCode]");
   console.error("  type <x> <y> <text>");
   console.error("  screenshot <windows-output-path>");
+  console.error("");
+  console.error("Page commands accept optional: --target <target-id|title-or-url-substring>");
 }
 
 async function jsonFetch(url, options) {
@@ -34,6 +44,14 @@ async function jsonFetch(url, options) {
     throw new Error(`${response.status} ${response.statusText} for ${url}`);
   }
   return response.json();
+}
+
+async function textFetch(url, options) {
+  const response = await fetch(url, options);
+  if (!response.ok) {
+    throw new Error(`${response.status} ${response.statusText} for ${url}`);
+  }
+  return response.text();
 }
 
 async function cdpCommand(ws, id, method, params = {}, timeoutMs = 15000) {
@@ -52,13 +70,31 @@ async function cdpCommand(ws, id, method, params = {}, timeoutMs = 15000) {
   });
 }
 
-async function withPage(callback) {
+function matchesTarget(tab, selector) {
+  if (!selector) return false;
+  const lower = selector.toLowerCase();
+  return (
+    tab.id === selector ||
+    String(tab.title || "").toLowerCase().includes(lower) ||
+    String(tab.url || "").toLowerCase().includes(lower)
+  );
+}
+
+async function findPage(selector = targetSelector) {
   const tabs = await jsonFetch(`${endpoint}/json/list`);
   const pages = tabs.filter((tab) => tab.type === "page");
-  const page =
-    pages.find((tab) => /notion/i.test(`${tab.url} ${tab.title}`)) ||
-    pages[0];
-  if (!page) throw new Error("No page target found");
+  const page = selector
+    ? pages.find((tab) => matchesTarget(tab, selector))
+    : pages.find((tab) => /notion/i.test(`${tab.url} ${tab.title}`)) || pages[0];
+  if (!page) {
+    const suffix = selector ? ` matching target: ${selector}` : "";
+    throw new Error(`No page target found${suffix}`);
+  }
+  return page;
+}
+
+async function withPage(callback) {
+  const page = await findPage();
 
   const ws = new WebSocket(page.webSocketDebuggerUrl);
   await new Promise((resolve, reject) => {
@@ -111,6 +147,13 @@ async function navigate(url) {
     await command("Page.navigate", { url });
     return { ok: true, url };
   });
+}
+
+async function closePage(selector = targetSelector || restArgs.join(" ")) {
+  if (!selector) throw new Error("close requires a target id or title/url substring");
+  const page = await findPage(selector);
+  const body = await textFetch(`${endpoint}/json/close/${page.id}`);
+  return { ok: true, id: page.id, title: redactText(page.title), url: redactText(page.url), body };
 }
 
 async function inspect() {
@@ -365,6 +408,8 @@ if (commandName === "version") {
   result = await navigate(restArgs.join(" "));
 } else if (commandName === "open") {
   result = await openPage(restArgs.join(" "));
+} else if (commandName === "close") {
+  result = await closePage();
 } else if (commandName === "inspect") {
   result = await inspect();
 } else if (commandName === "controls") {
