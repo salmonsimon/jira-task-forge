@@ -4,6 +4,8 @@ use crate::integrations::ai::AiProvider;
 pub(in crate::services) const JIRA_CREDENTIAL_SERVICE: &str = "jira-task-forge:jira";
 pub(in crate::services) const JIRA_API_TOKEN_ACCOUNT: &str = "api-token";
 pub(in crate::services) const AI_API_KEY_ACCOUNT: &str = "api-key";
+pub(in crate::services) const NOTION_CREDENTIAL_SERVICE: &str = "jira-task-forge:notion";
+pub(in crate::services) const NOTION_INTEGRATION_TOKEN_ACCOUNT: &str = "integration-token";
 
 impl AppServices {
     pub fn has_jira_api_token(&self) -> Result<bool, keyring::Error> {
@@ -72,6 +74,61 @@ impl AppServices {
                 "Could not remove {} API key: {error}",
                 provider.label()
             )),
+        }
+    }
+
+    pub fn has_notion_integration_token(&self) -> Result<bool, String> {
+        let entry =
+            keyring::Entry::new(NOTION_CREDENTIAL_SERVICE, NOTION_INTEGRATION_TOKEN_ACCOUNT)
+                .map_err(|error| format!("Could not open OS credential store: {error}"))?;
+        match entry.get_password() {
+            Ok(_) => Ok(true),
+            Err(keyring::Error::NoEntry) => Ok(false),
+            Err(error) => Err(format!("Could not read Notion token status: {error}")),
+        }
+    }
+
+    pub fn save_notion_integration_token(&self, token: &str) -> Result<(), String> {
+        let token = token.trim();
+        if token.is_empty() {
+            return Err("Notion integration token cannot be empty.".to_string());
+        }
+
+        let entry =
+            keyring::Entry::new(NOTION_CREDENTIAL_SERVICE, NOTION_INTEGRATION_TOKEN_ACCOUNT)
+                .map_err(|error| format!("Could not open OS credential store: {error}"))?;
+        entry
+            .set_password(token)
+            .map_err(|error| format!("Could not save Notion token: {error}"))?;
+        entry
+            .get_password()
+            .map_err(|error| format!("Could not verify Notion token: {error}"))?;
+        Ok(())
+    }
+
+    pub fn delete_notion_integration_token(&self) -> Result<(), String> {
+        let entry =
+            keyring::Entry::new(NOTION_CREDENTIAL_SERVICE, NOTION_INTEGRATION_TOKEN_ACCOUNT)
+                .map_err(|error| format!("Could not open OS credential store: {error}"))?;
+        match entry.delete_credential() {
+            Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+            Err(error) => Err(format!("Could not remove Notion token: {error}")),
+        }
+    }
+
+    pub(in crate::services) fn notion_integration_token(&self) -> Result<String, String> {
+        let entry =
+            keyring::Entry::new(NOTION_CREDENTIAL_SERVICE, NOTION_INTEGRATION_TOKEN_ACCOUNT)
+                .map_err(|error| format!("Could not open OS credential store: {error}"))?;
+        match entry.get_password() {
+            Ok(token) if token.trim().is_empty() => {
+                Err("Notion integration token is empty. Save a new token.".to_string())
+            }
+            Ok(token) => Ok(token.trim().to_string()),
+            Err(keyring::Error::NoEntry) => {
+                Err("Save a Notion integration token before syncing the catalog.".to_string())
+            }
+            Err(error) => Err(format!("Could not read Notion token: {error}")),
         }
     }
 }

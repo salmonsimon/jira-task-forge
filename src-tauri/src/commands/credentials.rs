@@ -102,3 +102,42 @@ pub async fn delete_ai_provider_api_key(
     })
     .await
 }
+
+#[tauri::command]
+pub async fn has_notion_integration_token(
+    services: State<'_, AppServices>,
+) -> Result<bool, String> {
+    let services = services.inner().clone();
+    run_blocking_result("Credential worker", move || {
+        services.has_notion_integration_token()
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn save_notion_integration_token(
+    services: State<'_, AppServices>,
+    token: String,
+) -> Result<(), String> {
+    let token = token.trim().to_string();
+    if token.is_empty() {
+        return Err("Notion integration token cannot be empty".to_string());
+    }
+
+    let services = services.inner().clone();
+    run_blocking_result("Credential worker", move || {
+        services.save_notion_integration_token(&token)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn delete_notion_integration_token(
+    services: State<'_, AppServices>,
+) -> Result<(), String> {
+    let services = services.inner().clone();
+    run_blocking_result("Credential worker", move || {
+        services.delete_notion_integration_token()
+    })
+    .await
+}

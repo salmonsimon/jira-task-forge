@@ -212,7 +212,7 @@ export type AppSettings = {
   aiProvider: AiProvider;
   aiModel: string;
   defaultContentLanguage: "Spanish" | "English";
-  catalogSourceMode: "public-exportable" | "manual";
+  catalogSourceMode: "notion" | "public-exportable" | "manual";
   catalogSourceUrl: string;
 };
 
@@ -233,6 +233,13 @@ export type CatalogSyncResult = {
     safeAliases: string[];
     notes: string;
   }>;
+};
+
+export type NotionCatalogConnectionTestResult = {
+  ok: boolean;
+  message: string;
+  title?: string | null;
+  extractedBlockCount: number;
 };
 
 export type JiraConnectionTestResult = {

@@ -1,6 +1,7 @@
 use tauri::State;
 
-use crate::area_catalog::CatalogSyncResult;
+use super::worker::run_blocking_result;
+use crate::area_catalog::{CatalogSyncResult, NotionCatalogConnectionTestResult};
 use crate::models::Category;
 use crate::services::AppServices;
 
@@ -57,4 +58,28 @@ pub fn sync_area_catalog_from_source(
     source_url: String,
 ) -> Result<CatalogSyncResult, String> {
     services.sync_area_catalog_from_source(&source_url)
+}
+
+#[tauri::command]
+pub async fn test_notion_catalog_connection(
+    services: State<'_, AppServices>,
+    page_url_or_id: String,
+) -> Result<NotionCatalogConnectionTestResult, String> {
+    let services = services.inner().clone();
+    run_blocking_result("Catalog sync worker", move || {
+        services.test_notion_catalog_connection(&page_url_or_id)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn sync_area_catalog_from_notion(
+    services: State<'_, AppServices>,
+    page_url_or_id: String,
+) -> Result<CatalogSyncResult, String> {
+    let services = services.inner().clone();
+    run_blocking_result("Catalog sync worker", move || {
+        services.sync_area_catalog_from_notion(&page_url_or_id)
+    })
+    .await
 }

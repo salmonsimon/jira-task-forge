@@ -19,6 +19,7 @@ import type {
   LocalTask,
   LocalIssueRelationship,
   NewAssistedDescriptionProposal,
+  NotionCatalogConnectionTestResult,
   SyncLogEntry,
   Tray
 } from "../types";
@@ -138,6 +139,16 @@ export async function syncPersistedAreaCatalogFromSource(sourceUrl: string): Pro
   return invoke<CatalogSyncResult>("sync_area_catalog_from_source", { sourceUrl });
 }
 
+export async function syncPersistedAreaCatalogFromNotion(pageUrlOrId: string): Promise<CatalogSyncResult> {
+  return invoke<CatalogSyncResult>("sync_area_catalog_from_notion", { pageUrlOrId });
+}
+
+export async function testPersistedNotionCatalogConnection(
+  pageUrlOrId: string
+): Promise<NotionCatalogConnectionTestResult> {
+  return invoke<NotionCatalogConnectionTestResult>("test_notion_catalog_connection", { pageUrlOrId });
+}
+
 export async function listPersistedJqlFavorites(): Promise<JqlFavorite[]> {
   return (await invoke<BackendJqlFavorite[]>("list_jql_favorites")).map(mapJqlFavorite);
 }
@@ -197,6 +208,18 @@ export async function deletePersistedOpenAiApiKey(): Promise<void> {
 
 export async function deletePersistedAiProviderApiKey(aiProvider: AiProvider): Promise<void> {
   await invoke("delete_ai_provider_api_key", { aiProvider });
+}
+
+export async function hasPersistedNotionIntegrationToken(): Promise<boolean> {
+  return invoke<boolean>("has_notion_integration_token");
+}
+
+export async function savePersistedNotionIntegrationToken(token: string): Promise<void> {
+  await invoke("save_notion_integration_token", { token });
+}
+
+export async function deletePersistedNotionIntegrationToken(): Promise<void> {
+  await invoke("delete_notion_integration_token");
 }
 
 export async function testPersistedOpenAiConnection(): Promise<string> {
@@ -493,7 +516,7 @@ function normalizeAppSettings(settings: AppSettings): AppSettings {
   return {
     ...settings,
     jiraCreationProjectKey: settings.jiraCreationProjectKey ?? legacySettings.jiraSandboxProjectKey ?? "",
-    catalogSourceMode: settings.catalogSourceMode ?? "public-exportable",
+    catalogSourceMode: settings.catalogSourceMode ?? "notion",
     catalogSourceUrl: settings.catalogSourceUrl ?? ""
   };
 }

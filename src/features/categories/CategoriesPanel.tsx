@@ -1,7 +1,8 @@
 import { AlertTriangle, Check, CheckCircle2, Copy, Eye, EyeOff, Pencil, Plus, RefreshCw, Tags, Trash2, X } from "lucide-react";
+import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import { Button, PanelHeader } from "../../components/ui";
-import type { AppSettings, CatalogSyncResult, Category } from "../../lib/types";
+import type { AppSettings, CatalogSyncResult, Category, NotionCatalogConnectionTestResult } from "../../lib/types";
 import { cn } from "../../lib/utils";
 
 export function CategoriesPanel({
@@ -14,6 +15,10 @@ export function CategoriesPanel({
   onDeleteCategory,
   onChangeCatalogSettings,
   onSyncAreaCatalog,
+  hasNotionIntegrationToken,
+  onSaveNotionIntegrationToken,
+  onDeleteNotionIntegrationToken,
+  onTestNotionCatalogConnection,
   onClose
 }: {
   projects: Category[];
@@ -25,6 +30,10 @@ export function CategoriesPanel({
   onDeleteCategory: (categoryId: string) => void | Promise<void>;
   onChangeCatalogSettings: (settings: Partial<AppSettings>) => Promise<boolean>;
   onSyncAreaCatalog: (sourceUrl?: string) => Promise<CatalogSyncResult | null>;
+  hasNotionIntegrationToken: () => Promise<boolean>;
+  onSaveNotionIntegrationToken: (token: string) => Promise<void>;
+  onDeleteNotionIntegrationToken: () => Promise<void>;
+  onTestNotionCatalogConnection: (pageUrlOrId: string) => Promise<NotionCatalogConnectionTestResult>;
   onClose: () => void;
 }) {
   const panelRef = useRef<HTMLElement | null>(null);
@@ -83,10 +92,14 @@ export function CategoriesPanel({
         <CatalogSetupModal
           catalogSourceMode={catalogSourceMode}
           catalogSourceUrl={catalogSourceUrl}
+          hasNotionIntegrationToken={hasNotionIntegrationToken}
           onChangeCatalogSettings={onChangeCatalogSettings}
           onClose={() => setIsCatalogSetupOpen(false)}
+          onDeleteNotionIntegrationToken={onDeleteNotionIntegrationToken}
+          onSaveNotionIntegrationToken={onSaveNotionIntegrationToken}
           onSyncAreaCatalog={onSyncAreaCatalog}
           onSyncResult={setCatalogNotice}
+          onTestNotionCatalogConnection={onTestNotionCatalogConnection}
         />
       ) : null}
     </aside>
@@ -103,7 +116,7 @@ function CategoryList({
   onSyncAreaCatalog,
   onOpenCatalogSetup,
   onSyncResult,
-  catalogSourceMode = "public-exportable",
+  catalogSourceMode = "notion",
   catalogSourceUrl = "",
   isCatalogManaged = false
 }: {
@@ -260,26 +273,63 @@ function CatalogSyncNotice({ result, onClose }: { result: CatalogSyncResult; onC
   );
 }
 
+function Feedback({ children, kind }: { children: ReactNode; kind: "success" | "warning" }) {
+  return (
+    <div
+      className={cn(
+        "rounded border px-3 py-2 text-xs",
+        kind === "success"
+          ? "border-[#abf5d1] bg-[#e3fcef] text-[#164b35]"
+          : "border-[#f5cd47] bg-[#fff7d6] text-[#533f04]"
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
 function CatalogSetupModal({
   catalogSourceMode,
   catalogSourceUrl,
+  hasNotionIntegrationToken,
   onChangeCatalogSettings,
   onClose,
+  onDeleteNotionIntegrationToken,
+  onSaveNotionIntegrationToken,
   onSyncAreaCatalog,
-  onSyncResult
+  onSyncResult,
+  onTestNotionCatalogConnection
 }: {
   catalogSourceMode: AppSettings["catalogSourceMode"];
   catalogSourceUrl: string;
+  hasNotionIntegrationToken: () => Promise<boolean>;
   onChangeCatalogSettings: (settings: Partial<AppSettings>) => Promise<boolean>;
   onClose: () => void;
+  onDeleteNotionIntegrationToken: () => Promise<void>;
+  onSaveNotionIntegrationToken: (token: string) => Promise<void>;
   onSyncAreaCatalog: (sourceUrl?: string) => Promise<CatalogSyncResult | null>;
   onSyncResult: (result: CatalogSyncResult | null) => void;
+  onTestNotionCatalogConnection: (pageUrlOrId: string) => Promise<NotionCatalogConnectionTestResult>;
 }) {
   const [step, setStep] = useState<"guide" | "connect" | "sync">("guide");
   const [mode, setMode] = useState<AppSettings["catalogSourceMode"]>(catalogSourceMode);
   const [sourceUrl, setSourceUrl] = useState(catalogSourceUrl);
+  const [notionToken, setNotionToken] = useState("");
+  const [hasNotionToken, setHasNotionToken] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
+  const [credentialMessage, setCredentialMessage] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<CatalogSyncResult | null>(null);
+  const [notionTestResult, setNotionTestResult] = useState<NotionCatalogConnectionTestResult | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void hasNotionIntegrationToken().then((available) => {
+      if (!cancelled) setHasNotionToken(available);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [hasNotionIntegrationToken]);
 
   async function copyTemplate() {
     await navigator.clipboard?.writeText(CATALOG_SOURCE_TEMPLATE);
@@ -290,6 +340,20 @@ function CatalogSetupModal({
     const startedAt = performance.now();
     try {
       await onChangeCatalogSettings({ catalogSourceMode: mode, catalogSourceUrl: sourceUrl.trim() });
+      if (mode === "notion") {
+        if (notionToken.trim()) {
+          await onSaveNotionIntegrationToken(notionToken);
+          setHasNotionToken(true);
+          setNotionToken("");
+          setCredentialMessage("Notion token saved in the OS credential store.");
+        }
+        const notionResult = await onTestNotionCatalogConnection(sourceUrl.trim());
+        await waitForMinimumElapsed(startedAt, 650);
+        setNotionTestResult(notionResult);
+        if (notionResult.ok) setStep("sync");
+        return;
+      }
+
       const result = mode === "manual" ? null : await onSyncAreaCatalog(sourceUrl.trim());
       await waitForMinimumElapsed(startedAt, 650);
       setTestResult(result);
@@ -305,13 +369,33 @@ function CatalogSetupModal({
     onClose();
   }
 
+  async function syncFromConfiguredSource() {
+    setIsTesting(true);
+    const startedAt = performance.now();
+    try {
+      const result = mode === "manual" ? null : await onSyncAreaCatalog(sourceUrl.trim());
+      await waitForMinimumElapsed(startedAt, 650);
+      setTestResult(result);
+      onSyncResult(result);
+      if (result?.ok || mode === "manual") await finish();
+    } finally {
+      setIsTesting(false);
+    }
+  }
+
+  async function removeNotionToken() {
+    await onDeleteNotionIntegrationToken();
+    setHasNotionToken(false);
+    setCredentialMessage("Notion token removed.");
+  }
+
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-[#091e42]/45 p-6">
       <div className="flex max-h-[88vh] w-[760px] max-w-full flex-col rounded border border-[#dfe1e6] bg-white shadow-2xl">
         <div className="flex items-start justify-between border-b border-[#dfe1e6] p-4">
           <div>
             <h2 className="text-base font-semibold">Catalog setup</h2>
-            <p className="text-sm text-[#6b778c]">Configure a public/exportable catalog source or keep manual categories.</p>
+            <p className="text-sm text-[#6b778c]">Connect the Notion source of truth, or use a JSON/manual fallback.</p>
           </div>
           <button className="text-[#6b778c] hover:text-[#172b4d]" onClick={onClose} title="Close" type="button">
             <X size={18} />
@@ -336,7 +420,7 @@ function CatalogSetupModal({
           {step === "guide" ? (
             <div className="space-y-4">
               <p className="text-sm text-[#42526e]">
-                Use a public/exportable JSON source. A normal public Notion page renders app HTML and cannot be parsed by JTF.
+                Use the existing Notion page as the source of truth. Add one JSON code block with the JTF catalog contract, share the page with a Notion integration, then paste the integration token and page URL in the next step.
               </p>
               <pre className="max-h-72 overflow-auto rounded bg-[#f7f8fa] p-3 text-xs text-[#172b4d]">{CATALOG_SOURCE_TEMPLATE}</pre>
               <Button icon={<Copy size={14} />} onClick={() => void copyTemplate()}>
@@ -348,18 +432,47 @@ function CatalogSetupModal({
             <div className="space-y-4">
               <label className="block text-sm font-semibold">Catalog mode</label>
               <select className="h-9 w-full rounded border border-[#dfe1e6] px-2 text-sm" value={mode} onChange={(event) => setMode(event.target.value as AppSettings["catalogSourceMode"])}>
+                <option value="notion">Sync from Notion page</option>
                 <option value="public-exportable">Sync with public/exportable source</option>
                 <option value="manual">Manual catalog</option>
               </select>
               {mode !== "manual" ? (
                 <>
-                  <label className="block text-sm font-semibold">Source URL</label>
+                  <label className="block text-sm font-semibold">{mode === "notion" ? "Notion page URL or ID" : "Source URL"}</label>
                   <input
                     className="h-9 w-full rounded border border-[#dfe1e6] px-2 text-sm"
-                    placeholder="https://..."
+                    placeholder={mode === "notion" ? "https://www.notion.so/... or page id" : "https://.../jtf-sync-catalog.json"}
                     value={sourceUrl}
                     onChange={(event) => setSourceUrl(event.target.value)}
                   />
+                </>
+              ) : null}
+              {mode === "notion" ? (
+                <>
+                  <div className="rounded border border-[#dfe1e6] bg-[#f7f8fa] p-3">
+                    <div className="text-sm font-semibold text-[#172b4d]">{hasNotionToken ? "Notion token saved" : "No Notion token saved"}</div>
+                    <p className="mt-1 text-xs text-[#6b778c]">The token stays in the OS credential store and is excluded from SQLite, backups, and logs.</p>
+                    {hasNotionToken ? (
+                      <button className="mt-2 text-xs font-semibold text-[#0c66e4]" onClick={() => void removeNotionToken()} type="button">
+                        Remove token
+                      </button>
+                    ) : null}
+                  </div>
+                  <label className="block text-sm font-semibold">Integration token</label>
+                  <input
+                    className="secret-input h-9 w-full rounded border border-[#dfe1e6] px-2 text-sm"
+                    placeholder={hasNotionToken ? "Enter a new token to replace it" : "Paste Notion integration token"}
+                    type="password"
+                    value={notionToken}
+                    onChange={(event) => setNotionToken(event.target.value)}
+                  />
+                  {credentialMessage ? <Feedback kind="success">{credentialMessage}</Feedback> : null}
+                  {notionTestResult ? (
+                    <Feedback kind={notionTestResult.ok ? "success" : "warning"}>
+                      {notionTestResult.message}
+                      {notionTestResult.title ? ` Page: ${notionTestResult.title}.` : ""}
+                    </Feedback>
+                  ) : null}
                 </>
               ) : null}
               <Button className="settings-button-test" disabled={isTesting || (mode !== "manual" && !sourceUrl.trim())} icon={isTesting ? <RefreshCw size={14} className="animate-spin" /> : <CheckCircle2 size={14} />} onClick={() => void testSource()}>
@@ -371,13 +484,18 @@ function CatalogSetupModal({
           {step === "sync" ? (
             <div className="space-y-3 text-sm text-[#42526e]">
               <p>{mode === "manual" ? "Manual catalog mode is configured. Projects remain manually editable and areas use the local fallback catalog." : "The source was validated and synchronized. Future Sync clicks will use the saved URL directly."}</p>
+              {mode === "notion" && notionTestResult?.ok ? (
+                <p>
+                  Notion connection is ready{notionTestResult.title ? ` for ${notionTestResult.title}` : ""}. Sync will read the JSON code block from that page.
+                </p>
+              ) : null}
               {testResult?.ok ? (
                 <p>
                   Synced {testResult.syncedAreaCount} areas, {testResult.deliveryFormatCount} delivery formats, and {testResult.ruleCount} rules.
                 </p>
               ) : null}
-              <Button className="settings-button-primary" icon={<Check size={14} />} onClick={() => void finish()}>
-                Finish
+              <Button className="settings-button-primary" disabled={isTesting} icon={isTesting ? <RefreshCw size={14} className="animate-spin" /> : <Check size={14} />} onClick={() => void syncFromConfiguredSource()}>
+                {isTesting ? "Syncing..." : mode === "manual" ? "Finish" : "Sync catalog"}
               </Button>
             </div>
           ) : null}

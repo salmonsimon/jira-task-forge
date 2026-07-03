@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::collections::HashSet;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -33,6 +34,15 @@ pub struct CatalogSyncResult {
     pub warnings: Vec<String>,
     pub errors: Vec<String>,
     pub areas: Vec<SyncedCatalogArea>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NotionCatalogConnectionTestResult {
+    pub ok: bool,
+    pub message: String,
+    pub title: Option<String>,
+    pub extracted_block_count: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -263,6 +273,40 @@ pub fn sync_exportable_catalog_from_url(source_url: &str) -> Result<CatalogSyncR
     }
 
     parse_exportable_catalog_json(source_url, &body)
+}
+
+pub fn sync_exportable_catalog_from_notion_page(
+    notion_token: &str,
+    page_url_or_id: &str,
+) -> Result<CatalogSyncResult, String> {
+    let page_id = notion_page_id_from_input(page_url_or_id)?;
+    let blocks = fetch_notion_page_blocks(notion_token, &page_id)?;
+    let catalog_json = extract_exportable_catalog_json_from_notion_blocks(&blocks)?;
+    parse_exportable_catalog_json(&format!("notion://page/{page_id}"), &catalog_json)
+}
+
+pub fn test_notion_catalog_page(
+    notion_token: &str,
+    page_url_or_id: &str,
+) -> Result<NotionCatalogConnectionTestResult, String> {
+    let page_id = notion_page_id_from_input(page_url_or_id)?;
+    let page = fetch_notion_page(notion_token, &page_id)?;
+    let blocks = fetch_notion_page_blocks(notion_token, &page_id)?;
+    let catalog_json = extract_exportable_catalog_json_from_notion_blocks(&blocks)?;
+    let result = parse_exportable_catalog_json(&format!("notion://page/{page_id}"), &catalog_json)?;
+    Ok(NotionCatalogConnectionTestResult {
+        ok: result.ok,
+        message: if result.ok {
+            format!(
+                "Notion catalog page validated: {} areas, {} delivery formats, {} rules.",
+                result.synced_area_count, result.delivery_format_count, result.rule_count
+            )
+        } else {
+            result.errors.join(" ")
+        },
+        title: notion_page_title(&page),
+        extracted_block_count: blocks.len(),
+    })
 }
 
 pub fn parse_exportable_catalog_json(
@@ -588,6 +632,180 @@ fn normalize_catalog_key(value: &str) -> String {
         .join("-")
 }
 
+fn fetch_notion_page(notion_token: &str, page_id: &str) -> Result<Value, String> {
+    notion_get(
+        notion_token,
+        &format!("https://api.notion.com/v1/pages/{page_id}"),
+    )
+}
+
+fn fetch_notion_page_blocks(notion_token: &str, page_id: &str) -> Result<Vec<Value>, String> {
+    let mut blocks = Vec::new();
+    let mut next_cursor: Option<String> = None;
+
+    loop {
+        let url = match &next_cursor {
+            Some(cursor) => format!(
+                "https://api.notion.com/v1/blocks/{page_id}/children?page_size=100&start_cursor={cursor}"
+            ),
+            None => format!("https://api.notion.com/v1/blocks/{page_id}/children?page_size=100"),
+        };
+        let response = notion_get(notion_token, &url)?;
+        if let Some(results) = response.get("results").and_then(Value::as_array) {
+            blocks.extend(results.iter().cloned());
+        }
+        if response
+            .get("has_more")
+            .and_then(Value::as_bool)
+            .unwrap_or(false)
+        {
+            next_cursor = response
+                .get("next_cursor")
+                .and_then(Value::as_str)
+                .map(ToString::to_string);
+            if next_cursor.is_none() {
+                return Err("Notion returned has_more without next_cursor.".to_string());
+            }
+        } else {
+            break;
+        }
+    }
+
+    Ok(blocks)
+}
+
+fn notion_get(notion_token: &str, url: &str) -> Result<Value, String> {
+    let notion_token = notion_token.trim();
+    if notion_token.is_empty() {
+        return Err("Notion integration token is required.".to_string());
+    }
+
+    let response = ureq::get(url)
+        .set("Authorization", &format!("Bearer {notion_token}"))
+        .set("Notion-Version", "2022-06-28")
+        .set("Accept", "application/json")
+        .timeout(std::time::Duration::from_secs(20))
+        .call()
+        .map_err(|error| notion_http_error_message(error))?;
+
+    response
+        .into_json::<Value>()
+        .map_err(|error| format!("Notion returned invalid JSON: {error}"))
+}
+
+fn notion_http_error_message(error: ureq::Error) -> String {
+    match error {
+        ureq::Error::Status(401, _) => "Notion rejected the integration token.".to_string(),
+        ureq::Error::Status(403, _) => {
+            "Notion integration is missing read content access for this page.".to_string()
+        }
+        ureq::Error::Status(404, _) => {
+            "Notion page was not found or has not been shared with the integration.".to_string()
+        }
+        ureq::Error::Status(status, response) => {
+            let body = response.into_string().unwrap_or_default();
+            format!("Notion request failed with HTTP {status}: {body}")
+        }
+        ureq::Error::Transport(error) => {
+            format!("Could not reach Notion API: {error}")
+        }
+    }
+}
+
+fn notion_page_id_from_input(input: &str) -> Result<String, String> {
+    let without_query = input
+        .trim()
+        .split(['?', '#'])
+        .next()
+        .unwrap_or_default()
+        .trim_end_matches('/');
+    let candidate = without_query
+        .rsplit('/')
+        .next()
+        .unwrap_or(without_query)
+        .rsplit('-')
+        .next()
+        .unwrap_or(without_query);
+    let compact: String = input
+        .trim()
+        .chars()
+        .filter(|character| character.is_ascii_hexdigit())
+        .collect();
+    let candidate_compact: String = candidate
+        .chars()
+        .filter(|character| character.is_ascii_hexdigit())
+        .collect();
+    let compact = if candidate_compact.len() >= 32 {
+        candidate_compact
+    } else {
+        compact
+    };
+    if compact.len() < 32 {
+        return Err("Paste a Notion page URL or 32-character page id.".to_string());
+    }
+    let page_id = &compact[compact.len() - 32..];
+    Ok(format!(
+        "{}-{}-{}-{}-{}",
+        &page_id[0..8],
+        &page_id[8..12],
+        &page_id[12..16],
+        &page_id[16..20],
+        &page_id[20..32]
+    ))
+}
+
+fn extract_exportable_catalog_json_from_notion_blocks(blocks: &[Value]) -> Result<String, String> {
+    for block in blocks {
+        if block.get("type").and_then(Value::as_str) != Some("code") {
+            continue;
+        }
+        let language = block
+            .get("code")
+            .and_then(|code| code.get("language"))
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        let text = rich_text_plain_text(
+            block
+                .get("code")
+                .and_then(|code| code.get("rich_text"))
+                .and_then(Value::as_array),
+        );
+        if text.trim().is_empty() {
+            continue;
+        }
+        if language.eq_ignore_ascii_case("json") || text.trim_start().starts_with('{') {
+            return Ok(text);
+        }
+    }
+
+    Err("Notion page must include a JSON code block with the JTF catalog contract.".to_string())
+}
+
+fn rich_text_plain_text(rich_text: Option<&Vec<Value>>) -> String {
+    rich_text
+        .into_iter()
+        .flatten()
+        .filter_map(|item| item.get("plain_text").and_then(Value::as_str))
+        .collect::<Vec<_>>()
+        .join("")
+}
+
+fn notion_page_title(page: &Value) -> Option<String> {
+    page.get("properties")
+        .and_then(Value::as_object)
+        .and_then(|properties| {
+            properties.values().find_map(|property| {
+                let title = property.get("title").and_then(Value::as_array)?;
+                let text = rich_text_plain_text(Some(title));
+                if text.trim().is_empty() {
+                    None
+                } else {
+                    Some(text)
+                }
+            })
+        })
+}
+
 const fn area(
     area_display_name: &'static str,
     jira_label: &'static str,
@@ -619,10 +837,12 @@ fn normalize_catalog_char(ch: char) -> char {
 #[cfg(test)]
 mod tests {
     use super::{
-        catalog_context_for_area, derive_issue_type_from_area, official_area_options,
-        parse_exportable_catalog_json, resolve_catalog_area, CatalogAreaResolution,
-        OfficialAreaOption, OFFICIAL_AREAS,
+        catalog_context_for_area, derive_issue_type_from_area,
+        extract_exportable_catalog_json_from_notion_blocks, notion_page_id_from_input,
+        official_area_options, parse_exportable_catalog_json, resolve_catalog_area,
+        CatalogAreaResolution, OfficialAreaOption, OFFICIAL_AREAS,
     };
+    use serde_json::json;
 
     #[test]
     fn normalizes_safe_aliases() {
@@ -822,5 +1042,34 @@ mod tests {
         assert!(result
             .errors
             .contains(&"Bug must be the only enabled area deriving issueType Bug.".to_string()));
+    }
+
+    #[test]
+    fn extracts_catalog_json_from_notion_code_block() {
+        let blocks = vec![json!({
+            "type": "code",
+            "code": {
+                "language": "json",
+                "rich_text": [
+                    { "plain_text": "{\"areas\":[],\"deliveryFormats\":[],\"areaFormatRules\":[]}" }
+                ]
+            }
+        })];
+
+        assert_eq!(
+            extract_exportable_catalog_json_from_notion_blocks(&blocks).expect("json extracts"),
+            "{\"areas\":[],\"deliveryFormats\":[],\"areaFormatRules\":[]}"
+        );
+    }
+
+    #[test]
+    fn parses_notion_page_id_from_url() {
+        assert_eq!(
+            notion_page_id_from_input(
+                "https://www.notion.so/workspace/JTF-Sync-Catalog-387c335aece481c292baf6991a86a5c3?pvs=4"
+            )
+            .expect("page id parses"),
+            "387c335a-ece4-81c2-92ba-f6991a86a5c3"
+        );
     }
 }

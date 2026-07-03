@@ -448,14 +448,14 @@ impl Default for AppSettings {
             ai_provider: "OpenAI".to_string(),
             ai_model: "gpt-4.1".to_string(),
             default_content_language: "Spanish".to_string(),
-            catalog_source_mode: "public-exportable".to_string(),
+            catalog_source_mode: "notion".to_string(),
             catalog_source_url: String::new(),
         }
     }
 }
 
 fn default_catalog_source_mode() -> String {
-    "public-exportable".to_string()
+    "notion".to_string()
 }
 
 #[cfg(test)]

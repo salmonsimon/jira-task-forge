@@ -17,6 +17,18 @@ const area: Category = {
   source: "local"
 };
 
+const notionProps = {
+  hasNotionIntegrationToken: async () => false,
+  onSaveNotionIntegrationToken: async () => undefined,
+  onDeleteNotionIntegrationToken: async () => undefined,
+  onTestNotionCatalogConnection: async () => ({
+    ok: false,
+    message: "Notion unavailable in test.",
+    title: null,
+    extractedBlockCount: 0
+  })
+};
+
 describe("CategoriesPanel", () => {
   it("stacks the header above the category lists", () => {
     const html = renderToStaticMarkup(
@@ -30,6 +42,7 @@ describe("CategoriesPanel", () => {
         onUpdateCategory={() => undefined}
         onChangeCatalogSettings={() => Promise.resolve(true)}
         onSyncAreaCatalog={async () => null}
+        {...notionProps}
         onClose={() => undefined}
       />
     );
@@ -51,6 +64,7 @@ it("shows catalog-managed areas as refreshable instead of manually creatable", (
       onUpdateCategory={() => undefined}
       onChangeCatalogSettings={() => Promise.resolve(true)}
       onSyncAreaCatalog={async () => null}
+      {...notionProps}
       onClose={() => undefined}
     />
   );

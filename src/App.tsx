@@ -21,6 +21,7 @@ import {
   createPersistedRecoveryTrayFromTasks,
   deletePersistedCategory,
   deletePersistedAiProviderApiKey,
+  deletePersistedNotionIntegrationToken,
   deletePersistedJqlFavorite,
   deletePersistedJiraApiToken,
   deletePersistedTaskAttachment,
@@ -30,6 +31,7 @@ import {
   getPersistedAppSettings,
   hasPersistedAiProviderApiKey,
   hasPersistedJiraApiToken,
+  hasPersistedNotionIntegrationToken,
   importPersistedBackup,
   createPersistedAssistedDescriptionProposal,
   listPersistedCategories,
@@ -47,13 +49,16 @@ import {
   saveCsvFile,
   savePersistedAiProviderApiKey,
   savePersistedJiraApiToken,
+  savePersistedNotionIntegrationToken,
   syncPersistedAreaCatalog,
+  syncPersistedAreaCatalogFromNotion,
   syncPersistedAreaCatalogFromSource,
   testPersistedAiProviderApiKey,
   testPersistedAiProviderConnection,
   testPersistedJiraApiToken,
   testPersistedJiraConnection,
   testPersistedJiraConnectionSettings,
+  testPersistedNotionCatalogConnection,
   transitionPersistedAssistedDescriptionProposal,
   updatePersistedAppSettings,
   updatePersistedAssistedDescriptionProposalSection,
@@ -123,7 +128,7 @@ const defaultAppSettings: AppSettings = {
   aiProvider: "OpenAI",
   aiModel: "gpt-4.1",
   defaultContentLanguage: "Spanish",
-  catalogSourceMode: "public-exportable",
+  catalogSourceMode: "notion",
   catalogSourceUrl: ""
 };
 const defaultJqlPrompt = "Show me high and highest open bugs for STT, sorted by priority";
@@ -523,10 +528,13 @@ export default function App() {
 
   async function syncAreaCatalog(sourceUrl?: string): Promise<CatalogSyncResult | null> {
     const requestedSourceUrl = sourceUrl?.trim() || appSettings.catalogSourceUrl.trim();
-    const shouldUseCatalogSource = Boolean(sourceUrl?.trim()) || appSettings.catalogSourceMode !== "manual";
+    const shouldUseExternalSource = Boolean(sourceUrl?.trim()) || appSettings.catalogSourceMode !== "manual";
 
-    if (usesTauriPersistence && requestedSourceUrl && shouldUseCatalogSource) {
-      const result = await syncPersistedAreaCatalogFromSource(requestedSourceUrl);
+    if (usesTauriPersistence && requestedSourceUrl && shouldUseExternalSource) {
+      const result =
+        appSettings.catalogSourceMode === "notion"
+          ? await syncPersistedAreaCatalogFromNotion(requestedSourceUrl)
+          : await syncPersistedAreaCatalogFromSource(requestedSourceUrl);
       if (!result.ok) return result;
 
       setCategories((currentCategories) => [
@@ -538,7 +546,10 @@ export default function App() {
           source: "catalog" as const
         }))
       ]);
-      await updateAppSettings({ catalogSourceMode: "public-exportable", catalogSourceUrl: result.sourceUrl });
+      await updateAppSettings({
+        catalogSourceMode: appSettings.catalogSourceMode,
+        catalogSourceUrl: appSettings.catalogSourceMode === "notion" ? requestedSourceUrl : result.sourceUrl
+      });
       return result;
     }
 
@@ -1528,6 +1539,19 @@ export default function App() {
             onDeleteCategory={deleteCategory}
             onChangeCatalogSettings={updateAppSettings}
             onSyncAreaCatalog={syncAreaCatalog}
+            hasNotionIntegrationToken={usesTauriPersistence ? hasPersistedNotionIntegrationToken : async () => false}
+            onSaveNotionIntegrationToken={usesTauriPersistence ? savePersistedNotionIntegrationToken : async () => undefined}
+            onDeleteNotionIntegrationToken={usesTauriPersistence ? deletePersistedNotionIntegrationToken : async () => undefined}
+            onTestNotionCatalogConnection={
+              usesTauriPersistence
+                ? testPersistedNotionCatalogConnection
+                : async () => ({
+                    ok: false,
+                    message: "Notion sync is available in the Tauri app.",
+                    title: null,
+                    extractedBlockCount: 0
+                  })
+            }
             onClose={() => setOpenPanel(null)}
           />
         ) : null}
