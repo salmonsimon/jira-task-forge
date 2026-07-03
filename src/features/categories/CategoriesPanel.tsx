@@ -1,9 +1,11 @@
-import { AlertTriangle, Check, CheckCircle2, Copy, Eye, EyeOff, Pencil, Plus, RefreshCw, Tags, Trash2, X } from "lucide-react";
+import { AlertTriangle, Check, CheckCircle2, Copy, ExternalLink, Eye, EyeOff, Pencil, Plus, RefreshCw, Tags, Trash2, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import { Button, PanelHeader } from "../../components/ui";
 import type { AppSettings, CatalogSyncResult, Category, NotionCatalogConnectionTestResult } from "../../lib/types";
 import { cn } from "../../lib/utils";
+
+const NOTION_DEVELOPER_PORTAL_URL = "https://www.notion.so/developers";
 
 export function CategoriesPanel({
   projects,
@@ -389,6 +391,12 @@ function CatalogSetupModal({
     setCredentialMessage("Notion token removed.");
   }
 
+  const hasNotionTokenInput = notionToken.trim().length > 0;
+  const canTestSource =
+    !isTesting &&
+    (mode === "manual" ||
+      (sourceUrl.trim().length > 0 && (mode !== "notion" || hasNotionToken || hasNotionTokenInput)));
+
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-[#091e42]/45 p-6">
       <div className="flex max-h-[88vh] w-[760px] max-w-full flex-col rounded border border-[#dfe1e6] bg-white shadow-2xl">
@@ -420,7 +428,7 @@ function CatalogSetupModal({
           {step === "guide" ? (
             <div className="space-y-4">
               <p className="text-sm text-[#42526e]">
-                Use the existing Notion page as the source of truth. Add one JSON code block with the JTF catalog contract, share the page with a Notion integration, then paste the integration token and page URL in the next step.
+                Use the existing Notion page as the source of truth. Create a Notion integration token, share the page with that integration, add one JSON code block with the JTF catalog contract, then paste the token and page URL in the next step.
               </p>
               <pre className="max-h-72 overflow-auto rounded bg-[#f7f8fa] p-3 text-xs text-[#172b4d]">{CATALOG_SOURCE_TEMPLATE}</pre>
               <Button icon={<Copy size={14} />} onClick={() => void copyTemplate()}>
@@ -438,44 +446,67 @@ function CatalogSetupModal({
               </select>
               {mode !== "manual" ? (
                 <>
-                  <label className="block text-sm font-semibold">{mode === "notion" ? "Notion page URL or ID" : "Source URL"}</label>
-                  <input
-                    className="h-9 w-full rounded border border-[#dfe1e6] px-2 text-sm"
-                    placeholder={mode === "notion" ? "https://www.notion.so/... or page id" : "https://.../jtf-sync-catalog.json"}
-                    value={sourceUrl}
-                    onChange={(event) => setSourceUrl(event.target.value)}
-                  />
+                  {mode === "notion" ? (
+                    <>
+                      <div className="rounded border border-[#dfe1e6] bg-[#f7f8fa] p-3">
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div>
+                            <div className="text-sm font-semibold text-[#172b4d]">{hasNotionToken ? "Notion token saved" : "No Notion token saved"}</div>
+                            <p className="mt-1 text-xs text-[#6b778c]">The token stays in the OS credential store and is excluded from SQLite, backups, and logs.</p>
+                          </div>
+                          <a
+                            className="inline-flex items-center gap-1 text-xs font-semibold text-[#0c66e4] hover:underline"
+                            href={NOTION_DEVELOPER_PORTAL_URL}
+                            rel="noreferrer"
+                            target="_blank"
+                          >
+                            Create token
+                            <ExternalLink size={12} />
+                          </a>
+                        </div>
+                        {hasNotionToken ? (
+                          <button className="mt-2 text-xs font-semibold text-[#0c66e4]" onClick={() => void removeNotionToken()} type="button">
+                            Remove token
+                          </button>
+                        ) : null}
+                      </div>
+                      <label className="block text-sm font-semibold">Integration token</label>
+                      <input
+                        className="secret-input h-9 w-full rounded border border-[#dfe1e6] px-2 text-sm"
+                        placeholder={hasNotionToken ? "Enter a new token to replace it" : "Paste Notion integration token"}
+                        type="password"
+                        value={notionToken}
+                        onChange={(event) => setNotionToken(event.target.value)}
+                      />
+                      <label className="block text-sm font-semibold">Notion page URL or ID</label>
+                      <input
+                        className="h-9 w-full rounded border border-[#dfe1e6] px-2 text-sm"
+                        placeholder="https://www.notion.so/... or page id"
+                        value={sourceUrl}
+                        onChange={(event) => setSourceUrl(event.target.value)}
+                      />
+                      {credentialMessage ? <Feedback kind="success">{credentialMessage}</Feedback> : null}
+                      {notionTestResult ? (
+                        <Feedback kind={notionTestResult.ok ? "success" : "warning"}>
+                          {notionTestResult.message}
+                          {notionTestResult.title ? ` Page: ${notionTestResult.title}.` : ""}
+                        </Feedback>
+                      ) : null}
+                    </>
+                  ) : (
+                    <>
+                      <label className="block text-sm font-semibold">Source URL</label>
+                      <input
+                        className="h-9 w-full rounded border border-[#dfe1e6] px-2 text-sm"
+                        placeholder="https://.../jtf-sync-catalog.json"
+                        value={sourceUrl}
+                        onChange={(event) => setSourceUrl(event.target.value)}
+                      />
+                    </>
+                  )}
                 </>
               ) : null}
-              {mode === "notion" ? (
-                <>
-                  <div className="rounded border border-[#dfe1e6] bg-[#f7f8fa] p-3">
-                    <div className="text-sm font-semibold text-[#172b4d]">{hasNotionToken ? "Notion token saved" : "No Notion token saved"}</div>
-                    <p className="mt-1 text-xs text-[#6b778c]">The token stays in the OS credential store and is excluded from SQLite, backups, and logs.</p>
-                    {hasNotionToken ? (
-                      <button className="mt-2 text-xs font-semibold text-[#0c66e4]" onClick={() => void removeNotionToken()} type="button">
-                        Remove token
-                      </button>
-                    ) : null}
-                  </div>
-                  <label className="block text-sm font-semibold">Integration token</label>
-                  <input
-                    className="secret-input h-9 w-full rounded border border-[#dfe1e6] px-2 text-sm"
-                    placeholder={hasNotionToken ? "Enter a new token to replace it" : "Paste Notion integration token"}
-                    type="password"
-                    value={notionToken}
-                    onChange={(event) => setNotionToken(event.target.value)}
-                  />
-                  {credentialMessage ? <Feedback kind="success">{credentialMessage}</Feedback> : null}
-                  {notionTestResult ? (
-                    <Feedback kind={notionTestResult.ok ? "success" : "warning"}>
-                      {notionTestResult.message}
-                      {notionTestResult.title ? ` Page: ${notionTestResult.title}.` : ""}
-                    </Feedback>
-                  ) : null}
-                </>
-              ) : null}
-              <Button className="settings-button-test" disabled={isTesting || (mode !== "manual" && !sourceUrl.trim())} icon={isTesting ? <RefreshCw size={14} className="animate-spin" /> : <CheckCircle2 size={14} />} onClick={() => void testSource()}>
+              <Button className="settings-button-test" disabled={!canTestSource} icon={isTesting ? <RefreshCw size={14} className="animate-spin" /> : <CheckCircle2 size={14} />} onClick={() => void testSource()}>
                 {isTesting ? "Testing..." : mode === "manual" ? "Use manual catalog" : "Test source"}
               </Button>
               {testResult ? <CatalogSyncNotice result={testResult} onClose={() => setTestResult(null)} /> : null}
