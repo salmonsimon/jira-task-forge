@@ -1,6 +1,6 @@
 # Known Failures
 
-## Chrome plugin and Computer Use can fail from the WSL repo cwd
+## Chrome plugin and Computer Use can fail before JavaScript starts
 
 Observed on 2026-07-03 in `/home/saimon/Development/jira-task-forge`.
 
@@ -13,7 +13,16 @@ codex/sandbox-state-meta: sandboxCwd is not a local file URI:
 file:///home/saimon/Development/jira-task-forge
 ```
 
-This is a tool/runtime failure, not a missing plugin file. The plugin scripts
+A separate projectless thread created for PR #223 preview validation reproduced
+the same failure from a Windows-mounted cwd:
+
+```text
+Mcp error: -32602: js: codex/sandbox-state-meta: sandboxCwd is not a local file URI:
+file:///mnt/c/Users/Saimon/Documents/Codex/2026-07-03/pr223-preview-validation
+```
+
+Changing from WSL-local to `/mnt/c` is therefore not a sufficient fix. This is
+a tool/runtime failure, not a missing plugin file. The plugin scripts
 existed at:
 
 - `/mnt/c/Users/Saimon/.codex/plugins/cache/openai-bundled/chrome/26.623.81905/scripts/browser-client.mjs`
