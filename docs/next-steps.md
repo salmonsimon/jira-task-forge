@@ -249,12 +249,17 @@ Recommended next implementation:
   because Regularizacion is not implemented yet.
 - Batch 1: catalog foundation and normalization. Include Issue #141 except the
   Regularizacion-specific acceptance item owned by Issue #135. Add an internal
-  versioned catalog for official area display names, Jira labels, approved safe
-  aliases, delivery-format mappings, conditional format rules, and issue-type
-  derivation. Validate safe normalization, non-official value blocking,
-  official-only option exposure, direct mappings, conditional mappings,
-  display-name/Jira-label separation, and Bug-as-Bug / all-other-areas-as-Story
-  issue type derivation.
+  versioned catalog, synced from the `JTF Sync Catalog` Notion source through
+  the Notion API for the current Personal v1 flow, for official area display
+  names, Jira labels, safe aliases or
+  unambiguous old names, delivery-format mappings, conditional format rules,
+  and issue-type derivation. The catalog should drive the app toward official
+  final values only: deprecated labels should not remain selectable, and
+  ambiguous values should require choosing an official area rather than being
+  modeled as aliases. Validate safe normalization, rejection or blocking of
+  non-official values, official-only option exposure, direct mappings,
+  conditional mappings, display-name/Jira-label separation, and Bug-as-Bug /
+  all-other-areas-as-Story issue type derivation.
 - Batch 2: description templates and Architecture intent. Include Issue #134,
   Issue #137, and Issue #136. Separate Story and Bug templates, add frequent
   task-type templates, and keep Arquitectura as one area/tag while
