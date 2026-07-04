@@ -1,10 +1,11 @@
-import { Bot, Check, ChevronDown, Download, ExternalLink, FileJson, KeyRound, Settings, UploadCloud } from "lucide-react";
+import { Bot, Check, ChevronDown, Download, ExternalLink, KeyRound, Settings, UploadCloud } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button, DetailBlock, LoadingOrb, PanelHeader, SegmentedControl } from "../../components/ui";
 import { appOverlayLayers, useAppOverlay } from "../../lib/app-overlays";
 import { getCredentialDraftControls, type CredentialDraftTestStatus } from "../../lib/domain";
 import type { AiProvider, AppSettings, CredentialConnectionTestResult, JiraConnectionTestResult, JiraProjectOption, NotionCatalogConnectionTestResult, ThemeMode } from "../../lib/types";
 import { JiraConnectionGuide } from "./JiraConnectionGuide";
+import notionMark from "../../assets/notion-mark.png";
 import { defaultNotionCatalogUrl, NotionSynchronizationGuide } from "./NotionSynchronizationGuide";
 
 const aiProviderOptions: Array<{ label: string; value: AiProvider }> = [
@@ -232,9 +233,11 @@ export function SettingsPanel({
 
         <div className="mt-4 rounded border border-[#dfe1e6] p-3">
           <div className="mb-3 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2 text-sm font-semibold">
-              <KeyRound size={15} />
-              Jira connection
+            <div className="flex min-w-0 items-center gap-2 text-sm font-semibold">
+              <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center">
+                <KeyRound size={16} strokeWidth={2.25} />
+              </span>
+              <span className="min-w-0 truncate">Jira connection</span>
               <span
                 aria-label={isJiraConnectionComplete ? "Jira connection complete" : "Jira connection needs setup"}
                 className={`inline-flex shrink-0 items-center justify-center ${
@@ -254,8 +257,8 @@ export function SettingsPanel({
                 )}
               </span>
             </div>
-            <Button className="settings-button-primary" variant="secondary" onClick={() => setIsJiraConnectionGuideOpen(true)}>
-              Set Connection
+            <Button className="settings-button-primary shrink-0" variant="secondary" onClick={() => setIsJiraConnectionGuideOpen(true)}>
+              Setup
             </Button>
           </div>
           <div className="mb-3 rounded border border-[#dfe1e6] bg-[#f7f8fa] p-3">
@@ -281,9 +284,11 @@ export function SettingsPanel({
 
         <div className="mt-4 rounded border border-[#dfe1e6] p-3">
           <div className="mb-3 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2 text-sm font-semibold">
-              <FileJson size={15} />
-              Notion synchronization
+            <div className="flex min-w-0 items-center gap-2 text-sm font-semibold">
+              <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center">
+                <img alt="" aria-hidden="true" className="h-4 w-4 rounded-[3px] object-contain" src={notionMark} />
+              </span>
+              <span className="min-w-0 truncate">Notion synchronization</span>
               <span
                 aria-label={isNotionSynchronizationConfigured ? "Notion synchronization configured" : "Notion synchronization needs setup"}
                 className={`inline-flex shrink-0 items-center justify-center ${
@@ -303,8 +308,8 @@ export function SettingsPanel({
                 )}
               </span>
             </div>
-            <Button className="settings-button-primary" variant="secondary" onClick={() => setIsNotionSynchronizationGuideOpen(true)}>
-              Set Synchronization
+            <Button className="settings-button-primary shrink-0" variant="secondary" onClick={() => setIsNotionSynchronizationGuideOpen(true)}>
+              Setup
             </Button>
           </div>
           <div className="mb-3 rounded border border-[#dfe1e6] bg-[#f7f8fa] p-3">

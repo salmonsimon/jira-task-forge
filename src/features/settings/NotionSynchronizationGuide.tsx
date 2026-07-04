@@ -1,4 +1,4 @@
-import { Check, CheckCircle2, ChevronDown, ChevronLeft, ExternalLink, FileJson, KeyRound, RefreshCw, Trash2 } from "lucide-react";
+import { Check, CheckCircle2, ChevronDown, ChevronLeft, ExternalLink, KeyRound, RefreshCw, Trash2 } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, LoadingOrb, PanelHeader } from "../../components/ui";
@@ -400,9 +400,9 @@ function ReviewRows({ rows }: { rows: Array<[string, string]> }) {
 function Feedback({ children, kind }: { children: ReactNode; kind: "success" | "warning" | "error" }) {
   return (
     <div
-      className={`mt-4 rounded border px-3 py-2 text-xs ${
+      className={`mt-4 rounded border px-3 py-2 text-xs font-medium ${
         kind === "success"
-          ? "border-[#abf5d1] bg-[#e3fcef] text-[#164b35]"
+          ? "border-[#006644] bg-[#00875a] text-white"
           : kind === "warning"
             ? "border-[#f5cd47] bg-[#fff7d6] text-[#533f04]"
             : "border-[#ffbdad] bg-[#ffebe6] text-[#5d1f1a]"
