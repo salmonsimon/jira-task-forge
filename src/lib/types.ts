@@ -233,6 +233,20 @@ export type CatalogSyncResult = {
     safeAliases: string[];
     notes: string;
   }>;
+  deliveryFormats: Array<{
+    formatName: string;
+    issueType: "Story" | "Bug";
+    storyHeadings: string[];
+    minimumDeliverable: string;
+    reviewChecklist: string[];
+  }>;
+  areaFormatRules: Array<{
+    areaDisplayName: string;
+    priority: number;
+    condition: string;
+    deliveryFormat: string;
+    blocking: boolean;
+  }>;
 };
 
 export type NotionCatalogConnectionTestResult = {

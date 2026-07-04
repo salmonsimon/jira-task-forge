@@ -46,6 +46,7 @@ pub(crate) enum AssistedDescriptionRequest {
 pub(crate) fn build_request(
     task: &LocalTask,
     additional_context: &str,
+    catalog_template_context: Option<&str>,
 ) -> Result<AssistedDescriptionRequest, String> {
     let additional_context = additional_context.trim();
     if task_description_needs_clarification(task, additional_context) {
@@ -54,14 +55,15 @@ pub(crate) fn build_request(
         ));
     }
 
-    let input = task_description_generation_context(task, additional_context);
+    let input =
+        task_description_generation_context(task, additional_context, catalog_template_context);
     Ok(AssistedDescriptionRequest::Generate(JsonFeatureRequest {
         instructions: task_description_generation_instructions(),
         json_prompt: provider_task_description_json_prompt(&input),
         input,
         schema_name: "assisted_description_draft",
         schema: assisted_description_json_schema(),
-        max_output_tokens: 2000,
+        max_output_tokens: 3000,
     }))
 }
 
@@ -115,6 +117,8 @@ Use the exact Markdown section headings from the requested template. \
 Use the base context as user and project preference context, especially stack defaults. \
 Do not invent product behavior, implementation scope, or acceptance criteria. \
 Do not add validation, risk, rollback, observability, or open-question sections. \
+When synced Notion catalog template context is present, treat its minimum deliverable and review checklist as mandatory requirements for the draft. Incorporate them into Alcance and Criterios de aceptacion without adding extra sections. \
+Catalog template headings are content requirements only; never use them as top-level Markdown headings and never replace the four Target Markdown format headings. \
 Prefer drafting over asking for clarification when the title, area, and user context describe a concrete problem or desired outcome. \
 Do not ask about known defaults from the base context, such as the engine or primary stack. \
 If the title and context are too thin to fill any useful section, return status needs_clarification with up to three concise questions in the task language and description null. \
@@ -122,7 +126,11 @@ If missing information would materially change scope or acceptance criteria, ret
 Keep the description compact and Jira-ready. Do not include markdown fences."
 }
 
-fn task_description_generation_context(task: &LocalTask, additional_context: &str) -> String {
+fn task_description_generation_context(
+    task: &LocalTask,
+    additional_context: &str,
+    catalog_template_context: Option<&str>,
+) -> String {
     let existing_description = task
         .description
         .as_deref()
@@ -149,13 +157,19 @@ Local Task context:\n\
 - Additional user context: {additional_context}\n\n\
 Target Markdown format:\n{template}",
         base_context = ASSISTED_DESCRIPTION_BASE_CONTEXT.trim(),
-        catalog_context = catalog_context_for_area(
-            &task.area,
-            &format!(
-                "{}\n{}\n{}",
-                task.title, additional_context, existing_description
-            )
-        ),
+        catalog_context = catalog_template_context
+            .map(str::trim)
+            .filter(|context| !context.is_empty())
+            .map(ToString::to_string)
+            .unwrap_or_else(|| {
+                catalog_context_for_area(
+                    &task.area,
+                    &format!(
+                        "{}\n{}\n{}",
+                        task.title, additional_context, existing_description
+                    ),
+                )
+            }),
         project = task.project,
         area = task.area,
         issue_type = task.issue_type,
@@ -277,7 +291,8 @@ mod tests {
 
     #[test]
     fn build_request_returns_clarification_before_provider_work() {
-        let request = build_request(&task_with_title("bug mesa"), "").expect("request builds");
+        let request =
+            build_request(&task_with_title("bug mesa"), "", None).expect("request builds");
 
         let AssistedDescriptionRequest::Clarification(draft) = request else {
             panic!("short task should ask for clarification");
@@ -293,6 +308,7 @@ mod tests {
         let context = task_description_generation_context(
             &task,
             "mesa aparece sin patas en runtime y afecta todas las escenas",
+            None,
         );
 
         assert!(context.contains("Unreal Engine 5"));
@@ -310,6 +326,7 @@ mod tests {
         let context = task_description_generation_context(
             &task,
             "La habilidad puede dispararse muchas veces seguidas.",
+            None,
         );
 
         assert!(context.contains("Official catalog context:"));
@@ -321,13 +338,40 @@ mod tests {
     }
 
     #[test]
+    fn task_description_context_uses_synced_catalog_template_requirements() {
+        let task = LocalTask {
+            area: "Programación".to_string(),
+            issue_type: "Story".to_string(),
+            ..task_with_title("Implementar cooldown de habilidad")
+        };
+        let context = task_description_generation_context(
+            &task,
+            "La habilidad puede dispararse muchas veces seguidas.",
+            Some(
+                "Synced Notion catalog template:
+- Delivery format: Feature de Programación
+- Minimum deliverable: PR/MR listo con implementación y validación.
+- Review checklist:
+- PR/MR creado.
+- Validado en runtime.",
+            ),
+        );
+
+        assert!(context.contains("Synced Notion catalog template:"));
+        assert!(context.contains("Minimum deliverable: PR/MR listo"));
+        assert!(context.contains("Review checklist:"));
+        assert!(context.contains("Validado en runtime."));
+    }
+
+    #[test]
     fn task_description_context_separates_area_display_name_from_jira_label() {
         let task = LocalTask {
             area: "Selección Recurso".to_string(),
             issue_type: "Story".to_string(),
             ..task_with_title("Elegir asset base")
         };
-        let context = task_description_generation_context(&task, "Seleccionar el recurso base.");
+        let context =
+            task_description_generation_context(&task, "Seleccionar el recurso base.", None);
 
         assert!(context.contains("- Official area display name: Selección Recurso"));
         assert!(context.contains("- Jira label: Selección-Recurso"));
@@ -338,6 +382,7 @@ mod tests {
         let request = build_request(
             &task_with_title("Crear maquinas expendedoras para el anden del Metro"),
             "Validar escala y materiales en runtime.",
+            None,
         )
         .expect("request builds");
 
@@ -348,7 +393,7 @@ mod tests {
         assert!(request.input.contains("Target Markdown format:"));
         assert!(request.json_prompt.contains("\"status\":\"drafted\""));
         assert_eq!(request.schema_name, "assisted_description_draft");
-        assert_eq!(request.max_output_tokens, 2000);
+        assert_eq!(request.max_output_tokens, 3000);
     }
 
     #[test]

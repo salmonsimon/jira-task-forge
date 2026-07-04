@@ -49,7 +49,11 @@ impl AppServices {
 
         let connection = self.connection();
         CategoryRepository::new(&connection)
-            .sync_area_catalog_entries(&result.areas)
+            .sync_area_catalog_contract(
+                &result.areas,
+                &result.delivery_formats,
+                &result.area_format_rules,
+            )
             .map_err(|error| error.to_string())?;
         let mut settings = SettingsRepository::new(&connection)
             .get_app_settings()
@@ -83,7 +87,11 @@ impl AppServices {
 
         let connection = self.connection();
         CategoryRepository::new(&connection)
-            .sync_area_catalog_entries(&result.areas)
+            .sync_area_catalog_contract(
+                &result.areas,
+                &result.delivery_formats,
+                &result.area_format_rules,
+            )
             .map_err(|error| error.to_string())?;
         let mut settings = SettingsRepository::new(&connection)
             .get_app_settings()

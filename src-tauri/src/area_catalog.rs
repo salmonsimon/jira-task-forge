@@ -34,6 +34,8 @@ pub struct CatalogSyncResult {
     pub warnings: Vec<String>,
     pub errors: Vec<String>,
     pub areas: Vec<SyncedCatalogArea>,
+    pub delivery_formats: Vec<SyncedDeliveryFormat>,
+    pub area_format_rules: Vec<SyncedAreaFormatRule>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -455,6 +457,8 @@ pub fn validate_exportable_catalog(
             warnings,
             errors,
             areas: Vec::new(),
+            delivery_formats: catalog.delivery_formats,
+            area_format_rules: catalog.area_format_rules,
         });
     }
 
@@ -467,6 +471,8 @@ pub fn validate_exportable_catalog(
         warnings,
         errors,
         areas: enabled_areas,
+        delivery_formats: catalog.delivery_formats,
+        area_format_rules: catalog.area_format_rules,
     })
 }
 
@@ -993,6 +999,12 @@ mod tests {
         assert!(result.ok);
         assert_eq!(result.synced_area_count, 2);
         assert_eq!(result.delivery_format_count, 2);
+        assert_eq!(result.delivery_formats.len(), 2);
+        assert_eq!(
+            result.delivery_formats[1].minimum_deliverable,
+            "PR/MR creado."
+        );
+        assert_eq!(result.area_format_rules.len(), 1);
         assert!(result.errors.is_empty());
     }
 

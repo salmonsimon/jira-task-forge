@@ -25,6 +25,10 @@ const MIGRATIONS: &[(&str, &str)] = &[
         "0005_catalog_category_source",
         include_str!("migrations/0005_catalog_category_source.sql"),
     ),
+    (
+        "0006_catalog_delivery_templates",
+        include_str!("migrations/0006_catalog_delivery_templates.sql"),
+    ),
 ];
 
 pub type DbResult<T> = Result<T, DbError>;
