@@ -10,9 +10,13 @@ if (!commandName || !Number.isFinite(port)) {
 const endpoint = `http://127.0.0.1:${port}`;
 
 let targetSelector = null;
-if (restArgs[0] === "--target") {
-  targetSelector = restArgs[1];
-  restArgs.splice(0, 2);
+const targetFlagIndex = restArgs.indexOf("--target");
+if (targetFlagIndex >= 0) {
+  targetSelector = restArgs[targetFlagIndex + 1];
+  if (!targetSelector) {
+    throw new Error("--target requires a target id or title/url substring");
+  }
+  restArgs.splice(targetFlagIndex, 2);
 }
 
 function usage() {
@@ -35,7 +39,7 @@ function usage() {
   console.error("  type <x> <y> <text>");
   console.error("  screenshot <windows-output-path>");
   console.error("");
-  console.error("Page commands accept optional: --target <target-id|title-or-url-substring>");
+  console.error("Page commands accept optional anywhere: --target <target-id|title-or-url-substring>");
 }
 
 async function jsonFetch(url, options) {

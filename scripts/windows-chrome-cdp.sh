@@ -33,7 +33,7 @@ Commands:
 
 Environment:
   JTF_CDP_PORT defaults to 9335.
-  Page commands accept optional: --target <target-id|title-or-url-substring>
+  Page commands accept optional anywhere: --target <target-id|title-or-url-substring>
 USAGE
 }
 
