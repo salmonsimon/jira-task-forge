@@ -8,7 +8,7 @@ use crate::services::AppServices;
 
 const ATLASSIAN_API_TOKENS_URL: &str =
     "https://id.atlassian.com/manage-profile/security/api-tokens";
-const NOTION_DEVELOPERS_URL: &str = "https://www.notion.so/developers";
+const NOTION_DEVELOPERS_URL: &str = "https://app.notion.com/developers/connections";
 
 #[tauri::command]
 pub fn open_atlassian_api_tokens_page() -> Result<(), String> {

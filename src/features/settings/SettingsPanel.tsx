@@ -286,7 +286,7 @@ export function SettingsPanel({
           <div className="mb-3 flex items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-2 text-sm font-semibold">
               <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center">
-                <img alt="" aria-hidden="true" className="h-4 w-4 rounded-[3px] object-contain" src={notionMark} />
+                <img alt="" aria-hidden="true" className="h-5 w-5 rounded-[3px] object-contain" src={notionMark} />
               </span>
               <span className="min-w-0 truncate">Notion synchronization</span>
               <span

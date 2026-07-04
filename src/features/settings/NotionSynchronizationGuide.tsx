@@ -5,7 +5,7 @@ import { Button, LoadingOrb, PanelHeader } from "../../components/ui";
 import { appOverlayLayers, useAppOverlay } from "../../lib/app-overlays";
 import type { AppSettings, NotionCatalogConnectionTestResult } from "../../lib/types";
 
-const notionDeveloperPortalUrl = "https://www.notion.so/developers";
+const notionDeveloperPortalUrl = "https://app.notion.com/developers/connections";
 export const defaultNotionCatalogUrl = "https://app.notion.com/p/capacitacion-interna-dts/JTF-Sync-Catalog-387c335aece481c292baf6991a86a5c3";
 
 type NotionStep = "token" | "source" | "review";

@@ -615,7 +615,7 @@ export default function App() {
   }
 
   async function openNotionDevelopersPage() {
-    const url = "https://www.notion.so/developers";
+    const url = "https://app.notion.com/developers/connections";
 
     if (usesTauriPersistence) {
       try {
