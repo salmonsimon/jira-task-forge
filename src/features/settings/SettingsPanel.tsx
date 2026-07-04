@@ -1,10 +1,11 @@
-import { Bot, Check, ChevronDown, Download, ExternalLink, KeyRound, Settings, UploadCloud } from "lucide-react";
+import { Bot, Check, ChevronDown, Download, ExternalLink, FileJson, KeyRound, Settings, UploadCloud } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button, DetailBlock, LoadingOrb, PanelHeader, SegmentedControl } from "../../components/ui";
 import { appOverlayLayers, useAppOverlay } from "../../lib/app-overlays";
 import { getCredentialDraftControls, type CredentialDraftTestStatus } from "../../lib/domain";
-import type { AiProvider, AppSettings, CredentialConnectionTestResult, JiraConnectionTestResult, JiraProjectOption, ThemeMode } from "../../lib/types";
+import type { AiProvider, AppSettings, CredentialConnectionTestResult, JiraConnectionTestResult, JiraProjectOption, NotionCatalogConnectionTestResult, ThemeMode } from "../../lib/types";
 import { JiraConnectionGuide } from "./JiraConnectionGuide";
+import { defaultNotionCatalogUrl, NotionSynchronizationGuide } from "./NotionSynchronizationGuide";
 
 const aiProviderOptions: Array<{ label: string; value: AiProvider }> = [
   { label: "OpenAI", value: "OpenAI" },
@@ -47,6 +48,10 @@ export function SettingsPanel({
   onTestAiProviderApiKey,
   onTestJiraApiTokenQuiet,
   onTestJiraConnectionSettings,
+  hasNotionIntegrationToken,
+  onSaveNotionIntegrationToken,
+  onDeleteNotionIntegrationToken,
+  onTestNotionCatalogConnection,
   onListJiraProjectsForConnection,
   onOpenJiraApiTokens,
   onOpenAiProviderApiKeys,
@@ -69,6 +74,10 @@ export function SettingsPanel({
   onTestAiProviderApiKey: (apiKey: string) => Promise<CredentialConnectionTestResult>;
   onTestJiraApiTokenQuiet: (token: string) => Promise<JiraConnectionTestResult>;
   onTestJiraConnectionSettings: (siteUrl: string, accountEmail: string) => Promise<JiraConnectionTestResult>;
+  hasNotionIntegrationToken: () => Promise<boolean>;
+  onSaveNotionIntegrationToken: (token: string) => Promise<void>;
+  onDeleteNotionIntegrationToken: () => Promise<void>;
+  onTestNotionCatalogConnection: (pageUrlOrId: string) => Promise<NotionCatalogConnectionTestResult>;
   onListJiraProjectsForConnection: (siteUrl: string, accountEmail: string) => Promise<JiraProjectOption[]>;
   onOpenJiraApiTokens: () => void;
   onOpenAiProviderApiKeys: () => void;
@@ -79,6 +88,8 @@ export function SettingsPanel({
   const panelRef = useRef<HTMLElement | null>(null);
   const aiProviderApiKeyDraftRef = useRef("");
   const [isJiraConnectionGuideOpen, setIsJiraConnectionGuideOpen] = useState(false);
+  const [isNotionSynchronizationGuideOpen, setIsNotionSynchronizationGuideOpen] = useState(false);
+  const [hasNotionToken, setHasNotionToken] = useState(false);
   const [aiProviderApiKeyDraft, setAiProviderApiKeyDraft] = useState("");
   const [aiProviderKeyDraftTestStatus, setAiProviderKeyDraftTestStatus] = useState<CredentialDraftTestStatus>("idle");
   const selectedAiProvider = settings.aiProvider === "None" ? "OpenAI" : settings.aiProvider;
@@ -94,6 +105,11 @@ export function SettingsPanel({
     settings.jiraAccountEmail.trim() &&
     settings.jiraCreationProjectKey.trim() &&
     hasJiraApiToken
+  );
+  const isNotionSynchronizationConfigured = Boolean(
+    settings.catalogSourceMode === "manual" ||
+      (settings.catalogSourceMode === "public-exportable" && settings.catalogSourceUrl.trim()) ||
+      (settings.catalogSourceMode === "notion" && settings.catalogSourceUrl.trim() && hasNotionToken)
   );
   const aiProviderKeyDraftControls = getCredentialDraftControls({
     hasConnectionSettings: isAiProviderSelected,
@@ -152,6 +168,16 @@ export function SettingsPanel({
     setAiProviderKeyDraftTestStatus("idle");
   }, [settings.aiProvider, aiProviderApiKeyDraft]);
 
+  useEffect(() => {
+    let cancelled = false;
+    void hasNotionIntegrationToken().then((available) => {
+      if (!cancelled) setHasNotionToken(available);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [hasNotionIntegrationToken, isNotionSynchronizationGuideOpen]);
+
   return (
     <aside ref={panelRef} className="fixed right-0 top-0 z-30 flex h-screen w-[420px] flex-col overscroll-contain border-l border-[#dfe1e6] bg-white shadow-xl">
       {isJiraConnectionGuideOpen ? (
@@ -167,6 +193,23 @@ export function SettingsPanel({
           onListProjects={onListJiraProjectsForConnection}
           onOpenJiraApiTokens={onOpenJiraApiTokens}
           onClose={() => setIsJiraConnectionGuideOpen(false)}
+        />
+      ) : null}
+      {isNotionSynchronizationGuideOpen ? (
+        <NotionSynchronizationGuide
+          settings={settings}
+          hasNotionIntegrationToken={hasNotionIntegrationToken}
+          onChangeCatalogSettings={onChange}
+          onClose={() => setIsNotionSynchronizationGuideOpen(false)}
+          onDeleteNotionIntegrationToken={async () => {
+            await onDeleteNotionIntegrationToken();
+            setHasNotionToken(false);
+          }}
+          onSaveNotionIntegrationToken={async (token) => {
+            await onSaveNotionIntegrationToken(token);
+            setHasNotionToken(true);
+          }}
+          onTestNotionCatalogConnection={onTestNotionCatalogConnection}
         />
       ) : null}
       <PanelHeader title="Settings" subtitle="Local configuration without secrets in backups" onClose={onClose} />
@@ -230,6 +273,54 @@ export function SettingsPanel({
           </div>
           <p className="mt-2 text-xs leading-relaxed text-[#6b778c]">
             Jira uses API tokens for now. Tokens are never stored in SQLite or backups. The backend stores the token in the OS credential store.
+          </p>
+        </div>
+
+        <div className="mt-4 rounded border border-[#dfe1e6] p-3">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-sm font-semibold">
+              <FileJson size={15} />
+              Notion synchronization
+              <span
+                aria-label={isNotionSynchronizationConfigured ? "Notion synchronization configured" : "Notion synchronization needs setup"}
+                className={`inline-flex shrink-0 items-center justify-center ${
+                  isNotionSynchronizationConfigured ? "text-[#36b37e]" : "text-[#ffab00]"
+                }`}
+                title={isNotionSynchronizationConfigured ? "Notion synchronization configured" : "Notion synchronization needs setup"}
+              >
+                {isNotionSynchronizationConfigured ? (
+                  <span className="inline-flex h-[18px] w-[18px] items-center justify-center rounded-full bg-[#4caf50] text-white">
+                    <Check size={14} strokeWidth={3} />
+                  </span>
+                ) : (
+                  <span className="relative inline-flex h-[18px] w-[18px] items-center justify-center">
+                    <span className="absolute inset-0 bg-[#ffab00] [clip-path:polygon(50%_5%,96%_90%,4%_90%)]" />
+                    <span className="relative top-[1px] text-[12px] font-black leading-none text-white">!</span>
+                  </span>
+                )}
+              </span>
+            </div>
+            <Button className="settings-button-primary" variant="secondary" onClick={() => setIsNotionSynchronizationGuideOpen(true)}>
+              Set Synchronization
+            </Button>
+          </div>
+          <div className="mb-3 rounded border border-[#dfe1e6] bg-[#f7f8fa] p-3">
+            <div className="mb-3">
+              <div className="text-sm font-semibold text-[#172b4d]">Synchronization state</div>
+              <p className="text-xs leading-relaxed text-[#6b778c]">
+                Official area catalog sync is configured through the guided setup.
+              </p>
+            </div>
+            <SettingsReadOnlyRows
+              rows={[
+                ["Catalog mode", catalogSourceModeLabel(settings.catalogSourceMode)],
+                ["Source", settings.catalogSourceMode === "manual" ? "Manual fallback" : settings.catalogSourceUrl || defaultNotionCatalogUrl],
+                ["Integration token", settings.catalogSourceMode === "notion" ? (hasNotionToken ? "Saved" : "Missing") : "Not required"]
+              ]}
+            />
+          </div>
+          <p className="mt-2 text-xs leading-relaxed text-[#6b778c]">
+            Notion tokens follow the same secret boundary as Jira credentials and are never included in backups.
           </p>
         </div>
 
@@ -331,6 +422,12 @@ export function SettingsPanel({
       </div>
     </aside>
   );
+}
+
+function catalogSourceModeLabel(mode: AppSettings["catalogSourceMode"]): string {
+  if (mode === "notion") return "Sync from Notion page";
+  if (mode === "public-exportable") return "Sync with public/exportable source";
+  return "Manual catalog";
 }
 
 function aiProviderKeyDraftStatusMessage(status: CredentialDraftTestStatus, hasConnectionSettings: boolean): string {

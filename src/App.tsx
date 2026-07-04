@@ -1537,21 +1537,8 @@ export default function App() {
             onCreateCategory={createCategory}
             onUpdateCategory={updateCategory}
             onDeleteCategory={deleteCategory}
-            onChangeCatalogSettings={updateAppSettings}
             onSyncAreaCatalog={syncAreaCatalog}
-            hasNotionIntegrationToken={usesTauriPersistence ? hasPersistedNotionIntegrationToken : async () => false}
-            onSaveNotionIntegrationToken={usesTauriPersistence ? savePersistedNotionIntegrationToken : async () => undefined}
-            onDeleteNotionIntegrationToken={usesTauriPersistence ? deletePersistedNotionIntegrationToken : async () => undefined}
-            onTestNotionCatalogConnection={
-              usesTauriPersistence
-                ? testPersistedNotionCatalogConnection
-                : async () => ({
-                    ok: false,
-                    message: "Notion sync is available in the Tauri app.",
-                    title: null,
-                    extractedBlockCount: 0
-                  })
-            }
+            onConfigureCatalogSource={() => setOpenPanel("settings")}
             onClose={() => setOpenPanel(null)}
           />
         ) : null}
@@ -1572,6 +1559,19 @@ export default function App() {
             onTestAiProviderApiKey={testAiProviderApiKey}
             onTestJiraApiTokenQuiet={testJiraApiTokenQuiet}
             onTestJiraConnectionSettings={testJiraConnectionSettings}
+            hasNotionIntegrationToken={usesTauriPersistence ? hasPersistedNotionIntegrationToken : async () => false}
+            onSaveNotionIntegrationToken={usesTauriPersistence ? savePersistedNotionIntegrationToken : async () => undefined}
+            onDeleteNotionIntegrationToken={usesTauriPersistence ? deletePersistedNotionIntegrationToken : async () => undefined}
+            onTestNotionCatalogConnection={
+              usesTauriPersistence
+                ? testPersistedNotionCatalogConnection
+                : async () => ({
+                    ok: false,
+                    message: "Notion sync is available in the Tauri app.",
+                    title: null,
+                    extractedBlockCount: 0
+                  })
+            }
             onListJiraProjectsForConnection={listJiraProjectsForConnection}
             onOpenJiraApiTokens={openJiraApiTokensPage}
             onOpenAiProviderApiKeys={openAiProviderApiKeysPage}
