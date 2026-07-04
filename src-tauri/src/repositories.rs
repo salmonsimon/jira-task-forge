@@ -40,6 +40,8 @@ const ASSISTED_DESCRIPTION_SECTION_DEFINITIONS: &[(&str, &str)] = &[
     ("problem", "Contexto"),
     ("scope", "Alcance"),
     ("acceptance_criteria", "Criterios de aceptacion"),
+    ("minimum_deliverable", "Entregable mínimo"),
+    ("review_checklist", "Checklist antes de Review"),
 ];
 
 pub struct TrayRepository<'connection> {
@@ -3673,7 +3675,10 @@ mod tests {
             .expect("proposal creates");
 
         assert_eq!(proposal.status, AssistedDescriptionProposalStatus::Pending);
-        assert_eq!(proposal.sections.len(), 4);
+        assert_eq!(
+            proposal.sections.len(),
+            ASSISTED_DESCRIPTION_SECTION_DEFINITIONS.len()
+        );
         assert_eq!(proposal.provider.as_deref(), Some("OpenAI"));
         assert!(proposal
             .sections

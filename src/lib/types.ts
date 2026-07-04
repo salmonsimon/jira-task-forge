@@ -14,7 +14,9 @@ export type AssistedDescriptionSectionId =
   | "user_story"
   | "problem"
   | "scope"
-  | "acceptance_criteria";
+  | "acceptance_criteria"
+  | "minimum_deliverable"
+  | "review_checklist";
 export type PreflightWarningSeverity = "blocking" | "resolvable";
 export type PreflightWarningCode =
   | "empty-tray"

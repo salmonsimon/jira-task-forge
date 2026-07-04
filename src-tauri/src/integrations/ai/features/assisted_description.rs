@@ -13,7 +13,11 @@ const ASSISTED_DESCRIPTION_REQUIRED_HEADINGS: &[&str] = &[
     "## Contexto",
     "## Alcance",
     "## Criterios de aceptacion",
+    "## Entregable mínimo",
+    "## Checklist antes de Review",
 ];
+const ASSISTED_DESCRIPTION_FINAL_HEADINGS: &[&str] =
+    &["## Entregable mínimo", "## Checklist antes de Review"];
 const ASSISTED_DESCRIPTION_TEMPLATE: &str = r#"## Historia de usuario
 
 Como [usuario/persona],
@@ -33,6 +37,14 @@ No incluye:
 - ...
 
 ## Criterios de aceptacion
+
+- ...
+
+## Entregable mínimo
+
+- ...
+
+## Checklist antes de Review
 
 - ...
 "#;
@@ -117,8 +129,8 @@ Use the exact Markdown section headings from the requested template. \
 Use the base context as user and project preference context, especially stack defaults. \
 Do not invent product behavior, implementation scope, or acceptance criteria. \
 Do not add validation, risk, rollback, observability, or open-question sections. \
-When synced Notion catalog template context is present, treat its minimum deliverable and review checklist as mandatory requirements for the draft. Incorporate them into Alcance and Criterios de aceptacion without adding extra sections. \
-Catalog template headings are content requirements only; never use them as top-level Markdown headings and never replace the four Target Markdown format headings. \
+When synced Notion catalog template context is present, treat its minimum deliverable and review checklist as mandatory requirements for the draft. The description must always end with the final sections ## Entregable mínimo and ## Checklist antes de Review, in that order. \
+Catalog template headings are content requirements only; map them into the Target Markdown format and never replace the Target Markdown format headings. \
 Prefer drafting over asking for clarification when the title, area, and user context describe a concrete problem or desired outcome. \
 Do not ask about known defaults from the base context, such as the engine or primary stack. \
 If the title and context are too thin to fill any useful section, return status needs_clarification with up to three concise questions in the task language and description null. \
@@ -209,6 +221,7 @@ fn validate_assisted_description_draft(
                     "AI provider omitted required assisted description section {missing_heading}."
                 ));
             }
+            validate_final_description_sections(description)?;
             draft.clarification_questions.clear();
         }
         "needs_clarification" => {
@@ -228,6 +241,37 @@ fn validate_assisted_description_draft(
     }
 
     Ok(draft)
+}
+
+fn validate_final_description_sections(description: &str) -> Result<(), String> {
+    let deliverable_index = description
+        .find(ASSISTED_DESCRIPTION_FINAL_HEADINGS[0])
+        .ok_or_else(|| {
+            "AI provider omitted final assisted description deliverable section.".to_string()
+        })?;
+    let checklist_index = description
+        .find(ASSISTED_DESCRIPTION_FINAL_HEADINGS[1])
+        .ok_or_else(|| {
+            "AI provider omitted final assisted description checklist section.".to_string()
+        })?;
+    if checklist_index <= deliverable_index {
+        return Err(
+            "AI provider returned assisted description final sections in the wrong order."
+                .to_string(),
+        );
+    }
+    let after_checklist = description[checklist_index..].trim();
+    let nested_heading_after_checklist = after_checklist
+        .lines()
+        .skip(1)
+        .any(|line| line.trim_start().starts_with("## "));
+    if nested_heading_after_checklist {
+        return Err(
+            "AI provider returned content after the final assisted description checklist section."
+                .to_string(),
+        );
+    }
+    Ok(())
 }
 
 fn task_description_needs_clarification(task: &LocalTask, additional_context: &str) -> bool {
@@ -414,10 +458,35 @@ mod tests {
         let draft = validate_assisted_description_draft(AssistedDescriptionDraft {
             status: " drafted ".to_string(),
             description: Some(
-                "## Historia de usuario\n\nComo usuario,\nquiero algo,\npara lograr valor.\n\n\
-## Contexto\n\nContexto claro.\n\n\
-## Alcance\n\nIncluye:\n- A\n\nNo incluye:\n- B\n\n\
-## Criterios de aceptacion\n\n- Criterio"
+                "## Historia de usuario
+
+Como usuario,
+quiero algo,
+para lograr valor.
+
+## Contexto
+
+Contexto claro.
+
+## Alcance
+
+Incluye:
+- A
+
+No incluye:
+- B
+
+## Criterios de aceptacion
+
+- Criterio
+
+## Entregable mínimo
+
+- Entregable
+
+## Checklist antes de Review
+
+- Checklist"
                     .to_string(),
             ),
             clarification_questions: vec!["  ".to_string(), "extra".to_string()],
@@ -427,6 +496,44 @@ mod tests {
         assert_eq!(draft.status, "drafted");
         assert!(draft.description.is_some());
         assert!(draft.clarification_questions.is_empty());
+    }
+
+    #[test]
+    fn rejects_descriptions_without_final_deliverable_and_checklist_sections() {
+        let error = validate_assisted_description_draft(AssistedDescriptionDraft {
+            status: "drafted".to_string(),
+            description: Some(
+                "## Historia de usuario
+
+Como usuario, quiero algo.
+
+## Contexto
+
+Contexto.
+
+## Alcance
+
+Incluye:
+- A
+
+## Criterios de aceptacion
+
+- Criterio
+
+## Checklist antes de Review
+
+- Checklist
+
+## Entregable mínimo
+
+- Entregable"
+                    .to_string(),
+            ),
+            clarification_questions: Vec::new(),
+        })
+        .expect_err("wrong final section order should fail");
+
+        assert!(error.contains("wrong order"));
     }
 
     #[test]
