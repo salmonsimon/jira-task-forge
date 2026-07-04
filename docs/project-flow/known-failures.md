@@ -64,6 +64,7 @@ Use it like this:
    scripts/windows-chrome-cdp.sh click-text --target <target-id> share
    scripts/windows-chrome-cdp.sh key --target <target-id> Escape
    scripts/windows-chrome-cdp.sh close <target-id>
+   scripts/windows-chrome-cdp.sh quit
    ```
 
    `open` creates a fresh target through Chrome's `/json/new` endpoint and is
@@ -102,9 +103,11 @@ Notion Developers connection named `Jira Task Forge` and safely opened the
 secret-bearing token UI; broad DOM inspection of that page was rejected and
 should stay blocked unless the user explicitly accepts credential-disclosure
 risk for that specific action. Safer commands (`info`, `open`, `controls`,
-`controls-top`, `click-text`, `key`, and `close`) were added so future agents can navigate
-authenticated Chrome state without defaulting to raw page dumps. A follow-up
+`controls-top`, `click-text`, `key`, `close`, and `quit`) were added so future
+agents can navigate authenticated Chrome state without defaulting to raw page
+dumps. A follow-up
 validated explicit target selection with both
 `controls --target <target-id> share` and
 `controls share --target <target-id>`, and validated
-`close <target-id>` against a duplicate `JTF Sync Catalog` tab.
+`close <target-id>` against a duplicate `JTF Sync Catalog` tab. Use `quit` to
+close the dedicated Chrome CDP window after the agent flow finishes.

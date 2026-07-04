@@ -16,6 +16,7 @@ Usage: scripts/windows-chrome-cdp.sh <command> [args...]
 Commands:
   launch
   version
+  quit
   list
   info
   navigate <url>

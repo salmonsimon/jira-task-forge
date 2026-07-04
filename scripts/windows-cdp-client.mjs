@@ -24,6 +24,7 @@ function usage() {
   console.error("");
   console.error("Commands:");
   console.error("  version");
+  console.error("  quit");
   console.error("  list");
   console.error("  info");
   console.error("  navigate <url>");
@@ -72,6 +73,36 @@ async function cdpCommand(ws, id, method, params = {}, timeoutMs = 15000) {
     }
     ws.addEventListener("message", onMessage);
   });
+}
+
+async function quitBrowser() {
+  let version;
+  try {
+    version = await jsonFetch(`${endpoint}/json/version`);
+  } catch (error) {
+    return {
+      ok: false,
+      reason: `CDP endpoint unavailable on ${endpoint}`,
+      detail: String(error?.message || error)
+    };
+  }
+
+  const ws = new WebSocket(version.webSocketDebuggerUrl);
+  await new Promise((resolve, reject) => {
+    ws.addEventListener("open", resolve, { once: true });
+    ws.addEventListener("error", reject, { once: true });
+  });
+
+  try {
+    await cdpCommand(ws, 1, "Browser.close", {}, 5000);
+  } catch (error) {
+    if (!String(error?.message || error).includes("Timed out waiting for Browser.close")) {
+      throw error;
+    }
+  } finally {
+    ws.close();
+  }
+  return { ok: true };
 }
 
 function matchesTarget(tab, selector) {
@@ -404,6 +435,8 @@ async function screenshot(outputPath) {
 let result;
 if (commandName === "version") {
   result = await jsonFetch(`${endpoint}/json/version`);
+} else if (commandName === "quit") {
+  result = await quitBrowser();
 } else if (commandName === "list") {
   result = await jsonFetch(`${endpoint}/json/list`);
 } else if (commandName === "info") {
