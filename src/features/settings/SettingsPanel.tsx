@@ -54,6 +54,7 @@ export function SettingsPanel({
   onTestNotionCatalogConnection,
   onListJiraProjectsForConnection,
   onOpenJiraApiTokens,
+  onOpenNotionDevelopers,
   onOpenAiProviderApiKeys,
   onExportBackup,
   onImportBackup,
@@ -80,6 +81,7 @@ export function SettingsPanel({
   onTestNotionCatalogConnection: (pageUrlOrId: string) => Promise<NotionCatalogConnectionTestResult>;
   onListJiraProjectsForConnection: (siteUrl: string, accountEmail: string) => Promise<JiraProjectOption[]>;
   onOpenJiraApiTokens: () => void;
+  onOpenNotionDevelopers: () => void;
   onOpenAiProviderApiKeys: () => void;
   onExportBackup: () => void;
   onImportBackup: () => void;
@@ -205,6 +207,7 @@ export function SettingsPanel({
             await onDeleteNotionIntegrationToken();
             setHasNotionToken(false);
           }}
+          onOpenNotionDevelopers={onOpenNotionDevelopers}
           onSaveNotionIntegrationToken={async (token) => {
             await onSaveNotionIntegrationToken(token);
             setHasNotionToken(true);

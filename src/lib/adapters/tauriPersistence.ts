@@ -369,6 +369,10 @@ export async function openPersistedAiProviderApiKeysPage(aiProvider: AppSettings
   await invoke("open_ai_provider_api_keys_page", { aiProvider });
 }
 
+export async function openPersistedNotionDevelopersPage(): Promise<void> {
+  await invoke("open_notion_developers_page");
+}
+
 export async function openPersistedJiraIssueUrl(url: string): Promise<void> {
   await invoke("open_jira_issue_url", { url });
 }

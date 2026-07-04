@@ -45,6 +45,7 @@ import {
   openPersistedAiProviderApiKeysPage,
   openPersistedAtlassianApiTokensPage,
   openPersistedJiraIssueUrl,
+  openPersistedNotionDevelopersPage,
   runPersistedJqlQuery,
   saveCsvFile,
   savePersistedAiProviderApiKey,
@@ -607,6 +608,21 @@ export default function App() {
         setAiCredentialMessage(
           `Could not open ${appSettings.aiProvider} automatically. Open ${url} in your browser.`
         );
+      }
+    }
+
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
+
+  async function openNotionDevelopersPage() {
+    const url = "https://www.notion.so/developers";
+
+    if (usesTauriPersistence) {
+      try {
+        await openPersistedNotionDevelopersPage();
+        return;
+      } catch {
+        console.warn(`Could not open Notion automatically. Open ${url} in your browser.`);
       }
     }
 
@@ -1574,6 +1590,7 @@ export default function App() {
             }
             onListJiraProjectsForConnection={listJiraProjectsForConnection}
             onOpenJiraApiTokens={openJiraApiTokensPage}
+            onOpenNotionDevelopers={openNotionDevelopersPage}
             onOpenAiProviderApiKeys={openAiProviderApiKeysPage}
             onExportBackup={exportBackup}
             onImportBackup={importBackup}

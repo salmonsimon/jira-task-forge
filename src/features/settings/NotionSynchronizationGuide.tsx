@@ -28,6 +28,7 @@ export function NotionSynchronizationGuide({
   onChangeCatalogSettings,
   onClose,
   onDeleteNotionIntegrationToken,
+  onOpenNotionDevelopers,
   onSaveNotionIntegrationToken,
   onTestNotionCatalogConnection
 }: {
@@ -36,6 +37,7 @@ export function NotionSynchronizationGuide({
   onChangeCatalogSettings: (settings: Partial<AppSettings>) => Promise<boolean>;
   onClose: () => void;
   onDeleteNotionIntegrationToken: () => Promise<void>;
+  onOpenNotionDevelopers: () => void;
   onSaveNotionIntegrationToken: (token: string) => Promise<void>;
   onTestNotionCatalogConnection: (pageUrlOrId: string) => Promise<NotionCatalogConnectionTestResult>;
 }) {
@@ -178,20 +180,20 @@ export function NotionSynchronizationGuide({
           {step === "token" ? (
             <GuideSection title="Notion integration token" description="Create or copy the internal integration secret, then save it before testing the page. The token stays in the OS credential store.">
               <div className="mb-5 rounded border border-[#dfe1e6] bg-[#f7f8fa] p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0">
                     <div className="text-sm font-semibold text-[#172b4d]">{hasToken ? "Credential saved" : "No credential saved"}</div>
                     <p className="text-xs leading-relaxed text-[#6b778c]">The Notion page must also be shared with the Jira Task Forge connection.</p>
                   </div>
-                  <a
-                    className="inline-flex h-9 items-center gap-2 rounded border border-[#c1c7d0] bg-white px-3 text-sm font-medium text-[#172b4d] hover:bg-[#f4f5f7]"
-                    href={notionDeveloperPortalUrl}
-                    rel="noreferrer"
-                    target="_blank"
+                  <Button
+                    className="settings-button-secondary w-full justify-center sm:w-auto sm:shrink-0"
+                    icon={<ExternalLink size={13} />}
+                    title={notionDeveloperPortalUrl}
+                    variant="secondary"
+                    onClick={onOpenNotionDevelopers}
                   >
                     Manage token
-                    <ExternalLink size={13} />
-                  </a>
+                  </Button>
                 </div>
               </div>
               <GuideInput
