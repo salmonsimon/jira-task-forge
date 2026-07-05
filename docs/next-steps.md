@@ -269,9 +269,9 @@ Recommended next implementation:
 - Issue #146: create the reusable AI Provider setup modal after the popup audit
   chooses the preferred setup/modal pattern. This avoids building another
   one-off surface before standardization.
-- Issue #145: add a read-only Jira catalog drift audit against the official JTF
-  catalog. It should never mutate Jira labels or infer new official aliases from
-  Jira data alone.
+- Issue #152: open the Notion synchronization setup guide directly when
+  Categories Sync is blocked by missing Notion configuration. This keeps the
+  sync action tied to the setup needed to complete it.
 - Issue #140: fix the tray selector nested button markup independently. It is
   frontend markup/accessibility debt and can run without product decisions.
 - Issue #134: separate the exact Story and Bug Assisted Description templates.
@@ -287,6 +287,9 @@ Recommended next implementation:
   documentation issue.
 - Issue #139: run live JTFTEST workflow QA only after the workflow model slices
   it depends on are implemented.
+- Issue #153: package the Windows app and choose/apply the final icon after
+  Issue #138 and Issue #139, so the shareable build reflects the reviewed docs
+  and live QA evidence.
 - Regularizacion is out of scope for now and is no longer a planned roadmap
   slice. Do not block any current issue, QA path, or documentation update on
   Regularizacion behavior.
@@ -604,42 +607,34 @@ Roadmap cleanup status after PR #144 and issue review:
 
 Recommended AFK batches from the current open issues:
 
-Batch A: visual audit and overlay behavior.
-Issue or source: Issue #150 and Issue #149.
-Branch family: `codex/popup-surface-audit`.
-Scope: screenshot every reachable popup/modal/dialog/sidebar/popover-like
-surface, group by interaction pattern, document current Escape/backdrop behavior,
-and make only tiny test fixes if current Escape behavior is clearly broken.
-Stop condition: choosing the final visual/modal pattern requires Saimon review.
+Batch 1: low-conflict AFK launch set.
+Issues: Issue #152, Issue #140, Issue #103, and Issue #150.
+Scope: route missing Notion setup directly from Categories Sync, fix tray
+selector nested buttons, document local storage/cleanup inventory, and capture
+the popup/modal screenshot audit. These can run in parallel because their file
+ownership and validation paths should barely overlap.
+Stop condition: Issue #150 stops at the visual inventory; choosing the final
+modal pattern requires Saimon review before implementation standardization.
 
-Batch B: small UI correctness slices.
-Issues: Issue #140 and Issue #147.
-Scope: fix nested tray selector buttons, then clarify Jira Verify/Token order and
-copy. These are narrow, testable frontend changes that do not require Jira
-writes.
+Batch 2: setup and overlay polish.
+Issues: Issue #149, Issue #147, and Issue #146.
+Scope: verify/fix Escape and nested overlay behavior, clarify Jira Verify/Token
+setup ordering, and add the AI Provider setup modal using the Jira/Notion setup
+visual family. Issue #146 should use a two-step flow: choose provider/model,
+then set and test the API key.
 
-Batch C: setup modal follow-through.
-Issue: Issue #146.
-Scope: create the AI Provider setup modal after Batch A chooses the shared modal
-pattern, so the app does not add another inconsistent setup surface.
-
-Batch D: catalog/Jira read-only audit.
-Issue: Issue #145.
-Scope: compare existing Jira label/area-like values against the official catalog
-without mutating Jira or inventing aliases from Jira data. DTS may be read-only;
-JTFTEST remains the write sandbox for any later QA.
-
-Batch E: workflow model slices.
+Batch 3: workflow model slices.
 Issues: Issue #134 and Issue #132, followed by Issue #138 and Issue #139.
 Scope: first separate exact Story/Bug templates, then implement Epic Scope
-modeling. Only after those behavior changes land should docs alignment and
-JTFTEST live workflow QA be treated as closing candidates.
+modeling with the already-decided `[{Project}] [{Area}] {Scope}` rule. Only
+after those behavior changes land should docs alignment and JTFTEST live
+workflow QA be treated as closing candidates.
 
-Batch F: storage inventory.
-Issue: Issue #103.
-Scope: documentation-only inventory of SQLite data, settings, backups, logs,
-diagnostics, managed attachments, generated files, cleanup behavior, and manual
-no-delete cautions. Do not add destructive cleanup controls.
+Final packaging slice.
+Issue: Issue #153.
+Scope: choose/apply the final app icon and package a Windows-ready build after
+Issue #138 and Issue #139, so the app can be shared directly with the team
+without `npm run tauri dev`.
 
 Already landed from the earlier batch plan:
 
@@ -658,16 +653,17 @@ Branch family:
 
 Deliverables:
 
+- Issue #152: open Notion setup directly from Categories Sync when sync is
+  blocked by missing Notion configuration.
+- Issue #140: fix invalid nested tray selector button markup.
+- Issue #103: document local storage/cleanup inventory.
 - Issue #150: capture and document screenshots of the current popup/modal/setup
   surfaces before changing the design system.
-- Issue #149: verify Escape behavior for Settings, Categories, and nested
-  modals while the overlay inventory is fresh.
 
 Reason:
 
-- The app now has multiple setup and popup-like surfaces. Saimon wants to choose
-  the target pattern personally from screenshots before implementation
-  standardizes the UI.
+- These four tasks are independently executable, low-conflict, and already have
+  enough scope to launch in separate WSL worktrees as visible AFK threads.
 
 ## Following Slice
 
@@ -679,13 +675,16 @@ Branch family:
 
 Deliverables:
 
-- Issue #140: fix invalid nested tray selector button markup.
+- Issue #149: verify/fix Escape behavior for Settings, Categories, and nested
+  modals.
 - Issue #147: clarify Jira setup Verify/Token ordering and messages.
+- Issue #146: add the AI Provider setup modal after the visual audit has a
+  chosen pattern.
 
 Reason:
 
-- These are narrow UI correctness fixes that can run AFK after the visual audit
-  without changing Jira write contracts.
+- These are related setup/overlay polish tasks. They can run after Batch 1, with
+  Issue #146 gated by the visual pattern decision from Issue #150.
 
 Separate hardening follow-up:
 

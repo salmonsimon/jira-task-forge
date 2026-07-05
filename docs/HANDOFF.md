@@ -163,8 +163,8 @@ Still pending:
   cleanup.
 - Issue #146: create a reusable AI Provider setup modal after the popup audit
   chooses the target pattern.
-- Issue #145: add read-only Jira area/label drift audit against the official JTF
-  catalog without mutating Jira or inventing catalog aliases from Jira data.
+- Issue #152: open the Notion setup guide directly from Categories Sync when
+  sync is blocked by missing Notion configuration.
 - Issue #140: fix invalid nested button markup in the tray selector.
 - Issue #134: separate exact Story and Bug Assisted Description target
   templates. PR #144 added catalog delivery-format context but still validates a
@@ -174,6 +174,9 @@ Still pending:
   not add destructive cleanup UI or commands.
 - Issue #138 and Issue #139 remain follow-ups after the remaining workflow
   behavior changes land: docs alignment first, then JTFTEST live workflow QA.
+- Issue #153 packages the Windows app and chooses/applies the final icon after
+  Issue #138 and Issue #139, so the team can run the app without `npm run tauri
+  dev`.
 - Regularizacion is out of current JTF scope. Issue #135 is closed as not
   planned and should not block current roadmap, docs, or QA work.
 - Full native QA in an environment with the Linux system dependencies needed by
@@ -200,20 +203,20 @@ grill areas:
 
 Recommended stack to work next:
 
-- Start with Issue #150 as a screenshot-first popup/modal surface audit, paired
-  with Issue #149 Escape behavior verification. Do not standardize the final
-  modal pattern until Saimon reviews the visual inventory.
-- Then run small AFK UI correctness slices: Issue #140 nested tray selector
-  button markup and Issue #147 Jira Verify/Token ordering.
-- After the popup pattern is chosen, implement Issue #146 AI Provider setup
-  modal using the shared setup/modal pattern.
-- Keep Issue #145 read-only and safe: Jira catalog drift audit may inspect DTS
-  but must not mutate it.
+- Launch Batch 1 as parallel AFK work: Issue #152 Notion setup direct routing,
+  Issue #140 tray selector nested button fix, Issue #103 storage inventory docs,
+  and Issue #150 screenshot-first popup/modal surface audit.
+- Then run setup and overlay polish: Issue #149 Escape behavior, Issue #147 Jira
+  Verify/Token ordering, and Issue #146 AI Provider setup modal. Issue #146
+  should use the Jira/Notion setup visual family with a two-step provider/model
+  then key/test flow.
 - Treat Issue #134 Story/Bug template separation and Issue #132 Epic Scope
-  modeling as deeper workflow slices with focused tests and HITL review for
-  model/sync changes.
-- Run Issue #138 docs alignment and Issue #139 JTFTEST live workflow QA only
-  after the behavior they document or validate has landed.
+  modeling as deeper workflow slices with focused tests. The Scope product rule
+  is already decided as `[{Project}] [{Area}] {Scope}`.
+- Run Issue #138 docs alignment and Issue #139 JTFTEST live workflow QA after
+  the behavior they document or validate has landed.
+- Run Issue #153 packaging/icon after Issue #138 and Issue #139 so the Windows
+  build reflects the reviewed workflow and QA evidence.
 
 ## Suggested Skills For Next Session
 
