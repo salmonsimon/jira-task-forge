@@ -78,6 +78,7 @@ export function AiProviderSetupGuide({
   const [step, setStep] = useState<AiProviderSetupStep>("provider");
   const [apiKeyDraft, setApiKeyDraft] = useState("");
   const [keyDraftTestStatus, setKeyDraftTestStatus] = useState<CredentialDraftTestStatus>("idle");
+  const [connectionTestFeedback, setConnectionTestFeedback] = useState<CredentialConnectionTestResult | null>(null);
   const [modelOptions, setModelOptions] = useState<string[]>([]);
   const [modelLoadStatus, setModelLoadStatus] = useState<"idle" | "loading" | "loaded" | "failed">("idle");
   const [modelLoadMessage, setModelLoadMessage] = useState<string | null>(null);
@@ -113,10 +114,12 @@ export function AiProviderSetupGuide({
     apiKeyDraftRef.current = value;
     setApiKeyDraft(value);
     setKeyDraftTestStatus("idle");
+    setConnectionTestFeedback(null);
   }
 
   async function selectProvider(aiProvider: SupportedAiProvider) {
     updateApiKeyDraft("");
+    setConnectionTestFeedback(null);
     setModelOptions([]);
     setModelLoadStatus("idle");
     setModelLoadMessage(null);
@@ -177,9 +180,11 @@ export function AiProviderSetupGuide({
     if (!controls.canTestConnection) return;
     const apiKeyUnderTest = apiKeyDraft;
     setKeyDraftTestStatus("testing");
+    setConnectionTestFeedback({ ok: true, message: apiKeyUnderTest ? "Testing this key without saving it." : `Testing saved ${selectedProvider} connection.` });
     const result = apiKeyUnderTest ? await onTestAiProviderApiKey(apiKeyUnderTest) : await onTestAiProviderConnection();
     if (apiKeyDraftRef.current !== apiKeyUnderTest) return;
     setKeyDraftTestStatus(result.ok ? "success" : "failed");
+    setConnectionTestFeedback(result);
   }
 
   async function saveApiKey() {
@@ -188,6 +193,7 @@ export function AiProviderSetupGuide({
     if (!saved) return;
     updateApiKeyDraft("");
     setKeyDraftTestStatus("idle");
+    setConnectionTestFeedback(null);
   }
 
   return (
@@ -303,9 +309,9 @@ export function AiProviderSetupGuide({
                   Remove key
                 </Button>
               </div>
-              {apiKeyDraft ? (
-                <FeedbackNote className="mt-4" variant={aiProviderKeyDraftStatusVariant(keyDraftTestStatus, controls.hasConnectionSettings)}>
-                  {aiProviderKeyDraftStatusMessage(keyDraftTestStatus, controls.hasConnectionSettings)}
+              {apiKeyDraft || connectionTestFeedback ? (
+                <FeedbackNote className="mt-4" variant={aiProviderConnectionFeedbackVariant(connectionTestFeedback, keyDraftTestStatus, controls.hasConnectionSettings)}>
+                  {aiProviderConnectionFeedbackMessage(connectionTestFeedback, keyDraftTestStatus, controls.hasConnectionSettings, Boolean(apiKeyDraft))}
                 </FeedbackNote>
               ) : null}
               {aiCredentialMessage ? (
@@ -429,6 +435,28 @@ function GuideSelect({
       ) : null}
     </div>
   );
+}
+
+function aiProviderConnectionFeedbackMessage(
+  feedback: CredentialConnectionTestResult | null,
+  status: CredentialDraftTestStatus,
+  hasConnectionSettings: boolean,
+  hasApiKeyDraft: boolean
+): string {
+  if (feedback && status === "testing") return feedback.message;
+  if (feedback && !feedback.ok) return feedback.message;
+  if (feedback && feedback.ok && !hasApiKeyDraft) return feedback.message;
+  return aiProviderKeyDraftStatusMessage(status, hasConnectionSettings);
+}
+
+function aiProviderConnectionFeedbackVariant(
+  feedback: CredentialConnectionTestResult | null,
+  status: CredentialDraftTestStatus,
+  hasConnectionSettings: boolean
+) {
+  if (feedback && status === "testing") return "info";
+  if (feedback && !feedback.ok) return "error";
+  return aiProviderKeyDraftStatusVariant(status, hasConnectionSettings);
 }
 
 function aiProviderKeyDraftStatusMessage(status: CredentialDraftTestStatus, hasConnectionSettings: boolean): string {

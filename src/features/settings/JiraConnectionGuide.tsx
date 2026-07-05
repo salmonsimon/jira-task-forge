@@ -1,4 +1,4 @@
-import { Check, CheckCircle2, ChevronDown, ChevronLeft, ExternalLink, Info, KeyRound, RefreshCw } from "lucide-react";
+import { Check, ChevronDown, ChevronLeft, ExternalLink, Info, KeyRound, RefreshCw } from "lucide-react";
 import type { FocusEvent, MouseEvent, ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, FeedbackNote, LoadingOrb, PanelHeader } from "../../components/ui";
@@ -462,7 +462,7 @@ export function JiraConnectionGuide({
                 Privacy & Diagnostics
               </button>
               {step === "review" ? (
-                <Button className="settings-button-primary" disabled={!canContinue || isSaving} icon={isSaving ? <LoadingOrb size="xs" /> : <CheckCircle2 size={14} />} onClick={saveConnection}>
+                <Button className="settings-button-primary" disabled={!canContinue || isSaving} icon={isSaving ? <LoadingOrb size="xs" /> : <Check size={14} />} onClick={saveConnection}>
                   {isSaving ? "Saving..." : "Save connection"}
                 </Button>
               ) : (
