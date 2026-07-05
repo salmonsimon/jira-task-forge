@@ -1,6 +1,7 @@
 import { AlertTriangle, Check, CheckCircle2, Eye, EyeOff, Pencil, Plus, RefreshCw, Tags, Trash2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { Button, FeedbackNote, PanelHeader } from "../../components/ui";
+import { Button, DrawerShell, FeedbackNote, PanelHeader } from "../../components/ui";
+import { appOverlayLayers, useAppOverlay } from "../../lib/app-overlays";
 import type { AppSettings, CatalogSyncResult, Category } from "../../lib/types";
 import { cn } from "../../lib/utils";
 
@@ -31,28 +32,18 @@ export function CategoriesPanel({
   const panelRef = useRef<HTMLElement | null>(null);
   const [catalogNotice, setCatalogNotice] = useState<CatalogSyncResult | null>(null);
 
-  useEffect(() => {
-    function handlePointerDown(event: PointerEvent) {
-      if (!panelRef.current || panelRef.current.contains(event.target as Node)) return;
-      onClose();
-    }
-
-    window.addEventListener("pointerdown", handlePointerDown);
-    return () => window.removeEventListener("pointerdown", handlePointerDown);
-  }, [onClose]);
-
-  useEffect(() => {
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key !== "Escape" || event.defaultPrevented) return;
-      onClose();
-    }
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
+  const overlay = useAppOverlay({
+    layer: appOverlayLayers.sidePanel,
+    onDismiss: onClose,
+    dismissOnEscape: true,
+    dismissOnBackdrop: true,
+    dismissOnOutsidePointer: true,
+    lockScroll: true,
+    surfaceRef: panelRef
+  });
 
   return (
-    <aside ref={panelRef} className="fixed right-0 top-0 z-30 flex h-screen w-[420px] flex-col overscroll-contain border-l border-[#dfe1e6] bg-white shadow-xl">
+    <DrawerShell overlay={overlay} surfaceRef={panelRef}>
       <PanelHeader title="Categories" subtitle="Projects and areas available in capture controls" onClose={onClose} />
       <div className="flex-1 overflow-y-auto overscroll-contain p-4">
         <CategoryList
@@ -79,7 +70,7 @@ export function CategoriesPanel({
         />
       </div>
       {catalogNotice ? <CatalogSyncNotice result={catalogNotice} onClose={() => setCatalogNotice(null)} /> : null}
-    </aside>
+    </DrawerShell>
   );
 }
 
@@ -227,18 +218,35 @@ function CategoryList({
 }
 
 function CatalogSyncNotice({ result, onClose }: { result: CatalogSyncResult; onClose: () => void }) {
+  const noticeRef = useRef<HTMLElement | null>(null);
   const isOk = result.ok;
+  const overlay = useAppOverlay({
+    layer: appOverlayLayers.centeredNotice,
+    onDismiss: onClose,
+    dismissOnEscape: true,
+    dismissOnBackdrop: true,
+    dismissOnOutsidePointer: true,
+    lockScroll: true,
+    surfaceRef: noticeRef
+  });
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(9,30,66,0.54)] px-4" onMouseDown={(event) => {
-      if (event.target === event.currentTarget) onClose();
-    }}>
-      <section className="w-full max-w-[520px] rounded border border-[#dfe1e6] bg-white p-4 shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
+    <div
+      className="fixed inset-0 z-[65] flex items-center justify-center bg-[rgba(9,30,66,0.66)] px-4"
+      data-overlay-scrim="catalog-sync-notice"
+      {...overlay.backdropProps}
+    >
+      <section
+        ref={noticeRef}
+        className="catalog-sync-notice-surface w-full max-w-[520px] rounded border border-[#dfe1e6] bg-white p-4 text-[#172b4d] shadow-2xl"
+        {...overlay.surfaceProps}
+      >
         <div className="mb-2 flex items-start justify-between gap-3">
         <div className="flex items-center gap-2 text-sm font-semibold">
           {isOk ? <CheckCircle2 size={16} className="text-[#1f845a]" /> : <AlertTriangle size={16} className="text-[#e56910]" />}
           {isOk ? "Catalog sync completed" : "Catalog sync needs attention"}
         </div>
-        <button className="text-[#6b778c] hover:text-[#172b4d]" onClick={onClose} title="Close" type="button">
+        <button className="catalog-sync-notice-close text-[#6b778c] hover:text-[#172b4d]" onClick={onClose} title="Close" type="button">
           <X size={16} />
         </button>
       </div>

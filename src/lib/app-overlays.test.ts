@@ -77,6 +77,34 @@ describe("app overlay stack", () => {
     unregisterFocusWindow();
   });
 
+  it("dismisses a catalog sync notice before the Categories drawer", () => {
+    const stack = createAppOverlayStack();
+    const dismissed: string[] = [];
+
+    const unregisterDrawer = stack.register({
+      id: "categories-drawer",
+      layer: 30,
+      dismissOnEscape: true,
+      onDismiss: () => dismissed.push("categories-drawer")
+    });
+    const unregisterNotice = stack.register({
+      id: "catalog-sync-notice",
+      layer: 65,
+      dismissOnEscape: true,
+      onDismiss: () => dismissed.push("catalog-sync-notice")
+    });
+
+    expect(stack.dismissTopmost("escape")).toBe(true);
+    expect(dismissed).toEqual(["catalog-sync-notice"]);
+
+    unregisterNotice();
+
+    expect(stack.dismissTopmost("escape")).toBe(true);
+    expect(dismissed).toEqual(["catalog-sync-notice", "categories-drawer"]);
+
+    unregisterDrawer();
+  });
+
   it("keeps scroll locking active while any registered overlay requests it", () => {
     const stack = createAppOverlayStack();
 

@@ -34,6 +34,7 @@ describe("CategoriesPanel", () => {
       />
     );
 
+    expect(html).toContain('data-overlay-scrim="drawer"');
     expect(html).toMatch(/<aside[^>]*class="[^"]*\bflex-col\b/);
   });
 });

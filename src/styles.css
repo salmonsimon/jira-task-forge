@@ -163,6 +163,20 @@ button {
   background-color: #2b2f36 !important;
 }
 
+.theme-dark .catalog-sync-notice-surface {
+  background-color: #172b4d !important;
+  border-color: #344563 !important;
+  color: #f4f5f7 !important;
+}
+
+.theme-dark .catalog-sync-notice-close {
+  color: #b3bac5 !important;
+}
+
+.theme-dark .catalog-sync-notice-close:hover {
+  color: #ffffff !important;
+}
+
 .app-top-chip {
   background-color: #f4f8ff;
   border-color: #b6c2cf;
