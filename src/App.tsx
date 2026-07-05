@@ -9,7 +9,7 @@ import { FeedbackNote } from "./components/ui";
 import { CategoriesPanel } from "./features/categories";
 import { JiraPreflightDialog, type JiraCreatePreflight } from "./features/jira-preflight";
 import { JqlView } from "./features/jql";
-import { SettingsPanel } from "./features/settings";
+import { AiProviderSetupGuide, SettingsPanel } from "./features/settings";
 import { TaskFocusWindow } from "./features/task-detail";
 import { TraysView, useTrayWorkspace } from "./features/trays";
 import { mockAppDataAdapter } from "./lib/adapters";
@@ -38,6 +38,7 @@ import {
   listPersistedCategories,
   listPersistedAssistedDescriptionProposals,
   listPersistedDescriptionProposalLog,
+  listPersistedAiProviderModels,
   listPersistedJqlFavorites,
   listPersistedJiraProjectsForConnection,
   listPersistedTaskSyncLog,
@@ -168,6 +169,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<MainTab>("trays");
   const [openPanel, setOpenPanel] = useState<Panel>(null);
   const [settingsInitialGuide, setSettingsInitialGuide] = useState<"notion-synchronization" | null>(null);
+  const [isAiProviderSetupOpen, setIsAiProviderSetupOpen] = useState(false);
   const [categories, setCategories] = useState<Category[]>(() => [...appData.listProjects(), ...appData.listAreas()]);
   const [jqlFavorites, setJqlFavorites] = useState<JqlFavorite[]>(() => appData.listJqlFavorites());
   const [taskSyncLogs, setTaskSyncLogs] = useState<Record<string, SyncLogEntry[]>>({});
@@ -667,15 +669,6 @@ export default function App() {
     });
   }
 
-  function showAiConnectionNotice(result: CredentialConnectionTestResult) {
-    showConnectionNotice({
-      kind: result.ok ? "success" : "error",
-      title: result.ok ? "AI Provider connection succeeded" : "AI Provider connection failed",
-      message: result.message,
-      detail: result.detail
-    });
-  }
-
   async function saveJiraApiToken(token: string) {
     const trimmedToken = token.trim();
     if (!trimmedToken) {
@@ -752,14 +745,12 @@ export default function App() {
     try {
       const message = await testPersistedAiProviderConnection();
       const result: CredentialConnectionTestResult = { ok: true, message };
-      showAiConnectionNotice(result);
       return result;
     } catch (error) {
       const result: CredentialConnectionTestResult = {
         ok: false,
         message: formatUnknownError(error, "Could not test AI provider connection.")
       };
-      showAiConnectionNotice(result);
       return result;
     } finally {
       await waitForMinimumElapsed(loadingStartedAt, 700);
@@ -778,19 +769,22 @@ export default function App() {
     try {
       const message = await testPersistedAiProviderApiKey(appSettings.aiProvider, apiKey);
       const result: CredentialConnectionTestResult = { ok: true, message };
-      showAiConnectionNotice(result);
       return result;
     } catch (error) {
       const result: CredentialConnectionTestResult = {
         ok: false,
         message: formatUnknownError(error, "Could not test AI provider connection.")
       };
-      showAiConnectionNotice(result);
       return result;
     } finally {
       await waitForMinimumElapsed(loadingStartedAt, 700);
       setIsTestingAiProviderConnection(false);
     }
+  }
+
+  async function listAiProviderModels(aiProvider: AppSettings["aiProvider"], apiKey?: string): Promise<string[]> {
+    if (aiProvider === "None" || !usesTauriPersistence) return [];
+    return listPersistedAiProviderModels(aiProvider, apiKey?.trim() || undefined);
   }
 
   async function testJiraConnection(): Promise<JiraConnectionTestResult> {
@@ -1547,6 +1541,7 @@ export default function App() {
             onAddSubtask={trayWorkspace.addSubtaskToTask}
             onDeleteSubtask={trayWorkspace.deleteTask}
             onGenerateDescription={generateTaskDescription}
+            onConfigureAiProvider={() => setIsAiProviderSetupOpen(true)}
             onListDescriptionProposals={usesTauriPersistence ? listPersistedAssistedDescriptionProposals : undefined}
             onListDescriptionProposalLog={usesTauriPersistence ? listPersistedDescriptionProposalLog : undefined}
             onSaveDescription={trayWorkspace.saveTaskDescription}
@@ -1590,6 +1585,7 @@ export default function App() {
             onDeleteAiProviderApiKey={deleteAiProviderApiKey}
             onTestAiProviderConnection={testAiProviderConnection}
             onTestAiProviderApiKey={testAiProviderApiKey}
+            onListAiProviderModels={listAiProviderModels}
             onTestJiraApiTokenQuiet={testJiraApiTokenQuiet}
             onTestJiraConnectionSettings={testJiraConnectionSettings}
             hasNotionIntegrationToken={usesTauriPersistence ? hasPersistedNotionIntegrationToken : async () => false}
@@ -1614,6 +1610,22 @@ export default function App() {
             initialGuide={settingsInitialGuide}
             onInitialGuideClose={returnToCategoriesFromSettingsGuide}
             onClose={() => setOpenPanel(null)}
+          />
+        ) : null}
+        {isAiProviderSetupOpen ? (
+          <AiProviderSetupGuide
+            settings={appSettings}
+            hasAiProviderApiKey={hasAiProviderApiKey}
+            aiCredentialMessage={aiCredentialMessage}
+            isTestingAiProviderConnection={isTestingAiProviderConnection}
+            onChange={updateAppSettings}
+            onClose={() => setIsAiProviderSetupOpen(false)}
+            onDeleteAiProviderApiKey={deleteAiProviderApiKey}
+            onOpenAiProviderApiKeys={openAiProviderApiKeysPage}
+            onSaveAiProviderApiKey={saveAiProviderApiKey}
+            onTestAiProviderApiKey={testAiProviderApiKey}
+            onTestAiProviderConnection={testAiProviderConnection}
+            onListAiProviderModels={listAiProviderModels}
           />
         ) : null}
         {trayPendingDelete ? (

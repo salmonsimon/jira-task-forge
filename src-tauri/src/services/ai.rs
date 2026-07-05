@@ -83,6 +83,30 @@ impl AppServices {
         Ok(format!("{} connection succeeded.", provider.label()))
     }
 
+    pub fn list_ai_provider_models(
+        &self,
+        ai_provider: &str,
+        api_key: Option<&str>,
+    ) -> Result<Vec<String>, String> {
+        let provider = AiProvider::from_settings_value(ai_provider)?;
+        let models = match api_key.map(str::trim).filter(|value| !value.is_empty()) {
+            Some(api_key) => self
+                .ai_client_with_api_key(provider, api_key)?
+                .list_models()?,
+            None => self.ai_client(provider)?.list_models()?,
+        };
+
+        if models.is_empty() {
+            Ok(provider
+                .fallback_models()
+                .iter()
+                .map(|model| (*model).to_string())
+                .collect())
+        } else {
+            Ok(models)
+        }
+    }
+
     fn ai_client(&self, provider: AiProvider) -> Result<AiClient, String> {
         let api_key = self.ai_provider_api_key(provider)?;
         self.ai_client_with_api_key(provider, &api_key)

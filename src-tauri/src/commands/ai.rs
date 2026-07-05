@@ -42,6 +42,19 @@ pub async fn test_ai_provider_api_key(
 }
 
 #[tauri::command]
+pub async fn list_ai_provider_models(
+    services: State<'_, AppServices>,
+    ai_provider: String,
+    api_key: Option<String>,
+) -> Result<Vec<String>, String> {
+    let services = services.inner().clone();
+    run_blocking_result("AI provider model list worker", move || {
+        services.list_ai_provider_models(&ai_provider, api_key.as_deref())
+    })
+    .await
+}
+
+#[tauri::command]
 pub async fn generate_task_description(
     services: State<'_, AppServices>,
     task_id: String,

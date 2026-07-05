@@ -72,6 +72,7 @@ pub fn run() {
             commands::ai::test_ai_provider_connection,
             commands::ai::test_openai_api_key,
             commands::ai::test_ai_provider_api_key,
+            commands::ai::list_ai_provider_models,
             commands::jira::test_jira_connection,
             commands::jira::test_jira_api_token,
             commands::jira::test_jira_connection_settings,

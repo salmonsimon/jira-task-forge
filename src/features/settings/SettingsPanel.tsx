@@ -1,37 +1,12 @@
-import { Bot, Check, ChevronDown, Download, ExternalLink, KeyRound, Settings, UploadCloud } from "lucide-react";
+import { Bot, Check, Download, KeyRound, Settings, UploadCloud } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { Button, DetailBlock, DrawerShell, FeedbackNote, LoadingOrb, PanelHeader, SegmentedControl } from "../../components/ui";
+import { Button, DetailBlock, DrawerShell, FeedbackNote, PanelHeader, SegmentedControl } from "../../components/ui";
 import { appOverlayLayers, useAppOverlay } from "../../lib/app-overlays";
-import { getCredentialDraftControls, type CredentialDraftTestStatus } from "../../lib/domain";
-import type { AiProvider, AppSettings, CredentialConnectionTestResult, JiraConnectionTestResult, JiraProjectOption, NotionCatalogConnectionTestResult, ThemeMode } from "../../lib/types";
+import type { AppSettings, CredentialConnectionTestResult, JiraConnectionTestResult, JiraProjectOption, NotionCatalogConnectionTestResult, ThemeMode } from "../../lib/types";
+import { AiProviderSetupGuide, defaultAiProviderModels } from "./AiProviderSetupGuide";
 import { JiraConnectionGuide } from "./JiraConnectionGuide";
 import notionMark from "../../assets/notion-mark.png";
 import { defaultNotionCatalogUrl, NotionSynchronizationGuide } from "./NotionSynchronizationGuide";
-
-const aiProviderOptions: Array<{ label: string; value: AiProvider }> = [
-  { label: "OpenAI", value: "OpenAI" },
-  { label: "Claude", value: "Claude" },
-  { label: "Gemini", value: "Gemini" },
-  { label: "None", value: "None" }
-];
-
-const aiProviderKeyLabels: Record<Exclude<AiProvider, "None">, string> = {
-  OpenAI: "OpenAI API key",
-  Claude: "Claude API key",
-  Gemini: "Gemini API key"
-};
-
-const aiProviderKeyPlaceholders: Record<Exclude<AiProvider, "None">, string> = {
-  OpenAI: "sk-...",
-  Claude: "sk-ant-...",
-  Gemini: "AIza..."
-};
-
-const defaultAiProviderModels: Record<Exclude<AiProvider, "None">, string> = {
-  OpenAI: "gpt-4.1",
-  Claude: "claude-sonnet-4-20250514",
-  Gemini: "gemini-2.5-flash"
-};
 
 export function SettingsPanel({
   settings,
@@ -47,6 +22,7 @@ export function SettingsPanel({
   onDeleteAiProviderApiKey,
   onTestAiProviderConnection,
   onTestAiProviderApiKey,
+  onListAiProviderModels,
   onTestJiraApiTokenQuiet,
   onTestJiraConnectionSettings,
   hasNotionIntegrationToken,
@@ -76,6 +52,7 @@ export function SettingsPanel({
   onDeleteAiProviderApiKey: () => void;
   onTestAiProviderConnection: () => Promise<CredentialConnectionTestResult>;
   onTestAiProviderApiKey: (apiKey: string) => Promise<CredentialConnectionTestResult>;
+  onListAiProviderModels: (aiProvider: AppSettings["aiProvider"], apiKey?: string) => Promise<string[]>;
   onTestJiraApiTokenQuiet: (token: string) => Promise<JiraConnectionTestResult>;
   onTestJiraConnectionSettings: (siteUrl: string, accountEmail: string) => Promise<JiraConnectionTestResult>;
   hasNotionIntegrationToken: () => Promise<boolean>;
@@ -88,27 +65,19 @@ export function SettingsPanel({
   onOpenAiProviderApiKeys: () => void;
   onExportBackup: () => void;
   onImportBackup: () => void;
-  initialGuide?: "notion-synchronization" | null;
+  initialGuide?: "notion-synchronization" | "ai-provider" | null;
   onInitialGuideClose?: () => void;
   onClose: () => void;
 }) {
   const panelRef = useRef<HTMLElement | null>(null);
-  const aiProviderApiKeyDraftRef = useRef("");
   const [isJiraConnectionGuideOpen, setIsJiraConnectionGuideOpen] = useState(false);
   const [isNotionSynchronizationGuideOpen, setIsNotionSynchronizationGuideOpen] = useState(
     initialGuide === "notion-synchronization"
   );
+  const [isAiProviderSetupGuideOpen, setIsAiProviderSetupGuideOpen] = useState(initialGuide === "ai-provider");
   const [hasNotionToken, setHasNotionToken] = useState(false);
-  const [aiProviderApiKeyDraft, setAiProviderApiKeyDraft] = useState("");
-  const [aiProviderKeyDraftTestStatus, setAiProviderKeyDraftTestStatus] = useState<CredentialDraftTestStatus>("idle");
   const selectedAiProvider = settings.aiProvider === "None" ? "OpenAI" : settings.aiProvider;
   const isAiProviderSelected = settings.aiProvider !== "None";
-  const selectedAiProviderKeyLabel = settings.aiProvider === "None" ? "AI provider API key" : aiProviderKeyLabels[selectedAiProvider];
-  const selectedAiProviderPlaceholder = settings.aiProvider === "None"
-    ? "Select an AI provider"
-    : hasAiProviderApiKey
-    ? "Enter a new key to replace it"
-    : aiProviderKeyPlaceholders[selectedAiProvider];
   const isJiraConnectionComplete = Boolean(
     settings.jiraSiteUrl.trim() &&
     settings.jiraAccountEmail.trim() &&
@@ -119,14 +88,7 @@ export function SettingsPanel({
     settings.catalogSourceMode === "manual" ||
       (settings.catalogSourceMode === "notion" && settings.catalogSourceUrl.trim() && hasNotionToken)
   );
-  const aiProviderKeyDraftControls = getCredentialDraftControls({
-    hasConnectionSettings: isAiProviderSelected,
-    hasSavedCredential: hasAiProviderApiKey,
-    isTestingConnection: isTestingAiProviderConnection,
-    keyDraft: aiProviderApiKeyDraft,
-    keyTestStatus: aiProviderKeyDraftTestStatus
-  });
-
+  const isAiProviderConfigured = Boolean(isAiProviderSelected && settings.aiModel.trim() && hasAiProviderApiKey);
   const overlay = useAppOverlay({
     layer: appOverlayLayers.sidePanel,
     onDismiss: onClose,
@@ -137,44 +99,16 @@ export function SettingsPanel({
     surfaceRef: panelRef
   });
 
-  function updateAiProviderApiKeyDraft(value: string) {
-    aiProviderApiKeyDraftRef.current = value;
-    setAiProviderApiKeyDraft(value);
-    setAiProviderKeyDraftTestStatus("idle");
-  }
-
-  function changeAiProvider(aiProvider: AiProvider) {
-    updateAiProviderApiKeyDraft("");
-    setAiProviderKeyDraftTestStatus("idle");
-    onChange({
-      aiProvider,
-      aiModel: aiProvider === "None" ? "" : defaultAiProviderModels[aiProvider]
-    });
-  }
-
-  async function testAiProviderKeyConnection() {
-    if (!aiProviderKeyDraftControls.canTestConnection) return;
-
-    const apiKeyUnderTest = aiProviderApiKeyDraft;
-    setAiProviderKeyDraftTestStatus("testing");
-    const result = apiKeyUnderTest ? await onTestAiProviderApiKey(apiKeyUnderTest) : await onTestAiProviderConnection();
-    if (aiProviderApiKeyDraftRef.current !== apiKeyUnderTest) return;
-    setAiProviderKeyDraftTestStatus(result.ok ? "success" : "failed");
-  }
-
-  async function saveAiProviderKey() {
-    if (!aiProviderKeyDraftControls.canSaveDraft) return;
-
-    const saved = await onSaveAiProviderApiKey(aiProviderApiKeyDraft);
-    if (saved) {
-      updateAiProviderApiKeyDraft("");
-      setAiProviderKeyDraftTestStatus("idle");
-    }
-  }
-
   function closeNotionSynchronizationGuide() {
     setIsNotionSynchronizationGuideOpen(false);
     if (initialGuide === "notion-synchronization") {
+      onInitialGuideClose?.();
+    }
+  }
+
+  function closeAiProviderSetupGuide() {
+    setIsAiProviderSetupGuideOpen(false);
+    if (initialGuide === "ai-provider") {
       onInitialGuideClose?.();
     }
   }
@@ -186,9 +120,10 @@ export function SettingsPanel({
   }, [initialGuide]);
 
   useEffect(() => {
-    if (!aiProviderApiKeyDraft) return;
-    setAiProviderKeyDraftTestStatus("idle");
-  }, [settings.aiProvider, aiProviderApiKeyDraft]);
+    if (initialGuide === "ai-provider") {
+      setIsAiProviderSetupGuideOpen(true);
+    }
+  }, [initialGuide]);
 
   useEffect(() => {
     let cancelled = false;
@@ -233,6 +168,22 @@ export function SettingsPanel({
             setHasNotionToken(true);
           }}
           onTestNotionCatalogConnection={onTestNotionCatalogConnection}
+        />
+      ) : null}
+      {isAiProviderSetupGuideOpen ? (
+        <AiProviderSetupGuide
+          settings={settings}
+          hasAiProviderApiKey={hasAiProviderApiKey}
+          aiCredentialMessage={aiCredentialMessage}
+          isTestingAiProviderConnection={isTestingAiProviderConnection}
+          onChange={onChange}
+          onClose={closeAiProviderSetupGuide}
+          onDeleteAiProviderApiKey={onDeleteAiProviderApiKey}
+          onOpenAiProviderApiKeys={onOpenAiProviderApiKeys}
+          onSaveAiProviderApiKey={onSaveAiProviderApiKey}
+          onTestAiProviderApiKey={onTestAiProviderApiKey}
+          onTestAiProviderConnection={onTestAiProviderConnection}
+          onListAiProviderModels={onListAiProviderModels}
         />
       ) : null}
       <PanelHeader title="Settings" subtitle="Local configuration without secrets in backups" onClose={onClose} />
@@ -351,87 +302,58 @@ export function SettingsPanel({
           </p>
         </div>
 
-        <DetailBlock icon={<Bot size={15} />} title="AI provider">
-          <SettingsSelect
-            label="Provider"
-            value={settings.aiProvider}
-            options={aiProviderOptions}
-            onChange={(aiProvider) => changeAiProvider(aiProvider as AiProvider)}
-          />
-          <div className="mt-3 rounded border border-[#dfe1e6] bg-[#f7f8fa] p-3">
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <div>
-                <div className="text-xs font-medium text-[#6b778c]">{selectedAiProviderKeyLabel}</div>
-                <div className="text-sm font-medium text-[#172b4d]">
-                  {settings.aiProvider === "None"
-                    ? "No AI provider selected"
-                    : hasAiProviderApiKey
-                      ? "Credential saved"
-                      : "No credential saved"}
-                </div>
-                {settings.aiProvider !== "None" ? (
-                  <button
-                    className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-[#0052cc] hover:underline"
-                    onClick={onOpenAiProviderApiKeys}
-                    type="button"
-                  >
-                    Create or manage key
-                    <ExternalLink size={11} />
-                  </button>
-                ) : null}
-              </div>
-              <span className={`rounded px-2 py-1 text-xs font-medium ${isAiProviderSelected && hasAiProviderApiKey ? "bg-[#e3fcef] text-[#006644]" : "bg-[#f4f5f7] text-[#6b778c]"}`}>
-                {settings.aiProvider === "None" ? "Off" : hasAiProviderApiKey ? "Saved" : "Missing"}
+        <div className="mt-4 rounded border border-[#dfe1e6] p-3">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-2 text-sm font-semibold">
+              <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center">
+                <Bot size={16} strokeWidth={2.25} />
+              </span>
+              <span className="min-w-0 truncate">AI provider</span>
+              <span
+                aria-label={isAiProviderConfigured ? "AI provider configured" : "AI provider needs setup"}
+                className={`inline-flex shrink-0 items-center justify-center ${
+                  isAiProviderConfigured ? "text-[#36b37e]" : "text-[#ffab00]"
+                }`}
+                title={isAiProviderConfigured ? "AI provider configured" : "AI provider needs setup"}
+              >
+                {isAiProviderConfigured ? (
+                  <span className="inline-flex h-[18px] w-[18px] items-center justify-center rounded-full bg-[#4caf50] text-white">
+                    <Check size={14} strokeWidth={3} />
+                  </span>
+                ) : (
+                  <span className="relative inline-flex h-[18px] w-[18px] items-center justify-center">
+                    <span className="absolute inset-0 bg-[#ffab00] [clip-path:polygon(50%_5%,96%_90%,4%_90%)]" />
+                    <span className="relative top-[1px] text-[12px] font-black leading-none text-white">!</span>
+                  </span>
+                )}
               </span>
             </div>
-            <SettingsInput
-              label="New API key"
-              masked
-              disabled={!isAiProviderSelected}
-              placeholder={selectedAiProviderPlaceholder}
-              value={aiProviderApiKeyDraft}
-              onChange={updateAiProviderApiKeyDraft}
-            />
-            <div className="grid grid-cols-2 gap-2">
-              <Button
-                className="settings-button-primary min-w-0 whitespace-nowrap"
-                disabled={!isAiProviderSelected || !aiProviderKeyDraftControls.canSaveDraft}
-                variant="secondary"
-                onClick={saveAiProviderKey}
-              >
-                Save key
-              </Button>
-              <Button
-                className="settings-button-danger min-w-0 whitespace-nowrap"
-                disabled={!isAiProviderSelected || !hasAiProviderApiKey}
-                variant="secondary"
-                onClick={onDeleteAiProviderApiKey}
-              >
-                Remove key
-              </Button>
-              <Button
-                className="settings-button-test col-span-2 min-w-0 whitespace-nowrap"
-                disabled={!isAiProviderSelected || !aiProviderKeyDraftControls.canTestConnection}
-                icon={isTestingAiProviderConnection ? <LoadingOrb size="xs" /> : undefined}
-                variant="secondary"
-                onClick={testAiProviderKeyConnection}
-              >
-                {isTestingAiProviderConnection ? "Testing..." : "Test connection"}
-              </Button>
-            </div>
-            {aiProviderApiKeyDraft ? (
-              <FeedbackNote className="mt-3" variant={aiProviderKeyDraftStatusVariant(aiProviderKeyDraftTestStatus, aiProviderKeyDraftControls.hasConnectionSettings)}>
-                {aiProviderKeyDraftStatusMessage(aiProviderKeyDraftTestStatus, aiProviderKeyDraftControls.hasConnectionSettings)}
-              </FeedbackNote>
-            ) : null}
-            {aiCredentialMessage ? (
-              <FeedbackNote className="mt-3" variant={aiCredentialMessageVariant(aiCredentialMessage)}>{aiCredentialMessage}</FeedbackNote>
-            ) : null}
+            <Button className="settings-button-primary shrink-0" variant="secondary" onClick={() => setIsAiProviderSetupGuideOpen(true)}>
+              Setup
+            </Button>
           </div>
+          <div className="mb-3 rounded border border-[#dfe1e6] bg-[#f7f8fa] p-3">
+            <div className="mb-3">
+              <div className="text-sm font-semibold text-[#172b4d]">Provider state</div>
+              <p className="text-xs leading-relaxed text-[#6b778c]">
+                Provider, model, and API key are configured through the guided setup.
+              </p>
+            </div>
+            <SettingsReadOnlyRows
+              rows={[
+                ["Provider", isAiProviderSelected ? settings.aiProvider : "Not set"],
+                ["Model", isAiProviderSelected ? settings.aiModel || defaultAiProviderModels[selectedAiProvider] : "Not set"],
+                ["API key", isAiProviderSelected ? (hasAiProviderApiKey ? "Saved" : "Missing") : "Not required"]
+              ]}
+            />
+          </div>
+          {aiCredentialMessage ? (
+            <FeedbackNote className="mt-3" variant={aiCredentialMessageVariant(aiCredentialMessage)}>{aiCredentialMessage}</FeedbackNote>
+          ) : null}
           <p className="mt-2 text-xs leading-relaxed text-[#6b778c]">
             AI keys follow the same secret boundary as Jira credentials and are never included in backups.
           </p>
-        </DetailBlock>
+        </div>
 
         <DetailBlock icon={<Download size={15} />} title="Backup and restore">
           <p className="mb-3 text-sm text-[#6b778c]">
@@ -457,22 +379,6 @@ function catalogSourceModeLabel(mode: AppSettings["catalogSourceMode"]): string 
   return "Manual catalog";
 }
 
-function aiProviderKeyDraftStatusMessage(status: CredentialDraftTestStatus, hasConnectionSettings: boolean): string {
-  if (!hasConnectionSettings) return "Select an AI provider before testing this key.";
-  if (status === "success") return "This key passed Test connection and can be saved.";
-  if (status === "failed") return "Update this key, then test again before saving.";
-  if (status === "testing") return "Testing this key without saving it.";
-  return "Test this key before saving it.";
-}
-
-function aiProviderKeyDraftStatusVariant(status: CredentialDraftTestStatus, hasConnectionSettings: boolean) {
-  if (!hasConnectionSettings) return "warning";
-  if (status === "success") return "success";
-  if (status === "failed") return "error";
-  if (status === "testing") return "info";
-  return "warning";
-}
-
 function aiCredentialMessageVariant(message: string) {
   if (/saved|removed/i.test(message)) return "success";
   if (/select|empty/i.test(message)) return "warning";
@@ -488,84 +394,6 @@ function SettingsReadOnlyRows({ rows }: { rows: Array<[string, string]> }) {
           <div className="min-w-0 break-words text-sm text-[#172b4d]">{value}</div>
         </div>
       ))}
-    </div>
-  );
-}
-
-function SettingsInput({
-  label,
-  value,
-  disabled = false,
-  masked = false,
-  placeholder,
-  onChange
-}: {
-  label: string;
-  value: string;
-  disabled?: boolean;
-  masked?: boolean;
-  placeholder?: string;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <label className="mb-3 block">
-      <span className="mb-1 block text-xs font-medium text-[#6b778c]">{label}</span>
-      <input
-        className={`h-9 w-full rounded border border-[#c1c7d0] bg-white px-2 text-sm outline-none focus:border-[#4c9aff] focus:ring-2 focus:ring-[#deebff] disabled:cursor-not-allowed disabled:bg-[#f4f5f7] disabled:text-[#6b778c] ${masked ? "secret-input" : ""}`}
-        disabled={disabled}
-        placeholder={placeholder}
-        type="text"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-      />
-    </label>
-  );
-}
-
-function SettingsSelect({
-  label,
-  value,
-  options,
-  onChange
-}: {
-  label: string;
-  value: string;
-  options: Array<{ label: string; value: string }>;
-  onChange: (value: string) => void;
-}) {
-  const [isOpen, setIsOpen] = useState(false);
-  const selectedOption = options.find((option) => option.value === value) ?? options[0];
-
-  return (
-    <div className="relative mb-3">
-      <div className="mb-1 block text-xs font-medium text-[#6b778c]">{label}</div>
-      <button
-        className="flex h-9 w-full items-center justify-between gap-2 rounded border border-[#c1c7d0] bg-white px-2 text-left text-sm text-[#172b4d] outline-none hover:bg-[#f4f5f7] focus:border-[#4c9aff] focus:ring-2 focus:ring-[#deebff]"
-        onBlur={() => window.setTimeout(() => setIsOpen(false), 120)}
-        onClick={() => setIsOpen((currentValue) => !currentValue)}
-        type="button"
-      >
-        <span>{selectedOption.label}</span>
-        <ChevronDown size={14} />
-      </button>
-      {isOpen ? (
-        <div className="absolute z-40 mt-1 w-full overflow-hidden rounded border border-[#c1c7d0] bg-white py-1 text-sm shadow-xl">
-          {options.map((option) => (
-            <button
-              className="flex w-full items-center justify-between gap-2 px-2 py-2 text-left text-[#172b4d] hover:bg-[#f4f5f7]"
-              key={option.value}
-              onClick={() => {
-                onChange(option.value);
-                setIsOpen(false);
-              }}
-              type="button"
-            >
-              <span>{option.label}</span>
-              {option.value === value ? <Check size={13} /> : null}
-            </button>
-          ))}
-        </div>
-      ) : null}
     </div>
   );
 }

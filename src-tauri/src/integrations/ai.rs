@@ -77,6 +77,10 @@ impl AiClient {
 
         self.transport.test_connection(&model, &probe)
     }
+
+    pub fn list_models(&self) -> Result<Vec<String>, String> {
+        self.transport.list_models()
+    }
 }
 
 #[cfg(test)]
