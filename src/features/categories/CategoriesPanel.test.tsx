@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { Category } from "../../lib/types";
-import { CategoriesPanel } from "./CategoriesPanel";
+import { CategoriesPanel, createManualCatalogSyncResult, isMissingNotionSynchronizationSetup } from "./CategoriesPanel";
 
 const project: Category = {
   id: "project-dts",
@@ -60,4 +60,48 @@ it("shows catalog-managed areas as refreshable instead of manually creatable", (
   expect(html.match(/>New</g)).toHaveLength(1);
   expect(html).not.toContain("Rename Bug");
   expect(html).not.toContain("Delete Bug");
+});
+
+it("detects missing Notion setup failures from catalog sync", () => {
+  expect(
+    isMissingNotionSynchronizationSetup("notion", {
+      ok: false,
+      sourceUrl: "",
+      syncedAreaCount: 0,
+      deliveryFormatCount: 0,
+      ruleCount: 0,
+      warnings: [],
+      errors: ["Save a Notion integration token before syncing the catalog."],
+      areas: [],
+      deliveryFormats: [],
+      areaFormatRules: []
+    })
+  ).toBe(true);
+
+  expect(
+    isMissingNotionSynchronizationSetup("public-exportable", {
+      ok: false,
+      sourceUrl: "",
+      syncedAreaCount: 0,
+      deliveryFormatCount: 0,
+      ruleCount: 0,
+      warnings: [],
+      errors: ["Save a Notion integration token before syncing the catalog."],
+      areas: [],
+      deliveryFormats: [],
+      areaFormatRules: []
+    })
+  ).toBe(false);
+});
+
+it("creates a visible manual catalog sync result when the fallback path returns no backend notice", () => {
+  expect(createManualCatalogSyncResult([area, { ...area, id: "area-polish", name: "Polish" }])).toMatchObject({
+    ok: true,
+    sourceUrl: "manual",
+    syncedAreaCount: 2,
+    deliveryFormatCount: 0,
+    ruleCount: 0,
+    warnings: [],
+    errors: []
+  });
 });

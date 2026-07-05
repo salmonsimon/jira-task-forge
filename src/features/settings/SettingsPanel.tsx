@@ -59,6 +59,8 @@ export function SettingsPanel({
   onOpenAiProviderApiKeys,
   onExportBackup,
   onImportBackup,
+  initialGuide,
+  onInitialGuideClose,
   onClose
 }: {
   settings: AppSettings;
@@ -86,12 +88,16 @@ export function SettingsPanel({
   onOpenAiProviderApiKeys: () => void;
   onExportBackup: () => void;
   onImportBackup: () => void;
+  initialGuide?: "notion-synchronization" | null;
+  onInitialGuideClose?: () => void;
   onClose: () => void;
 }) {
   const panelRef = useRef<HTMLElement | null>(null);
   const aiProviderApiKeyDraftRef = useRef("");
   const [isJiraConnectionGuideOpen, setIsJiraConnectionGuideOpen] = useState(false);
-  const [isNotionSynchronizationGuideOpen, setIsNotionSynchronizationGuideOpen] = useState(false);
+  const [isNotionSynchronizationGuideOpen, setIsNotionSynchronizationGuideOpen] = useState(
+    initialGuide === "notion-synchronization"
+  );
   const [hasNotionToken, setHasNotionToken] = useState(false);
   const [aiProviderApiKeyDraft, setAiProviderApiKeyDraft] = useState("");
   const [aiProviderKeyDraftTestStatus, setAiProviderKeyDraftTestStatus] = useState<CredentialDraftTestStatus>("idle");
@@ -166,6 +172,13 @@ export function SettingsPanel({
     }
   }
 
+  function closeNotionSynchronizationGuide() {
+    setIsNotionSynchronizationGuideOpen(false);
+    if (initialGuide === "notion-synchronization") {
+      onInitialGuideClose?.();
+    }
+  }
+
   useEffect(() => {
     if (!aiProviderApiKeyDraft) return;
     setAiProviderKeyDraftTestStatus("idle");
@@ -203,7 +216,7 @@ export function SettingsPanel({
           settings={settings}
           hasNotionIntegrationToken={hasNotionIntegrationToken}
           onChangeCatalogSettings={onChange}
-          onClose={() => setIsNotionSynchronizationGuideOpen(false)}
+          onClose={closeNotionSynchronizationGuide}
           onDeleteNotionIntegrationToken={async () => {
             await onDeleteNotionIntegrationToken();
             setHasNotionToken(false);

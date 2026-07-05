@@ -25,7 +25,7 @@ export function CategoriesPanel({
   onUpdateCategory: (categoryId: string, patch: Partial<Pick<Category, "hidden" | "name">>) => void | Promise<void>;
   onDeleteCategory: (categoryId: string) => void | Promise<void>;
   onSyncAreaCatalog: (sourceUrl?: string) => Promise<CatalogSyncResult | null>;
-  onConfigureCatalogSource: () => void;
+  onConfigureCatalogSource: (target?: "settings" | "notion-synchronization") => void;
   onClose: () => void;
 }) {
   const panelRef = useRef<HTMLElement | null>(null);
@@ -107,7 +107,7 @@ function CategoryList({
   onUpdateCategory: (categoryId: string, patch: Partial<Pick<Category, "hidden" | "name">>) => void | Promise<void>;
   onDeleteCategory: (categoryId: string) => void | Promise<void>;
   onSyncAreaCatalog?: (sourceUrl?: string) => Promise<CatalogSyncResult | null>;
-  onConfigureCatalogSource?: () => void;
+  onConfigureCatalogSource?: (target?: "settings" | "notion-synchronization") => void;
   onSyncResult?: (result: CatalogSyncResult | null) => void;
 }) {
   const [isAdding, setIsAdding] = useState(false);
@@ -127,7 +127,7 @@ function CategoryList({
   async function syncCatalog() {
     if (!onSyncAreaCatalog || isSyncing) return;
     if (catalogSourceMode !== "manual" && !catalogSourceUrl.trim()) {
-      onConfigureCatalogSource?.();
+      onConfigureCatalogSource?.(catalogSourceMode === "notion" ? "notion-synchronization" : "settings");
       return;
     }
 
@@ -136,7 +136,11 @@ function CategoryList({
     try {
       const result = await onSyncAreaCatalog();
       await waitForMinimumElapsed(startedAt, 650);
-      onSyncResult?.(result);
+      if (isMissingNotionSynchronizationSetup(catalogSourceMode, result)) {
+        onConfigureCatalogSource?.("notion-synchronization");
+        return;
+      }
+      onSyncResult?.(result ?? createManualCatalogSyncResult(categories));
     } finally {
       setIsSyncing(false);
     }
@@ -233,7 +237,9 @@ function CatalogSyncNotice({ result, onClose }: { result: CatalogSyncResult; onC
       </div>
       {isOk ? (
         <p className="text-xs text-[#42526e]">
-          {result.syncedAreaCount} areas, {result.deliveryFormatCount} delivery formats, and {result.ruleCount} rules validated.
+          {result.sourceUrl === "manual"
+            ? `${result.syncedAreaCount} manual fallback areas are available.`
+            : `${result.syncedAreaCount} areas, ${result.deliveryFormatCount} delivery formats, and ${result.ruleCount} rules validated.`}
         </p>
       ) : (
         <ul className="max-h-40 list-disc overflow-y-auto pl-5 text-xs text-[#42526e]">
@@ -259,6 +265,38 @@ async function waitForMinimumElapsed(startedAt: number, minimumMs: number): Prom
   if (remainingMs > 0) {
     await new Promise((resolve) => window.setTimeout(resolve, remainingMs));
   }
+}
+
+export function createManualCatalogSyncResult(categories: Category[]): CatalogSyncResult {
+  return {
+    ok: true,
+    sourceUrl: "manual",
+    syncedAreaCount: categories.length,
+    deliveryFormatCount: 0,
+    ruleCount: 0,
+    warnings: [],
+    errors: [],
+    areas: [],
+    deliveryFormats: [],
+    areaFormatRules: []
+  };
+}
+
+export function isMissingNotionSynchronizationSetup(
+  catalogSourceMode: AppSettings["catalogSourceMode"],
+  result: CatalogSyncResult | null
+): boolean {
+  if (catalogSourceMode !== "notion" || !result || result.ok) return false;
+
+  return result.errors.some((error) => {
+    const normalizedError = error.toLowerCase();
+    return (
+      normalizedError.includes("save a notion integration token") ||
+      normalizedError.includes("notion integration token is empty") ||
+      normalizedError.includes("notion integration token is required") ||
+      normalizedError.includes("paste a notion page url")
+    );
+  });
 }
 
 function CategoryRow({

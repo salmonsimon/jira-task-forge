@@ -402,10 +402,10 @@ function Feedback({ children, kind }: { children: ReactNode; kind: "success" | "
     <div
       className={`mt-4 rounded border px-3 py-2 text-xs font-medium ${
         kind === "success"
-          ? "border-[#006644] bg-[#00875a] text-white"
+          ? "border-[#abf5d1] bg-[#e3fcef] text-[#006644]"
           : kind === "warning"
-            ? "border-[#f5cd47] bg-[#fff7d6] text-[#533f04]"
-            : "border-[#ffbdad] bg-[#ffebe6] text-[#5d1f1a]"
+            ? "border-[#f5cd47] bg-[#fff7d6] text-[#974f0c]"
+            : "border-[#ffbdad] bg-[#ffebe6] text-[#bf2600]"
       }`}
     >
       {children}
