@@ -4,12 +4,12 @@ This document is the default execution path for the repo. It is meant to support
 
 ## Current Checkpoint
 
-Date: 2026-06-23
+Date: 2026-07-05
 
 Main is up to date through:
 
 ```text
-#130 Recover Jira parent retries with remote markers
+#144 Add official area catalog sync foundation
 ```
 
 Recent Personal v1 hardening merged since the older May checkpoint:
@@ -52,6 +52,15 @@ Recent Personal v1 hardening merged since the older May checkpoint:
 - PR #130 added safer Jira parent retry recovery through remote correlation
   markers, candidate issue search, REST property verification, and safe failure
   when a retry cannot be reconciled confidently.
+- PR #142 refreshed the roadmap for the workflow AFK batches.
+- PR #143 clarified that the catalog uses official final labels and should not
+  keep deprecated labels selectable.
+- PR #144 added the official area catalog sync foundation: versioned catalog
+  data, Notion API sync through a stored integration token, Settings Notion
+  synchronization setup, catalog-managed Areas, safe normalization,
+  delivery-format mappings, conditional Arquitectura formats, Bug/Story
+  issue-type derivation, Assisted Description/Jira payload catalog context, and
+  live Notion/OpenAI/JTFTEST verification.
 
 Historical baseline from the first checkpoint:
 
@@ -222,14 +231,17 @@ Expected limitations right now:
 - Read-only JQL queries are wired through Jira Cloud REST API v3.
 - JQL favorites persistence, session JQL history, backup/import, sync progress,
   task sync audit activity, OpenAI settings, and Ask AI JQL drafting are wired.
-- Categories persistence, audit log UI, broader Jira issue relationship sync,
-  remote correlation marker recovery, attachment source validation, remaining
-  `Privacy & Diagnostics` copy/test polish if review finds gaps, and local data
-  cleanup / storage inventory remain open roadmap slices. Guided Jira
-  Connection setup, per-task assisted description structure/proposal logs,
-  local sub-task editing, managed attachment ingestion, Jira attachment upload,
-  minimal CSP, and sync audit detail allowlisting have landed and still need
-  regular native/live QA coverage.
+- Catalog-managed Areas, Notion synchronization, remote correlation marker
+  recovery, attachment source validation, guided Jira Connection setup, per-task
+  assisted description structure/proposal logs, local sub-task editing, managed
+  attachment ingestion, Jira attachment upload, minimal CSP, sync audit detail
+  allowlisting, and setup-time `Privacy & Diagnostics` have landed and still
+  need regular native/live QA coverage. Remaining open roadmap slices are now
+  tracked in GitHub issues: popup/modal visual audit and standardization,
+  Escape/sidebar polish, Jira Verify/Token ordering, AI Provider setup modal,
+  read-only Jira catalog drift audit, tray selector nested button markup, Story
+  vs Bug description template separation, Epic Scope modeling, docs alignment,
+  JTFTEST workflow QA, and local data cleanup/storage inventory.
 - Task detail `Details` supports editable project, area, and priority for editable non-archived tasks. Auto-generated epic and labels remain visible but muted/read-only.
 
 Near-term decided follow-ups:
@@ -242,57 +254,45 @@ Near-term decided follow-ups:
 
 Recommended next implementation:
 
-- Launch the next work from the current workflow issues after this roadmap
-  refresh lands. The near-term workflow plan intentionally excludes the
-  Regularizacion flow: Issue #135 is the single owner for adding that product
-  behavior later, and no other issue or batch should be considered incomplete
-  because Regularizacion is not implemented yet.
-- Batch 1: catalog foundation and normalization. Include Issue #141 except the
-  Regularizacion-specific acceptance item owned by Issue #135. Add an internal
-  versioned catalog, synced from the `JTF Sync Catalog` Notion source through
-  the Notion API for the current Personal v1 flow, for official area display
-  names, Jira labels, safe aliases or
-  unambiguous old names, delivery-format mappings, conditional format rules,
-  and issue-type derivation. The catalog should drive the app toward official
-  final values only: deprecated labels should not remain selectable, and
-  ambiguous values should require choosing an official area rather than being
-  modeled as aliases. Validate safe normalization, rejection or blocking of
-  non-official values, official-only option exposure, direct mappings,
-  conditional mappings, display-name/Jira-label separation, and Bug-as-Bug /
-  all-other-areas-as-Story issue type derivation.
-- Batch 2: description templates and Architecture intent. Include Issue #134,
-  Issue #137, and Issue #136. Separate Story and Bug templates, add frequent
-  task-type templates, and keep Arquitectura as one area/tag while
-  distinguishing Arquitectura - Brief and Arquitectura - Propuesta Final
-  through task intent, title, description, minimum deliverable, and checklist.
-  Architecture must not create automatic subtasks or require both Brief and
-  Final Proposal as default deliverables in one Story.
-- Single task: Epic Scope model. Include Issue #132. Move epic resolution and
-  creation from Project + Area to Project + Area + Scope while preserving
-  compatibility with legacy epics named `[{Project}] {Area}`. Keep this
-  separate because it touches local modeling, preflight grouping, Jira epic
-  search/create, and sync tests.
-- Single task: tray selector nested button fix. Include Issue #140. Fix invalid
-  nested interactive markup and add focused regression coverage if practical.
-  This can run independently because it is frontend markup debt, not workflow
-  product logic.
-- Documentation batch: Include Issue #138 after the implementation shape is
-  settled. Update product decisions, Jira description format, live QA, and
-  handoff docs to match the implemented catalog, templates, Architecture rules,
-  and Epic Scope behavior. Keep Regularizacion documented only as a future flow
-  owned by Issue #135 until that issue is implemented.
-- Live QA batch: Include Issue #139 after the implementation batches land. Use
-  `JTFTEST` only for writes and DTS only as read-only reference material.
-  Record evidence under `docs/live-qa-results/`. Verify new epic naming,
-  Story/Bug templates, Architecture Brief/Final Proposal stories without
-  automatic subtasks, explicit non-Architecture subtasks, area labels, review
-  checklist, local sync audit, and duplicate-epic prevention.
-- Continue using `docs/internal-release-readiness.md`, `docs/live-qa.md`,
-  `docs/backup-restore-drill.md`, and the large-tray smoke fixture as
-  repeatable QA gates after each batch. Keep backend coverage above 80% while
-  adding focused tests for new catalog, template, sync, and Jira behavior. If
-  QA reveals product/UI friction, do a small frontend-only fix branch before
-  expanding integration writes.
+- Issue #150 first slice: do a visual audit before any popup/modal
+  standardization implementation. Capture screenshots of all reachable
+  popup-like surfaces, including centered modals, setup guides, side panels,
+  dropdowns, popovers, notices, and task focus windows. Group them by
+  interaction pattern and wait for Saimon to choose the target pattern before
+  consolidating components.
+- Issue #149: complete or verify Escape behavior for Settings, Categories, and
+  nested modals. This is small and pairs naturally with the popup audit because
+  it documents current overlay behavior before standardization.
+- Issue #147: clarify the Jira setup guide order and responsibilities for
+  Verify vs Token. Current code still has `Verify` before `Token`, so this
+  should remain a focused UX/logic slice.
+- Issue #146: create the reusable AI Provider setup modal after the popup audit
+  chooses the preferred setup/modal pattern. This avoids building another
+  one-off surface before standardization.
+- Issue #152: open the Notion synchronization setup guide directly when
+  Categories Sync is blocked by missing Notion configuration. This keeps the
+  sync action tied to the setup needed to complete it.
+- Issue #140: fix the tray selector nested button markup independently. It is
+  frontend markup/accessibility debt and can run without product decisions.
+- Issue #134: separate the exact Story and Bug Assisted Description templates.
+  PR #144 added catalog delivery-format context, but the backend still validates
+  a single Story-shaped target template, so this issue remains open.
+- Issue #132: implement Epic Scope modeling as its own HITL-sensitive slice
+  because it changes local modeling, preflight grouping, Jira epic search/create,
+  and sync tests.
+- Issue #103: add the local data cleanup and storage inventory note. Keep it
+  documentation-only and avoid destructive cleanup UI or commands.
+- Issue #138: keep docs alignment as a follow-up after the remaining behavior
+  changes land. This roadmap refresh does not close the full workflow
+  documentation issue.
+- Issue #139: run live JTFTEST workflow QA only after the workflow model slices
+  it depends on are implemented.
+- Issue #153: package the Windows app and choose/apply the final icon after
+  Issue #138 and Issue #139, so the shareable build reflects the reviewed docs
+  and live QA evidence.
+- Regularizacion is out of scope for now and is no longer a planned roadmap
+  slice. Do not block any current issue, QA path, or documentation update on
+  Regularizacion behavior.
 
 ## Working Model
 
@@ -587,71 +587,54 @@ Batch 1 status:
   unavailable, API token management remains separate, and `Privacy &
   Diagnostics` is available inside the guide.
 
-Settings definition before #102:
+Roadmap cleanup status after PR #144 and issue review:
 
-Issue or source: `#102` visible Settings privacy copy.
-Status: mostly landed through PR #128's guided setup. Treat remaining work as a
-focused review/copy/test follow-up, not as a broad new Settings block.
-Accepted direction now in app: `Privacy & Diagnostics` opens a small secondary
-in-app detail view from the guided setup. The current text covers Jira Cloud
-calls, user-triggered AI provider calls, OS credential-store secret handling,
-SQLite/backup/log exclusion, manual `npm audit` registry metadata, and the
-`JTFTEST` writable / `DTS` read-only QA boundary.
-Possible remaining work: tighten copy after manual review, add rendering tests
-if the frontend test harness covers this modal, or update docs if the boundary
-changes.
-Explicit out-of-scope for now: no permanent privacy-copy block in the main
-Settings panel, no new privacy policy, no auth changes, no new external calls,
-and no destructive cleanup controls.
-Future option: Distributable v1 may add a formal web privacy/security document,
-but the in-app detail view remains the canonical setup-time explanation.
+- Issue #102 visible Settings privacy copy: closed after PR #128 because
+  `Privacy & Diagnostics` is the accepted setup-time explanation for Personal
+  v1. Do not add a permanent main Settings privacy block unless product scope
+  changes.
+- Issue #135 Regularizacion flow: closed as not planned. Regularizacion is out
+  of current JTF scope and should not appear as a pending roadmap dependency.
+- Issue #136 Arquitectura templates and Issue #137 frequent task templates:
+  closed after PR #144 because the official catalog now provides delivery
+  formats, conditional Arquitectura Brief/Propuesta Final resolution, and
+  Assisted Description template context.
+- Issue #148 Notion private sync: closed after PR #144 because Notion API sync
+  with an OS credential-store integration token is implemented.
+- Issue #134 remains open because PR #144 added catalog delivery-format context,
+  but the backend still uses one Story-shaped target Markdown template for
+  Assisted Description validation.
 
-Recommended Batch 2:
+Recommended AFK batches from the current open issues:
 
-Issue or source: `#103` local data cleanup and storage inventory note.
-Branch: `codex/local-data-storage-inventory`.
-WSL worktree path: `/home/saimon/Development/jira-task-forge-storage-inventory`.
-Scope: documentation-only inventory of SQLite data, settings, backups,
-diagnostics/logs, managed attachments, generated files, automatic cleanup, and
-manual no-delete cautions.
-Explicit out-of-scope: no cleanup UI, no deletion commands, no migration, no
-attachment lifecycle implementation. If attachment behavior depends on `#95`,
-mark that part as pending instead of pretending it is final.
-Validation commands: `git diff --check`.
-Stop conditions: the note needs exact attachment lifecycle guarantees that are
-not implemented yet, or starts proposing destructive user controls.
+Batch 1: low-conflict AFK launch set.
+Issues: Issue #152, Issue #140, Issue #103, and Issue #150.
+Scope: route missing Notion setup directly from Categories Sync, fix tray
+selector nested buttons, document local storage/cleanup inventory, and capture
+the popup/modal screenshot audit. These can run in parallel because their file
+ownership and validation paths should barely overlap.
+Stop condition: Issue #150 stops at the visual inventory; choosing the final
+modal pattern requires Saimon review before implementation standardization.
 
-Recommended Batch 3:
+Batch 2: setup and overlay polish.
+Issues: Issue #149, Issue #147, and Issue #146.
+Scope: verify/fix Escape and nested overlay behavior, clarify Jira Verify/Token
+setup ordering, and add the AI Provider setup modal using the Jira/Notion setup
+visual family. Issue #146 should use a two-step flow: choose provider/model,
+then set and test the API key.
 
-Issue or source: `#94` Remote Correlation Marker recovery.
-Branch: `codex/remote-correlation-recovery`.
-WSL worktree path: `/home/saimon/Development/jira-task-forge-correlation-recovery`.
-Scope: recover ambiguous Jira parent-create retries by querying Jira for the
-expected remote marker before creating another issue; reconcile found issues
-locally and record sanitized audit events.
-Explicit out-of-scope: attachment handling, relationship sync, UI redesign,
-credential UX, or changing the accepted Jira creation model.
-Validation commands: focused Rust tests for found-marker recovery, no-marker
-retry, marker-query failure, and `cargo test`.
-Stop conditions: the recovery behavior would require changing accepted ADR 0005,
-or live validation would need writes outside `JTFTEST`.
+Batch 3: workflow model slices.
+Issues: Issue #134 and Issue #132, followed by Issue #138 and Issue #139.
+Scope: first separate exact Story/Bug templates, then implement Epic Scope
+modeling with the already-decided `[{Project}] [{Area}] {Scope}` rule. Only
+after those behavior changes land should docs alignment and JTFTEST live
+workflow QA be treated as closing candidates.
 
-Recommended Batch 4:
-
-Issue or source: `#95` attachment file grants and source validation.
-Branch: `codex/attachment-source-validation`.
-WSL worktree path: `/home/saimon/Development/jira-task-forge-attachment-validation`.
-Scope: implement the accepted attachment provenance policy so ingestion requires
-a backend-owned consent/grant signal, rejects unsafe sources, copies into
-managed storage, and persists only safe managed metadata.
-Explicit out-of-scope: remote Jira retry/idempotency changes, relationship sync,
-backup bundle redesign, or broad cleanup UI.
-Validation commands: focused Rust tests for valid granted files, arbitrary path
-rejection, directory rejection, symlink/escape rejection, oversized files, and
-internal app-directory rejection; then `cargo test`.
-Stop conditions: the accepted provenance policy from `#87` is ambiguous, file
-dialog/grant behavior differs between WSL and native Windows in a way that needs
-HITL, or the implementation would mutate existing managed attachments.
+Final packaging slice.
+Issue: Issue #153.
+Scope: choose/apply the final app icon and package a Windows-ready build after
+Issue #138 and Issue #139, so the app can be shared directly with the team
+without `npm run tauri dev`.
 
 Already landed from the earlier batch plan:
 
@@ -666,44 +649,49 @@ Recommended next implementation slice:
 
 Branch family:
 
-- `codex/local-data-storage-inventory`
+- `codex/popup-surface-audit`
 
 Deliverables:
 
-- #103: add documentation-only storage inventory. Keep attachment lifecycle
-  details implementation-dependent until #95 lands.
-- #102: review the landed `Privacy & Diagnostics` detail view from PR #128 and
-  leave only targeted copy/docs/test polish if something concrete is missing.
+- Issue #152: open Notion setup directly from Categories Sync when sync is
+  blocked by missing Notion configuration.
+- Issue #140: fix invalid nested tray selector button markup.
+- Issue #103: document local storage/cleanup inventory.
+- Issue #150: capture and document screenshots of the current popup/modal/setup
+  surfaces before changing the design system.
 
 Reason:
 
-- The storage inventory is docs-only and low-risk. The guided setup now carries
-  the Personal v1 privacy/diagnostics explanation, so any #102 follow-up should
-  be narrow and evidence-backed.
+- These four tasks are independently executable, low-conflict, and already have
+  enough scope to launch in separate WSL worktrees as visible AFK threads.
 
 ## Following Slice
 
 Recommended following implementation slice:
 
-Branch: `codex/remote-correlation-recovery`
+Branch family:
+
+- `codex/ui-correctness-small-fixes`
 
 Deliverables:
 
-- Implement #94 ambiguous Jira sync recovery with Remote Correlation Markers.
-- Keep duplicate-prevention behavior narrow around parent issue creation.
-- Reuse the centralized sync audit detail module from PR #125.
+- Issue #149: verify/fix Escape behavior for Settings, Categories, and nested
+  modals.
+- Issue #147: clarify Jira setup Verify/Token ordering and messages.
+- Issue #146: add the AI Provider setup modal after the visual audit has a
+  chosen pattern.
 
 Reason:
 
-- Duplicate Jira issue prevention is more important than relationship expansion
-  before trusting the app for daily Jira creation.
+- These are related setup/overlay polish tasks. They can run after Batch 1, with
+  Issue #146 gated by the visual pattern decision from Issue #150.
 
 Separate hardening follow-up:
 
-- Implement #95 attachment source validation as its own PR after #94 or in a
-  separate non-overlapping batch.
-- Revisit Jira issue relationships after duplicate-prevention and attachment
-  filesystem safety are less ambiguous.
+- Keep remote correlation marker recovery and attachment source validation under
+  regular native/live QA because both have landed and protect Jira write safety.
+- Revisit broader Jira issue relationships only after the current popup/setup
+  polish and workflow model issues are settled.
 
 ## Security And Reliability Tests To Add
 
