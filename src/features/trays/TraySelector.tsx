@@ -1,5 +1,5 @@
 import { Archive, Check, FolderKanban, PanelRightOpen, Pencil, RotateCcw, Trash2, Plus, X } from "lucide-react";
-import { useState, type MouseEvent } from "react";
+import { useState } from "react";
 import { Button, IconButton, TrayStateBadge } from "../../components/ui";
 import { deriveTrayStatusTag } from "../../lib/domain";
 import type { Tray } from "../../lib/types";
@@ -46,10 +46,6 @@ export function TraySelector({
     cancelRename();
   }
 
-  function stopCardClick(event: MouseEvent) {
-    event.stopPropagation();
-  }
-
   return (
     <section className="flex-1 px-5 py-5">
       <div className="mb-4 flex items-center justify-between">
@@ -72,18 +68,15 @@ export function TraySelector({
           </div>
         ) : null}
         {trays.map((tray) => (
-          <button
-            className="flex w-full items-center justify-between rounded border border-[#dfe1e6] bg-white px-4 py-3 text-left shadow-sm transition hover:border-[#4c9aff] hover:bg-[#f4f8ff]"
+          <div
+            className="flex w-full items-center justify-between rounded border border-[#dfe1e6] bg-white text-left shadow-sm transition hover:border-[#4c9aff] hover:bg-[#f4f8ff] focus-within:border-[#4c9aff] focus-within:ring-2 focus-within:ring-[#deebff]"
             key={tray.id}
-            onClick={() => {
-              if (editingTrayId !== tray.id) onOpenTray(tray);
-            }}
           >
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <FolderKanban size={16} className="text-[#42526e]" />
-                {editingTrayId === tray.id ? (
-                  <span className="flex items-center gap-2" onClick={stopCardClick}>
+            {editingTrayId === tray.id ? (
+              <div className="min-w-0 flex-1 px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <FolderKanban size={16} className="text-[#42526e]" />
+                  <span className="flex items-center gap-2">
                     <input
                       autoFocus
                       className="h-8 min-w-[260px] rounded border border-[#4c9aff] bg-white px-2 text-sm font-medium outline-none ring-2 ring-[#deebff]"
@@ -101,59 +94,49 @@ export function TraySelector({
                       <X size={16} />
                     </IconButton>
                   </span>
-                ) : (
-                  <>
-                    <span className="font-medium">{tray.name}</span>
-                    <IconButton
-                      title="Rename tray"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        beginRename(tray);
-                      }}
-                    >
-                      <Pencil size={14} />
-                    </IconButton>
-                  </>
-                )}
-                <TrayStateBadge state={deriveTrayStatusTag(tray.tasks, tray.state)} />
+                  <TrayStateBadge state={deriveTrayStatusTag(tray.tasks, tray.state)} />
+                </div>
+                <div className="mt-1 text-xs text-[#6b778c]">{tray.summary}</div>
               </div>
-              <div className="mt-1 text-xs text-[#6b778c]">{tray.summary}</div>
-            </div>
-            <span className="flex items-center gap-2 text-xs text-[#6b778c]">
+            ) : (
+              <button
+                aria-label={`Open tray ${tray.name}`}
+                className="flex min-w-0 flex-1 items-center justify-between rounded-l px-4 py-3 text-left outline-none"
+                onClick={() => onOpenTray(tray)}
+                type="button"
+              >
+                <span className="min-w-0">
+                  <span className="flex items-center gap-2">
+                    <FolderKanban size={16} className="shrink-0 text-[#42526e]" />
+                    <span className="font-medium">{tray.name}</span>
+                    <TrayStateBadge state={deriveTrayStatusTag(tray.tasks, tray.state)} />
+                  </span>
+                  <span className="mt-1 block text-xs text-[#6b778c]">{tray.summary}</span>
+                </span>
+                <PanelRightOpen size={16} className="ml-3 shrink-0 text-[#6b778c]" />
+              </button>
+            )}
+            <span className="flex shrink-0 items-center gap-2 px-4 py-3 text-xs text-[#6b778c]">
               <span>{tray.updatedAt}</span>
+              {editingTrayId !== tray.id ? (
+                <IconButton title="Rename tray" onClick={() => beginRename(tray)}>
+                  <Pencil size={14} />
+                </IconButton>
+              ) : null}
               {tray.state === "Archived" ? (
-                <IconButton
-                  title="Restore tray"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onRestoreTray(tray.id);
-                  }}
-                >
+                <IconButton title="Restore tray" onClick={() => onRestoreTray(tray.id)}>
                   <RotateCcw size={15} />
                 </IconButton>
               ) : (
-                <IconButton
-                  title="Archive tray"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onArchiveTray(tray.id);
-                  }}
-                >
+                <IconButton title="Archive tray" onClick={() => onArchiveTray(tray.id)}>
                   <Archive size={15} />
                 </IconButton>
               )}
-              <IconButton
-                title="Delete tray"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onDeleteTray(tray.id);
-                }}
-              >
+              <IconButton title="Delete tray" onClick={() => onDeleteTray(tray.id)}>
                 <Trash2 size={15} />
               </IconButton>
-              <PanelRightOpen size={16} />
             </span>
-          </button>
+          </div>
         ))}
       </div>
 
