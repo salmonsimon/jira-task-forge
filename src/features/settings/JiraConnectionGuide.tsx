@@ -6,16 +6,55 @@ import { appOverlayLayers, useAppOverlay } from "../../lib/app-overlays";
 import { validateJiraSiteUrlDraft } from "../../lib/domain";
 import type { AppSettings, JiraConnectionTestResult, JiraProjectOption } from "../../lib/types";
 
-type GuideStep = "site" | "account" | "verify" | "project" | "token" | "review";
+type GuideStep = "site" | "account" | "token" | "verify" | "project" | "review";
 
-const guideSteps: Array<{ id: GuideStep; label: string }> = [
+export const jiraConnectionGuideSteps: Array<{ id: GuideStep; label: string }> = [
   { id: "site", label: "Site" },
   { id: "account", label: "Account" },
+  { id: "token", label: "Token" },
   { id: "verify", label: "Verify" },
   { id: "project", label: "Project" },
-  { id: "token", label: "Token" },
   { id: "review", label: "Review" }
 ];
+
+export const jiraConnectionGuideCopy = {
+  tokenDescription:
+    "Save or replace the Jira API token before running full Jira checks. The token stays in the OS credential store.",
+  tokenDraftPending: "Test this key, then save it before continuing.",
+  tokenDraftPassed: "This key passed Test key. Save it so Verify can use it.",
+  savedTokenReady: "A saved Jira API token is available. You can test it, replace it, or continue to Verify.",
+  verifyDescription:
+    "The app runs a full Jira Cloud connection check with the saved API token, draft site, and account email. Nothing is saved during this step.",
+  verifyTokenReady: "Verify uses the credential saved by the Token step.",
+  verifyTokenMissing: "Complete the Token step first to save a credential. Verify does not test site and email by themselves."
+};
+
+export function canContinueJiraConnectionGuideStep({
+  step,
+  hasValidSiteUrl,
+  hasAccountEmail,
+  hasJiraApiToken,
+  hasUnsavedTokenDraft,
+  isSavingToken,
+  hasProjectKey
+}: {
+  step: GuideStep;
+  hasValidSiteUrl: boolean;
+  hasAccountEmail: boolean;
+  hasJiraApiToken: boolean;
+  hasUnsavedTokenDraft: boolean;
+  isSavingToken: boolean;
+  hasProjectKey: boolean;
+}) {
+  return (
+    (step === "site" && hasValidSiteUrl) ||
+    (step === "account" && hasAccountEmail) ||
+    (step === "token" && hasJiraApiToken && !hasUnsavedTokenDraft && !isSavingToken) ||
+    (step === "verify" && hasJiraApiToken) ||
+    (step === "project" && hasProjectKey) ||
+    step === "review"
+  );
+}
 
 export function JiraConnectionGuide({
   settings,
@@ -62,14 +101,17 @@ export function JiraConnectionGuide({
   const normalizedSiteUrl = siteUrlValidation.ok ? siteUrlValidation.value : siteUrlDraft.trim();
   const accountEmail = accountEmailDraft.trim();
   const projectKey = projectKeyDraft.trim().toUpperCase();
-  const canContinue =
-    (step === "site" && siteUrlValidation.ok) ||
-    (step === "account" && Boolean(accountEmail)) ||
-    step === "verify" ||
-    (step === "project" && Boolean(projectKey)) ||
-    (step === "token" && (hasJiraApiToken || jiraTokenStatus === "success")) ||
-    step === "review";
-  const currentStepIndex = guideSteps.findIndex((candidate) => candidate.id === step);
+  const hasUnsavedTokenDraft = Boolean(jiraApiTokenDraft.trim());
+  const canContinue = canContinueJiraConnectionGuideStep({
+    step,
+    hasValidSiteUrl: siteUrlValidation.ok,
+    hasAccountEmail: Boolean(accountEmail),
+    hasJiraApiToken,
+    hasUnsavedTokenDraft,
+    isSavingToken: jiraTokenStatus === "saving",
+    hasProjectKey: Boolean(projectKey)
+  });
+  const currentStepIndex = jiraConnectionGuideSteps.findIndex((candidate) => candidate.id === step);
   const overlay = useAppOverlay({
     layer: appOverlayLayers.nestedModal,
     onDismiss: onClose,
@@ -92,12 +134,12 @@ export function JiraConnectionGuide({
   }, [onClose]);
 
   function moveNext() {
-    const nextStep = guideSteps[currentStepIndex + 1]?.id;
+    const nextStep = jiraConnectionGuideSteps[currentStepIndex + 1]?.id;
     if (nextStep) setStep(nextStep);
   }
 
   function moveBack() {
-    const previousStep = guideSteps[currentStepIndex - 1]?.id;
+    const previousStep = jiraConnectionGuideSteps[currentStepIndex - 1]?.id;
     if (previousStep) setStep(previousStep);
   }
 
@@ -204,7 +246,7 @@ export function JiraConnectionGuide({
           <>
             <div className="border-b border-[#dfe1e6] bg-[#f7f8fa] px-5 py-3">
               <div className="grid grid-cols-6 gap-2">
-                {guideSteps.map((candidate, index) => (
+                {jiraConnectionGuideSteps.map((candidate, index) => (
                   <button
                     className={`h-8 rounded border px-2 text-xs font-medium ${
                       candidate.id === step
@@ -253,7 +295,7 @@ export function JiraConnectionGuide({
                 </GuideSection>
               ) : null}
               {step === "token" ? (
-                <GuideSection title="Jira API token" description="Save or replace the Jira API token used by the selected site, account, and project. The token stays in the OS credential store.">
+                <GuideSection title="Jira API token" description={jiraConnectionGuideCopy.tokenDescription}>
                   <div className="mb-6 rounded border border-[#dfe1e6] bg-[#f7f8fa] p-4">
                     <div className="flex items-center justify-between gap-3">
                       <div>
@@ -314,28 +356,30 @@ export function JiraConnectionGuide({
                       <FeedbackNote variant="info">Testing Jira API token...</FeedbackNote>
                     ) : jiraTokenStatus === "success" ? (
                       <FeedbackNote variant="success">
-                        {jiraApiTokenDraft ? "This key passed Test key and can be saved." : "Saved Jira API token test succeeded."}
+                        {jiraApiTokenDraft ? jiraConnectionGuideCopy.tokenDraftPassed : "Saved Jira API token test succeeded."}
                         {jiraTokenMessage ? ` ${jiraTokenMessage}` : ""}
                       </FeedbackNote>
                     ) : jiraTokenStatus === "failed" ? (
                       <FeedbackNote variant="error">
                         {jiraTokenMessage || "Update this key or Jira connection details, then test again."}
                       </FeedbackNote>
-                    ) : jiraApiTokenDraft ? (
-                      <FeedbackNote variant="warning">Test this key before saving it.</FeedbackNote>
+                    ) : hasUnsavedTokenDraft ? (
+                      <FeedbackNote variant="warning">{jiraConnectionGuideCopy.tokenDraftPending}</FeedbackNote>
                     ) : hasJiraApiToken ? (
-                      <FeedbackNote variant="success">A saved Jira API token is available. You can test it or continue to review.</FeedbackNote>
+                      <FeedbackNote variant="success">{jiraConnectionGuideCopy.savedTokenReady}</FeedbackNote>
                     ) : null}
                   </div>
                 </GuideSection>
               ) : null}
               {step === "verify" ? (
-                <GuideSection title="Verify connection" description="The app tests the draft site and email using the saved Jira API token. Nothing is saved during this step.">
+                <GuideSection title="Verify connection" description={jiraConnectionGuideCopy.verifyDescription}>
                   <div className="rounded border border-[#dfe1e6] bg-[#f7f8fa] p-4">
                     <div className="flex items-center justify-between gap-3">
                       <div>
                         <div className="text-sm font-semibold text-[#172b4d]">{hasJiraApiToken ? "API token saved" : "API token missing"}</div>
-                        <p className="text-xs text-[#6b778c]">The Token step saves or replaces the credential in the OS credential store.</p>
+                        <p className="text-xs text-[#6b778c]">
+                          {hasJiraApiToken ? jiraConnectionGuideCopy.verifyTokenReady : jiraConnectionGuideCopy.verifyTokenMissing}
+                        </p>
                       </div>
                       <Button className="settings-button-secondary" icon={<ExternalLink size={13} />} variant="secondary" onClick={onOpenJiraApiTokens}>
                         Manage token
