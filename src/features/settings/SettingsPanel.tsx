@@ -179,6 +179,12 @@ export function SettingsPanel({
   }
 
   useEffect(() => {
+    if (initialGuide === "notion-synchronization") {
+      setIsNotionSynchronizationGuideOpen(true);
+    }
+  }, [initialGuide]);
+
+  useEffect(() => {
     if (!aiProviderApiKeyDraft) return;
     setAiProviderKeyDraftTestStatus("idle");
   }, [settings.aiProvider, aiProviderApiKeyDraft]);

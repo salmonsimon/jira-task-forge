@@ -140,6 +140,14 @@ function CategoryList({
         return;
       }
       if (result) onSyncResult?.(result);
+    } catch (error) {
+      await waitForMinimumElapsed(startedAt, 650);
+      const result = createCatalogSyncErrorResult(error);
+      if (isMissingNotionSynchronizationSetup(catalogSourceMode, result)) {
+        onConfigureCatalogSource?.("notion-synchronization");
+        return;
+      }
+      onSyncResult?.(result);
     } finally {
       setIsSyncing(false);
     }
@@ -266,6 +274,27 @@ async function waitForMinimumElapsed(startedAt: number, minimumMs: number): Prom
   }
 }
 
+
+export function createCatalogSyncErrorResult(error: unknown): CatalogSyncResult {
+  return {
+    ok: false,
+    sourceUrl: "",
+    syncedAreaCount: 0,
+    deliveryFormatCount: 0,
+    ruleCount: 0,
+    warnings: [],
+    errors: [catalogSyncErrorMessage(error)],
+    areas: [],
+    deliveryFormats: [],
+    areaFormatRules: []
+  };
+}
+
+function catalogSyncErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message.trim()) return error.message;
+  if (typeof error === "string" && error.trim()) return error;
+  return "Catalog sync failed.";
+}
 
 export function isMissingNotionSynchronizationSetup(
   catalogSourceMode: AppSettings["catalogSourceMode"],

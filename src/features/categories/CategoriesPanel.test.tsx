@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { Category } from "../../lib/types";
-import { CategoriesPanel, isMissingNotionSynchronizationSetup } from "./CategoriesPanel";
+import { CategoriesPanel, createCatalogSyncErrorResult, isMissingNotionSynchronizationSetup } from "./CategoriesPanel";
 
 const project: Category = {
   id: "project-dts",
@@ -92,6 +92,12 @@ it("detects missing Notion setup failures from catalog sync", () => {
       areaFormatRules: []
     })
   ).toBe(false);
+});
+
+it("detects missing Notion setup from rejected Tauri sync errors", () => {
+  const result = createCatalogSyncErrorResult(new Error("Save a Notion integration token before syncing the catalog."));
+
+  expect(isMissingNotionSynchronizationSetup("notion", result)).toBe(true);
 });
 
 it("renders manual catalog areas as editable local categories", () => {
