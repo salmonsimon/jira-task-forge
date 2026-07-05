@@ -284,11 +284,47 @@ Captured:
 - `27-toast-category-example-mock.png`: visual-only toast category example.
 - `28-centered-notice-category-example-mock.png`: visual-only centered notice category example.
 - `29-blocking-alert-category-example-mock.png`: visual-only blocking alert category example.
+- `30-backup-unavailable-dialog-real.png`: backup notice dialog reached through browser fixture.
+- `31-jira-setup-verify-step-real.png`: Jira setup verify step.
+- `32-notion-mode-dropdown-real.png`: Notion catalog mode dropdown.
+- `33-notion-manual-source-real.png`: Notion manual catalog source step.
+- `34-csv-export-browser-after-click-real.png`: browser state after CSV export click; no notice appears because native dialog invocation fails outside Tauri.
+- `35-notion-manual-review-real.png`: Notion manual catalog review step.
 
 Screenshot blockers and gaps:
 - Catalog sync notice could not be reached as a real fixture state because missing Notion setup routes to the Notion setup guide before producing a sync result notice. Visual comparison mocks were captured for current vs selected normalized variants.
 - Connection notice and CSV export notice require backend/native actions or a native save dialog. Visual category mocks were captured, but real native/browser evidence remains a follow-up if screenshot proof from the desktop shell is required.
+- CSV export was attempted in browser fixture. The exact blocker is `Cannot read properties of undefined (reading 'invoke')`, from the native Tauri dialog/plugin path outside the Tauri shell.
 - Local task deletion is an immediate row action rather than a modal confirmation; strong tray delete confirmation was captured.
+
+## Completeness Matrix
+
+Covered with real browser-fixture screenshots:
+- Main tray selector.
+- Active tray.
+- Quick Capture dropdown.
+- Settings drawer.
+- Categories drawer.
+- Jira setup wizard.
+- Notion setup wizard.
+- Notion catalog mode dropdown.
+- Settings AI provider dropdown.
+- Tray table Area, Type, and Priority dropdowns.
+- Task focus window.
+- Assisted description prompt modal.
+- Assisted description proposal review modal.
+- Jira create preflight dialog.
+- Backup unavailable dialog.
+- Strong tray delete confirmation.
+
+Covered by static code inspection plus visual comparison mock:
+- Catalog sync notice. Browser fixture cannot reach the real result notice because the current non-Tauri/manual sync path returns `null`, and missing Notion setup routes into the Notion setup wizard. The target decision is still clear: migrate it to `useAppOverlay`, normalize it to the selected overlay/dialog family, and provide dark/light mode variants.
+- Toast, centered notice, and blocking alert category examples. These mocks illustrate the accepted taxonomy; real connection/CSV/Jira-creation result states depend on backend/native paths.
+
+Blocked outside native/Tauri shell:
+- CSV export completion notice. Browser click hits the native plugin path and throws `Cannot read properties of undefined (reading 'invoke')`.
+- Native backup export/import success notices. Browser can cover the backup unavailable dialog, but native save/open success requires the desktop shell.
+- Jira creation result notice. It requires a real Jira creation attempt through the Tauri backend; do not use DTS for this, and use JTFTEST only in a later implementation/QA slice if live write evidence is needed.
 
 ## Validation
 
