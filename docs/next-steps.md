@@ -282,6 +282,11 @@ Recommended next implementation:
   and sync tests.
 - Issue #103: add the local data cleanup and storage inventory note. Keep it
   documentation-only and avoid destructive cleanup UI or commands.
+- Issue #157: implement managed attachment byte cleanup after successful Jira
+  upload and after `AI only` attachments no longer need local bytes once a task
+  is `Created`.
+- Issue #158: implement bounded cleanup for stale `attachments/staging` files
+  after import or interrupted staging work.
 - Issue #138: keep docs alignment as a follow-up after the remaining behavior
   changes land. This roadmap refresh does not close the full workflow
   documentation issue.
@@ -623,7 +628,15 @@ setup ordering, and add the AI Provider setup modal using the Jira/Notion setup
 visual family. Issue #146 should use a two-step flow: choose provider/model,
 then set and test the API key.
 
-Batch 3: workflow model slices.
+Batch 3: storage lifecycle hardening.
+Issues: Issue #157 and Issue #158.
+Scope: implement accepted cleanup behavior for managed attachment bytes after
+successful Jira upload or `Created` `AI only` lifecycle completion, and clean
+temporary `attachments/staging` files after import or interrupted staging work.
+Keep this AFK-scoped to backend filesystem/sync/import behavior and focused
+tests; do not add broad cleanup UI or app-data reset commands.
+
+Batch 4: workflow model slices.
 Issues: Issue #134 and Issue #132, followed by Issue #138 and Issue #139.
 Scope: first separate exact Story/Bug templates, then implement Epic Scope
 modeling with the already-decided `[{Project}] [{Area}] {Scope}` rule. Only
@@ -688,8 +701,9 @@ Reason:
 
 Separate hardening follow-up:
 
-- Keep remote correlation marker recovery and attachment source validation under
-  regular native/live QA because both have landed and protect Jira write safety.
+- Keep remote correlation marker recovery, attachment source validation, and the
+  Issue #157/Issue #158 storage lifecycle cleanup under regular native/live QA
+  because they protect Jira write safety and local filesystem hygiene.
 - Revisit broader Jira issue relationships only after the current popup/setup
   polish and workflow model issues are settled.
 
