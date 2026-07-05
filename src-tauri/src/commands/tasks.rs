@@ -1,6 +1,9 @@
 use tauri::{AppHandle, State};
 use tauri_plugin_dialog::DialogExt;
 
+use crate::area_catalog::{
+    derive_issue_type_from_area, resolve_catalog_area, CatalogAreaResolution,
+};
 use crate::attachment_storage::AttachmentFileGrant;
 use crate::models::{LocalIssueRelationship, LocalTask, NewSubtask, NewTask, SyncAuditEvent, Tray};
 use crate::services::AppServices;
@@ -13,9 +16,12 @@ pub fn create_task(
     area: String,
     title: String,
     priority: String,
-    issue_type: String,
+    _issue_type: String,
     content_language: String,
 ) -> Result<LocalTask, String> {
+    let area = official_area_display_name(&area)?;
+    let issue_type = derive_issue_type_from_area(&area).to_string();
+
     services
         .create_task(NewTask {
             tray_id,
@@ -65,10 +71,11 @@ pub fn update_task_details(
     priority: String,
     issue_type: String,
 ) -> Result<Option<LocalTask>, String> {
-    let normalized_issue_type = if issue_type.trim().is_empty() {
-        derive_issue_type_from_area(&area).to_string()
+    let area = official_area_display_name(&area)?;
+    let normalized_issue_type = if issue_type.trim() == "Sub-task" {
+        "Sub-task".to_string()
     } else {
-        issue_type.trim().to_string()
+        derive_issue_type_from_area(&area).to_string()
     };
 
     services
@@ -197,17 +204,9 @@ pub fn list_task_sync_audit_events(
         .map_err(|error| error.to_string())
 }
 
-fn derive_issue_type_from_area(area: &str) -> &'static str {
-    if area.trim().eq_ignore_ascii_case("bug") {
-        "Bug"
-    } else {
-        "Story"
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use super::derive_issue_type_from_area;
+    use crate::area_catalog::derive_issue_type_from_area;
 
     #[test]
     fn derives_bug_issue_type_only_from_bug_area() {
@@ -216,5 +215,19 @@ mod tests {
         assert_eq!(derive_issue_type_from_area("Programacion"), "Story");
         assert_eq!(derive_issue_type_from_area("3D"), "Story");
         assert_eq!(derive_issue_type_from_area(""), "Story");
+    }
+}
+
+fn official_area_display_name(area: &str) -> Result<String, String> {
+    match resolve_catalog_area(area) {
+        CatalogAreaResolution::Official {
+            area_display_name, ..
+        }
+        | CatalogAreaResolution::Normalized {
+            area_display_name, ..
+        } => Ok(area_display_name.to_string()),
+        CatalogAreaResolution::Blocked => {
+            Err("Choose an official catalog area before saving this task.".to_string())
+        }
     }
 }

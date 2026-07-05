@@ -14,7 +14,9 @@ export type AssistedDescriptionSectionId =
   | "user_story"
   | "problem"
   | "scope"
-  | "acceptance_criteria";
+  | "acceptance_criteria"
+  | "minimum_deliverable"
+  | "review_checklist";
 export type PreflightWarningSeverity = "blocking" | "resolvable";
 export type PreflightWarningCode =
   | "empty-tray"
@@ -23,6 +25,7 @@ export type PreflightWarningCode =
   | "missing-creation-project"
   | "missing-project"
   | "missing-area"
+  | "invalid-area"
   | "missing-title"
   | "missing-parent-task"
   | "missing-description"
@@ -88,7 +91,7 @@ export type Category = {
   categoryType: "project" | "area";
   name: string;
   hidden?: boolean;
-  source: "local" | "jira";
+  source: "local" | "jira" | "catalog";
 };
 
 export type JqlFavorite = {
@@ -211,6 +214,48 @@ export type AppSettings = {
   aiProvider: AiProvider;
   aiModel: string;
   defaultContentLanguage: "Spanish" | "English";
+  catalogSourceMode: "notion" | "public-exportable" | "manual";
+  catalogSourceUrl: string;
+};
+
+export type CatalogSyncResult = {
+  ok: boolean;
+  sourceUrl: string;
+  syncedAreaCount: number;
+  deliveryFormatCount: number;
+  ruleCount: number;
+  warnings: string[];
+  errors: string[];
+  areas: Array<{
+    areaDisplayName: string;
+    jiraLabel: string;
+    enabledInJTF: boolean;
+    issueType: "Story" | "Bug";
+    defaultDeliveryFormat: string;
+    safeAliases: string[];
+    notes: string;
+  }>;
+  deliveryFormats: Array<{
+    formatName: string;
+    issueType: "Story" | "Bug";
+    storyHeadings: string[];
+    minimumDeliverable: string;
+    reviewChecklist: string[];
+  }>;
+  areaFormatRules: Array<{
+    areaDisplayName: string;
+    priority: number;
+    condition: string;
+    deliveryFormat: string;
+    blocking: boolean;
+  }>;
+};
+
+export type NotionCatalogConnectionTestResult = {
+  ok: boolean;
+  message: string;
+  title?: string | null;
+  extractedBlockCount: number;
 };
 
 export type JiraConnectionTestResult = {

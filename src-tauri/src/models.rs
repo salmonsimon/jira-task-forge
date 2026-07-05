@@ -154,6 +154,10 @@ pub struct AppSettings {
     pub ai_provider: String,
     pub ai_model: String,
     pub default_content_language: String,
+    #[serde(default = "default_catalog_source_mode")]
+    pub catalog_source_mode: String,
+    #[serde(default)]
+    pub catalog_source_url: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -444,8 +448,14 @@ impl Default for AppSettings {
             ai_provider: "OpenAI".to_string(),
             ai_model: "gpt-4.1".to_string(),
             default_content_language: "Spanish".to_string(),
+            catalog_source_mode: "notion".to_string(),
+            catalog_source_url: String::new(),
         }
     }
+}
+
+fn default_catalog_source_mode() -> String {
+    "notion".to_string()
 }
 
 #[cfg(test)]

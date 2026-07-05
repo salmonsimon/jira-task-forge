@@ -1,8 +1,9 @@
 import { duplicateTaskForGraph } from "./taskGraph";
+import { deriveCatalogIssueType } from "./catalog";
 import type { IssueType, LocalTask } from "../types";
 
 export function deriveIssueTypeFromArea(area: string): IssueType {
-  return area.trim().toLowerCase() === "bug" ? "Bug" : "Story";
+  return deriveCatalogIssueType(area);
 }
 
 export function isTaskReadOnly(task: Pick<LocalTask, "syncStatus">): boolean {

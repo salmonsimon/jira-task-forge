@@ -13,7 +13,9 @@ export const assistedDescriptionSectionDefinitions = [
   { id: "user_story", label: "User story", markdownHeading: "Historia de usuario" },
   { id: "problem", label: "Context", markdownHeading: "Contexto" },
   { id: "scope", label: "Scope", markdownHeading: "Alcance" },
-  { id: "acceptance_criteria", label: "Acceptance criteria", markdownHeading: "Criterios de aceptacion" }
+  { id: "acceptance_criteria", label: "Acceptance criteria", markdownHeading: "Criterios de aceptacion" },
+  { id: "minimum_deliverable", label: "Minimum deliverable", markdownHeading: "Entregable mínimo" },
+  { id: "review_checklist", label: "Review checklist", markdownHeading: "Checklist antes de Review" }
 ] as const satisfies readonly {
   id: AssistedDescriptionSectionId;
   label: string;
@@ -91,7 +93,9 @@ const sectionAliases: Record<AssistedDescriptionSectionId, string[]> = {
     "risks",
     "open questions",
     "preguntas abiertas"
-  ]
+  ],
+  minimum_deliverable: ["entregable minimo", "entregable mínimo", "minimum deliverable"],
+  review_checklist: ["checklist antes de review", "checklist", "review checklist"]
 };
 
 const sectionIdByNormalizedHeading = buildSectionAliasIndex();

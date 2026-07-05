@@ -1,6 +1,7 @@
 use serde_json::{json, Value};
 
 use super::{strip_json_fence, JsonFeatureRequest};
+use crate::area_catalog::catalog_context_for_area;
 use crate::integrations::ai::AiProvider;
 use crate::models::{AssistedDescriptionDraft, LocalTask};
 
@@ -12,7 +13,11 @@ const ASSISTED_DESCRIPTION_REQUIRED_HEADINGS: &[&str] = &[
     "## Contexto",
     "## Alcance",
     "## Criterios de aceptacion",
+    "## Entregable mínimo",
+    "## Checklist antes de Review",
 ];
+const ASSISTED_DESCRIPTION_FINAL_HEADINGS: &[&str] =
+    &["## Entregable mínimo", "## Checklist antes de Review"];
 const ASSISTED_DESCRIPTION_TEMPLATE: &str = r#"## Historia de usuario
 
 Como [usuario/persona],
@@ -34,6 +39,14 @@ No incluye:
 ## Criterios de aceptacion
 
 - ...
+
+## Entregable mínimo
+
+- ...
+
+## Checklist antes de Review
+
+- ...
 "#;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -45,6 +58,7 @@ pub(crate) enum AssistedDescriptionRequest {
 pub(crate) fn build_request(
     task: &LocalTask,
     additional_context: &str,
+    catalog_template_context: Option<&str>,
 ) -> Result<AssistedDescriptionRequest, String> {
     let additional_context = additional_context.trim();
     if task_description_needs_clarification(task, additional_context) {
@@ -53,14 +67,15 @@ pub(crate) fn build_request(
         ));
     }
 
-    let input = task_description_generation_context(task, additional_context);
+    let input =
+        task_description_generation_context(task, additional_context, catalog_template_context);
     Ok(AssistedDescriptionRequest::Generate(JsonFeatureRequest {
         instructions: task_description_generation_instructions(),
         json_prompt: provider_task_description_json_prompt(&input),
         input,
         schema_name: "assisted_description_draft",
         schema: assisted_description_json_schema(),
-        max_output_tokens: 2000,
+        max_output_tokens: 3000,
     }))
 }
 
@@ -114,6 +129,8 @@ Use the exact Markdown section headings from the requested template. \
 Use the base context as user and project preference context, especially stack defaults. \
 Do not invent product behavior, implementation scope, or acceptance criteria. \
 Do not add validation, risk, rollback, observability, or open-question sections. \
+When synced Notion catalog template context is present, treat its minimum deliverable and review checklist as mandatory requirements for the draft. The description must always end with the final sections ## Entregable mínimo and ## Checklist antes de Review, in that order. \
+Catalog template headings are content requirements only; map them into the Target Markdown format and never replace the Target Markdown format headings. \
 Prefer drafting over asking for clarification when the title, area, and user context describe a concrete problem or desired outcome. \
 Do not ask about known defaults from the base context, such as the engine or primary stack. \
 If the title and context are too thin to fill any useful section, return status needs_clarification with up to three concise questions in the task language and description null. \
@@ -121,7 +138,11 @@ If missing information would materially change scope or acceptance criteria, ret
 Keep the description compact and Jira-ready. Do not include markdown fences."
 }
 
-fn task_description_generation_context(task: &LocalTask, additional_context: &str) -> String {
+fn task_description_generation_context(
+    task: &LocalTask,
+    additional_context: &str,
+    catalog_template_context: Option<&str>,
+) -> String {
     let existing_description = task
         .description
         .as_deref()
@@ -136,6 +157,7 @@ fn task_description_generation_context(task: &LocalTask, additional_context: &st
 
     format!(
         "Base context:\n{base_context}\n\n\
+{catalog_context}\n\n\
 Local Task context:\n\
 - Project: {project}\n\
 - Area: {area}\n\
@@ -147,6 +169,19 @@ Local Task context:\n\
 - Additional user context: {additional_context}\n\n\
 Target Markdown format:\n{template}",
         base_context = ASSISTED_DESCRIPTION_BASE_CONTEXT.trim(),
+        catalog_context = catalog_template_context
+            .map(str::trim)
+            .filter(|context| !context.is_empty())
+            .map(ToString::to_string)
+            .unwrap_or_else(|| {
+                catalog_context_for_area(
+                    &task.area,
+                    &format!(
+                        "{}\n{}\n{}",
+                        task.title, additional_context, existing_description
+                    ),
+                )
+            }),
         project = task.project,
         area = task.area,
         issue_type = task.issue_type,
@@ -186,6 +221,7 @@ fn validate_assisted_description_draft(
                     "AI provider omitted required assisted description section {missing_heading}."
                 ));
             }
+            validate_final_description_sections(description)?;
             draft.clarification_questions.clear();
         }
         "needs_clarification" => {
@@ -205,6 +241,37 @@ fn validate_assisted_description_draft(
     }
 
     Ok(draft)
+}
+
+fn validate_final_description_sections(description: &str) -> Result<(), String> {
+    let deliverable_index = description
+        .find(ASSISTED_DESCRIPTION_FINAL_HEADINGS[0])
+        .ok_or_else(|| {
+            "AI provider omitted final assisted description deliverable section.".to_string()
+        })?;
+    let checklist_index = description
+        .find(ASSISTED_DESCRIPTION_FINAL_HEADINGS[1])
+        .ok_or_else(|| {
+            "AI provider omitted final assisted description checklist section.".to_string()
+        })?;
+    if checklist_index <= deliverable_index {
+        return Err(
+            "AI provider returned assisted description final sections in the wrong order."
+                .to_string(),
+        );
+    }
+    let after_checklist = description[checklist_index..].trim();
+    let nested_heading_after_checklist = after_checklist
+        .lines()
+        .skip(1)
+        .any(|line| line.trim_start().starts_with("## "));
+    if nested_heading_after_checklist {
+        return Err(
+            "AI provider returned content after the final assisted description checklist section."
+                .to_string(),
+        );
+    }
+    Ok(())
 }
 
 fn task_description_needs_clarification(task: &LocalTask, additional_context: &str) -> bool {
@@ -268,7 +335,8 @@ mod tests {
 
     #[test]
     fn build_request_returns_clarification_before_provider_work() {
-        let request = build_request(&task_with_title("bug mesa"), "").expect("request builds");
+        let request =
+            build_request(&task_with_title("bug mesa"), "", None).expect("request builds");
 
         let AssistedDescriptionRequest::Clarification(draft) = request else {
             panic!("short task should ask for clarification");
@@ -284,6 +352,7 @@ mod tests {
         let context = task_description_generation_context(
             &task,
             "mesa aparece sin patas en runtime y afecta todas las escenas",
+            None,
         );
 
         assert!(context.contains("Unreal Engine 5"));
@@ -292,10 +361,72 @@ mod tests {
     }
 
     #[test]
+    fn task_description_context_includes_catalog_guidance_for_area() {
+        let task = LocalTask {
+            area: "Programacion".to_string(),
+            issue_type: "Story".to_string(),
+            ..task_with_title("Implementar cooldown de habilidad")
+        };
+        let context = task_description_generation_context(
+            &task,
+            "La habilidad puede dispararse muchas veces seguidas.",
+            None,
+        );
+
+        assert!(context.contains("Official catalog context:"));
+        assert!(context.contains("- Official area display name: Programación"));
+        assert!(context.contains("- Jira label: Programación"));
+        assert!(context.contains("- Delivery format: Feature de Programación"));
+        assert!(context.contains("- Issue type derivation: Story"));
+        assert!(context.contains("Use the official area display name in visible summaries"));
+    }
+
+    #[test]
+    fn task_description_context_uses_synced_catalog_template_requirements() {
+        let task = LocalTask {
+            area: "Programación".to_string(),
+            issue_type: "Story".to_string(),
+            ..task_with_title("Implementar cooldown de habilidad")
+        };
+        let context = task_description_generation_context(
+            &task,
+            "La habilidad puede dispararse muchas veces seguidas.",
+            Some(
+                "Synced Notion catalog template:
+- Delivery format: Feature de Programación
+- Minimum deliverable: PR/MR listo con implementación y validación.
+- Review checklist:
+- PR/MR creado.
+- Validado en runtime.",
+            ),
+        );
+
+        assert!(context.contains("Synced Notion catalog template:"));
+        assert!(context.contains("Minimum deliverable: PR/MR listo"));
+        assert!(context.contains("Review checklist:"));
+        assert!(context.contains("Validado en runtime."));
+    }
+
+    #[test]
+    fn task_description_context_separates_area_display_name_from_jira_label() {
+        let task = LocalTask {
+            area: "Selección Recurso".to_string(),
+            issue_type: "Story".to_string(),
+            ..task_with_title("Elegir asset base")
+        };
+        let context =
+            task_description_generation_context(&task, "Seleccionar el recurso base.", None);
+
+        assert!(context.contains("- Official area display name: Selección Recurso"));
+        assert!(context.contains("- Jira label: Selección-Recurso"));
+    }
+
+    #[test]
     fn build_request_owns_assisted_description_prompt_shape() {
         let request = build_request(
             &task_with_title("Crear maquinas expendedoras para el anden del Metro"),
             "Validar escala y materiales en runtime.",
+            None,
         )
         .expect("request builds");
 
@@ -306,7 +437,7 @@ mod tests {
         assert!(request.input.contains("Target Markdown format:"));
         assert!(request.json_prompt.contains("\"status\":\"drafted\""));
         assert_eq!(request.schema_name, "assisted_description_draft");
-        assert_eq!(request.max_output_tokens, 2000);
+        assert_eq!(request.max_output_tokens, 3000);
     }
 
     #[test]
@@ -327,10 +458,35 @@ mod tests {
         let draft = validate_assisted_description_draft(AssistedDescriptionDraft {
             status: " drafted ".to_string(),
             description: Some(
-                "## Historia de usuario\n\nComo usuario,\nquiero algo,\npara lograr valor.\n\n\
-## Contexto\n\nContexto claro.\n\n\
-## Alcance\n\nIncluye:\n- A\n\nNo incluye:\n- B\n\n\
-## Criterios de aceptacion\n\n- Criterio"
+                "## Historia de usuario
+
+Como usuario,
+quiero algo,
+para lograr valor.
+
+## Contexto
+
+Contexto claro.
+
+## Alcance
+
+Incluye:
+- A
+
+No incluye:
+- B
+
+## Criterios de aceptacion
+
+- Criterio
+
+## Entregable mínimo
+
+- Entregable
+
+## Checklist antes de Review
+
+- Checklist"
                     .to_string(),
             ),
             clarification_questions: vec!["  ".to_string(), "extra".to_string()],
@@ -340,6 +496,44 @@ mod tests {
         assert_eq!(draft.status, "drafted");
         assert!(draft.description.is_some());
         assert!(draft.clarification_questions.is_empty());
+    }
+
+    #[test]
+    fn rejects_descriptions_without_final_deliverable_and_checklist_sections() {
+        let error = validate_assisted_description_draft(AssistedDescriptionDraft {
+            status: "drafted".to_string(),
+            description: Some(
+                "## Historia de usuario
+
+Como usuario, quiero algo.
+
+## Contexto
+
+Contexto.
+
+## Alcance
+
+Incluye:
+- A
+
+## Criterios de aceptacion
+
+- Criterio
+
+## Checklist antes de Review
+
+- Checklist
+
+## Entregable mínimo
+
+- Entregable"
+                    .to_string(),
+            ),
+            clarification_questions: Vec::new(),
+        })
+        .expect_err("wrong final section order should fail");
+
+        assert!(error.contains("wrong order"));
     }
 
     #[test]

@@ -49,10 +49,12 @@ impl AiClient {
         model: &str,
         task: &LocalTask,
         additional_context: Option<&str>,
+        catalog_template_context: Option<&str>,
     ) -> Result<AssistedDescriptionDraft, String> {
         let request = features::assisted_description::build_request(
             task,
             additional_context.unwrap_or_default(),
+            catalog_template_context,
         )?;
         let request = match request {
             features::assisted_description::AssistedDescriptionRequest::Clarification(draft) => {

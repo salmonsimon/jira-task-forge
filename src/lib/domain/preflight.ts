@@ -1,3 +1,4 @@
+import { resolveCatalogArea } from "./catalog";
 import { isSubtask } from "./taskGraph";
 import type { LocalTask, PreflightWarning } from "../types";
 
@@ -25,6 +26,13 @@ export function classifyTaskPreflightWarnings(task: LocalTask): PreflightWarning
       severity: "blocking",
       taskId: task.id,
       message: "Area is required before creating this task in Jira."
+    });
+  } else if (resolveCatalogArea(task.area).kind === "blocked") {
+    warnings.push({
+      code: "invalid-area",
+      severity: "blocking",
+      taskId: task.id,
+      message: "Choose an official catalog area before creating this task in Jira."
     });
   }
 

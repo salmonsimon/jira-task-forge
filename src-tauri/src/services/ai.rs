@@ -2,7 +2,7 @@ use super::credentials::AI_API_KEY_ACCOUNT;
 use super::AppServices;
 use crate::integrations::ai::{ai_model_or_default, AiClient, AiCredentials, AiProvider};
 use crate::models::{AssistedDescriptionDraft, JqlAiDraft};
-use crate::repositories::TaskRepository;
+use crate::repositories::{CategoryRepository, TaskRepository};
 
 impl AppServices {
     pub fn draft_jql_with_ai(&self, prompt: &str) -> Result<JqlAiDraft, String> {
@@ -34,7 +34,29 @@ impl AppServices {
         }
         .ok_or_else(|| "Task not found.".to_string())?;
 
-        client.draft_task_description(&model, &task, additional_context)
+        let catalog_context = {
+            let connection = self.connection();
+            CategoryRepository::new(&connection)
+                .catalog_template_context_for_area(
+                    &task.area,
+                    &format!(
+                        "{}
+{}
+{}",
+                        task.title,
+                        additional_context.unwrap_or_default(),
+                        task.description.as_deref().unwrap_or_default()
+                    ),
+                )
+                .map_err(|error| format!("Could not load catalog template context: {error}"))?
+        };
+
+        client.draft_task_description(
+            &model,
+            &task,
+            additional_context,
+            catalog_context.as_deref(),
+        )
     }
 
     pub fn test_ai_provider_connection(&self) -> Result<String, String> {

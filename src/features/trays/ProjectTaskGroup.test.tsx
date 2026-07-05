@@ -21,7 +21,7 @@ describe("ProjectTaskGroup", () => {
       <ProjectTaskGroup
         project="Transversal"
         tasks={[task]}
-        areas={["3D", "Compra"]}
+        areas={["3D", "Selección Recurso"]}
         selectedTaskId={null}
         onOpenTask={() => undefined}
         onUpdateTask={() => undefined}

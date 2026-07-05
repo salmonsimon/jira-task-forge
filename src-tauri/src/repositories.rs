@@ -1,7 +1,10 @@
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 use serde_json::Value;
 use uuid::Uuid;
 
+use crate::area_catalog::{
+    SyncedAreaFormatRule, SyncedCatalogArea, SyncedDeliveryFormat, OFFICIAL_AREAS,
+};
 use crate::attachment_storage::validate_managed_relative_path;
 use crate::db::{utc_now_string, DbError, DbResult};
 use crate::integrations::jira::normalize_jira_site_url;
@@ -22,20 +25,6 @@ const DEFAULT_PROJECT_CATEGORIES: &[(&str, bool)] = &[
     ("Transversal", false),
     ("Legacy Sandbox", true),
 ];
-const DEFAULT_AREA_CATEGORIES: &[(&str, bool)] = &[
-    ("Bug", false),
-    ("3D", false),
-    ("Polish", false),
-    ("Programacion", false),
-    ("Iluminacion", false),
-    ("Texturas", false),
-    ("Localizacion", false),
-    ("Refactorizacion", false),
-    ("Tutorial", false),
-    ("Feeling", false),
-    ("Diseno", false),
-    ("Deprecated", true),
-];
 const DEFAULT_JQL_FAVORITES: &[(&str, &str)] = &[
     (
         "Urgent open bugs",
@@ -51,6 +40,8 @@ const ASSISTED_DESCRIPTION_SECTION_DEFINITIONS: &[(&str, &str)] = &[
     ("problem", "Contexto"),
     ("scope", "Alcance"),
     ("acceptance_criteria", "Criterios de aceptacion"),
+    ("minimum_deliverable", "Entregable mínimo"),
+    ("review_checklist", "Checklist antes de Review"),
 ];
 
 pub struct TrayRepository<'connection> {
@@ -169,6 +160,11 @@ impl<'connection> CategoryRepository<'connection> {
 
     pub fn create(&self, category_type: &str, name: &str) -> DbResult<Category> {
         validate_category_type(category_type)?;
+        if category_type == "area" {
+            return Err(DbError::InvalidData(
+                "Areas are managed by the official catalog sync.".to_string(),
+            ));
+        }
         let name = normalize_display_name(name)?;
         let normalized_name = normalize_name(&name);
         let now = utc_now_string()?;
@@ -203,6 +199,11 @@ impl<'connection> CategoryRepository<'connection> {
         let Some(current) = self.find_by_id(id)? else {
             return Ok(None);
         };
+        if current.category_type == "area" && name.is_some() {
+            return Err(DbError::InvalidData(
+                "Areas are managed by the official catalog sync.".to_string(),
+            ));
+        }
         let next_name = match name {
             Some(name) => normalize_display_name(name)?,
             None => current.name,
@@ -230,10 +231,313 @@ impl<'connection> CategoryRepository<'connection> {
     }
 
     pub fn delete(&self, id: &str) -> DbResult<bool> {
+        let Some(current) = self.find_by_id(id)? else {
+            return Ok(false);
+        };
+        if current.category_type == "area" {
+            return Err(DbError::InvalidData(
+                "Areas are managed by the official catalog sync.".to_string(),
+            ));
+        }
         let changed = self
             .connection
             .execute("DELETE FROM categories WHERE id = ?1", [id])?;
         Ok(changed > 0)
+    }
+
+    pub fn sync_area_catalog(&self) -> DbResult<Vec<Category>> {
+        let areas = OFFICIAL_AREAS
+            .iter()
+            .map(|area| SyncedCatalogArea {
+                area_display_name: area.area_display_name.to_string(),
+                jira_label: area.jira_label.to_string(),
+                enabled_in_jtf: true,
+                issue_type: "Story".to_string(),
+                default_delivery_format: area.delivery_format.to_string(),
+                safe_aliases: area
+                    .aliases
+                    .iter()
+                    .map(|alias| (*alias).to_string())
+                    .collect(),
+                notes: String::new(),
+            })
+            .collect::<Vec<_>>();
+        self.sync_area_catalog_entries(&areas)
+    }
+
+    pub fn sync_area_catalog_entries(
+        &self,
+        areas: &[SyncedCatalogArea],
+    ) -> DbResult<Vec<Category>> {
+        self.sync_area_catalog_contract(areas, &[], &[])
+    }
+
+    pub fn sync_area_catalog_contract(
+        &self,
+        areas: &[SyncedCatalogArea],
+        delivery_formats: &[SyncedDeliveryFormat],
+        area_format_rules: &[SyncedAreaFormatRule],
+    ) -> DbResult<Vec<Category>> {
+        let now = utc_now_string()?;
+        self.connection.execute(
+            "
+            UPDATE categories
+            SET ignored = 1, updated_at = ?1
+            WHERE category_type = 'area'
+            ",
+            [now.as_str()],
+        )?;
+        self.connection
+            .execute("DELETE FROM catalog_area_details", [])?;
+        self.connection
+            .execute("DELETE FROM catalog_delivery_formats", [])?;
+        self.connection
+            .execute("DELETE FROM catalog_area_format_rules", [])?;
+
+        for catalog_area in areas {
+            let id = Uuid::new_v4().to_string();
+            let normalized_name = normalize_name(&catalog_area.area_display_name);
+            let safe_aliases_json = serde_json::to_string(&catalog_area.safe_aliases)
+                .map_err(|error| DbError::InvalidData(error.to_string()))?;
+            self.connection.execute(
+                "
+                INSERT INTO categories (
+                    id, category_type, name, normalized_name, source, hidden, ignored, created_at, updated_at
+                )
+                VALUES (?1, 'area', ?2, ?3, 'catalog', 0, 0, ?4, ?4)
+                ON CONFLICT(category_type, normalized_name) DO UPDATE SET
+                    name = excluded.name,
+                    source = 'catalog',
+                    hidden = 0,
+                    ignored = 0,
+                    updated_at = excluded.updated_at
+                ",
+                (
+                    id.as_str(),
+                    catalog_area.area_display_name.as_str(),
+                    normalized_name.as_str(),
+                    now.as_str(),
+                ),
+            )?;
+            self.connection.execute(
+                "
+                INSERT INTO catalog_area_details (
+                    area_display_name, normalized_name, jira_label, issue_type,
+                    default_delivery_format, safe_aliases_json, notes, updated_at
+                )
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+                ",
+                (
+                    catalog_area.area_display_name.as_str(),
+                    normalized_name.as_str(),
+                    catalog_area.jira_label.as_str(),
+                    catalog_area.issue_type.as_str(),
+                    catalog_area.default_delivery_format.as_str(),
+                    safe_aliases_json.as_str(),
+                    catalog_area.notes.as_str(),
+                    now.as_str(),
+                ),
+            )?;
+        }
+
+        for delivery_format in delivery_formats {
+            let story_headings_json = serde_json::to_string(&delivery_format.story_headings)
+                .map_err(|error| DbError::InvalidData(error.to_string()))?;
+            let review_checklist_json = serde_json::to_string(&delivery_format.review_checklist)
+                .map_err(|error| DbError::InvalidData(error.to_string()))?;
+            self.connection.execute(
+                "
+                INSERT INTO catalog_delivery_formats (
+                    format_name, normalized_name, issue_type, story_headings_json,
+                    minimum_deliverable, review_checklist_json, updated_at
+                )
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+                ",
+                (
+                    delivery_format.format_name.as_str(),
+                    normalize_name(&delivery_format.format_name).as_str(),
+                    delivery_format.issue_type.as_str(),
+                    story_headings_json.as_str(),
+                    delivery_format.minimum_deliverable.as_str(),
+                    review_checklist_json.as_str(),
+                    now.as_str(),
+                ),
+            )?;
+        }
+
+        for rule in area_format_rules {
+            let id = Uuid::new_v4().to_string();
+            self.connection.execute(
+                "
+                INSERT INTO catalog_area_format_rules (
+                    id, area_display_name, normalized_area_name, priority, condition,
+                    normalized_condition, delivery_format, blocking, updated_at
+                )
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+                ",
+                (
+                    id.as_str(),
+                    rule.area_display_name.as_str(),
+                    normalize_name(&rule.area_display_name).as_str(),
+                    rule.priority,
+                    rule.condition.as_str(),
+                    normalize_name(&rule.condition).as_str(),
+                    rule.delivery_format.as_str(),
+                    bool_to_db(rule.blocking),
+                    now.as_str(),
+                ),
+            )?;
+        }
+
+        self.list(Some("area"))
+    }
+
+    pub fn catalog_template_context_for_area(
+        &self,
+        area: &str,
+        description_or_deliverable: &str,
+    ) -> DbResult<Option<String>> {
+        let normalized_area = normalize_name(area);
+        let area_detail = self
+            .connection
+            .query_row(
+                "
+                SELECT area_display_name, jira_label, issue_type, default_delivery_format, notes
+                FROM catalog_area_details
+                WHERE normalized_name = ?1
+                ",
+                [normalized_area.as_str()],
+                |row| {
+                    Ok((
+                        row.get::<_, String>("area_display_name")?,
+                        row.get::<_, String>("jira_label")?,
+                        row.get::<_, String>("issue_type")?,
+                        row.get::<_, String>("default_delivery_format")?,
+                        row.get::<_, String>("notes")?,
+                    ))
+                },
+            )
+            .optional()?;
+        let Some((area_display_name, jira_label, issue_type, default_delivery_format, notes)) =
+            area_detail
+        else {
+            return Ok(None);
+        };
+        let delivery_format = self.delivery_format_for_catalog_area(
+            &area_display_name,
+            &default_delivery_format,
+            description_or_deliverable,
+        )?;
+        let normalized_format = normalize_name(&delivery_format);
+        let format_detail = self
+            .connection
+            .query_row(
+                "
+                SELECT format_name, issue_type, story_headings_json, minimum_deliverable, review_checklist_json
+                FROM catalog_delivery_formats
+                WHERE normalized_name = ?1
+                ",
+                [normalized_format.as_str()],
+                |row| {
+                    Ok((
+                        row.get::<_, String>("format_name")?,
+                        row.get::<_, String>("issue_type")?,
+                        row.get::<_, String>("story_headings_json")?,
+                        row.get::<_, String>("minimum_deliverable")?,
+                        row.get::<_, String>("review_checklist_json")?,
+                    ))
+                },
+            )
+            .optional()?;
+        let Some((
+            format_name,
+            format_issue_type,
+            story_headings_json,
+            minimum_deliverable,
+            review_checklist_json,
+        )) = format_detail
+        else {
+            return Ok(None);
+        };
+        let story_headings = parse_string_array_json(&story_headings_json)?;
+        let review_checklist = parse_string_array_json(&review_checklist_json)?;
+        let checklist = if review_checklist.is_empty() {
+            "- None".to_string()
+        } else {
+            review_checklist
+                .iter()
+                .map(|item| format!("- {item}"))
+                .collect::<Vec<_>>()
+                .join("\n")
+        };
+        let headings = if story_headings.is_empty() {
+            "None".to_string()
+        } else {
+            story_headings.join(", ")
+        };
+        let notes = if notes.trim().is_empty() {
+            "None".to_string()
+        } else {
+            notes.trim().to_string()
+        };
+
+        Ok(Some(
+            [
+                "Synced Notion catalog template:".to_string(),
+                format!("- Official area display name: {area_display_name}"),
+                format!("- Jira label: {jira_label}"),
+                format!("- Area issue type: {issue_type}"),
+                format!("- Delivery format: {format_name}"),
+                format!("- Delivery format issue type: {format_issue_type}"),
+                format!("- Required story headings: {headings}"),
+                format!("- Minimum deliverable: {minimum_deliverable}"),
+                "- Review checklist:".to_string(),
+                checklist,
+                format!("- Area notes: {notes}"),
+            ]
+            .join("\n"),
+        ))
+    }
+
+    fn delivery_format_for_catalog_area(
+        &self,
+        area_display_name: &str,
+        default_delivery_format: &str,
+        description_or_deliverable: &str,
+    ) -> DbResult<String> {
+        let normalized_area = normalize_name(area_display_name);
+        let normalized_context = normalize_name(description_or_deliverable);
+        let mut statement = self.connection.prepare(
+            "
+            SELECT condition, normalized_condition, delivery_format, blocking
+            FROM catalog_area_format_rules
+            WHERE normalized_area_name = ?1
+            ORDER BY priority ASC
+            ",
+        )?;
+        let rules = statement
+            .query_map([normalized_area.as_str()], |row| {
+                Ok((
+                    row.get::<_, String>("condition")?,
+                    row.get::<_, String>("normalized_condition")?,
+                    row.get::<_, String>("delivery_format")?,
+                    row.get::<_, i64>("blocking")? != 0,
+                ))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+
+        for (condition, normalized_condition, delivery_format, blocking) in rules {
+            if blocking || normalized_condition == "fallback" || normalized_condition.is_empty() {
+                continue;
+            }
+            if normalized_context.contains(&normalized_condition)
+                || normalized_context.contains(&normalize_name(&condition))
+            {
+                return Ok(delivery_format);
+            }
+        }
+
+        Ok(default_delivery_format.to_string())
     }
 
     fn find_by_id(&self, id: &str) -> DbResult<Option<Category>> {
@@ -255,7 +559,7 @@ impl<'connection> CategoryRepository<'connection> {
 
     fn ensure_defaults_seeded(&self) -> DbResult<()> {
         self.seed_category_type_if_empty("project", DEFAULT_PROJECT_CATEGORIES)?;
-        self.seed_category_type_if_empty("area", DEFAULT_AREA_CATEGORIES)?;
+        self.seed_catalog_area_categories_if_empty()?;
         Ok(())
     }
 
@@ -290,6 +594,39 @@ impl<'connection> CategoryRepository<'connection> {
                     *name,
                     normalized_name.as_str(),
                     bool_to_db(*hidden),
+                    now.as_str(),
+                ),
+            )?;
+        }
+
+        Ok(())
+    }
+
+    fn seed_catalog_area_categories_if_empty(&self) -> DbResult<()> {
+        let count: i64 = self.connection.query_row(
+            "SELECT COUNT(*) FROM categories WHERE category_type = 'area'",
+            [],
+            |row| row.get(0),
+        )?;
+        if count > 0 {
+            return Ok(());
+        }
+
+        let now = utc_now_string()?;
+        for catalog_area in OFFICIAL_AREAS {
+            let id = Uuid::new_v4().to_string();
+            let normalized_name = normalize_name(catalog_area.area_display_name);
+            self.connection.execute(
+                "
+                INSERT OR IGNORE INTO categories (
+                    id, category_type, name, normalized_name, source, hidden, ignored, created_at, updated_at
+                )
+                VALUES (?1, 'area', ?2, ?3, 'catalog', 0, 0, ?4, ?4)
+                ",
+                (
+                    id.as_str(),
+                    catalog_area.area_display_name,
+                    normalized_name.as_str(),
                     now.as_str(),
                 ),
             )?;
@@ -1966,6 +2303,11 @@ fn bool_to_db(value: bool) -> i64 {
     }
 }
 
+fn parse_string_array_json(value: &str) -> DbResult<Vec<String>> {
+    serde_json::from_str::<Vec<String>>(value)
+        .map_err(|error| DbError::InvalidData(error.to_string()))
+}
+
 fn normalize_proposal_sections(
     sections: Vec<AssistedDescriptionProposalSection>,
     updated_at: &str,
@@ -2262,35 +2604,124 @@ mod tests {
             .any(|category| category.name == "Legacy Sandbox" && category.hidden));
 
         let created = repository
-            .create("area", "  Gameplay   UX  ")
-            .expect("category creates");
+            .create("project", "  Gameplay   UX  ")
+            .expect("project category creates");
         assert_eq!(created.name, "Gameplay UX");
-        assert_eq!(created.category_type, "area");
+        assert_eq!(created.category_type, "project");
         assert_eq!(created.source, "local");
         assert!(!created.hidden);
 
         let updated = repository
             .update(&created.id, Some("UX Polish"), Some(true))
-            .expect("category updates")
-            .expect("category exists");
+            .expect("project category updates")
+            .expect("project category exists");
         assert_eq!(updated.name, "UX Polish");
         assert!(updated.hidden);
 
-        assert!(repository.delete(&updated.id).expect("category deletes"));
+        assert!(repository
+            .delete(&updated.id)
+            .expect("project category deletes"));
         assert!(!repository
             .delete(&updated.id)
             .expect("missing delete is false"));
-        assert!(!repository
-            .list(Some("area"))
-            .expect("areas list")
-            .iter()
-            .any(|category| category.id == updated.id));
+    }
 
-        let recreated = repository
-            .create("area", "UX Polish")
-            .expect("category name can be reused after delete");
-        assert_eq!(recreated.name, "UX Polish");
-        assert_ne!(recreated.id, updated.id);
+    #[test]
+    fn syncs_catalog_templates_for_ai_description_context() {
+        let connection = open_in_memory_database().expect("database opens");
+        let repository = CategoryRepository::new(&connection);
+
+        repository
+            .sync_area_catalog_contract(
+                &[SyncedCatalogArea {
+                    area_display_name: "Programación".to_string(),
+                    jira_label: "Programación".to_string(),
+                    enabled_in_jtf: true,
+                    issue_type: "Story".to_string(),
+                    default_delivery_format: "Feature de Programación".to_string(),
+                    safe_aliases: vec!["Programacion".to_string()],
+                    notes: "Usar para trabajo de código.".to_string(),
+                }],
+                &[SyncedDeliveryFormat {
+                    format_name: "Feature de Programación".to_string(),
+                    issue_type: "Story".to_string(),
+                    story_headings: vec!["Historia de usuario".to_string(), "Alcance".to_string()],
+                    minimum_deliverable: "PR/MR listo con implementación, pruebas y evidencia."
+                        .to_string(),
+                    review_checklist: vec![
+                        "PR/MR creado.".to_string(),
+                        "Validación en runtime documentada.".to_string(),
+                    ],
+                }],
+                &[SyncedAreaFormatRule {
+                    area_display_name: "Programación".to_string(),
+                    priority: 1,
+                    condition: "fallback".to_string(),
+                    delivery_format: "Feature de Programación".to_string(),
+                    blocking: false,
+                }],
+            )
+            .expect("catalog sync persists");
+
+        let context = repository
+            .catalog_template_context_for_area("Programación", "Implementar cooldown")
+            .expect("catalog context loads")
+            .expect("catalog context exists");
+
+        assert!(context.contains("Synced Notion catalog template:"));
+        assert!(context.contains("- Delivery format: Feature de Programación"));
+        assert!(context.contains(
+            "- Minimum deliverable: PR/MR listo con implementación, pruebas y evidencia."
+        ));
+        assert!(context.contains("- PR/MR creado."));
+        assert!(context.contains("- Validación en runtime documentada."));
+    }
+
+    #[test]
+    fn manages_areas_from_official_catalog_only() {
+        let connection = open_in_memory_database().expect("database opens");
+        let repository = CategoryRepository::new(&connection);
+
+        let areas = repository.list(Some("area")).expect("area categories list");
+        assert!(areas
+            .iter()
+            .any(|category| category.name == "Programación" && category.source == "catalog"));
+        assert!(areas
+            .iter()
+            .any(|category| category.name == "Selección Recurso" && category.source == "catalog"));
+        assert!(!areas.iter().any(|category| category.name == "Compra"));
+
+        assert!(matches!(
+            repository.create("area", "Compra"),
+            Err(DbError::InvalidData(_))
+        ));
+
+        let bug = areas
+            .iter()
+            .find(|category| category.name == "Bug")
+            .expect("Bug exists");
+        assert!(matches!(
+            repository.update(&bug.id, Some("Error"), None),
+            Err(DbError::InvalidData(_))
+        ));
+        assert!(matches!(
+            repository.delete(&bug.id),
+            Err(DbError::InvalidData(_))
+        ));
+
+        let hidden = repository
+            .update(&bug.id, None, Some(true))
+            .expect("catalog area visibility updates")
+            .expect("catalog area exists");
+        assert!(hidden.hidden);
+
+        let synced = repository
+            .sync_area_catalog()
+            .expect("catalog sync succeeds");
+        assert!(synced
+            .iter()
+            .any(|category| category.name == "Bug" && !category.hidden));
+        assert!(synced.iter().all(|category| category.source == "catalog"));
     }
 
     #[test]
@@ -3244,7 +3675,10 @@ mod tests {
             .expect("proposal creates");
 
         assert_eq!(proposal.status, AssistedDescriptionProposalStatus::Pending);
-        assert_eq!(proposal.sections.len(), 4);
+        assert_eq!(
+            proposal.sections.len(),
+            ASSISTED_DESCRIPTION_SECTION_DEFINITIONS.len()
+        );
         assert_eq!(proposal.provider.as_deref(), Some("OpenAI"));
         assert!(proposal
             .sections
@@ -3442,6 +3876,7 @@ mod tests {
                 ai_provider: "OpenAI".to_string(),
                 ai_model: "gpt-4.1-mini".to_string(),
                 default_content_language: "Spanish".to_string(),
+                ..AppSettings::default()
             })
             .expect("settings update");
 
@@ -3467,6 +3902,7 @@ mod tests {
                 ai_provider: "OpenAI".to_string(),
                 ai_model: "gpt-4.1-mini".to_string(),
                 default_content_language: "Spanish".to_string(),
+                ..AppSettings::default()
             })
             .expect("settings update");
 
@@ -3495,6 +3931,7 @@ mod tests {
                 ai_provider: "OpenAI".to_string(),
                 ai_model: "gpt-4.1-mini".to_string(),
                 default_content_language: "Spanish".to_string(),
+                ..AppSettings::default()
             })
             .expect_err("custom hosts should fail");
 
@@ -3537,6 +3974,7 @@ mod tests {
                 ai_provider: "OpenAI".to_string(),
                 ai_model: "gpt-4.1".to_string(),
                 default_content_language: "Spanish".to_string(),
+                ..AppSettings::default()
             })
             .expect("unrelated setting updates");
 

@@ -6,6 +6,7 @@ import type {
   AssistedDescriptionDraft,
   AssistedDescriptionProposal,
   AssistedDescriptionProposalStatus,
+  CatalogSyncResult,
   Category,
   DescriptionProposalLogEntry,
   DescriptionSectionStatus,
@@ -18,6 +19,7 @@ import type {
   LocalTask,
   LocalIssueRelationship,
   NewAssistedDescriptionProposal,
+  NotionCatalogConnectionTestResult,
   SyncLogEntry,
   Tray
 } from "../types";
@@ -128,6 +130,25 @@ export async function deletePersistedCategory(id: string): Promise<boolean> {
   return invoke<boolean>("delete_category", { id });
 }
 
+export async function syncPersistedAreaCatalog(): Promise<Category[]> {
+  const categories = await invoke<BackendCategory[]>("sync_area_catalog");
+  return categories.map(mapCategory);
+}
+
+export async function syncPersistedAreaCatalogFromSource(sourceUrl: string): Promise<CatalogSyncResult> {
+  return invoke<CatalogSyncResult>("sync_area_catalog_from_source", { sourceUrl });
+}
+
+export async function syncPersistedAreaCatalogFromNotion(pageUrlOrId: string): Promise<CatalogSyncResult> {
+  return invoke<CatalogSyncResult>("sync_area_catalog_from_notion", { pageUrlOrId });
+}
+
+export async function testPersistedNotionCatalogConnection(
+  pageUrlOrId: string
+): Promise<NotionCatalogConnectionTestResult> {
+  return invoke<NotionCatalogConnectionTestResult>("test_notion_catalog_connection", { pageUrlOrId });
+}
+
 export async function listPersistedJqlFavorites(): Promise<JqlFavorite[]> {
   return (await invoke<BackendJqlFavorite[]>("list_jql_favorites")).map(mapJqlFavorite);
 }
@@ -187,6 +208,18 @@ export async function deletePersistedOpenAiApiKey(): Promise<void> {
 
 export async function deletePersistedAiProviderApiKey(aiProvider: AiProvider): Promise<void> {
   await invoke("delete_ai_provider_api_key", { aiProvider });
+}
+
+export async function hasPersistedNotionIntegrationToken(): Promise<boolean> {
+  return invoke<boolean>("has_notion_integration_token");
+}
+
+export async function savePersistedNotionIntegrationToken(token: string): Promise<void> {
+  await invoke("save_notion_integration_token", { token });
+}
+
+export async function deletePersistedNotionIntegrationToken(): Promise<void> {
+  await invoke("delete_notion_integration_token");
 }
 
 export async function testPersistedOpenAiConnection(): Promise<string> {
@@ -336,6 +369,10 @@ export async function openPersistedAiProviderApiKeysPage(aiProvider: AppSettings
   await invoke("open_ai_provider_api_keys_page", { aiProvider });
 }
 
+export async function openPersistedNotionDevelopersPage(): Promise<void> {
+  await invoke("open_notion_developers_page");
+}
+
 export async function openPersistedJiraIssueUrl(url: string): Promise<void> {
   await invoke("open_jira_issue_url", { url });
 }
@@ -482,6 +519,8 @@ function normalizeAppSettings(settings: AppSettings): AppSettings {
 
   return {
     ...settings,
-    jiraCreationProjectKey: settings.jiraCreationProjectKey ?? legacySettings.jiraSandboxProjectKey ?? ""
+    jiraCreationProjectKey: settings.jiraCreationProjectKey ?? legacySettings.jiraSandboxProjectKey ?? "",
+    catalogSourceMode: settings.catalogSourceMode ?? "notion",
+    catalogSourceUrl: settings.catalogSourceUrl ?? ""
   };
 }

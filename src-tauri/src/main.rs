@@ -1,3 +1,4 @@
+mod area_catalog;
 mod attachment_storage;
 mod backup;
 mod commands;
@@ -44,6 +45,10 @@ pub fn run() {
             commands::settings::get_app_settings,
             commands::settings::update_app_settings,
             commands::categories::list_categories,
+            commands::categories::sync_area_catalog,
+            commands::categories::sync_area_catalog_from_source,
+            commands::categories::sync_area_catalog_from_notion,
+            commands::categories::test_notion_catalog_connection,
             commands::categories::create_category,
             commands::categories::update_category,
             commands::categories::delete_category,
@@ -60,6 +65,9 @@ pub fn run() {
             commands::credentials::save_ai_provider_api_key,
             commands::credentials::delete_openai_api_key,
             commands::credentials::delete_ai_provider_api_key,
+            commands::credentials::has_notion_integration_token,
+            commands::credentials::save_notion_integration_token,
+            commands::credentials::delete_notion_integration_token,
             commands::ai::test_openai_connection,
             commands::ai::test_ai_provider_connection,
             commands::ai::test_openai_api_key,
@@ -97,6 +105,7 @@ pub fn run() {
             commands::backup::save_csv_file,
             commands::external_links::open_atlassian_api_tokens_page,
             commands::external_links::open_ai_provider_api_keys_page,
+            commands::external_links::open_notion_developers_page,
             commands::external_links::open_jira_issue_url
         ])
         .run(tauri::generate_context!())

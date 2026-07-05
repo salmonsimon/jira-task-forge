@@ -112,7 +112,7 @@ Objetivo anterior.`);
     });
 
     expect(proposal.status).toBe("Pending");
-    expect(proposal.sections).toHaveLength(4);
+    expect(proposal.sections).toHaveLength(assistedDescriptionSectionDefinitions.length);
     expect(proposal.sections.map((section) => section.sectionId)).toEqual(
       assistedDescriptionSectionDefinitions.map((section) => section.id)
     );

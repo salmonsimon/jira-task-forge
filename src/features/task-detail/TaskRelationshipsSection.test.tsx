@@ -42,7 +42,7 @@ const blockerTask: LocalTask = {
 const blockedTask: LocalTask = {
   id: "blocked",
   project: "STT",
-  area: "Compra",
+  area: "Selección Recurso",
   title: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   priority: "Medium",
   issueType: "Story",

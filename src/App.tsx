@@ -21,6 +21,7 @@ import {
   createPersistedRecoveryTrayFromTasks,
   deletePersistedCategory,
   deletePersistedAiProviderApiKey,
+  deletePersistedNotionIntegrationToken,
   deletePersistedJqlFavorite,
   deletePersistedJiraApiToken,
   deletePersistedTaskAttachment,
@@ -30,6 +31,7 @@ import {
   getPersistedAppSettings,
   hasPersistedAiProviderApiKey,
   hasPersistedJiraApiToken,
+  hasPersistedNotionIntegrationToken,
   importPersistedBackup,
   createPersistedAssistedDescriptionProposal,
   listPersistedCategories,
@@ -43,15 +45,21 @@ import {
   openPersistedAiProviderApiKeysPage,
   openPersistedAtlassianApiTokensPage,
   openPersistedJiraIssueUrl,
+  openPersistedNotionDevelopersPage,
   runPersistedJqlQuery,
   saveCsvFile,
   savePersistedAiProviderApiKey,
   savePersistedJiraApiToken,
+  savePersistedNotionIntegrationToken,
+  syncPersistedAreaCatalog,
+  syncPersistedAreaCatalogFromNotion,
+  syncPersistedAreaCatalogFromSource,
   testPersistedAiProviderApiKey,
   testPersistedAiProviderConnection,
   testPersistedJiraApiToken,
   testPersistedJiraConnection,
   testPersistedJiraConnectionSettings,
+  testPersistedNotionCatalogConnection,
   transitionPersistedAssistedDescriptionProposal,
   updatePersistedAppSettings,
   updatePersistedAssistedDescriptionProposalSection,
@@ -92,6 +100,7 @@ import type {
   AssistedDescriptionDraft,
   AiProvider,
   BackupOperationNotice,
+  CatalogSyncResult,
   Category,
   CredentialConnectionTestResult,
   JqlAiDraft,
@@ -119,7 +128,9 @@ const defaultAppSettings: AppSettings = {
   jiraCreationProjectKey: "",
   aiProvider: "OpenAI",
   aiModel: "gpt-4.1",
-  defaultContentLanguage: "Spanish"
+  defaultContentLanguage: "Spanish",
+  catalogSourceMode: "notion",
+  catalogSourceUrl: ""
 };
 const defaultJqlPrompt = "Show me high and highest open bugs for STT, sorted by priority";
 const atlassianApiTokensUrl = "https://id.atlassian.com/manage-profile/security/api-tokens";
@@ -516,6 +527,44 @@ export default function App() {
     setCategories((currentCategories) => currentCategories.filter((category) => category.id !== categoryId));
   }
 
+  async function syncAreaCatalog(sourceUrl?: string): Promise<CatalogSyncResult | null> {
+    const requestedSourceUrl = sourceUrl?.trim() || appSettings.catalogSourceUrl.trim();
+    const shouldUseExternalSource = Boolean(sourceUrl?.trim()) || appSettings.catalogSourceMode !== "manual";
+
+    if (usesTauriPersistence && requestedSourceUrl && shouldUseExternalSource) {
+      const result =
+        appSettings.catalogSourceMode === "notion"
+          ? await syncPersistedAreaCatalogFromNotion(requestedSourceUrl)
+          : await syncPersistedAreaCatalogFromSource(requestedSourceUrl);
+      if (!result.ok) return result;
+
+      setCategories((currentCategories) => [
+        ...currentCategories.filter((category) => category.categoryType !== "area"),
+        ...result.areas.map((area) => ({
+          id: `catalog-${area.areaDisplayName}`,
+          categoryType: "area" as const,
+          name: area.areaDisplayName,
+          source: "catalog" as const
+        }))
+      ]);
+      await updateAppSettings({
+        catalogSourceMode: appSettings.catalogSourceMode,
+        catalogSourceUrl: appSettings.catalogSourceMode === "notion" ? requestedSourceUrl : result.sourceUrl
+      });
+      return result;
+    }
+
+    const syncedAreas = usesTauriPersistence
+      ? await syncPersistedAreaCatalog()
+      : appData.listAreas().map((area) => ({ ...area, source: "catalog" as const }));
+
+    setCategories((currentCategories) => [
+      ...currentCategories.filter((category) => category.categoryType !== "area"),
+      ...syncedAreas
+    ]);
+    return null;
+  }
+
   async function openJiraIssue(url: string) {
     if (usesTauriPersistence) {
       try {
@@ -559,6 +608,21 @@ export default function App() {
         setAiCredentialMessage(
           `Could not open ${appSettings.aiProvider} automatically. Open ${url} in your browser.`
         );
+      }
+    }
+
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
+
+  async function openNotionDevelopersPage() {
+    const url = "https://app.notion.com/developers/connections";
+
+    if (usesTauriPersistence) {
+      try {
+        await openPersistedNotionDevelopersPage();
+        return;
+      } catch {
+        console.warn(`Could not open Notion automatically. Open ${url} in your browser.`);
       }
     }
 
@@ -1484,9 +1548,13 @@ export default function App() {
           <CategoriesPanel
             projects={projectCategories}
             areas={areaCategories}
+            catalogSourceMode={appSettings.catalogSourceMode}
+            catalogSourceUrl={appSettings.catalogSourceUrl}
             onCreateCategory={createCategory}
             onUpdateCategory={updateCategory}
             onDeleteCategory={deleteCategory}
+            onSyncAreaCatalog={syncAreaCatalog}
+            onConfigureCatalogSource={() => setOpenPanel("settings")}
             onClose={() => setOpenPanel(null)}
           />
         ) : null}
@@ -1507,8 +1575,22 @@ export default function App() {
             onTestAiProviderApiKey={testAiProviderApiKey}
             onTestJiraApiTokenQuiet={testJiraApiTokenQuiet}
             onTestJiraConnectionSettings={testJiraConnectionSettings}
+            hasNotionIntegrationToken={usesTauriPersistence ? hasPersistedNotionIntegrationToken : async () => false}
+            onSaveNotionIntegrationToken={usesTauriPersistence ? savePersistedNotionIntegrationToken : async () => undefined}
+            onDeleteNotionIntegrationToken={usesTauriPersistence ? deletePersistedNotionIntegrationToken : async () => undefined}
+            onTestNotionCatalogConnection={
+              usesTauriPersistence
+                ? testPersistedNotionCatalogConnection
+                : async () => ({
+                    ok: false,
+                    message: "Notion sync is available in the Tauri app.",
+                    title: null,
+                    extractedBlockCount: 0
+                  })
+            }
             onListJiraProjectsForConnection={listJiraProjectsForConnection}
             onOpenJiraApiTokens={openJiraApiTokensPage}
+            onOpenNotionDevelopers={openNotionDevelopersPage}
             onOpenAiProviderApiKeys={openAiProviderApiKeysPage}
             onExportBackup={exportBackup}
             onImportBackup={importBackup}

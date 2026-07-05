@@ -10,18 +10,20 @@ export const projects: Category[] = [
 ];
 
 export const areas: Category[] = [
-  { categoryType: "area", id: "area-bug", name: "Bug", source: "jira" },
-  { categoryType: "area", id: "area-3d", name: "3D", source: "jira" },
-  { categoryType: "area", id: "area-polish", name: "Polish", source: "jira" },
-  { categoryType: "area", id: "area-programacion", name: "Programacion", source: "jira" },
-  { categoryType: "area", id: "area-iluminacion", name: "Iluminacion", source: "jira" },
-  { categoryType: "area", id: "area-texturas", name: "Texturas", source: "jira" },
-  { categoryType: "area", id: "area-localizacion", name: "Localizacion", source: "jira" },
-  { categoryType: "area", id: "area-refactorizacion", name: "Refactorizacion", source: "jira" },
-  { categoryType: "area", id: "area-tutorial", name: "Tutorial", source: "jira" },
-  { categoryType: "area", id: "area-feeling", name: "Feeling", source: "jira" },
-  { categoryType: "area", id: "area-diseno", name: "Diseno", source: "jira" },
-  { categoryType: "area", id: "area-deprecated", name: "Deprecated", source: "jira", hidden: true }
+  { categoryType: "area", id: "area-bug", name: "Bug", source: "catalog" },
+  { categoryType: "area", id: "area-3d", name: "3D", source: "catalog" },
+  { categoryType: "area", id: "area-polish", name: "Polish", source: "catalog" },
+  { categoryType: "area", id: "area-programacion", name: "Programación", source: "catalog" },
+  { categoryType: "area", id: "area-integracion", name: "Integración", source: "catalog" },
+  { categoryType: "area", id: "area-diseno", name: "Diseño", source: "catalog" },
+  { categoryType: "area", id: "area-animacion", name: "Animación", source: "catalog" },
+  { categoryType: "area", id: "area-iluminacion", name: "Iluminación", source: "catalog" },
+  { categoryType: "area", id: "area-texturas", name: "Texturas", source: "catalog" },
+  { categoryType: "area", id: "area-localizacion", name: "Localización", source: "catalog" },
+  { categoryType: "area", id: "area-refactorizacion", name: "Refactorización", source: "catalog" },
+  { categoryType: "area", id: "area-investigacion", name: "Investigación", source: "catalog" },
+  { categoryType: "area", id: "area-seleccion-recurso", name: "Selección Recurso", source: "catalog" },
+  { categoryType: "area", id: "area-arquitectura", name: "Arquitectura", source: "catalog" }
 ];
 
 export const trays: Tray[] = [
