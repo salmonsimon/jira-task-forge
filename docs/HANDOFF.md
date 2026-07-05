@@ -172,6 +172,11 @@ Still pending:
 - Issue #132: implement Epic Scope modeling as a dedicated HITL-sensitive slice.
 - Issue #103: add documentation-only local data cleanup/storage inventory. Do
   not add destructive cleanup UI or commands.
+- Issue #157: implement managed attachment byte cleanup after successful Jira
+  upload and after `AI only` attachments no longer need local bytes once a task
+  is `Created`.
+- Issue #158: implement bounded cleanup for stale `attachments/staging` files
+  after import or interrupted staging work.
 - Issue #138 and Issue #139 remain follow-ups after the remaining workflow
   behavior changes land: docs alignment first, then JTFTEST live workflow QA.
 - Issue #153 packages the Windows app and chooses/applies the final icon after
@@ -210,6 +215,10 @@ Recommended stack to work next:
   Verify/Token ordering, and Issue #146 AI Provider setup modal. Issue #146
   should use the Jira/Notion setup visual family with a two-step provider/model
   then key/test flow.
+- Run storage lifecycle hardening next: Issue #157 managed attachment byte
+  cleanup and Issue #158 stale staging cleanup. Keep both AFK-scoped to backend
+  filesystem/sync/import behavior and focused tests; do not add broad cleanup UI
+  or app-data reset commands.
 - Treat Issue #134 Story/Bug template separation and Issue #132 Epic Scope
   modeling as deeper workflow slices with focused tests. The Scope product rule
   is already decided as `[{Project}] [{Area}] {Scope}`.
