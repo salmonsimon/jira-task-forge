@@ -117,7 +117,6 @@ export function SettingsPanel({
   );
   const isNotionSynchronizationConfigured = Boolean(
     settings.catalogSourceMode === "manual" ||
-      (settings.catalogSourceMode === "public-exportable" && settings.catalogSourceUrl.trim()) ||
       (settings.catalogSourceMode === "notion" && settings.catalogSourceUrl.trim() && hasNotionToken)
   );
   const aiProviderKeyDraftControls = getCredentialDraftControls({
@@ -447,7 +446,7 @@ export function SettingsPanel({
 
 function catalogSourceModeLabel(mode: AppSettings["catalogSourceMode"]): string {
   if (mode === "notion") return "Sync from Notion page";
-  if (mode === "public-exportable") return "Sync with public/exportable source";
+  if (mode === "public-exportable") return "Legacy external source";
   return "Manual catalog";
 }
 

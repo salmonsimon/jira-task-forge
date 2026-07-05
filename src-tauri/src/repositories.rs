@@ -2696,9 +2696,7 @@ mod tests {
         assert_eq!(renamed.source, "local");
         assert!(renamed.hidden);
 
-        assert!(repository
-            .delete(&renamed.id)
-            .expect("manual area deletes"));
+        assert!(repository.delete(&renamed.id).expect("manual area deletes"));
         assert!(!repository
             .list(Some("area"))
             .expect("area categories list")

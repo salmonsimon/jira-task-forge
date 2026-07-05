@@ -5,8 +5,36 @@ use crate::integrations::ai::{ai_model_or_default, AiProvider};
 use crate::models::{AppSettings, LocalTask, NewSubtask, NewTask, NewTray, TrayState};
 use crate::repositories::{TaskRepository, TrayRepository};
 use std::fs;
+use std::io::{Read, Write};
+use std::net::TcpListener;
 use std::path::Path;
+use std::thread;
 use uuid::Uuid;
+
+fn serve_catalog_once(body: &'static str) -> String {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("test server binds");
+    let address = listener.local_addr().expect("test server address");
+    thread::spawn(move || {
+        if let Ok((mut stream, _)) = listener.accept() {
+            let mut buffer = [0_u8; 1024];
+            let _ = stream.read(&mut buffer);
+            let response = format!(
+                "HTTP/1.1 200 OK
+Content-Type: application/json
+Content-Length: {}
+Connection: close
+
+{}",
+                body.len(),
+                body
+            );
+            stream
+                .write_all(response.as_bytes())
+                .expect("test server writes response");
+        }
+    });
+    format!("http://{address}/jtf-sync-catalog.json")
+}
 
 fn attachment_grant(source_path: &Path) -> AttachmentFileGrant {
     AttachmentFileGrant::from_backend_file_dialog(source_path.to_path_buf())
@@ -685,6 +713,77 @@ fn manages_categories_and_jql_favorites_through_services() {
     assert!(services
         .delete_category(&category.id)
         .expect("category deletes"));
+}
+
+#[test]
+fn external_catalog_sync_removes_manual_areas_not_in_synced_catalog() {
+    let services = AppServices::new(open_in_memory_database().expect("database opens"));
+    services
+        .create_category("area", "Compra")
+        .expect("manual area creates");
+    assert!(services
+        .list_categories(Some("area"))
+        .expect("areas list before sync")
+        .iter()
+        .any(|category| category.name == "Compra"));
+
+    let source_url = serve_catalog_once(
+        r#"{
+          "areas": [
+            {
+              "areaDisplayName": "Bug",
+              "jiraLabel": "Bug",
+              "enabledInJTF": true,
+              "issueType": "Bug",
+              "defaultDeliveryFormat": "Bug",
+              "safeAliases": []
+            },
+            {
+              "areaDisplayName": "Programación",
+              "jiraLabel": "Programación",
+              "enabledInJTF": true,
+              "issueType": "Story",
+              "defaultDeliveryFormat": "Feature de Programación",
+              "safeAliases": ["Programacion"]
+            }
+          ],
+          "deliveryFormats": [
+            {
+              "formatName": "Bug",
+              "issueType": "Bug",
+              "storyHeadings": ["Historia de usuario"],
+              "minimumDeliverable": "Bug reproducible.",
+              "reviewChecklist": ["Pasos de reproducción incluidos."]
+            },
+            {
+              "formatName": "Feature de Programación",
+              "issueType": "Story",
+              "storyHeadings": ["Historia de usuario"],
+              "minimumDeliverable": "PR/MR creado.",
+              "reviewChecklist": ["PR/MR creado."]
+            }
+          ],
+          "areaFormatRules": []
+        }"#,
+    );
+
+    let result = services
+        .sync_area_catalog_from_source(&source_url)
+        .expect("external catalog sync succeeds");
+    assert!(result.ok);
+    assert_eq!(result.synced_area_count, 2);
+
+    let areas = services
+        .list_categories(Some("area"))
+        .expect("areas list after sync");
+    assert!(areas
+        .iter()
+        .any(|category| category.name == "Programación" && category.source == "catalog"));
+    assert!(areas
+        .iter()
+        .any(|category| category.name == "Bug" && category.source == "catalog"));
+    assert!(!areas.iter().any(|category| category.name == "Compra"));
+    assert!(!areas.iter().any(|category| category.name == "3D"));
 }
 
 #[test]
