@@ -1,6 +1,6 @@
 import { Bot, Check, ChevronDown, Download, ExternalLink, KeyRound, Settings, UploadCloud } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { Button, DetailBlock, FeedbackNote, LoadingOrb, PanelHeader, SegmentedControl } from "../../components/ui";
+import { Button, DetailBlock, DrawerShell, FeedbackNote, LoadingOrb, PanelHeader, SegmentedControl } from "../../components/ui";
 import { appOverlayLayers, useAppOverlay } from "../../lib/app-overlays";
 import { getCredentialDraftControls, type CredentialDraftTestStatus } from "../../lib/domain";
 import type { AiProvider, AppSettings, CredentialConnectionTestResult, JiraConnectionTestResult, JiraProjectOption, NotionCatalogConnectionTestResult, ThemeMode } from "../../lib/types";
@@ -127,10 +127,11 @@ export function SettingsPanel({
     keyTestStatus: aiProviderKeyDraftTestStatus
   });
 
-  useAppOverlay({
+  const overlay = useAppOverlay({
     layer: appOverlayLayers.sidePanel,
     onDismiss: onClose,
     dismissOnEscape: true,
+    dismissOnBackdrop: true,
     dismissOnOutsidePointer: true,
     lockScroll: true,
     surfaceRef: panelRef
@@ -200,7 +201,7 @@ export function SettingsPanel({
   }, [hasNotionIntegrationToken, isNotionSynchronizationGuideOpen]);
 
   return (
-    <aside ref={panelRef} className="fixed right-0 top-0 z-30 flex h-screen w-[420px] flex-col overscroll-contain border-l border-[#dfe1e6] bg-white shadow-xl">
+    <DrawerShell overlay={overlay} surfaceRef={panelRef}>
       {isJiraConnectionGuideOpen ? (
         <JiraConnectionGuide
           settings={settings}
@@ -446,7 +447,7 @@ export function SettingsPanel({
           </div>
         </DetailBlock>
       </div>
-    </aside>
+    </DrawerShell>
   );
 }
 

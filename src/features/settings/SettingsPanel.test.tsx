@@ -49,6 +49,7 @@ describe("SettingsPanel", () => {
       />
     );
 
+    expect(html).toContain('data-overlay-scrim="drawer"');
     expect(html.match(/>Setup<\/button>/g)).toHaveLength(2);
     expect(html).not.toContain("Set Connection");
     expect(html).not.toContain("Set Synchronization");

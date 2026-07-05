@@ -1,4 +1,5 @@
 export { Button } from "./Button";
+export { DrawerShell } from "./DrawerShell";
 export { FeedbackNote, feedbackNoteClassName, type FeedbackNoteSurface, type FeedbackNoteVariant } from "./FeedbackNote";
 export { IconButton } from "./IconButton";
 export { LoadingOrb } from "./LoadingOrb";
