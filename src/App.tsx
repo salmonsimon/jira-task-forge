@@ -9,7 +9,7 @@ import { FeedbackNote } from "./components/ui";
 import { CategoriesPanel } from "./features/categories";
 import { JiraPreflightDialog, type JiraCreatePreflight } from "./features/jira-preflight";
 import { JqlView } from "./features/jql";
-import { SettingsPanel } from "./features/settings";
+import { AiProviderSetupGuide, SettingsPanel } from "./features/settings";
 import { TaskFocusWindow } from "./features/task-detail";
 import { TraysView, useTrayWorkspace } from "./features/trays";
 import { mockAppDataAdapter } from "./lib/adapters";
@@ -168,6 +168,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<MainTab>("trays");
   const [openPanel, setOpenPanel] = useState<Panel>(null);
   const [settingsInitialGuide, setSettingsInitialGuide] = useState<"notion-synchronization" | null>(null);
+  const [isAiProviderSetupOpen, setIsAiProviderSetupOpen] = useState(false);
   const [categories, setCategories] = useState<Category[]>(() => [...appData.listProjects(), ...appData.listAreas()]);
   const [jqlFavorites, setJqlFavorites] = useState<JqlFavorite[]>(() => appData.listJqlFavorites());
   const [taskSyncLogs, setTaskSyncLogs] = useState<Record<string, SyncLogEntry[]>>({});
@@ -1547,6 +1548,7 @@ export default function App() {
             onAddSubtask={trayWorkspace.addSubtaskToTask}
             onDeleteSubtask={trayWorkspace.deleteTask}
             onGenerateDescription={generateTaskDescription}
+            onConfigureAiProvider={() => setIsAiProviderSetupOpen(true)}
             onListDescriptionProposals={usesTauriPersistence ? listPersistedAssistedDescriptionProposals : undefined}
             onListDescriptionProposalLog={usesTauriPersistence ? listPersistedDescriptionProposalLog : undefined}
             onSaveDescription={trayWorkspace.saveTaskDescription}
@@ -1614,6 +1616,21 @@ export default function App() {
             initialGuide={settingsInitialGuide}
             onInitialGuideClose={returnToCategoriesFromSettingsGuide}
             onClose={() => setOpenPanel(null)}
+          />
+        ) : null}
+        {isAiProviderSetupOpen ? (
+          <AiProviderSetupGuide
+            settings={appSettings}
+            hasAiProviderApiKey={hasAiProviderApiKey}
+            aiCredentialMessage={aiCredentialMessage}
+            isTestingAiProviderConnection={isTestingAiProviderConnection}
+            onChange={updateAppSettings}
+            onClose={() => setIsAiProviderSetupOpen(false)}
+            onDeleteAiProviderApiKey={deleteAiProviderApiKey}
+            onOpenAiProviderApiKeys={openAiProviderApiKeysPage}
+            onSaveAiProviderApiKey={saveAiProviderApiKey}
+            onTestAiProviderApiKey={testAiProviderApiKey}
+            onTestAiProviderConnection={testAiProviderConnection}
           />
         ) : null}
         {trayPendingDelete ? (

@@ -38,6 +38,7 @@ export function TaskFocusWindow({
   onAddSubtask,
   onDeleteSubtask,
   onGenerateDescription,
+  onConfigureAiProvider,
   onListDescriptionProposals,
   onListDescriptionProposalLog,
   onSaveDescription,
@@ -65,6 +66,7 @@ export function TaskFocusWindow({
   onAddSubtask: (taskId: string, title: string) => void | Promise<void>;
   onDeleteSubtask: (taskId: string) => void | Promise<void>;
   onGenerateDescription: (taskId: string, additionalContext: string) => Promise<AssistedDescriptionDraft>;
+  onConfigureAiProvider?: () => void;
   onListDescriptionProposals?: (taskId: string) => Promise<AssistedDescriptionProposal[]>;
   onListDescriptionProposalLog?: (taskId: string) => Promise<DescriptionProposalLogEntry[]>;
   onSaveDescription: (taskId: string, description: string) => void | Promise<void>;
@@ -171,6 +173,7 @@ export function TaskFocusWindow({
               readOnly={readOnly}
               isGeneratingDescription={isGeneratingDescription}
               onGenerateDescription={onGenerateDescription}
+              onConfigureAiProvider={onConfigureAiProvider}
               onListProposals={onListDescriptionProposals}
               onListProposalLog={onListDescriptionProposalLog}
               onSaveDescription={onSaveDescription}

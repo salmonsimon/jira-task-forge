@@ -50,7 +50,7 @@ describe("SettingsPanel", () => {
     );
 
     expect(html).toContain('data-overlay-scrim="drawer"');
-    expect(html.match(/>Setup<\/button>/g)).toHaveLength(2);
+    expect(html.match(/>Setup<\/button>/g)).toHaveLength(3);
     expect(html).not.toContain("Set Connection");
     expect(html).not.toContain("Set Synchronization");
     expect(html).toContain("notion-mark");
@@ -94,6 +94,45 @@ describe("SettingsPanel", () => {
     expect(html).toContain("Catalog source");
     expect(html).toContain("Catalog mode");
     expect(html).not.toContain("Notion integration token");
-    expect(html.match(/>Setup<\/button>/g)).toHaveLength(2);
+    expect(html.match(/>Setup<\/button>/g)).toHaveLength(3);
+  });
+
+  it("can open the AI provider setup guide directly", () => {
+    const html = renderToStaticMarkup(
+      <SettingsPanel
+        settings={{ ...settings, aiProvider: "OpenAI", aiModel: "gpt-4.1" }}
+        hasJiraApiToken
+        hasAiProviderApiKey={false}
+        aiCredentialMessage={null}
+        isTestingJiraConnection={false}
+        isTestingAiProviderConnection={false}
+        onChange={async () => true}
+        onSaveJiraApiToken={async () => true}
+        onDeleteJiraApiToken={() => undefined}
+        onSaveAiProviderApiKey={async () => true}
+        onDeleteAiProviderApiKey={() => undefined}
+        onTestAiProviderConnection={async () => ({ ok: true, message: "Connected" })}
+        onTestAiProviderApiKey={async () => ({ ok: true, message: "Connected" })}
+        onTestJiraApiTokenQuiet={async () => ({ ok: true, message: "Connected", accountDisplayName: null, accountEmail: null })}
+        onTestJiraConnectionSettings={async () => ({ ok: true, message: "Connected", accountDisplayName: null, accountEmail: null })}
+        hasNotionIntegrationToken={async () => true}
+        onSaveNotionIntegrationToken={async () => undefined}
+        onDeleteNotionIntegrationToken={async () => undefined}
+        onTestNotionCatalogConnection={async () => ({ ok: true, message: "Connected", title: "JTF Sync Catalog", extractedBlockCount: 1 })}
+        onListJiraProjectsForConnection={async () => []}
+        onOpenJiraApiTokens={() => undefined}
+        onOpenNotionDevelopers={() => undefined}
+        onOpenAiProviderApiKeys={() => undefined}
+        onExportBackup={() => undefined}
+        onImportBackup={() => undefined}
+        initialGuide="ai-provider"
+        onClose={() => undefined}
+      />
+    );
+
+    expect(html).toContain("Set AI Provider");
+    expect(html).toContain("Provider and model");
+    expect(html).toContain("Recommended model");
+    expect(html).toContain("gpt-4.1");
   });
 });

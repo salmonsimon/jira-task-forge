@@ -51,6 +51,7 @@ export function AssistedDescriptionSection({
   readOnly,
   isGeneratingDescription,
   onGenerateDescription,
+  onConfigureAiProvider,
   onListProposals,
   onListProposalLog,
   onSaveDescription,
@@ -66,6 +67,7 @@ export function AssistedDescriptionSection({
   readOnly: boolean;
   isGeneratingDescription: boolean;
   onGenerateDescription: (taskId: string, additionalContext: string) => Promise<AssistedDescriptionDraft>;
+  onConfigureAiProvider?: () => void;
   onListProposals?: (taskId: string) => Promise<AssistedDescriptionProposal[]>;
   onListProposalLog?: (taskId: string) => Promise<DescriptionProposalLogEntry[]>;
   onSaveDescription: (taskId: string, description: string) => void | Promise<void>;
@@ -614,6 +616,7 @@ export function AssistedDescriptionSection({
           isGeneratingDescription={isGeneratingDescription}
           onCancel={clearDescriptionPrompt}
           onChange={setDescriptionContext}
+          onConfigureAiProvider={onConfigureAiProvider}
           onGenerate={() => {
             void generateProposal(promptSectionIds);
           }}
@@ -975,13 +978,14 @@ function ProposalLogList({ entries }: { entries: DescriptionProposalLogEntry[] }
   );
 }
 
-function DescriptionPromptModal({
+export function DescriptionPromptModal({
   clarificationQuestions,
   descriptionContext,
   descriptionMessage,
   isGeneratingDescription,
   onCancel,
   onChange,
+  onConfigureAiProvider,
   onGenerate,
   onKeyDown
 }: {
@@ -991,6 +995,7 @@ function DescriptionPromptModal({
   isGeneratingDescription: boolean;
   onCancel: () => void;
   onChange: (value: string) => void;
+  onConfigureAiProvider?: () => void;
   onGenerate: () => void;
   onKeyDown: (event: ReactKeyboardEvent<HTMLTextAreaElement>) => void;
 }) {
@@ -1002,6 +1007,8 @@ function DescriptionPromptModal({
     lockScroll: true,
     shouldDismiss: () => !isGeneratingDescription
   });
+  const canConfigureAiProvider = Boolean(onConfigureAiProvider && descriptionMessage && isAiProviderSetupMessage(descriptionMessage));
+  const aiProviderSetupActionLabel = descriptionMessage ? getAiProviderSetupActionLabel(descriptionMessage) : "Configure OpenAI";
 
   return (
     <div
@@ -1052,7 +1059,20 @@ function DescriptionPromptModal({
           />
           {descriptionMessage ? (
             <FeedbackNote surface="dark" variant="info">
-              {descriptionMessage}
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <span>{descriptionMessage}</span>
+                {canConfigureAiProvider ? (
+                  <Button
+                    className="shrink-0"
+                    variant="darkPrimary"
+                    onClick={() => {
+                      onConfigureAiProvider?.();
+                    }}
+                  >
+                    {aiProviderSetupActionLabel}
+                  </Button>
+                ) : null}
+              </div>
             </FeedbackNote>
           ) : null}
           {clarificationQuestions.length ? (
@@ -1641,6 +1661,14 @@ function formatSectionScopeLabel(sectionIds: AssistedDescriptionSectionId[]): st
   if (sectionIds.length === 1) return getAssistedDescriptionSectionLabel(sectionIds[0]);
   if (sectionIds.length === assistedDescriptionSectionDefinitions.length) return "all proposal sections";
   return `${sectionIds.length} proposal sections`;
+}
+
+export function isAiProviderSetupMessage(message: string): boolean {
+  return /Select an AI provider|Save a .* API key/i.test(message);
+}
+
+export function getAiProviderSetupActionLabel(message: string): string {
+  return /Save a .* API key/i.test(message) ? "Save API key" : "Configure OpenAI";
 }
 
 function isEmptySectionChangeRequest(changeRequest: string): boolean {
