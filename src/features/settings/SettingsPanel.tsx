@@ -1,19 +1,12 @@
-import { Bot, Check, ChevronDown, Download, KeyRound, Settings, UploadCloud } from "lucide-react";
+import { Bot, Check, Download, KeyRound, Settings, UploadCloud } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button, DetailBlock, DrawerShell, FeedbackNote, PanelHeader, SegmentedControl } from "../../components/ui";
 import { appOverlayLayers, useAppOverlay } from "../../lib/app-overlays";
-import type { AiProvider, AppSettings, CredentialConnectionTestResult, JiraConnectionTestResult, JiraProjectOption, NotionCatalogConnectionTestResult, ThemeMode } from "../../lib/types";
+import type { AppSettings, CredentialConnectionTestResult, JiraConnectionTestResult, JiraProjectOption, NotionCatalogConnectionTestResult, ThemeMode } from "../../lib/types";
 import { AiProviderSetupGuide, defaultAiProviderModels } from "./AiProviderSetupGuide";
 import { JiraConnectionGuide } from "./JiraConnectionGuide";
 import notionMark from "../../assets/notion-mark.png";
 import { defaultNotionCatalogUrl, NotionSynchronizationGuide } from "./NotionSynchronizationGuide";
-
-const aiProviderOptions: Array<{ label: string; value: AiProvider }> = [
-  { label: "OpenAI", value: "OpenAI" },
-  { label: "Claude", value: "Claude" },
-  { label: "Gemini", value: "Gemini" },
-  { label: "None", value: "None" }
-];
 
 export function SettingsPanel({
   settings,
@@ -93,6 +86,7 @@ export function SettingsPanel({
     settings.catalogSourceMode === "manual" ||
       (settings.catalogSourceMode === "notion" && settings.catalogSourceUrl.trim() && hasNotionToken)
   );
+  const isAiProviderConfigured = Boolean(isAiProviderSelected && settings.aiModel.trim() && hasAiProviderApiKey);
   const overlay = useAppOverlay({
     layer: appOverlayLayers.sidePanel,
     onDismiss: onClose,
@@ -102,13 +96,6 @@ export function SettingsPanel({
     lockScroll: true,
     surfaceRef: panelRef
   });
-
-  function changeAiProvider(aiProvider: AiProvider) {
-    onChange({
-      aiProvider,
-      aiModel: aiProvider === "None" ? "" : defaultAiProviderModels[aiProvider]
-    });
-  }
 
   function closeNotionSynchronizationGuide() {
     setIsNotionSynchronizationGuideOpen(false);
@@ -312,43 +299,58 @@ export function SettingsPanel({
           </p>
         </div>
 
-        <DetailBlock icon={<Bot size={15} />} title="AI provider">
-          <SettingsSelect
-            label="Provider"
-            value={settings.aiProvider}
-            options={aiProviderOptions}
-            onChange={(aiProvider) => changeAiProvider(aiProvider as AiProvider)}
-          />
-          <div className="mt-3 rounded border border-[#dfe1e6] bg-[#f7f8fa] p-3">
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <div>
-                <div className="text-xs font-medium text-[#6b778c]">Provider setup</div>
-                <div className="text-sm font-medium text-[#172b4d]">
-                  {settings.aiProvider === "None"
-                    ? "No AI provider selected"
-                    : hasAiProviderApiKey
-                      ? "Credential saved"
-                      : "No credential saved"}
-                </div>
-                <p className="mt-1 text-xs leading-relaxed text-[#6b778c]">
-                  Default model: {isAiProviderSelected ? settings.aiModel || defaultAiProviderModels[selectedAiProvider] : "Not selected"}
-                </p>
-              </div>
-              <span className={`rounded px-2 py-1 text-xs font-medium ${isAiProviderSelected && hasAiProviderApiKey ? "bg-[#e3fcef] text-[#006644]" : "bg-[#f4f5f7] text-[#6b778c]"}`}>
-                {settings.aiProvider === "None" ? "Off" : hasAiProviderApiKey ? "Saved" : "Missing"}
+        <div className="mt-4 rounded border border-[#dfe1e6] p-3">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-2 text-sm font-semibold">
+              <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center">
+                <Bot size={16} strokeWidth={2.25} />
+              </span>
+              <span className="min-w-0 truncate">AI provider</span>
+              <span
+                aria-label={isAiProviderConfigured ? "AI provider configured" : "AI provider needs setup"}
+                className={`inline-flex shrink-0 items-center justify-center ${
+                  isAiProviderConfigured ? "text-[#36b37e]" : "text-[#ffab00]"
+                }`}
+                title={isAiProviderConfigured ? "AI provider configured" : "AI provider needs setup"}
+              >
+                {isAiProviderConfigured ? (
+                  <span className="inline-flex h-[18px] w-[18px] items-center justify-center rounded-full bg-[#4caf50] text-white">
+                    <Check size={14} strokeWidth={3} />
+                  </span>
+                ) : (
+                  <span className="relative inline-flex h-[18px] w-[18px] items-center justify-center">
+                    <span className="absolute inset-0 bg-[#ffab00] [clip-path:polygon(50%_5%,96%_90%,4%_90%)]" />
+                    <span className="relative top-[1px] text-[12px] font-black leading-none text-white">!</span>
+                  </span>
+                )}
               </span>
             </div>
-            {aiCredentialMessage ? (
-              <FeedbackNote className="mt-3" variant={aiCredentialMessageVariant(aiCredentialMessage)}>{aiCredentialMessage}</FeedbackNote>
-            ) : null}
-            <Button className="settings-button-primary mt-3 w-full justify-center" variant="secondary" onClick={() => setIsAiProviderSetupGuideOpen(true)}>
+            <Button className="settings-button-primary shrink-0" variant="secondary" onClick={() => setIsAiProviderSetupGuideOpen(true)}>
               Setup
             </Button>
           </div>
+          <div className="mb-3 rounded border border-[#dfe1e6] bg-[#f7f8fa] p-3">
+            <div className="mb-3">
+              <div className="text-sm font-semibold text-[#172b4d]">Provider state</div>
+              <p className="text-xs leading-relaxed text-[#6b778c]">
+                Provider, model, and API key are configured through the guided setup.
+              </p>
+            </div>
+            <SettingsReadOnlyRows
+              rows={[
+                ["Provider", isAiProviderSelected ? settings.aiProvider : "Not set"],
+                ["Model", isAiProviderSelected ? settings.aiModel || defaultAiProviderModels[selectedAiProvider] : "Not set"],
+                ["API key", isAiProviderSelected ? (hasAiProviderApiKey ? "Saved" : "Missing") : "Not required"]
+              ]}
+            />
+          </div>
+          {aiCredentialMessage ? (
+            <FeedbackNote className="mt-3" variant={aiCredentialMessageVariant(aiCredentialMessage)}>{aiCredentialMessage}</FeedbackNote>
+          ) : null}
           <p className="mt-2 text-xs leading-relaxed text-[#6b778c]">
             AI keys follow the same secret boundary as Jira credentials and are never included in backups.
           </p>
-        </DetailBlock>
+        </div>
 
         <DetailBlock icon={<Download size={15} />} title="Backup and restore">
           <p className="mb-3 text-sm text-[#6b778c]">
@@ -389,54 +391,6 @@ function SettingsReadOnlyRows({ rows }: { rows: Array<[string, string]> }) {
           <div className="min-w-0 break-words text-sm text-[#172b4d]">{value}</div>
         </div>
       ))}
-    </div>
-  );
-}
-
-function SettingsSelect({
-  label,
-  value,
-  options,
-  onChange
-}: {
-  label: string;
-  value: string;
-  options: Array<{ label: string; value: string }>;
-  onChange: (value: string) => void;
-}) {
-  const [isOpen, setIsOpen] = useState(false);
-  const selectedOption = options.find((option) => option.value === value) ?? options[0];
-
-  return (
-    <div className="relative mb-3">
-      <div className="mb-1 block text-xs font-medium text-[#6b778c]">{label}</div>
-      <button
-        className="flex h-9 w-full items-center justify-between gap-2 rounded border border-[#c1c7d0] bg-white px-2 text-left text-sm text-[#172b4d] outline-none hover:bg-[#f4f5f7] focus:border-[#4c9aff] focus:ring-2 focus:ring-[#deebff]"
-        onBlur={() => window.setTimeout(() => setIsOpen(false), 120)}
-        onClick={() => setIsOpen((currentValue) => !currentValue)}
-        type="button"
-      >
-        <span>{selectedOption.label}</span>
-        <ChevronDown size={14} />
-      </button>
-      {isOpen ? (
-        <div className="absolute z-40 mt-1 w-full overflow-hidden rounded border border-[#c1c7d0] bg-white py-1 text-sm shadow-xl">
-          {options.map((option) => (
-            <button
-              className="flex w-full items-center justify-between gap-2 px-2 py-2 text-left text-[#172b4d] hover:bg-[#f4f5f7]"
-              key={option.value}
-              onClick={() => {
-                onChange(option.value);
-                setIsOpen(false);
-              }}
-              type="button"
-            >
-              <span>{option.label}</span>
-              {option.value === value ? <Check size={13} /> : null}
-            </button>
-          ))}
-        </div>
-      ) : null}
     </div>
   );
 }

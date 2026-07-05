@@ -131,8 +131,9 @@ describe("SettingsPanel", () => {
     );
 
     expect(html).toContain("Set AI Provider");
-    expect(html).toContain("Provider and model");
-    expect(html).toContain("Recommended model");
+    expect(html).toContain("Provider");
+    expect(html).toContain("AI provider");
+    expect(html).toContain("Default model");
     expect(html).toContain("gpt-4.1");
   });
 });
