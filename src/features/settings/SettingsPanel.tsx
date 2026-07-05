@@ -1,6 +1,6 @@
 import { Bot, Check, ChevronDown, Download, ExternalLink, KeyRound, Settings, UploadCloud } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { Button, DetailBlock, LoadingOrb, PanelHeader, SegmentedControl } from "../../components/ui";
+import { Button, DetailBlock, FeedbackNote, LoadingOrb, PanelHeader, SegmentedControl } from "../../components/ui";
 import { appOverlayLayers, useAppOverlay } from "../../lib/app-overlays";
 import { getCredentialDraftControls, type CredentialDraftTestStatus } from "../../lib/domain";
 import type { AiProvider, AppSettings, CredentialConnectionTestResult, JiraConnectionTestResult, JiraProjectOption, NotionCatalogConnectionTestResult, ThemeMode } from "../../lib/types";
@@ -419,12 +419,12 @@ export function SettingsPanel({
               </Button>
             </div>
             {aiProviderApiKeyDraft ? (
-              <p className="mt-2 break-words text-xs leading-relaxed text-[#6b778c]">
+              <FeedbackNote className="mt-3" variant={aiProviderKeyDraftStatusVariant(aiProviderKeyDraftTestStatus, aiProviderKeyDraftControls.hasConnectionSettings)}>
                 {aiProviderKeyDraftStatusMessage(aiProviderKeyDraftTestStatus, aiProviderKeyDraftControls.hasConnectionSettings)}
-              </p>
+              </FeedbackNote>
             ) : null}
             {aiCredentialMessage ? (
-              <p className="mt-2 break-words text-xs leading-relaxed text-[#6b778c]">{aiCredentialMessage}</p>
+              <FeedbackNote className="mt-3" variant={aiCredentialMessageVariant(aiCredentialMessage)}>{aiCredentialMessage}</FeedbackNote>
             ) : null}
           </div>
           <p className="mt-2 text-xs leading-relaxed text-[#6b778c]">
@@ -462,6 +462,20 @@ function aiProviderKeyDraftStatusMessage(status: CredentialDraftTestStatus, hasC
   if (status === "failed") return "Update this key, then test again before saving.";
   if (status === "testing") return "Testing this key without saving it.";
   return "Test this key before saving it.";
+}
+
+function aiProviderKeyDraftStatusVariant(status: CredentialDraftTestStatus, hasConnectionSettings: boolean) {
+  if (!hasConnectionSettings) return "warning";
+  if (status === "success") return "success";
+  if (status === "failed") return "error";
+  if (status === "testing") return "info";
+  return "warning";
+}
+
+function aiCredentialMessageVariant(message: string) {
+  if (/saved|removed/i.test(message)) return "success";
+  if (/select|empty/i.test(message)) return "warning";
+  return "error";
 }
 
 function SettingsReadOnlyRows({ rows }: { rows: Array<[string, string]> }) {
