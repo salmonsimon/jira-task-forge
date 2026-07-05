@@ -21,7 +21,7 @@ export function CategoriesPanel({
   areas: Category[];
   catalogSourceMode: AppSettings["catalogSourceMode"];
   catalogSourceUrl: string;
-  onCreateCategory: (categoryType: "project", name: string) => void | Promise<void>;
+  onCreateCategory: (categoryType: "project" | "area", name: string) => void | Promise<void>;
   onUpdateCategory: (categoryId: string, patch: Partial<Pick<Category, "hidden" | "name">>) => void | Promise<void>;
   onDeleteCategory: (categoryId: string) => void | Promise<void>;
   onSyncAreaCatalog: (sourceUrl?: string) => Promise<CatalogSyncResult | null>;
@@ -67,7 +67,7 @@ export function CategoriesPanel({
           categoryType="area"
           title="Areas"
           categories={areas}
-          isCatalogManaged
+          isCatalogManaged={catalogSourceMode !== "manual"}
           catalogSourceMode={catalogSourceMode}
           catalogSourceUrl={catalogSourceUrl}
           onCreateCategory={onCreateCategory}
@@ -103,7 +103,7 @@ function CategoryList({
   isCatalogManaged?: boolean;
   catalogSourceMode?: AppSettings["catalogSourceMode"];
   catalogSourceUrl?: string;
-  onCreateCategory: (categoryType: "project", name: string) => void | Promise<void>;
+  onCreateCategory: (categoryType: "project" | "area", name: string) => void | Promise<void>;
   onUpdateCategory: (categoryId: string, patch: Partial<Pick<Category, "hidden" | "name">>) => void | Promise<void>;
   onDeleteCategory: (categoryId: string) => void | Promise<void>;
   onSyncAreaCatalog?: (sourceUrl?: string) => Promise<CatalogSyncResult | null>;
@@ -118,7 +118,6 @@ function CategoryList({
     const nextName = newName.trim();
     if (!nextName) return;
 
-    if (categoryType !== "project") return;
     await onCreateCategory(categoryType, nextName);
     setNewName("");
     setIsAdding(false);
@@ -140,7 +139,7 @@ function CategoryList({
         onConfigureCatalogSource?.("notion-synchronization");
         return;
       }
-      onSyncResult?.(result ?? createManualCatalogSyncResult(categories));
+      if (result) onSyncResult?.(result);
     } finally {
       setIsSyncing(false);
     }
@@ -267,20 +266,6 @@ async function waitForMinimumElapsed(startedAt: number, minimumMs: number): Prom
   }
 }
 
-export function createManualCatalogSyncResult(categories: Category[]): CatalogSyncResult {
-  return {
-    ok: true,
-    sourceUrl: "manual",
-    syncedAreaCount: categories.length,
-    deliveryFormatCount: 0,
-    ruleCount: 0,
-    warnings: [],
-    errors: [],
-    areas: [],
-    deliveryFormats: [],
-    areaFormatRules: []
-  };
-}
 
 export function isMissingNotionSynchronizationSetup(
   catalogSourceMode: AppSettings["catalogSourceMode"],
