@@ -60,6 +60,9 @@ readiness gate in [`docs/internal-release-readiness.md`](docs/internal-release-r
 Use [`docs/live-qa.md`](docs/live-qa.md) for the longer native and live Jira QA
 procedure.
 
+For local storage locations, cleanup expectations, and Windows/WSL app data
+caveats, see [`docs/local-data-storage-inventory.md`](docs/local-data-storage-inventory.md).
+
 ## Local Git Guard
 
 This repo uses a local Git hook to block direct pushes to `main` from this workspace.
