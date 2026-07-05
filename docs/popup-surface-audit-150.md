@@ -12,6 +12,14 @@ Worktree preflight:
 Issue source:
 - Related Issue #150: standardize app popups and modal surfaces.
 - This file covers the requested audit-first slice only. The broader implementation acceptance criteria still require Saimon HITL pattern choice, shared component work, migration, and visual QA of migrated surfaces.
+- Saimon HITL decisions captured after visual review:
+  - Drawers should use a visible scrim.
+  - Categories sync notice should be normalized to the dark overlay pattern, with a light-mode variant that fits light mode.
+  - Modal-like surfaces should use `useAppOverlay`.
+  - Notices/toasts/dialogs should be split by intent: toast, centered notice, blocking alert, and confirmation dialog.
+  - Dropdown/listbox behavior should be unified without forcing every value style to look identical.
+  - Setup/configuration flows should reuse the current Jira/Notion centered wizard pattern.
+  - Nested task-detail modals should share one dark modal shell.
 
 Visual evidence:
 - Screenshot capture should use repo-local tooling only, such as Vite plus Playwright from the project dev dependencies.
@@ -207,12 +215,25 @@ Assisted description section edit:
 ## Static Surface Groups
 
 Recommended target taxonomy before implementation:
-- Drawer: Settings and Categories side panels. Decide whether drawers get a visible scrim or remain scrimless right panels.
+- Drawer: Settings and Categories side panels. Saimon selected a visible scrim.
 - Focus window: Task focus window. Keep separate from normal dialogs because it is a large workspace, not a confirmation or setup flow.
-- Setup wizard modal: Jira connection and Notion synchronization. These should likely share one setup-shell component if Saimon likes the current centered wizard family.
+- Setup wizard modal: Jira connection and Notion synchronization. Saimon selected this visual family as the shared setup pattern.
 - Blocking dialog: Jira create preflight, destructive delete, backup/import notices, Jira creation/recovery notices.
-- Toast/status notice: connection notice, CSV export notice, JQL loading status. These should not all inherit modal dismissal behavior.
-- Listbox/dropdown: Quick Capture, inline task fields, task detail fields, attachment purpose, relationship type, Settings provider, Jira project picker, Notion catalog mode.
+- Toast/status notice: connection notice, CSV export notice, JQL loading status. Saimon accepted separating these by intent instead of treating all as one generic modal class.
+- Listbox/dropdown: Quick Capture, inline task fields, task detail fields, attachment purpose, relationship type, Settings provider, Jira project picker, Notion catalog mode. Saimon accepted unified behavior while preserving variant-specific value styling.
+
+Dropdown/listbox standardization does not need to make every value look identical. Preserve value-specific styling for Priority, Type, Area, and setup/settings variants while unifying keyboard behavior, outside-click dismissal, scroll containment, z-index, and accessibility roles.
+
+Notice/dialog categories selected:
+- Toast: lightweight feedback that should not block the user, for example connection test success/error.
+- Centered notice: larger completion feedback that can auto-dismiss or be dismissed, for example CSV export complete.
+- Blocking alert/dialog: the user must choose a recovery/continue action, for example Jira creation needs attention.
+- Confirmation dialog: destructive or reversible command confirmation, for example tray delete.
+
+Categories sync notice target:
+- Use `useAppOverlay`.
+- Normalize to the dark overlay/dialog family in dark mode.
+- Add a light-mode variant that matches light mode instead of forcing the dark shell there.
 
 ## Screenshot Plan
 
@@ -247,12 +268,27 @@ Captured:
 - `08-task-focus-window.png`: task focus window.
 - `09-settings-provider-dropdown.png`: Settings AI provider dropdown.
 - `11-jira-create-preflight.png`: Jira create preflight dialog.
+- `13-settings-drawer-no-scrim.png`: Settings drawer as implemented before the decision.
+- `14-settings-drawer-with-scrim-mock.png`: visual-only mock of the selected drawer direction with scrim.
+- `15-categories-drawer-no-scrim.png`: Categories drawer as implemented before the decision.
+- `16-categories-drawer-with-scrim-mock.png`: visual-only mock of the selected drawer direction with scrim.
+- `17-catalog-sync-notice-current-mock.png`: visual-only mock of the current light catalog sync notice shape over Categories.
+- `18-catalog-sync-notice-overlay-stack-mock.png`: visual-only mock of the selected normalized dark overlay direction for Categories sync notice.
+- `19-inline-priority-dropdown.png`: tray table Priority dropdown.
+- `20-inline-type-dropdown.png`: tray table Type dropdown.
+- `21-inline-area-dropdown.png`: tray table Area dropdown.
+- `22-editable-task-focus-window.png`: task focus window on an editable task.
+- `23-description-prompt-modal.png`: assisted description prompt modal.
+- `24-description-proposal-review-or-panel.png`: assisted description proposal review modal.
+- `26-delete-tray-confirm.png`: strong tray delete confirmation.
+- `27-toast-category-example-mock.png`: visual-only toast category example.
+- `28-centered-notice-category-example-mock.png`: visual-only centered notice category example.
+- `29-blocking-alert-category-example-mock.png`: visual-only blocking alert category example.
 
 Screenshot blockers and gaps:
-- Catalog sync notice was not captured because the visible fixture routes missing Notion setup to the Notion setup guide before producing a sync result notice.
-- Assisted description prompt and proposal review modals were not captured because the seeded task state did not expose a safe, no-secret path to open proposal generation/review.
-- Tray delete confirmation was not captured in the browser fixture because the available row delete controls did not expose the expected safe selector during the screenshot run.
-- Connection notice and CSV export notice were not captured because they require triggering backend/native actions; this audit avoided native dialogs and Jira/API mutations.
+- Catalog sync notice could not be reached as a real fixture state because missing Notion setup routes to the Notion setup guide before producing a sync result notice. Visual comparison mocks were captured for current vs selected normalized variants.
+- Connection notice and CSV export notice require backend/native actions or a native save dialog. Visual category mocks were captured, but real native/browser evidence remains a follow-up if screenshot proof from the desktop shell is required.
+- Local task deletion is an immediate row action rather than a modal confirmation; strong tray delete confirmation was captured.
 
 ## Validation
 
@@ -264,9 +300,9 @@ Screenshot blockers and gaps:
 ## Awaiting HITL Choice
 
 No final visual standard is selected in this slice. Recommended HITL decision prompts:
-- Should side panels remain no-backdrop drawers, or should they use a visible scrim like modals?
-- Should dropdown/listbox controls be unified into one shared component with consistent keyboard behavior?
-- Should notices be split into toast, centered confirmation, and blocking alert categories, or reduced to fewer patterns?
-- Should every modal-like surface use `useAppOverlay`, including categories sync notice?
-- Should nested task-detail modals share one dark modal shell with consistent max-width, header, footer, and busy state?
-- Should setup/configuration flows standardize on the current Jira/Notion centered wizard shell, or should some setup remain inside the Settings drawer?
+- Resolved: side panels should use a visible scrim.
+- Resolved: dropdown/listbox controls should share behavior, while preserving distinct value styling.
+- Resolved: notices should be split into toast, centered notice, blocking alert, and confirmation dialog categories.
+- Resolved: modal-like surfaces should use `useAppOverlay`, including Categories sync notice.
+- Resolved: nested task-detail modals should share one dark modal shell with consistent max-width, header, footer, and busy state.
+- Resolved: setup/configuration flows should standardize on the current Jira/Notion centered wizard shell.
