@@ -38,6 +38,7 @@ import {
   listPersistedCategories,
   listPersistedAssistedDescriptionProposals,
   listPersistedDescriptionProposalLog,
+  listPersistedAiProviderModels,
   listPersistedJqlFavorites,
   listPersistedJiraProjectsForConnection,
   listPersistedTaskSyncLog,
@@ -668,15 +669,6 @@ export default function App() {
     });
   }
 
-  function showAiConnectionNotice(result: CredentialConnectionTestResult) {
-    showConnectionNotice({
-      kind: result.ok ? "success" : "error",
-      title: result.ok ? "AI Provider connection succeeded" : "AI Provider connection failed",
-      message: result.message,
-      detail: result.detail
-    });
-  }
-
   async function saveJiraApiToken(token: string) {
     const trimmedToken = token.trim();
     if (!trimmedToken) {
@@ -753,14 +745,12 @@ export default function App() {
     try {
       const message = await testPersistedAiProviderConnection();
       const result: CredentialConnectionTestResult = { ok: true, message };
-      showAiConnectionNotice(result);
       return result;
     } catch (error) {
       const result: CredentialConnectionTestResult = {
         ok: false,
         message: formatUnknownError(error, "Could not test AI provider connection.")
       };
-      showAiConnectionNotice(result);
       return result;
     } finally {
       await waitForMinimumElapsed(loadingStartedAt, 700);
@@ -779,19 +769,22 @@ export default function App() {
     try {
       const message = await testPersistedAiProviderApiKey(appSettings.aiProvider, apiKey);
       const result: CredentialConnectionTestResult = { ok: true, message };
-      showAiConnectionNotice(result);
       return result;
     } catch (error) {
       const result: CredentialConnectionTestResult = {
         ok: false,
         message: formatUnknownError(error, "Could not test AI provider connection.")
       };
-      showAiConnectionNotice(result);
       return result;
     } finally {
       await waitForMinimumElapsed(loadingStartedAt, 700);
       setIsTestingAiProviderConnection(false);
     }
+  }
+
+  async function listAiProviderModels(aiProvider: AppSettings["aiProvider"], apiKey?: string): Promise<string[]> {
+    if (aiProvider === "None" || !usesTauriPersistence) return [];
+    return listPersistedAiProviderModels(aiProvider, apiKey?.trim() || undefined);
   }
 
   async function testJiraConnection(): Promise<JiraConnectionTestResult> {
@@ -1592,6 +1585,7 @@ export default function App() {
             onDeleteAiProviderApiKey={deleteAiProviderApiKey}
             onTestAiProviderConnection={testAiProviderConnection}
             onTestAiProviderApiKey={testAiProviderApiKey}
+            onListAiProviderModels={listAiProviderModels}
             onTestJiraApiTokenQuiet={testJiraApiTokenQuiet}
             onTestJiraConnectionSettings={testJiraConnectionSettings}
             hasNotionIntegrationToken={usesTauriPersistence ? hasPersistedNotionIntegrationToken : async () => false}
@@ -1631,6 +1625,7 @@ export default function App() {
             onSaveAiProviderApiKey={saveAiProviderApiKey}
             onTestAiProviderApiKey={testAiProviderApiKey}
             onTestAiProviderConnection={testAiProviderConnection}
+            onListAiProviderModels={listAiProviderModels}
           />
         ) : null}
         {trayPendingDelete ? (

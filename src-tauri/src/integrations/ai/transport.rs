@@ -47,6 +47,18 @@ impl AiTransportClient {
         }
     }
 
+    pub(crate) fn list_models(&self) -> Result<Vec<String>, String> {
+        match self.provider {
+            AiProvider::OpenAi => OpenAiAdapter::new(&self.api_key).list_models(),
+            AiProvider::Claude | AiProvider::Gemini => Ok(self
+                .provider
+                .fallback_models()
+                .iter()
+                .map(|model| (*model).to_string())
+                .collect()),
+        }
+    }
+
     fn send_json(&self, model: &str, request: &JsonFeatureRequest) -> Result<Value, String> {
         match self.provider {
             AiProvider::OpenAi => OpenAiAdapter::new(&self.api_key).create_json(model, request),
@@ -127,6 +139,35 @@ impl<'a> OpenAiAdapter<'a> {
 
         Err(last_error.unwrap_or_else(|| "OpenAI request failed.".to_string()))
     }
+
+    fn list_models(&self) -> Result<Vec<String>, String> {
+        let response = self.get_models_with_retry()?;
+        let mut models = response
+            .get("data")
+            .and_then(Value::as_array)
+            .ok_or_else(|| "OpenAI models response did not include a data array.".to_string())?
+            .iter()
+            .filter_map(|model| model.get("id").and_then(Value::as_str))
+            .filter(|id| is_supported_openai_model_id(id))
+            .map(ToString::to_string)
+            .collect::<Vec<_>>();
+        models.sort();
+        models.dedup();
+
+        if models.is_empty() {
+            return Err("OpenAI did not return selectable models.".to_string());
+        }
+
+        Ok(models)
+    }
+}
+
+fn is_supported_openai_model_id(model_id: &str) -> bool {
+    let model_id = model_id.to_ascii_lowercase();
+    model_id.starts_with("gpt-")
+        || model_id.starts_with("o1")
+        || model_id.starts_with("o3")
+        || model_id.starts_with("o4")
 }
 
 struct ClaudeAdapter<'a> {

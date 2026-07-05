@@ -238,6 +238,10 @@ export async function testPersistedAiProviderApiKey(aiProvider: AiProvider, apiK
   return invoke<string>("test_ai_provider_api_key", { aiProvider, apiKey });
 }
 
+export async function listPersistedAiProviderModels(aiProvider: AiProvider, apiKey?: string): Promise<string[]> {
+  return invoke<string[]>("list_ai_provider_models", { aiProvider, apiKey });
+}
+
 export async function testPersistedJiraConnection(): Promise<JiraConnectionTestResult> {
   return invoke<JiraConnectionTestResult>("test_jira_connection");
 }

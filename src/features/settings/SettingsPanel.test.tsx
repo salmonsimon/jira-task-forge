@@ -33,6 +33,7 @@ describe("SettingsPanel", () => {
         onDeleteAiProviderApiKey={() => undefined}
         onTestAiProviderConnection={async () => ({ ok: true, message: "Connected" })}
         onTestAiProviderApiKey={async () => ({ ok: true, message: "Connected" })}
+        onListAiProviderModels={async () => ["gpt-4.1", "gpt-4.1-mini", "o3-mini"]}
         onTestJiraApiTokenQuiet={async () => ({ ok: true, message: "Connected", accountDisplayName: null, accountEmail: null })}
         onTestJiraConnectionSettings={async () => ({ ok: true, message: "Connected", accountDisplayName: null, accountEmail: null })}
         hasNotionIntegrationToken={async () => true}
@@ -73,6 +74,7 @@ describe("SettingsPanel", () => {
         onDeleteAiProviderApiKey={() => undefined}
         onTestAiProviderConnection={async () => ({ ok: true, message: "Connected" })}
         onTestAiProviderApiKey={async () => ({ ok: true, message: "Connected" })}
+        onListAiProviderModels={async () => ["gpt-4.1", "gpt-4.1-mini", "o3-mini"]}
         onTestJiraApiTokenQuiet={async () => ({ ok: true, message: "Connected", accountDisplayName: null, accountEmail: null })}
         onTestJiraConnectionSettings={async () => ({ ok: true, message: "Connected", accountDisplayName: null, accountEmail: null })}
         hasNotionIntegrationToken={async () => true}
@@ -113,6 +115,7 @@ describe("SettingsPanel", () => {
         onDeleteAiProviderApiKey={() => undefined}
         onTestAiProviderConnection={async () => ({ ok: true, message: "Connected" })}
         onTestAiProviderApiKey={async () => ({ ok: true, message: "Connected" })}
+        onListAiProviderModels={async () => ["gpt-4.1", "gpt-4.1-mini", "o3-mini"]}
         onTestJiraApiTokenQuiet={async () => ({ ok: true, message: "Connected", accountDisplayName: null, accountEmail: null })}
         onTestJiraConnectionSettings={async () => ({ ok: true, message: "Connected", accountDisplayName: null, accountEmail: null })}
         hasNotionIntegrationToken={async () => true}

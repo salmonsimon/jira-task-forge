@@ -1,4 +1,4 @@
-import { Bot, ChevronDown, ExternalLink, KeyRound, Trash2 } from "lucide-react";
+import { Bot, Check, ChevronDown, ExternalLink, KeyRound, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button, FeedbackNote, LoadingOrb, PanelHeader } from "../../components/ui";
 import { appOverlayLayers, useAppOverlay } from "../../lib/app-overlays";
@@ -55,6 +55,7 @@ export function AiProviderSetupGuide({
   onDeleteAiProviderApiKey,
   onOpenAiProviderApiKeys,
   onSaveAiProviderApiKey,
+  onListAiProviderModels,
   onTestAiProviderApiKey,
   onTestAiProviderConnection
 }: {
@@ -67,6 +68,7 @@ export function AiProviderSetupGuide({
   onDeleteAiProviderApiKey: () => void;
   onOpenAiProviderApiKeys: () => void;
   onSaveAiProviderApiKey: (apiKey: string) => Promise<boolean>;
+  onListAiProviderModels: (aiProvider: AppSettings["aiProvider"], apiKey?: string) => Promise<string[]>;
   onTestAiProviderApiKey: (apiKey: string) => Promise<CredentialConnectionTestResult>;
   onTestAiProviderConnection: () => Promise<CredentialConnectionTestResult>;
 }) {
@@ -76,9 +78,16 @@ export function AiProviderSetupGuide({
   const [step, setStep] = useState<AiProviderSetupStep>("provider");
   const [apiKeyDraft, setApiKeyDraft] = useState("");
   const [keyDraftTestStatus, setKeyDraftTestStatus] = useState<CredentialDraftTestStatus>("idle");
+  const [modelOptions, setModelOptions] = useState<string[]>([]);
+  const [modelLoadStatus, setModelLoadStatus] = useState<"idle" | "loading" | "loaded" | "failed">("idle");
+  const [modelLoadMessage, setModelLoadMessage] = useState<string | null>(null);
   const selectedProvider = settings.aiProvider === "None" ? initialProvider : settings.aiProvider;
   const selectedModel = settings.aiModel || defaultAiProviderModels[selectedProvider];
   const currentStepIndex = aiProviderSetupSteps.findIndex((candidate) => candidate.id === step);
+  const visibleModelOptions = mergeModelOptions(
+    modelOptions.length ? modelOptions : availableAiProviderModels[selectedProvider],
+    selectedModel
+  );
   const controls = getCredentialDraftControls({
     hasConnectionSettings: true,
     hasSavedCredential: hasAiProviderApiKey,
@@ -108,6 +117,9 @@ export function AiProviderSetupGuide({
 
   async function selectProvider(aiProvider: SupportedAiProvider) {
     updateApiKeyDraft("");
+    setModelOptions([]);
+    setModelLoadStatus("idle");
+    setModelLoadMessage(null);
     await onChange({ aiProvider, aiModel: defaultAiProviderModels[aiProvider] });
   }
 
@@ -120,6 +132,35 @@ export function AiProviderSetupGuide({
 
   async function selectModel(aiModel: string) {
     await onChange({ aiProvider: selectedProvider, aiModel });
+  }
+
+  async function openModelStep() {
+    setStep("model");
+    await loadModelOptions();
+  }
+
+  async function loadModelOptions() {
+    setModelLoadStatus("loading");
+    setModelLoadMessage(null);
+    try {
+      const loadedModels = await onListAiProviderModels(selectedProvider, apiKeyDraft.trim() || undefined);
+      const nextModels = mergeModelOptions(
+        loadedModels.length ? loadedModels : availableAiProviderModels[selectedProvider],
+        selectedModel
+      );
+      setModelOptions(nextModels);
+      setModelLoadStatus("loaded");
+      setModelLoadMessage(
+        loadedModels.length
+          ? `${nextModels.length} ${selectedProvider} models loaded.`
+          : `Using built-in ${selectedProvider} model options.`
+      );
+    } catch (error) {
+      const fallbackModels = mergeModelOptions(availableAiProviderModels[selectedProvider], selectedModel);
+      setModelOptions(fallbackModels);
+      setModelLoadStatus("failed");
+      setModelLoadMessage(error instanceof Error ? error.message : `Could not load ${selectedProvider} models.`);
+    }
   }
 
   async function testConnection() {
@@ -167,7 +208,13 @@ export function AiProviderSetupGuide({
                       : "border-[#dfe1e6] bg-white text-[#6b778c]"
                 }`}
                 key={candidate.id}
-                onClick={() => setStep(candidate.id)}
+                onClick={() => {
+                  if (candidate.id === "model") {
+                    void openModelStep();
+                    return;
+                  }
+                  setStep(candidate.id);
+                }}
                 type="button"
               >
                 {index + 1}. {candidate.label}
@@ -267,11 +314,21 @@ export function AiProviderSetupGuide({
               <GuideSelect
                 label={`${selectedProvider} model`}
                 value={selectedModel}
-                options={availableAiProviderModels[selectedProvider].map((model) => ({ label: model, value: model }))}
+                options={visibleModelOptions.map((model) => ({ label: model, value: model }))}
                 onChange={(value) => {
                   void selectModel(value);
                 }}
               />
+              {modelLoadStatus === "loading" ? (
+                <FeedbackNote className="mt-4" variant="info">
+                  Loading {selectedProvider} models...
+                </FeedbackNote>
+              ) : null}
+              {modelLoadMessage && modelLoadStatus !== "loading" ? (
+                <FeedbackNote className="mt-4" variant={modelLoadStatus === "failed" ? "warning" : "success"}>
+                  {modelLoadMessage}
+                </FeedbackNote>
+              ) : null}
               <div className="mt-5 rounded border border-[#dfe1e6] bg-[#f7f8fa] p-4">
                 <div className="text-sm font-semibold text-[#172b4d]">Final setup</div>
                 <div className="mt-2 grid gap-2 text-sm text-[#172b4d] sm:grid-cols-3">
@@ -290,7 +347,7 @@ export function AiProviderSetupGuide({
               Continue to API key
             </Button>
           ) : step === "key" ? (
-            <Button className="settings-button-primary" icon={<Bot size={14} />} variant="secondary" onClick={() => setStep("model")}>
+            <Button className="settings-button-primary" icon={<Bot size={14} />} variant="secondary" onClick={() => void openModelStep()}>
               Continue to model
             </Button>
           ) : (
@@ -302,6 +359,13 @@ export function AiProviderSetupGuide({
       </section>
     </div>
   );
+}
+
+function mergeModelOptions(models: string[], selectedModel: string): string[] {
+  const mergedModels = [selectedModel, ...models]
+    .map((model) => model.trim())
+    .filter(Boolean);
+  return Array.from(new Set(mergedModels));
 }
 
 function GuideSelect({
@@ -334,8 +398,8 @@ function GuideSelect({
         <div className="absolute z-10 mt-1 max-h-56 w-full overflow-y-auto rounded border border-[#c1c7d0] bg-white py-1 text-sm shadow-lg">
           {options.map((option) => (
             <button
-              className={`block w-full px-3 py-2 text-left hover:bg-[#deebff] ${
-                option.value === value ? "bg-[#deebff] text-[#0747a6]" : "text-[#172b4d]"
+              className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left hover:bg-[#f4f5f7] ${
+                option.value === value ? "bg-[#f4f5f7] text-[#172b4d]" : "text-[#172b4d]"
               }`}
               key={option.value}
               onMouseDown={(event) => event.preventDefault()}
@@ -345,7 +409,8 @@ function GuideSelect({
               }}
               type="button"
             >
-              {option.label}
+              <span className="truncate">{option.label}</span>
+              {option.value === value ? <Check size={13} /> : null}
             </button>
           ))}
         </div>

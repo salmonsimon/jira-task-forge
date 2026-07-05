@@ -28,6 +28,7 @@ function renderGuide(overrides: Partial<AppSettings> = {}) {
       onDeleteAiProviderApiKey={() => undefined}
       onOpenAiProviderApiKeys={() => undefined}
       onSaveAiProviderApiKey={async () => true}
+      onListAiProviderModels={async () => ["gpt-4.1", "gpt-4.1-mini", "o3-mini"]}
       onTestAiProviderApiKey={async () => ({ ok: true, message: "Connected" })}
       onTestAiProviderConnection={async () => ({ ok: true, message: "Connected" })}
     />

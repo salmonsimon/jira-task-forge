@@ -783,7 +783,9 @@ fn external_catalog_sync_removes_manual_areas_not_in_synced_catalog() {
     assert!(areas
         .iter()
         .any(|category| category.name == "Bug" && category.source == "catalog"));
-    assert!(!areas.iter().any(|category| category.name == manual_area_name));
+    assert!(!areas
+        .iter()
+        .any(|category| category.name == manual_area_name));
     assert!(!areas.iter().any(|category| category.name == "3D"));
 }
 
@@ -909,6 +911,12 @@ fn returns_early_ai_provider_errors_before_keyring_or_network_work() {
     );
     assert_eq!(
         services
+            .list_ai_provider_models("None", None)
+            .expect_err("provider must be selected"),
+        "Select an AI provider before using AI."
+    );
+    assert_eq!(
+        services
             .draft_jql_with_ai("show latest DTS issue")
             .expect_err("provider must be selected"),
         "Select an AI provider before using AI."
@@ -932,6 +940,11 @@ fn returns_early_ai_provider_errors_before_keyring_or_network_work() {
             .expect_err("empty draft key rejected"),
         "Claude API key cannot be empty."
     );
+
+    let claude_models = services
+        .list_ai_provider_models("Claude", Some("unsaved-key"))
+        .expect("claude fallback model list resolves without network");
+    assert!(claude_models.contains(&"claude-sonnet-4-20250514".to_string()));
 }
 
 #[test]

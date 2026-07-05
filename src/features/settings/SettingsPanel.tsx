@@ -22,6 +22,7 @@ export function SettingsPanel({
   onDeleteAiProviderApiKey,
   onTestAiProviderConnection,
   onTestAiProviderApiKey,
+  onListAiProviderModels,
   onTestJiraApiTokenQuiet,
   onTestJiraConnectionSettings,
   hasNotionIntegrationToken,
@@ -51,6 +52,7 @@ export function SettingsPanel({
   onDeleteAiProviderApiKey: () => void;
   onTestAiProviderConnection: () => Promise<CredentialConnectionTestResult>;
   onTestAiProviderApiKey: (apiKey: string) => Promise<CredentialConnectionTestResult>;
+  onListAiProviderModels: (aiProvider: AppSettings["aiProvider"], apiKey?: string) => Promise<string[]>;
   onTestJiraApiTokenQuiet: (token: string) => Promise<JiraConnectionTestResult>;
   onTestJiraConnectionSettings: (siteUrl: string, accountEmail: string) => Promise<JiraConnectionTestResult>;
   hasNotionIntegrationToken: () => Promise<boolean>;
@@ -181,6 +183,7 @@ export function SettingsPanel({
           onSaveAiProviderApiKey={onSaveAiProviderApiKey}
           onTestAiProviderApiKey={onTestAiProviderApiKey}
           onTestAiProviderConnection={onTestAiProviderConnection}
+          onListAiProviderModels={onListAiProviderModels}
         />
       ) : null}
       <PanelHeader title="Settings" subtitle="Local configuration without secrets in backups" onClose={onClose} />

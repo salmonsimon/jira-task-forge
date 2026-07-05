@@ -44,6 +44,26 @@ impl AiProvider {
         }
     }
 
+    pub fn fallback_models(self) -> &'static [&'static str] {
+        match self {
+            Self::OpenAi => &["gpt-4.1", "gpt-4.1-mini", "gpt-4o", "gpt-4o-mini"],
+            Self::Claude => &[
+                "claude-sonnet-4-20250514",
+                "claude-opus-4-20250514",
+                "claude-3-7-sonnet-20250219",
+                "claude-3-5-sonnet-20241022",
+                "claude-3-5-haiku-20241022",
+            ],
+            Self::Gemini => &[
+                "gemini-2.5-pro",
+                "gemini-2.5-flash",
+                "gemini-2.0-flash",
+                "gemini-1.5-pro",
+                "gemini-1.5-flash",
+            ],
+        }
+    }
+
     pub fn api_key_page_url(self) -> &'static str {
         match self {
             Self::OpenAi => OPENAI_API_KEYS_URL,
@@ -119,6 +139,17 @@ mod tests {
             "claude-sonnet-4-20250514"
         );
         assert_eq!(ai_model_or_default(AiProvider::Gemini, "custom"), "custom");
+    }
+
+    #[test]
+    fn exposes_fallback_model_catalogs() {
+        assert!(AiProvider::OpenAi.fallback_models().contains(&"gpt-4.1"));
+        assert!(AiProvider::Claude
+            .fallback_models()
+            .contains(&"claude-sonnet-4-20250514"));
+        assert!(AiProvider::Gemini
+            .fallback_models()
+            .contains(&"gemini-2.5-flash"));
     }
 
     #[test]
