@@ -96,7 +96,7 @@ High-level shape:
 
 ## Current Engineering Checkpoint
 
-As of the merged PR #128 guided Jira connection setup checkpoint, the
+As of the merged PR #144 official catalog sync checkpoint, the
 app includes:
 
 - Tauri + React shell with Jira-like styling.
@@ -134,6 +134,13 @@ app includes:
   details.
 - Assisted Description proposal review, proposal logs, backup/import behavior,
   DTS-format prompt/copy polish, and no-change proposal handling.
+- Official catalog support for Areas, including catalog-managed area options,
+  safe normalization, display-name/Jira-label separation, Bug/Story issue-type
+  derivation, delivery-format mappings, conditional Arquitectura Brief/Propuesta
+  Final resolution, and Assisted Description/Jira payload catalog context.
+- Notion synchronization for the `JTF Sync Catalog` page, including Settings
+  setup, Notion API page/block reads, Notion integration-token storage in the OS
+  credential store, connection testing, and manual/public fallback modes.
 - Jira QA boundary: `JTFTEST` is the writable test project. Agents may freely
   mutate `JTFTEST` for implementation and QA. `DTS` is read-only reference data
   and must not be mutated by agents.
@@ -143,36 +150,40 @@ app includes:
 
 Still pending:
 
-- Re-check native QA after the post-PR command-worker, backup, audit, JQL, and
-  Ask AI changes.
-- Categories persistence in the UI.
-- Audit log UI, broader Jira issue relationship sync, attachment source validation,
-  focused `Privacy & Diagnostics` copy/test polish if review finds gaps, local data cleanup/storage inventory,
-  and remaining native/live QA hardening around assisted descriptions,
-  sub-tasks, and attachment upload.
-- Full native QA in an environment with the Linux system dependencies needed by Tauri/keyring.
-- Manual Jira admin CSV import fallback validation after the API create flow works.
-- Keep Rust backend line coverage above 80%; it is currently 80.40% in
-  `docs/coverage-report.md`.
+- Re-check native/live QA after the PR #144 catalog, Notion sync, Assisted
+  Description template-context, and Jira payload changes. Use `JTFTEST` for
+  writes and keep `DTS` read-only.
+- Issue #150: audit all popup/modal/dialog/sidebar/popover-like surfaces with
+  screenshots before choosing a standard component pattern. Saimon should choose
+  the preferred visual/interaction pattern before implementation consolidation.
+- Issue #149: complete or verify Escape behavior for Settings, Categories, and
+  nested modals without double-closing underlying surfaces.
+- Issue #147: clarify Jira setup Verify/Token order and messages. The current
+  guide still presents `Verify` before `Token`, so this remains a focused UX
+  cleanup.
+- Issue #146: create a reusable AI Provider setup modal after the popup audit
+  chooses the target pattern.
+- Issue #145: add read-only Jira area/label drift audit against the official JTF
+  catalog without mutating Jira or inventing catalog aliases from Jira data.
+- Issue #140: fix invalid nested button markup in the tray selector.
+- Issue #134: separate exact Story and Bug Assisted Description target
+  templates. PR #144 added catalog delivery-format context but still validates a
+  single Story-shaped Markdown target.
+- Issue #132: implement Epic Scope modeling as a dedicated HITL-sensitive slice.
+- Issue #103: add documentation-only local data cleanup/storage inventory. Do
+  not add destructive cleanup UI or commands.
+- Issue #138 and Issue #139 remain follow-ups after the remaining workflow
+  behavior changes land: docs alignment first, then JTFTEST live workflow QA.
+- Regularizacion is out of current JTF scope. Issue #135 is closed as not
+  planned and should not block current roadmap, docs, or QA work.
+- Full native QA in an environment with the Linux system dependencies needed by
+  Tauri/keyring remains useful before daily internal use.
+- Manual Jira admin CSV import fallback validation remains lower priority than
+  the API create path.
+- Keep Rust backend line coverage above 80%; see `docs/coverage-report.md`.
 - Continue growing frontend workflow tests beyond the current domain/workflow
-  helper coverage, especially around Settings and preflight flows.
-- Issue #112's guided `Set Connection` flow landed in PR #128. Keep Jira Site
-  URL, account email, and project key setup in that guided path; Settings should
-  continue to show those values as read-only connection state, save them only at
-  the wizard review step, allow manual project-key fallback only when discovery
-  is unavailable, and keep API token management separate.
-- Treat issue #102 as mostly satisfied by the guided setup's in-app `Privacy &
-  Diagnostics` detail view. Leave only focused copy, docs, or rendering-test
-  follow-up if review finds the current text insufficient. Do not add a
-  permanent privacy-copy block to the main Settings panel for Personal v1.
-- Issue #94 has landed as a Jira sync reliability slice: failed parent tasks
-  without a local Jira key query Remote Correlation Markers before retrying
-  creation, recover the local Jira link when a match exists, and fail safely
-  without creating when marker lookup cannot be confirmed.
-- Implement issue #95 as a dedicated attachment provenance/source-validation
-  slice, separate from Jira sync internals.
-- Implement issue #103 as documentation-only storage inventory; if it lands
-  before #95, mark attachment lifecycle details as pending rather than final.
+  helper coverage, especially around Settings, overlay behavior, and preflight
+  flows.
 
 ## Open Grill Area
 
@@ -189,18 +200,20 @@ grill areas:
 
 Recommended stack to work next:
 
-- Run native QA for tray lifecycle, CSV export, backup/restore, settings, token
-  storage, Jira/OpenAI connection tests, direct JQL, Ask AI drafting, create
-  preflight, and visible sync/audit behavior.
-- Run live QA for Jira issue creation against `JTFTEST`: missing description
-  confirmation, metadata preflight, epic reuse/create, parent Story/Bug
-  creation, accepted sub-task creation, selected Jira-ready attachment upload,
-  partial failure, and recovery tray movement.
-- Keep remaining Jira write work narrow. Prioritize Remote Correlation Marker
-  recovery before broader Jira issue relationship sync.
-- Keep attachment provenance/source validation separate from sync/audit work.
-- After API creation works, verify that Jira's admin CSV importer can still use
-  exported files manually.
+- Start with Issue #150 as a screenshot-first popup/modal surface audit, paired
+  with Issue #149 Escape behavior verification. Do not standardize the final
+  modal pattern until Saimon reviews the visual inventory.
+- Then run small AFK UI correctness slices: Issue #140 nested tray selector
+  button markup and Issue #147 Jira Verify/Token ordering.
+- After the popup pattern is chosen, implement Issue #146 AI Provider setup
+  modal using the shared setup/modal pattern.
+- Keep Issue #145 read-only and safe: Jira catalog drift audit may inspect DTS
+  but must not mutate it.
+- Treat Issue #134 Story/Bug template separation and Issue #132 Epic Scope
+  modeling as deeper workflow slices with focused tests and HITL review for
+  model/sync changes.
+- Run Issue #138 docs alignment and Issue #139 JTFTEST live workflow QA only
+  after the behavior they document or validate has landed.
 
 ## Suggested Skills For Next Session
 

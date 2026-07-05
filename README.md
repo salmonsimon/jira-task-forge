@@ -10,11 +10,12 @@ The app now has SQLite-backed local trays/tasks, persisted non-secret settings,
 CSV export, JSON backup/restore without secrets, Jira API token storage through
 the OS credential store, Jira connection testing, read-only JQL search with
 favorites/recent history, AI-assisted JQL drafting through the Tauri backend,
-sync audit activity, Jira-admin-import-friendly CSV export, task detail
-sub-tasks, local issue relationship drafts, attachment metadata and managed-file
-ingestion, assisted description sections/proposals, and a guarded `Create in
-Jira` flow that creates required epics, parent Story/Bug issues, accepted
-sub-tasks, and selected Jira-ready attachments.
+sync audit activity, Jira-admin-import-friendly CSV export, official
+area catalog sync from Notion with OS credential-store token handling, task
+detail sub-tasks, local issue relationship drafts, attachment metadata and
+managed-file ingestion, assisted description sections/proposals, and a guarded
+`Create in Jira` flow that creates required epics, parent Story/Bug issues,
+accepted sub-tasks, and selected Jira-ready attachments.
 
 ## Stack
 
