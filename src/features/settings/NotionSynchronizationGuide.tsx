@@ -8,11 +8,11 @@ import type { AppSettings, NotionCatalogConnectionTestResult } from "../../lib/t
 const notionDeveloperPortalUrl = "https://app.notion.com/developers/connections";
 export const defaultNotionCatalogUrl = "https://app.notion.com/p/capacitacion-interna-dts/JTF-Sync-Catalog-387c335aece481c292baf6991a86a5c3";
 
-type NotionStep = "token" | "source" | "review";
+type NotionStep = "source" | "token" | "review";
 
 const notionSteps: Array<{ id: NotionStep; label: string }> = [
-  { id: "token", label: "Token" },
   { id: "source", label: "Source" },
+  { id: "token", label: "Token" },
   { id: "review", label: "Review" }
 ];
 
@@ -41,7 +41,7 @@ export function NotionSynchronizationGuide({
   onTestNotionCatalogConnection: (pageUrlOrId: string) => Promise<NotionCatalogConnectionTestResult>;
 }) {
   const surfaceRef = useRef<HTMLElement | null>(null);
-  const [step, setStep] = useState<NotionStep>("token");
+  const [step, setStep] = useState<NotionStep>("source");
   const [mode, setMode] = useState<AppSettings["catalogSourceMode"]>(
     settings.catalogSourceMode === "public-exportable" ? "notion" : settings.catalogSourceMode
   );
@@ -52,10 +52,11 @@ export function NotionSynchronizationGuide({
   const [testResult, setTestResult] = useState<NotionCatalogConnectionTestResult | null>(null);
   const [isSavingToken, setIsSavingToken] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
-  const currentStepIndex = notionSteps.findIndex((candidate) => candidate.id === step);
+  const visibleSteps = mode === "manual" ? notionSteps.filter((candidate) => candidate.id === "source") : notionSteps;
+  const currentStepIndex = visibleSteps.findIndex((candidate) => candidate.id === step);
   const canContinue =
-    (step === "token" && (hasToken || Boolean(tokenDraft.trim()) || mode !== "notion")) ||
     (step === "source" && (mode === "manual" || Boolean(sourceUrl.trim()))) ||
+    (step === "token" && (hasToken || Boolean(tokenDraft.trim()) || mode !== "notion")) ||
     step === "review";
   const sourceLabel = useMemo(
     () => catalogModeOptions.find((option) => option.value === mode)?.label ?? "Unknown",
@@ -80,13 +81,19 @@ export function NotionSynchronizationGuide({
     };
   }, [hasNotionIntegrationToken]);
 
+  useEffect(() => {
+    if (mode === "manual" && step !== "source") {
+      setStep("source");
+    }
+  }, [mode, step]);
+
   function moveNext() {
-    const nextStep = notionSteps[currentStepIndex + 1]?.id;
+    const nextStep = visibleSteps[currentStepIndex + 1]?.id;
     if (nextStep) setStep(nextStep);
   }
 
   function moveBack() {
-    const previousStep = notionSteps[currentStepIndex - 1]?.id;
+    const previousStep = visibleSteps[currentStepIndex - 1]?.id;
     if (previousStep) setStep(previousStep);
   }
 
@@ -156,10 +163,10 @@ export function NotionSynchronizationGuide({
         {...overlay.surfaceProps}
         onMouseDown={(event) => event.stopPropagation()}
       >
-        <PanelHeader title="Set Notion Synchronization" subtitle="Connect the JTF Sync Catalog page used by official area sync." onClose={onClose} />
+        <PanelHeader title="Set Catalog Source" subtitle="Choose Manual catalog for local Areas or connect the JTF Sync Catalog page for official area sync." onClose={onClose} />
         <div className="border-b border-[#dfe1e6] bg-[#f7f8fa] px-5 py-3">
-          <div className="grid grid-cols-3 gap-2">
-            {notionSteps.map((candidate, index) => (
+          <div className={`grid gap-2 ${visibleSteps.length === 1 ? "grid-cols-1" : "grid-cols-3"}`}>
+            {visibleSteps.map((candidate, index) => (
               <button
                 className={`h-8 rounded border px-2 text-xs font-medium ${
                   candidate.id === step
@@ -178,6 +185,24 @@ export function NotionSynchronizationGuide({
           </div>
         </div>
         <div className="min-h-[360px] flex-1 overflow-y-auto p-6">
+          {step === "source" ? (
+            <GuideSection title="Catalog source" description="Choose whether Areas are managed locally or synced from the Notion catalog. Manual catalog saves immediately and skips external setup.">
+              <SourceModeSelect label="Catalog mode" value={mode} options={catalogModeOptions} onChange={setMode} />
+              {mode !== "manual" ? (
+                <GuideInput
+                  label="Notion page URL or ID"
+                  placeholder={defaultNotionCatalogUrl}
+                  value={sourceUrl}
+                  onChange={(value) => {
+                    setSourceUrl(value);
+                    setTestResult(null);
+                  }}
+                />
+              ) : (
+                <Feedback kind="warning">Manual catalog keeps Areas editable in Categories. No Notion token, page URL, or connection test is needed.</Feedback>
+              )}
+            </GuideSection>
+          ) : null}
           {step === "token" ? (
             <GuideSection title="Notion integration token" description="Create or copy the internal integration secret, then save it before testing the page. The token stays in the OS credential store.">
               <div className="mb-5 rounded border border-[#dfe1e6] bg-[#f7f8fa] p-4">
@@ -231,24 +256,6 @@ export function NotionSynchronizationGuide({
               {tokenMessage ? <Feedback kind="success">{tokenMessage}</Feedback> : null}
             </GuideSection>
           ) : null}
-          {step === "source" ? (
-            <GuideSection title="Catalog source" description="Use the existing Notion page as the source of truth. The app extracts the page id from the URL and reads the JSON code block through the Notion API.">
-              <SourceModeSelect label="Catalog mode" value={mode} options={catalogModeOptions} onChange={setMode} />
-              {mode !== "manual" ? (
-                <GuideInput
-                  label="Notion page URL or ID"
-                  placeholder={defaultNotionCatalogUrl}
-                  value={sourceUrl}
-                  onChange={(value) => {
-                    setSourceUrl(value);
-                    setTestResult(null);
-                  }}
-                />
-              ) : (
-                <Feedback kind="warning">Manual catalog mode keeps the local fallback catalog and does not read Notion.</Feedback>
-              )}
-            </GuideSection>
-          ) : null}
           {step === "review" ? (
             <GuideSection title="Review and test" description="Save the source settings, then test that the app can read the JTF catalog contract.">
               <ReviewRows
@@ -288,6 +295,10 @@ export function NotionSynchronizationGuide({
           {step === "review" ? (
             <Button className="settings-button-primary" disabled={!canContinue || isTesting} icon={<Check size={14} />} onClick={saveAndClose}>
               Done
+            </Button>
+          ) : step === "source" && mode === "manual" ? (
+            <Button className="settings-button-primary" disabled={!canContinue || isTesting} icon={<Check size={14} />} onClick={saveAndClose}>
+              Use manual catalog
             </Button>
           ) : (
             <Button className="settings-button-primary" disabled={!canContinue} onClick={moveNext}>

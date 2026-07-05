@@ -89,8 +89,10 @@ describe("SettingsPanel", () => {
       />
     );
 
-    expect(html).toContain("Set Notion Synchronization");
-    expect(html).toContain("Notion integration token");
+    expect(html).toContain("Set Catalog Source");
+    expect(html).toContain("Catalog source");
+    expect(html).toContain("Catalog mode");
+    expect(html).not.toContain("Notion integration token");
     expect(html.match(/>Setup<\/button>/g)).toHaveLength(2);
   });
 });

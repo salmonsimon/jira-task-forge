@@ -1,7 +1,7 @@
 use serde_json::{json, Value};
 
 use super::{strip_json_fence, JsonFeatureRequest};
-use crate::area_catalog::catalog_context_for_area;
+use crate::area_catalog::{catalog_context_for_area, resolve_catalog_area, CatalogAreaResolution};
 use crate::integrations::ai::AiProvider;
 use crate::models::{AssistedDescriptionDraft, LocalTask};
 
@@ -133,6 +133,7 @@ When synced Notion catalog template context is present, treat its minimum delive
 Catalog template headings are content requirements only; map them into the Target Markdown format and never replace the Target Markdown format headings. \
 Prefer drafting over asking for clarification when the title, area, and user context describe a concrete problem or desired outcome. \
 Do not ask about known defaults from the base context, such as the engine or primary stack. \
+When no synced catalog template guidance exists for a manual or custom Area, do not invent area-specific delivery requirements, review checklist items, or synced catalog context; ask concise clarification questions when user input is needed to make those sections honest. \
 If the title and context are too thin to fill any useful section, return status needs_clarification with up to three concise questions in the task language and description null. \
 If missing information would materially change scope or acceptance criteria, return status needs_clarification with targeted questions instead of inventing Jira content. \
 Keep the description compact and Jira-ready. Do not include markdown fences."
@@ -174,13 +175,7 @@ Target Markdown format:\n{template}",
             .filter(|context| !context.is_empty())
             .map(ToString::to_string)
             .unwrap_or_else(|| {
-                catalog_context_for_area(
-                    &task.area,
-                    &format!(
-                        "{}\n{}\n{}",
-                        task.title, additional_context, existing_description
-                    ),
-                )
+                missing_or_fallback_catalog_context(task, additional_context, existing_description)
             }),
         project = task.project,
         area = task.area,
@@ -190,6 +185,32 @@ Target Markdown format:\n{template}",
         title = task.title,
         template = ASSISTED_DESCRIPTION_TEMPLATE
     )
+}
+
+fn missing_or_fallback_catalog_context(
+    task: &LocalTask,
+    additional_context: &str,
+    existing_description: &str,
+) -> String {
+    match resolve_catalog_area(&task.area) {
+        CatalogAreaResolution::Official { .. } | CatalogAreaResolution::Normalized { .. } => {
+            catalog_context_for_area(
+                &task.area,
+                &format!(
+                    "{}\n{}\n{}",
+                    task.title, additional_context, existing_description
+                ),
+            )
+        }
+        CatalogAreaResolution::Blocked => format!(
+            "Manual catalog guidance:\n\
+- No synced Notion catalog template context was found for Area: {area}.\n\
+- Preserve the Target Markdown format exactly, including historia de usuario, contexto, alcance, criterios de aceptacion, entregable, and checklist.\n\
+- Do not pretend official catalog template requirements exist for this Area.\n\
+- If the title and user context do not give enough information for scope, acceptance criteria, deliverable, or checklist, return needs_clarification with targeted questions.",
+            area = task.area
+        ),
+    }
 }
 
 fn validate_assisted_description_draft(
@@ -405,6 +426,52 @@ mod tests {
         assert!(context.contains("Minimum deliverable: PR/MR listo"));
         assert!(context.contains("Review checklist:"));
         assert!(context.contains("Validado en runtime."));
+    }
+
+    #[test]
+    fn task_description_context_is_honest_when_manual_area_has_no_catalog_guidance() {
+        let task = LocalTask {
+            area: "Gameplay Experiments".to_string(),
+            issue_type: "Story".to_string(),
+            ..task_with_title("Probar interaccion de portal con objetivos")
+        };
+        let context = task_description_generation_context(
+            &task,
+            "Explorar si el portal puede activar objetivos cercanos sin romper el flujo actual.",
+            None,
+        );
+
+        assert!(context.contains("Manual catalog guidance:"));
+        assert!(context.contains(
+            "No synced Notion catalog template context was found for Area: Gameplay Experiments."
+        ));
+        assert!(context.contains(
+            "Do not pretend official catalog template requirements exist for this Area."
+        ));
+        assert!(context.contains("return needs_clarification with targeted questions"));
+        assert!(!context.contains("Official catalog context:"));
+        assert!(!context.contains("Synced Notion catalog template:"));
+    }
+
+    #[test]
+    fn manual_area_context_preserves_base_assisted_description_structure() {
+        let task = LocalTask {
+            area: "Gameplay Experiments".to_string(),
+            issue_type: "Story".to_string(),
+            ..task_with_title("Probar interaccion de portal con objetivos")
+        };
+        let context = task_description_generation_context(
+            &task,
+            "Explorar si el portal puede activar objetivos cercanos.",
+            None,
+        );
+
+        assert!(context.contains("## Historia de usuario"));
+        assert!(context.contains("## Contexto"));
+        assert!(context.contains("## Alcance"));
+        assert!(context.contains("## Criterios de aceptacion"));
+        assert!(context.contains("## Entregable mínimo"));
+        assert!(context.contains("## Checklist antes de Review"));
     }
 
     #[test]
