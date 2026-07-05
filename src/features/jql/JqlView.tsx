@@ -1,6 +1,6 @@
 import { Bot, Check, ExternalLink, History, Loader2, Pencil, Search, Star, X } from "lucide-react";
 import { useEffect, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from "react";
-import { Button, IssueTypeBadge, LoadingOrb, PriorityBadge, SegmentedControl } from "../../components/ui";
+import { Button, FeedbackNote, IssueTypeBadge, LoadingOrb, PriorityBadge, SegmentedControl } from "../../components/ui";
 import { buildJiraIssueBrowseUrl } from "../../lib/domain";
 import type { JqlAiDraft, JqlFavorite, JqlRecentQuery, JqlResult, JqlRunState } from "../../lib/types";
 import { cn } from "../../lib/utils";
@@ -165,9 +165,15 @@ export function JqlView({
                 />
               </label>
               <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div className="min-w-0 text-xs leading-relaxed text-[#6b778c]">
-                  {jqlAiMessage ?? "AI drafts JQL and loads it into Direct JQL. It will not run automatically."}
-                </div>
+                {jqlAiMessage ? (
+                  <FeedbackNote className="min-w-0 flex-1" variant={getJqlMessageVariant(jqlAiMessage)}>
+                    {jqlAiMessage}
+                  </FeedbackNote>
+                ) : (
+                  <div className="min-w-0 flex-1 text-xs leading-relaxed text-[#6b778c]">
+                    AI drafts JQL and loads it into Direct JQL. It will not run automatically.
+                  </div>
+                )}
                 <Button
                   className="min-w-[132px] shrink-0 whitespace-nowrap"
                   disabled={isDraftingJqlWithAi}
@@ -193,7 +199,13 @@ export function JqlView({
                 onKeyDown={handleRunShortcut}
               />
               <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div className="min-w-0 text-xs leading-relaxed text-[#6b778c]">{queryMessage}</div>
+                {queryMessage ? (
+                  runState === "error" ? (
+                    <FeedbackNote className="min-w-0 flex-1" variant="error">{queryMessage}</FeedbackNote>
+                  ) : (
+                    <div className="min-w-0 flex-1 text-xs leading-relaxed text-[#6b778c]">{queryMessage}</div>
+                  )
+                ) : null}
                 <div className="flex shrink-0 flex-wrap justify-end gap-2">
                   <Button
                     className="min-w-[112px] shrink-0 whitespace-nowrap"
@@ -278,6 +290,10 @@ export function JqlView({
       </div>
     </section>
   );
+}
+
+function getJqlMessageVariant(message: string) {
+  return /could not|failed|error/i.test(message) ? "error" : "warning";
 }
 
 function JqlResultsEmptyState({

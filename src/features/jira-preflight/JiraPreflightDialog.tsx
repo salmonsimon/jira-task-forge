@@ -1,6 +1,6 @@
 import { AlertTriangle, Check, CheckCircle2, ChevronRight, Info, Loader2, ShieldCheck, XCircle } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
-import { Button, LoadingOrb } from "../../components/ui";
+import { Button, FeedbackNote, LoadingOrb, feedbackNoteClassName } from "../../components/ui";
 import { appOverlayLayers, useAppOverlay } from "../../lib/app-overlays";
 import { formatEpicTarget, groupEpicResolutionWarnings, groupSubtasksByParent, isSubtask } from "../../lib/domain";
 import type {
@@ -182,10 +182,10 @@ export function JiraPreflightDialog({
               warnings={blockingWarnings}
             />
           ) : (
-            <div className="flex items-center gap-2 rounded border border-[#216e4e] bg-[#143c2b] px-3 py-3 text-sm text-[#7ee2a8]">
+            <FeedbackNote className="flex items-center gap-2 text-sm" surface="dark" variant="success">
               <CheckCircle2 size={16} />
               No blocking issues found.
-            </div>
+            </FeedbackNote>
           )}
 
           {reviewWarnings.length ? (
@@ -244,7 +244,7 @@ export function JiraPreflightDialog({
             />
           ) : null}
           {createError ? (
-            <div className="rounded border border-[#ae2e24] bg-[#4f1d1a] px-3 py-3 text-sm text-[#ffb8ad]">{createError}</div>
+            <FeedbackNote className="text-sm" surface="dark" variant="error">{createError}</FeedbackNote>
           ) : null}
         </div>
 
@@ -418,14 +418,7 @@ function CreateResultSummary({
         : "danger";
 
   return (
-    <div
-      className={cn(
-        "rounded border px-3 py-3 text-sm",
-        tone === "success" && "border-[#216e4e] bg-[#143c2b] text-[#7ee2a8]",
-        tone === "warning" && "border-[#7f5f01] bg-[#3f3102] text-[#f5cd47]",
-        tone === "danger" && "border-[#ae2e24] bg-[#4f1d1a] text-[#ffb8ad]"
-      )}
-    >
+    <FeedbackNote className="py-3 text-sm" surface="dark" variant={tone === "danger" ? "error" : tone}>
       <div className="font-semibold">
         {result.status === "succeeded" ? "Jira creation completed" : result.status === "partial" ? "Jira creation partially completed" : "Jira creation stopped"}
       </div>
@@ -451,7 +444,7 @@ function CreateResultSummary({
           </Button>
         </div>
       ) : null}
-    </div>
+    </FeedbackNote>
   );
 }
 
@@ -467,7 +460,7 @@ function MissingDescriptionModeSelector({
   onChange: (mode: MissingDescriptionMode) => void;
 }) {
   return (
-    <div className={cn("rounded border border-[#7f5f01] bg-[#2f2606] px-3 py-3", disabled && "opacity-60")}>
+    <div className={feedbackNoteClassName({ className: cn("px-3 py-3", disabled && "opacity-60"), surface: "dark", variant: "warning" })}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <div className="text-sm font-semibold text-[#f5cd47]">Missing descriptions</div>
@@ -534,9 +527,8 @@ function PreflightWarningGroup({
   return (
     <details
       className={cn(
-        "preflight-disclosure rounded border",
-        tone === "danger" && "border-[#ae2e24] bg-[#4f1d1a]",
-        tone === "warning" && "border-[#7f5f01] bg-[#3f3102]"
+        "preflight-disclosure",
+        feedbackNoteClassName({ surface: "dark", variant: tone === "danger" ? "error" : "warning" })
       )}
     >
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-3 focus:outline-none">

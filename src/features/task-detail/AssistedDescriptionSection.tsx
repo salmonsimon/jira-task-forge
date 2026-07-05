@@ -1,7 +1,7 @@
 import { Check, ChevronDown, Eye, Loader2, MessageCircle, Pencil, Sparkles, X } from "lucide-react";
 import { useEffect, useMemo, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { createPortal } from "react-dom";
-import { Button, IconButton } from "../../components/ui";
+import { Button, FeedbackNote, IconButton } from "../../components/ui";
 import { appOverlayLayers, useAppOverlay } from "../../lib/app-overlays";
 import {
   applyManualAssistedDescriptionSectionEdit,
@@ -1051,22 +1051,22 @@ function DescriptionPromptModal({
             value={descriptionContext}
           />
           {descriptionMessage ? (
-            <div className="rounded border border-[#454852] bg-[#22252a] px-3 py-2 text-xs leading-relaxed text-[#aeb3bd]">
+            <FeedbackNote surface="dark" variant="info">
               {descriptionMessage}
-            </div>
+            </FeedbackNote>
           ) : null}
           {clarificationQuestions.length ? (
-            <div className="rounded border border-[#7f5f01] bg-[#2f2606] px-3 py-3 text-sm text-[#dfe1e6]">
-              <div className="mb-2 text-xs font-semibold text-[#f5cd47]">More context needed</div>
+            <FeedbackNote className="py-3 text-sm" surface="dark" variant="warning">
+              <div className="mb-2 text-xs font-semibold">More context needed</div>
               <ul className="space-y-1">
                 {clarificationQuestions.map((question) => (
                   <li className="flex gap-2" key={question}>
-                    <span className="text-[#f5cd47]">-</span>
+                    <span>-</span>
                     <span>{question}</span>
                   </li>
                 ))}
               </ul>
-            </div>
+            </FeedbackNote>
           ) : null}
         </div>
 
@@ -1245,9 +1245,9 @@ function AssistedDescriptionProposalReviewModal({
           </div>
 
           {reviewMessage ? (
-            <div className="mb-4 rounded border border-[#5d1f1a] bg-[#2b1616] px-4 py-3 text-sm text-[#ffb4a8]">
+            <FeedbackNote className="mb-4 px-4 py-3 text-sm" surface="dark" variant="error">
               {reviewMessage}
-            </div>
+            </FeedbackNote>
           ) : null}
 
           <div className="space-y-3">

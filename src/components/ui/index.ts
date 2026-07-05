@@ -1,4 +1,5 @@
 export { Button } from "./Button";
+export { FeedbackNote, feedbackNoteClassName, type FeedbackNoteSurface, type FeedbackNoteVariant } from "./FeedbackNote";
 export { IconButton } from "./IconButton";
 export { LoadingOrb } from "./LoadingOrb";
 export { AreaBadge, DescriptionBadge, IssueTypeBadge, PriorityBadge, SyncBadge, TrayStateBadge } from "./badges";

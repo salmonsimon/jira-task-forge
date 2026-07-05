@@ -6,7 +6,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode
 } from "react";
-import { Button } from "../../components/ui";
+import { Button, FeedbackNote } from "../../components/ui";
 import {
   countAiEligibleAttachments,
   countAttachmentsByPurpose,
@@ -151,9 +151,9 @@ export function TaskAttachmentsSection({
           </div>
         )}
         {errorMessage ? (
-          <div className="mt-3 rounded border border-[#ae2e24] bg-[#4f1d1a] px-3 py-2 text-sm text-[#ffb8ad]">
+          <FeedbackNote className="mt-3 text-sm" surface="dark" variant="error">
             {errorMessage}
-          </div>
+          </FeedbackNote>
         ) : null}
       </div>
     </TaskFocusSection>

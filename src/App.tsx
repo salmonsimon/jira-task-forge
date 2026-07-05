@@ -5,6 +5,7 @@ import { downloadDir, join } from "@tauri-apps/api/path";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { AlertTriangle, CheckCircle2, X } from "lucide-react";
 import { AppHeader } from "./components/shell";
+import { FeedbackNote } from "./components/ui";
 import { CategoriesPanel } from "./features/categories";
 import { JiraPreflightDialog, type JiraCreatePreflight } from "./features/jira-preflight";
 import { JqlView } from "./features/jql";
@@ -1707,9 +1708,9 @@ function JiraCreationNoticeDialog({
           </div>
         </div>
         <div className="space-y-4 px-5 py-4">
-          <div className="rounded border border-[#7f5f01] bg-[#3f3102] px-3 py-3 text-sm leading-relaxed text-[#f5cd47]">
+          <FeedbackNote className="text-sm" surface="dark" variant="warning">
             {getJiraCreationNoticeGuidance(result)}
-          </div>
+          </FeedbackNote>
           {visibleMessages.length ? (
             <div>
               <div className="text-xs font-semibold uppercase text-[#b7bbc4]">Result details</div>
@@ -1732,7 +1733,7 @@ function JiraCreationNoticeDialog({
             </div>
           ) : null}
           {notice.recoveryError ? (
-            <div className="rounded border border-[#ae2e24] bg-[#4f1d1a] px-3 py-3 text-sm text-[#ffb8ad]">{notice.recoveryError}</div>
+            <FeedbackNote className="text-sm" surface="dark" variant="error">{notice.recoveryError}</FeedbackNote>
           ) : null}
         </div>
         <div className="flex flex-wrap justify-end gap-2 border-t border-[#454852] px-5 py-4">
@@ -1780,14 +1781,8 @@ function ConnectionNoticeToast({
       className="fixed inset-0 z-[60] flex items-start justify-center px-4 pt-4"
       {...overlay.backdropProps}
     >
-      <section
-        className={`pointer-events-auto rounded border px-4 py-3 shadow-2xl ${
-          isSuccess
-            ? "border-[#abf5d1] bg-[#e3fcef] text-[#006644]"
-            : "border-[#ffbdad] bg-[#ffebe6] text-[#bf2600]"
-        }`}
-        {...overlay.surfaceProps}
-      >
+      <section className="pointer-events-auto" {...overlay.surfaceProps}>
+        <FeedbackNote className="px-4 py-3 shadow-2xl" variant={isSuccess ? "success" : "error"}>
         <div className="flex items-start gap-3">
           <div className="mt-0.5 shrink-0">{isSuccess ? <CheckCircle2 size={18} /> : <AlertTriangle size={18} />}</div>
           <div className="min-w-0 flex-1">
@@ -1804,6 +1799,7 @@ function ConnectionNoticeToast({
             <X size={15} />
           </button>
         </div>
+        </FeedbackNote>
       </section>
     </div>
   );
@@ -1918,11 +1914,11 @@ function BackupNoticeDialog({
           ) : null}
           {visibleSecondaryCounts.length ? <BackupCountGrid title="Skipped existing" counts={visibleSecondaryCounts} muted /> : null}
           {notice.warnings?.length ? (
-            <div className="mt-4 rounded border border-[#665245] bg-[#3b302b] px-3 py-2 text-sm leading-relaxed text-[#ffd2bd]">
+            <FeedbackNote className="mt-4 text-sm" surface="dark" variant="warning">
               {notice.warnings.map((warning) => (
                 <div key={warning}>{warning}</div>
               ))}
-            </div>
+            </FeedbackNote>
           ) : null}
         </div>
         <div className="flex justify-end border-t border-[#454852] px-5 py-4">

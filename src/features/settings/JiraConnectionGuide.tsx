@@ -1,7 +1,7 @@
 import { Check, CheckCircle2, ChevronDown, ChevronLeft, ExternalLink, Info, KeyRound, RefreshCw } from "lucide-react";
 import type { MouseEvent, ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Button, LoadingOrb, PanelHeader } from "../../components/ui";
+import { Button, FeedbackNote, LoadingOrb, PanelHeader } from "../../components/ui";
 import { appOverlayLayers, useAppOverlay } from "../../lib/app-overlays";
 import { validateJiraSiteUrlDraft } from "../../lib/domain";
 import type { AppSettings, JiraConnectionTestResult, JiraProjectOption } from "../../lib/types";
@@ -235,7 +235,7 @@ export function JiraConnectionGuide({
                       setProjectDiscoveryState("idle");
                     }}
                   />
-                  <Feedback kind={siteUrlValidation.ok ? "success" : "error"}>{siteUrlValidation.message}</Feedback>
+                  <FeedbackNote variant={siteUrlValidation.ok ? "success" : "error"}>{siteUrlValidation.message}</FeedbackNote>
                 </GuideSection>
               ) : null}
               {step === "account" ? (
@@ -311,20 +311,20 @@ export function JiraConnectionGuide({
                   </div>
                   <div className="mt-4">
                     {jiraTokenStatus === "testing" ? (
-                      <Feedback kind="warning">Testing Jira API token...</Feedback>
+                      <FeedbackNote variant="info">Testing Jira API token...</FeedbackNote>
                     ) : jiraTokenStatus === "success" ? (
-                      <Feedback kind="success">
+                      <FeedbackNote variant="success">
                         {jiraApiTokenDraft ? "This key passed Test key and can be saved." : "Saved Jira API token test succeeded."}
                         {jiraTokenMessage ? ` ${jiraTokenMessage}` : ""}
-                      </Feedback>
+                      </FeedbackNote>
                     ) : jiraTokenStatus === "failed" ? (
-                      <Feedback kind="error">
+                      <FeedbackNote variant="error">
                         {jiraTokenMessage || "Update this key or Jira connection details, then test again."}
-                      </Feedback>
+                      </FeedbackNote>
                     ) : jiraApiTokenDraft ? (
-                      <Feedback kind="warning">Test this key before saving it.</Feedback>
+                      <FeedbackNote variant="warning">Test this key before saving it.</FeedbackNote>
                     ) : hasJiraApiToken ? (
-                      <Feedback kind="success">A saved Jira API token is available. You can test it or continue to review.</Feedback>
+                      <FeedbackNote variant="success">A saved Jira API token is available. You can test it or continue to review.</FeedbackNote>
                     ) : null}
                   </div>
                 </GuideSection>
@@ -353,10 +353,10 @@ export function JiraConnectionGuide({
                   </Button>
                   {connectionResult ? (
                     <div className="mt-4">
-                      <Feedback kind={connectionResult.ok ? "success" : "error"}>
+                      <FeedbackNote variant={connectionResult.ok ? "success" : "error"}>
                         {connectionResult.message}
                         {connectionResult.ok && connectionResult.accountDisplayName ? ` Connected as ${connectionResult.accountDisplayName}.` : ""}
-                      </Feedback>
+                      </FeedbackNote>
                     </div>
                   ) : null}
                 </GuideSection>
@@ -394,7 +394,7 @@ export function JiraConnectionGuide({
                     onChange={(value) => setProjectKeyDraft(value.toUpperCase())}
                   />
                   {projectDiscoveryMessage ? (
-                    <Feedback kind={projectDiscoveryState === "failed" ? "warning" : "success"}>{projectDiscoveryMessage}</Feedback>
+                    <FeedbackNote className="mt-3" variant={projectDiscoveryState === "failed" ? "warning" : "success"}>{projectDiscoveryMessage}</FeedbackNote>
                   ) : null}
                 </GuideSection>
               ) : null}
@@ -407,7 +407,7 @@ export function JiraConnectionGuide({
                       ["Jira creation project key", projectKey || "Missing"]
                     ]}
                   />
-                  {saveError ? <Feedback kind="error">{saveError}</Feedback> : null}
+                  {saveError ? <FeedbackNote className="mt-3" variant="error">{saveError}</FeedbackNote> : null}
                 </GuideSection>
               ) : null}
             </div>
@@ -551,16 +551,6 @@ function ProjectSelect({
       ) : null}
     </div>
   );
-}
-
-function Feedback({ kind, children }: { kind: "success" | "warning" | "error"; children: ReactNode }) {
-  const className =
-    kind === "success"
-      ? "border-[#abf5d1] bg-[#e3fcef] text-[#006644]"
-      : kind === "warning"
-        ? "border-[#f5cd47] bg-[#fff7d6] text-[#974f0c]"
-        : "border-[#ffbdad] bg-[#ffebe6] text-[#bf2600]";
-  return <p className={`rounded border px-2 py-1.5 text-xs leading-relaxed ${className}`}>{children}</p>;
 }
 
 function preventMouseNavigation(event: MouseEvent<HTMLElement>) {

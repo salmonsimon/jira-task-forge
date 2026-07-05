@@ -1,7 +1,7 @@
 import { Check, CheckCircle2, ChevronDown, ChevronLeft, ExternalLink, KeyRound, RefreshCw, Trash2 } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Button, LoadingOrb, PanelHeader } from "../../components/ui";
+import { Button, FeedbackNote, LoadingOrb, PanelHeader } from "../../components/ui";
 import { appOverlayLayers, useAppOverlay } from "../../lib/app-overlays";
 import type { AppSettings, NotionCatalogConnectionTestResult } from "../../lib/types";
 
@@ -199,7 +199,7 @@ export function NotionSynchronizationGuide({
                   }}
                 />
               ) : (
-                <Feedback kind="warning">Manual catalog keeps Areas editable in Categories. No Notion token, page URL, or connection test is needed.</Feedback>
+                <FeedbackNote variant="warning">Manual catalog keeps Areas editable in Categories. No Notion token, page URL, or connection test is needed.</FeedbackNote>
               )}
             </GuideSection>
           ) : null}
@@ -253,7 +253,7 @@ export function NotionSynchronizationGuide({
                   Remove token
                 </Button>
               </div>
-              {tokenMessage ? <Feedback kind="success">{tokenMessage}</Feedback> : null}
+              {tokenMessage ? <FeedbackNote className="mt-4" variant="success">{tokenMessage}</FeedbackNote> : null}
             </GuideSection>
           ) : null}
           {step === "review" ? (
@@ -280,10 +280,10 @@ export function NotionSynchronizationGuide({
                 </Button>
               </div>
               {testResult ? (
-                <Feedback kind={testResult.ok ? "success" : "error"}>
+                <FeedbackNote className="mt-4" variant={testResult.ok ? "success" : "error"}>
                   {testResult.message}
                   {testResult.title ? ` Page: ${testResult.title}.` : ""}
-                </Feedback>
+                </FeedbackNote>
               ) : null}
             </GuideSection>
           ) : null}
@@ -405,22 +405,6 @@ function ReviewRows({ rows }: { rows: Array<[string, string]> }) {
           <div className="min-w-0 break-words text-sm text-[#172b4d]">{value}</div>
         </div>
       ))}
-    </div>
-  );
-}
-
-function Feedback({ children, kind }: { children: ReactNode; kind: "success" | "warning" | "error" }) {
-  return (
-    <div
-      className={`mt-4 rounded border px-3 py-2 text-xs font-medium ${
-        kind === "success"
-          ? "border-[#abf5d1] bg-[#e3fcef] text-[#006644]"
-          : kind === "warning"
-            ? "border-[#f5cd47] bg-[#fff7d6] text-[#974f0c]"
-            : "border-[#ffbdad] bg-[#ffebe6] text-[#bf2600]"
-      }`}
-    >
-      {children}
     </div>
   );
 }

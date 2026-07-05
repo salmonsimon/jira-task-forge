@@ -1,6 +1,6 @@
 import { AlertTriangle, Check, CheckCircle2, Eye, EyeOff, Pencil, Plus, RefreshCw, Tags, Trash2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { Button, PanelHeader } from "../../components/ui";
+import { Button, FeedbackNote, PanelHeader } from "../../components/ui";
 import type { AppSettings, CatalogSyncResult, Category } from "../../lib/types";
 import { cn } from "../../lib/utils";
 
@@ -243,24 +243,28 @@ function CatalogSyncNotice({ result, onClose }: { result: CatalogSyncResult; onC
         </button>
       </div>
       {isOk ? (
-        <p className="text-xs text-[#42526e]">
+        <FeedbackNote variant="success">
           {result.sourceUrl === "manual"
             ? `${result.syncedAreaCount} manual fallback areas are available.`
             : `${result.syncedAreaCount} areas, ${result.deliveryFormatCount} delivery formats, and ${result.ruleCount} rules validated.`}
-        </p>
+        </FeedbackNote>
       ) : (
-        <ul className="max-h-40 list-disc overflow-y-auto pl-5 text-xs text-[#42526e]">
-          {result.errors.map((error) => (
-            <li key={error}>{error}</li>
-          ))}
-        </ul>
+        <FeedbackNote variant="error">
+          <ul className="max-h-40 list-disc overflow-y-auto pl-4">
+            {result.errors.map((error) => (
+              <li key={error}>{error}</li>
+            ))}
+          </ul>
+        </FeedbackNote>
       )}
       {result.warnings.length > 0 ? (
-        <ul className="mt-2 max-h-24 list-disc overflow-y-auto pl-5 text-xs text-[#6b778c]">
-          {result.warnings.map((warning) => (
-            <li key={warning}>{warning}</li>
-          ))}
-        </ul>
+        <FeedbackNote className="mt-2" variant="warning">
+          <ul className="max-h-24 list-disc overflow-y-auto pl-4">
+            {result.warnings.map((warning) => (
+              <li key={warning}>{warning}</li>
+            ))}
+          </ul>
+        </FeedbackNote>
       ) : null}
       </section>
     </div>
