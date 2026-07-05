@@ -402,9 +402,9 @@ function GuideSelect({
 
   return (
     <div className="relative">
-      <div className="mb-1 block text-xs font-medium text-[#6b778c]">{label}</div>
+      <div className="mb-2 block text-xs font-medium text-[#6b778c]">{label}</div>
       <button
-        className="flex h-9 w-full items-center justify-between gap-2 rounded border border-[#c1c7d0] bg-white px-2 text-left text-sm text-[#172b4d] outline-none hover:bg-[#f4f5f7] focus:border-[#4c9aff] focus:ring-2 focus:ring-[#deebff]"
+        className="flex h-10 w-full items-center justify-between gap-2 rounded border border-[#c1c7d0] bg-white px-3 text-left text-sm text-[#172b4d] outline-none hover:bg-[#f4f5f7] focus:border-[#4c9aff] focus:ring-2 focus:ring-[#deebff]"
         onBlur={() => window.setTimeout(() => setIsOpen(false), 120)}
         onClick={() => setIsOpen((currentValue) => !currentValue)}
         type="button"
@@ -413,12 +413,11 @@ function GuideSelect({
         <ChevronDown size={14} />
       </button>
       {isOpen ? (
-        <div className="absolute z-10 mt-1 max-h-56 w-full overflow-y-auto rounded border border-[#c1c7d0] bg-white py-1 text-sm shadow-lg">
+        <div className="app-select-menu absolute z-40 mt-1 max-h-56 w-full overflow-y-auto rounded border py-1 text-sm shadow-xl">
           {options.map((option) => (
             <button
-              className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left hover:bg-[#f4f5f7] ${
-                option.value === value ? "bg-[#f4f5f7] text-[#172b4d]" : "text-[#172b4d]"
-              }`}
+              aria-selected={option.value === value}
+              className="app-select-option flex w-full items-center justify-between gap-2 px-3 py-2 text-left"
               key={option.value}
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => {
