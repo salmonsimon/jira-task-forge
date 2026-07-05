@@ -1,5 +1,5 @@
 import { Check, CheckCircle2, ChevronDown, ChevronLeft, ExternalLink, Info, KeyRound, RefreshCw } from "lucide-react";
-import type { MouseEvent, ReactNode } from "react";
+import type { FocusEvent, MouseEvent, ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, FeedbackNote, LoadingOrb, PanelHeader } from "../../components/ui";
 import { appOverlayLayers, useAppOverlay } from "../../lib/app-overlays";
@@ -426,9 +426,8 @@ export function JiraConnectionGuide({
                       value={projectKey}
                       onChange={(value) => {
                         setProjectKeyDraft(value);
-                        setIsProjectMenuOpen(false);
                       }}
-                      onToggle={() => setIsProjectMenuOpen((currentValue) => !currentValue)}
+                      onOpenChange={setIsProjectMenuOpen}
                     />
                   ) : null}
                   <GuideInput
@@ -550,24 +549,23 @@ function ProjectSelect({
   options,
   isOpen,
   onChange,
-  onToggle
+  onOpenChange
 }: {
   label: string;
   value: string;
   options: JiraProjectOption[];
   isOpen: boolean;
   onChange: (value: string) => void;
-  onToggle: () => void;
+  onOpenChange: (isOpen: boolean) => void;
 }) {
   const selectedProject = options.find((project) => project.key === value) ?? options[0];
 
   return (
-    <div className="relative mb-5">
+    <div className="relative mb-5" onBlur={(event) => closeProjectSelectOnBlur(event, onOpenChange)}>
       <div className="mb-2 block text-xs font-medium text-[#6b778c]">{label}</div>
       <button
         className="flex h-10 w-full items-center justify-between gap-2 rounded border border-[#c1c7d0] bg-white px-3 text-left text-sm text-[#172b4d] outline-none hover:bg-[#f4f5f7] focus:border-[#4c9aff] focus:ring-2 focus:ring-[#deebff]"
-        onBlur={() => window.setTimeout(() => isOpen && onToggle(), 120)}
-        onClick={onToggle}
+        onClick={() => onOpenChange(!isOpen)}
         type="button"
       >
         <span className="truncate">
@@ -582,7 +580,10 @@ function ProjectSelect({
               aria-selected={project.key === value}
               className="app-select-option flex w-full items-center justify-between gap-2 px-3 py-2 text-left"
               key={project.key}
-              onClick={() => onChange(project.key)}
+              onClick={() => {
+                onChange(project.key);
+                onOpenChange(false);
+              }}
               type="button"
             >
               <span className="truncate">
@@ -595,6 +596,12 @@ function ProjectSelect({
       ) : null}
     </div>
   );
+}
+
+function closeProjectSelectOnBlur(event: FocusEvent<HTMLDivElement>, onOpenChange: (isOpen: boolean) => void) {
+  const nextFocusedElement = event.relatedTarget;
+  if (nextFocusedElement instanceof Node && event.currentTarget.contains(nextFocusedElement)) return;
+  onOpenChange(false);
 }
 
 function preventMouseNavigation(event: MouseEvent<HTMLElement>) {
