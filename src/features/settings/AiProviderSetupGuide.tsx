@@ -1,4 +1,4 @@
-import { Bot, Check, ChevronDown, ExternalLink, KeyRound, Trash2 } from "lucide-react";
+import { Check, ChevronDown, ChevronLeft, ExternalLink, KeyRound, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button, FeedbackNote, LoadingOrb, PanelHeader } from "../../components/ui";
 import { appOverlayLayers, useAppOverlay } from "../../lib/app-overlays";
@@ -128,6 +128,16 @@ export function AiProviderSetupGuide({
       await selectProvider(selectedProvider);
     }
     setStep("key");
+  }
+
+  function moveBack() {
+    if (step === "model") {
+      setStep("key");
+      return;
+    }
+    if (step === "key") {
+      setStep("provider");
+    }
   }
 
   async function selectModel(aiModel: string) {
@@ -340,18 +350,20 @@ export function AiProviderSetupGuide({
             </div>
           ) : null}
         </div>
-        <div className="flex flex-wrap justify-between gap-2 border-t border-[#dfe1e6] bg-[#f7f8fa] px-5 py-4">
-          <Button variant="secondary" onClick={onClose}>Close</Button>
+        <div className="flex items-center justify-between border-t border-[#dfe1e6] bg-[#f7f8fa] px-5 py-3">
+          <Button disabled={currentStepIndex === 0} icon={<ChevronLeft size={14} />} variant="secondary" onClick={moveBack}>
+            Back
+          </Button>
           {step === "provider" ? (
-            <Button className="settings-button-primary" icon={<Bot size={14} />} variant="secondary" onClick={() => void continueFromProvider()}>
-              Continue to API key
+            <Button className="settings-button-primary" onClick={() => void continueFromProvider()}>
+              Continue
             </Button>
           ) : step === "key" ? (
-            <Button className="settings-button-primary" icon={<Bot size={14} />} variant="secondary" onClick={() => void openModelStep()}>
-              Continue to model
+            <Button className="settings-button-primary" onClick={() => void openModelStep()}>
+              Continue
             </Button>
           ) : (
-            <Button className="settings-button-primary" variant="secondary" onClick={onClose}>
+            <Button className="settings-button-primary" icon={<Check size={14} />} onClick={onClose}>
               Done
             </Button>
           )}
