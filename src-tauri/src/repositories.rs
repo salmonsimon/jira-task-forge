@@ -160,11 +160,6 @@ impl<'connection> CategoryRepository<'connection> {
 
     pub fn create(&self, category_type: &str, name: &str) -> DbResult<Category> {
         validate_category_type(category_type)?;
-        if category_type == "area" {
-            return Err(DbError::InvalidData(
-                "Areas are managed by the official catalog sync.".to_string(),
-            ));
-        }
         let name = normalize_display_name(name)?;
         let normalized_name = normalize_name(&name);
         let now = utc_now_string()?;
@@ -199,29 +194,30 @@ impl<'connection> CategoryRepository<'connection> {
         let Some(current) = self.find_by_id(id)? else {
             return Ok(None);
         };
-        if current.category_type == "area" && name.is_some() {
-            return Err(DbError::InvalidData(
-                "Areas are managed by the official catalog sync.".to_string(),
-            ));
-        }
         let next_name = match name {
             Some(name) => normalize_display_name(name)?,
             None => current.name,
         };
         let normalized_name = normalize_name(&next_name);
         let next_hidden = hidden.unwrap_or(current.hidden);
+        let next_source = if current.category_type == "area" && name.is_some() {
+            "local"
+        } else {
+            current.source.as_str()
+        };
         let now = utc_now_string()?;
 
         self.connection.execute(
             "
             UPDATE categories
-            SET name = ?1, normalized_name = ?2, hidden = ?3, updated_at = ?4
-            WHERE id = ?5
+            SET name = ?1, normalized_name = ?2, hidden = ?3, source = ?4, updated_at = ?5
+            WHERE id = ?6
             ",
             (
                 next_name.as_str(),
                 normalized_name.as_str(),
                 bool_to_db(next_hidden),
+                next_source,
                 now.as_str(),
                 id,
             ),
@@ -231,13 +227,8 @@ impl<'connection> CategoryRepository<'connection> {
     }
 
     pub fn delete(&self, id: &str) -> DbResult<bool> {
-        let Some(current) = self.find_by_id(id)? else {
+        if self.find_by_id(id)?.is_none() {
             return Ok(false);
-        };
-        if current.category_type == "area" {
-            return Err(DbError::InvalidData(
-                "Areas are managed by the official catalog sync.".to_string(),
-            ));
         }
         let changed = self
             .connection
@@ -388,6 +379,14 @@ impl<'connection> CategoryRepository<'connection> {
                 ),
             )?;
         }
+
+        self.connection.execute(
+            "
+            DELETE FROM categories
+            WHERE category_type = 'area' AND ignored = 1
+            ",
+            [],
+        )?;
 
         self.list(Some("area"))
     }
@@ -2678,50 +2677,69 @@ mod tests {
     }
 
     #[test]
-    fn manages_areas_from_official_catalog_only() {
+    fn manages_manual_areas_like_local_categories() {
         let connection = open_in_memory_database().expect("database opens");
         let repository = CategoryRepository::new(&connection);
+
+        let created = repository
+            .create("area", "  __manual_area_edit_fixture__   alpha  ")
+            .expect("manual area creates");
+        assert_eq!(created.name, "__manual_area_edit_fixture__ alpha");
+        assert_eq!(created.category_type, "area");
+        assert_eq!(created.source, "local");
+
+        let renamed = repository
+            .update(&created.id, Some("__manual_area_edit_fixture__ beta"), Some(true))
+            .expect("manual area updates")
+            .expect("manual area exists");
+        assert_eq!(renamed.name, "__manual_area_edit_fixture__ beta");
+        assert_eq!(renamed.source, "local");
+        assert!(renamed.hidden);
+
+        assert!(repository.delete(&renamed.id).expect("manual area deletes"));
+        assert!(!repository
+            .list(Some("area"))
+            .expect("area categories list")
+            .iter()
+            .any(|category| category.id == renamed.id));
+    }
+
+    #[test]
+    fn catalog_sync_deletes_manual_and_stale_areas_not_in_synced_catalog() {
+        let connection = open_in_memory_database().expect("database opens");
+        let repository = CategoryRepository::new(&connection);
+        let manual_area_name = "__manual_area_should_be_pruned__";
+
+        repository
+            .create("area", manual_area_name)
+            .expect("manual area creates");
+        assert!(repository
+            .list(Some("area"))
+            .expect("area categories list")
+            .iter()
+            .any(|category| category.name == manual_area_name));
+
+        let synced = repository
+            .sync_area_catalog_entries(&[SyncedCatalogArea {
+                area_display_name: "Programación".to_string(),
+                jira_label: "Programación".to_string(),
+                enabled_in_jtf: true,
+                issue_type: "Story".to_string(),
+                default_delivery_format: "Feature de Programación".to_string(),
+                safe_aliases: vec!["Programacion".to_string()],
+                notes: "Usar para trabajo de código.".to_string(),
+            }])
+            .expect("catalog sync succeeds");
+
+        assert_eq!(synced.len(), 1);
+        assert_eq!(synced[0].name, "Programación");
 
         let areas = repository.list(Some("area")).expect("area categories list");
         assert!(areas
             .iter()
             .any(|category| category.name == "Programación" && category.source == "catalog"));
-        assert!(areas
-            .iter()
-            .any(|category| category.name == "Selección Recurso" && category.source == "catalog"));
-        assert!(!areas.iter().any(|category| category.name == "Compra"));
-
-        assert!(matches!(
-            repository.create("area", "Compra"),
-            Err(DbError::InvalidData(_))
-        ));
-
-        let bug = areas
-            .iter()
-            .find(|category| category.name == "Bug")
-            .expect("Bug exists");
-        assert!(matches!(
-            repository.update(&bug.id, Some("Error"), None),
-            Err(DbError::InvalidData(_))
-        ));
-        assert!(matches!(
-            repository.delete(&bug.id),
-            Err(DbError::InvalidData(_))
-        ));
-
-        let hidden = repository
-            .update(&bug.id, None, Some(true))
-            .expect("catalog area visibility updates")
-            .expect("catalog area exists");
-        assert!(hidden.hidden);
-
-        let synced = repository
-            .sync_area_catalog()
-            .expect("catalog sync succeeds");
-        assert!(synced
-            .iter()
-            .any(|category| category.name == "Bug" && !category.hidden));
-        assert!(synced.iter().all(|category| category.source == "catalog"));
+        assert!(!areas.iter().any(|category| category.name == manual_area_name));
+        assert!(!areas.iter().any(|category| category.name == "Bug"));
     }
 
     #[test]

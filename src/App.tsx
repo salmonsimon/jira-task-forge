@@ -166,6 +166,7 @@ type JiraCreationNotice = {
 export default function App() {
   const [activeTab, setActiveTab] = useState<MainTab>("trays");
   const [openPanel, setOpenPanel] = useState<Panel>(null);
+  const [settingsInitialGuide, setSettingsInitialGuide] = useState<"notion-synchronization" | null>(null);
   const [categories, setCategories] = useState<Category[]>(() => [...appData.listProjects(), ...appData.listAreas()]);
   const [jqlFavorites, setJqlFavorites] = useState<JqlFavorite[]>(() => appData.listJqlFavorites());
   const [taskSyncLogs, setTaskSyncLogs] = useState<Record<string, SyncLogEntry[]>>({});
@@ -563,6 +564,21 @@ export default function App() {
       ...syncedAreas
     ]);
     return null;
+  }
+
+  function openAppPanel(panel: Panel) {
+    setSettingsInitialGuide(null);
+    setOpenPanel(panel);
+  }
+
+  function openCatalogSourceConfiguration(target: "settings" | "notion-synchronization" = "settings") {
+    setSettingsInitialGuide(target === "notion-synchronization" ? "notion-synchronization" : null);
+    setOpenPanel("settings");
+  }
+
+  function returnToCategoriesFromSettingsGuide() {
+    setSettingsInitialGuide(null);
+    setOpenPanel("categories");
   }
 
   async function openJiraIssue(url: string) {
@@ -1456,7 +1472,7 @@ export default function App() {
     <div className={cn("min-h-screen bg-[#f7f8fa] text-[#172b4d]", resolvedTheme === "dark" && "theme-dark")}>
       <div className="flex min-h-screen">
         <main className="flex min-w-0 flex-1 flex-col">
-          <AppHeader activeTab={activeTab} setActiveTab={setActiveTab} openPanel={setOpenPanel} />
+          <AppHeader activeTab={activeTab} setActiveTab={setActiveTab} openPanel={openAppPanel} />
           {activeTab === "trays" ? (
             <TraysView
               trays={visibleTrays}
@@ -1554,7 +1570,7 @@ export default function App() {
             onUpdateCategory={updateCategory}
             onDeleteCategory={deleteCategory}
             onSyncAreaCatalog={syncAreaCatalog}
-            onConfigureCatalogSource={() => setOpenPanel("settings")}
+            onConfigureCatalogSource={openCatalogSourceConfiguration}
             onClose={() => setOpenPanel(null)}
           />
         ) : null}
@@ -1594,6 +1610,8 @@ export default function App() {
             onOpenAiProviderApiKeys={openAiProviderApiKeysPage}
             onExportBackup={exportBackup}
             onImportBackup={importBackup}
+            initialGuide={settingsInitialGuide}
+            onInitialGuideClose={returnToCategoriesFromSettingsGuide}
             onClose={() => setOpenPanel(null)}
           />
         ) : null}

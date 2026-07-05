@@ -16,9 +16,8 @@ const notionSteps: Array<{ id: NotionStep; label: string }> = [
   { id: "review", label: "Review" }
 ];
 
-const catalogModeOptions: Array<{ label: string; value: AppSettings["catalogSourceMode"] }> = [
+export const catalogModeOptions: Array<{ label: string; value: AppSettings["catalogSourceMode"] }> = [
   { label: "Sync from Notion page", value: "notion" },
-  { label: "Sync with public/exportable source", value: "public-exportable" },
   { label: "Manual catalog", value: "manual" }
 ];
 
@@ -43,7 +42,9 @@ export function NotionSynchronizationGuide({
 }) {
   const surfaceRef = useRef<HTMLElement | null>(null);
   const [step, setStep] = useState<NotionStep>("token");
-  const [mode, setMode] = useState<AppSettings["catalogSourceMode"]>(settings.catalogSourceMode);
+  const [mode, setMode] = useState<AppSettings["catalogSourceMode"]>(
+    settings.catalogSourceMode === "public-exportable" ? "notion" : settings.catalogSourceMode
+  );
   const [sourceUrl, setSourceUrl] = useState(settings.catalogSourceUrl || defaultNotionCatalogUrl);
   const [tokenDraft, setTokenDraft] = useState("");
   const [hasToken, setHasToken] = useState(false);
@@ -125,7 +126,7 @@ export function NotionSynchronizationGuide({
       } else {
         setTestResult({
           ok: true,
-          message: mode === "manual" ? "Manual catalog mode is configured." : "Catalog source settings saved.",
+          message: "Manual catalog mode is configured.",
           title: null,
           extractedBlockCount: 0
         });
@@ -235,8 +236,8 @@ export function NotionSynchronizationGuide({
               <SourceModeSelect label="Catalog mode" value={mode} options={catalogModeOptions} onChange={setMode} />
               {mode !== "manual" ? (
                 <GuideInput
-                  label={mode === "notion" ? "Notion page URL or ID" : "Source URL"}
-                  placeholder={mode === "notion" ? defaultNotionCatalogUrl : "https://.../jtf-sync-catalog.json"}
+                  label="Notion page URL or ID"
+                  placeholder={defaultNotionCatalogUrl}
                   value={sourceUrl}
                   onChange={(value) => {
                     setSourceUrl(value);
@@ -402,10 +403,10 @@ function Feedback({ children, kind }: { children: ReactNode; kind: "success" | "
     <div
       className={`mt-4 rounded border px-3 py-2 text-xs font-medium ${
         kind === "success"
-          ? "border-[#006644] bg-[#00875a] text-white"
+          ? "border-[#abf5d1] bg-[#e3fcef] text-[#006644]"
           : kind === "warning"
-            ? "border-[#f5cd47] bg-[#fff7d6] text-[#533f04]"
-            : "border-[#ffbdad] bg-[#ffebe6] text-[#5d1f1a]"
+            ? "border-[#f5cd47] bg-[#fff7d6] text-[#974f0c]"
+            : "border-[#ffbdad] bg-[#ffebe6] text-[#bf2600]"
       }`}
     >
       {children}

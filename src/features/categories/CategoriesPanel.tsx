@@ -21,11 +21,11 @@ export function CategoriesPanel({
   areas: Category[];
   catalogSourceMode: AppSettings["catalogSourceMode"];
   catalogSourceUrl: string;
-  onCreateCategory: (categoryType: "project", name: string) => void | Promise<void>;
+  onCreateCategory: (categoryType: "project" | "area", name: string) => void | Promise<void>;
   onUpdateCategory: (categoryId: string, patch: Partial<Pick<Category, "hidden" | "name">>) => void | Promise<void>;
   onDeleteCategory: (categoryId: string) => void | Promise<void>;
   onSyncAreaCatalog: (sourceUrl?: string) => Promise<CatalogSyncResult | null>;
-  onConfigureCatalogSource: () => void;
+  onConfigureCatalogSource: (target?: "settings" | "notion-synchronization") => void;
   onClose: () => void;
 }) {
   const panelRef = useRef<HTMLElement | null>(null);
@@ -67,7 +67,7 @@ export function CategoriesPanel({
           categoryType="area"
           title="Areas"
           categories={areas}
-          isCatalogManaged
+          isCatalogManaged={catalogSourceMode !== "manual"}
           catalogSourceMode={catalogSourceMode}
           catalogSourceUrl={catalogSourceUrl}
           onCreateCategory={onCreateCategory}
@@ -103,11 +103,11 @@ function CategoryList({
   isCatalogManaged?: boolean;
   catalogSourceMode?: AppSettings["catalogSourceMode"];
   catalogSourceUrl?: string;
-  onCreateCategory: (categoryType: "project", name: string) => void | Promise<void>;
+  onCreateCategory: (categoryType: "project" | "area", name: string) => void | Promise<void>;
   onUpdateCategory: (categoryId: string, patch: Partial<Pick<Category, "hidden" | "name">>) => void | Promise<void>;
   onDeleteCategory: (categoryId: string) => void | Promise<void>;
   onSyncAreaCatalog?: (sourceUrl?: string) => Promise<CatalogSyncResult | null>;
-  onConfigureCatalogSource?: () => void;
+  onConfigureCatalogSource?: (target?: "settings" | "notion-synchronization") => void;
   onSyncResult?: (result: CatalogSyncResult | null) => void;
 }) {
   const [isAdding, setIsAdding] = useState(false);
@@ -118,7 +118,6 @@ function CategoryList({
     const nextName = newName.trim();
     if (!nextName) return;
 
-    if (categoryType !== "project") return;
     await onCreateCategory(categoryType, nextName);
     setNewName("");
     setIsAdding(false);
@@ -127,7 +126,7 @@ function CategoryList({
   async function syncCatalog() {
     if (!onSyncAreaCatalog || isSyncing) return;
     if (catalogSourceMode !== "manual" && !catalogSourceUrl.trim()) {
-      onConfigureCatalogSource?.();
+      onConfigureCatalogSource?.(catalogSourceMode === "notion" ? "notion-synchronization" : "settings");
       return;
     }
 
@@ -136,6 +135,18 @@ function CategoryList({
     try {
       const result = await onSyncAreaCatalog();
       await waitForMinimumElapsed(startedAt, 650);
+      if (isMissingNotionSynchronizationSetup(catalogSourceMode, result)) {
+        onConfigureCatalogSource?.("notion-synchronization");
+        return;
+      }
+      if (result) onSyncResult?.(result);
+    } catch (error) {
+      await waitForMinimumElapsed(startedAt, 650);
+      const result = createCatalogSyncErrorResult(error);
+      if (isMissingNotionSynchronizationSetup(catalogSourceMode, result)) {
+        onConfigureCatalogSource?.("notion-synchronization");
+        return;
+      }
       onSyncResult?.(result);
     } finally {
       setIsSyncing(false);
@@ -233,7 +244,9 @@ function CatalogSyncNotice({ result, onClose }: { result: CatalogSyncResult; onC
       </div>
       {isOk ? (
         <p className="text-xs text-[#42526e]">
-          {result.syncedAreaCount} areas, {result.deliveryFormatCount} delivery formats, and {result.ruleCount} rules validated.
+          {result.sourceUrl === "manual"
+            ? `${result.syncedAreaCount} manual fallback areas are available.`
+            : `${result.syncedAreaCount} areas, ${result.deliveryFormatCount} delivery formats, and ${result.ruleCount} rules validated.`}
         </p>
       ) : (
         <ul className="max-h-40 list-disc overflow-y-auto pl-5 text-xs text-[#42526e]">
@@ -259,6 +272,45 @@ async function waitForMinimumElapsed(startedAt: number, minimumMs: number): Prom
   if (remainingMs > 0) {
     await new Promise((resolve) => window.setTimeout(resolve, remainingMs));
   }
+}
+
+
+export function createCatalogSyncErrorResult(error: unknown): CatalogSyncResult {
+  return {
+    ok: false,
+    sourceUrl: "",
+    syncedAreaCount: 0,
+    deliveryFormatCount: 0,
+    ruleCount: 0,
+    warnings: [],
+    errors: [catalogSyncErrorMessage(error)],
+    areas: [],
+    deliveryFormats: [],
+    areaFormatRules: []
+  };
+}
+
+function catalogSyncErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message.trim()) return error.message;
+  if (typeof error === "string" && error.trim()) return error;
+  return "Catalog sync failed.";
+}
+
+export function isMissingNotionSynchronizationSetup(
+  catalogSourceMode: AppSettings["catalogSourceMode"],
+  result: CatalogSyncResult | null
+): boolean {
+  if (catalogSourceMode !== "notion" || !result || result.ok) return false;
+
+  return result.errors.some((error) => {
+    const normalizedError = error.toLowerCase();
+    return (
+      normalizedError.includes("save a notion integration token") ||
+      normalizedError.includes("notion integration token is empty") ||
+      normalizedError.includes("notion integration token is required") ||
+      normalizedError.includes("paste a notion page url")
+    );
+  });
 }
 
 function CategoryRow({

@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { AppSettings } from "../../lib/types";
-import { NotionSynchronizationGuide } from "./NotionSynchronizationGuide";
+import { catalogModeOptions, NotionSynchronizationGuide } from "./NotionSynchronizationGuide";
 
 const settings: AppSettings = {
   themeMode: "light",
@@ -41,4 +41,9 @@ describe("NotionSynchronizationGuide", () => {
     expect(html).toContain("settings-button-secondary w-full justify-center sm:w-auto sm:shrink-0");
     expect(html).not.toContain("href=\"https://www.notion.so/developers\"");
   });
+  it("does not offer the legacy public exportable source mode", () => {
+    expect(catalogModeOptions.map((option) => option.label)).toEqual(["Sync from Notion page", "Manual catalog"]);
+    expect(catalogModeOptions.map((option) => option.value)).not.toContain("public-exportable");
+  });
+
 });
