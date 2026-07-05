@@ -2682,17 +2682,17 @@ mod tests {
         let repository = CategoryRepository::new(&connection);
 
         let created = repository
-            .create("area", "  Compra   UX  ")
+            .create("area", "  __manual_area_edit_fixture__   alpha  ")
             .expect("manual area creates");
-        assert_eq!(created.name, "Compra UX");
+        assert_eq!(created.name, "__manual_area_edit_fixture__ alpha");
         assert_eq!(created.category_type, "area");
         assert_eq!(created.source, "local");
 
         let renamed = repository
-            .update(&created.id, Some("Compra Gameplay"), Some(true))
+            .update(&created.id, Some("__manual_area_edit_fixture__ beta"), Some(true))
             .expect("manual area updates")
             .expect("manual area exists");
-        assert_eq!(renamed.name, "Compra Gameplay");
+        assert_eq!(renamed.name, "__manual_area_edit_fixture__ beta");
         assert_eq!(renamed.source, "local");
         assert!(renamed.hidden);
 
@@ -2708,15 +2708,16 @@ mod tests {
     fn catalog_sync_deletes_manual_and_stale_areas_not_in_synced_catalog() {
         let connection = open_in_memory_database().expect("database opens");
         let repository = CategoryRepository::new(&connection);
+        let manual_area_name = "__manual_area_should_be_pruned__";
 
         repository
-            .create("area", "Compra")
+            .create("area", manual_area_name)
             .expect("manual area creates");
         assert!(repository
             .list(Some("area"))
             .expect("area categories list")
             .iter()
-            .any(|category| category.name == "Compra"));
+            .any(|category| category.name == manual_area_name));
 
         let synced = repository
             .sync_area_catalog_entries(&[SyncedCatalogArea {
@@ -2737,7 +2738,7 @@ mod tests {
         assert!(areas
             .iter()
             .any(|category| category.name == "Programación" && category.source == "catalog"));
-        assert!(!areas.iter().any(|category| category.name == "Compra"));
+        assert!(!areas.iter().any(|category| category.name == manual_area_name));
         assert!(!areas.iter().any(|category| category.name == "Bug"));
     }
 

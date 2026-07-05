@@ -718,14 +718,15 @@ fn manages_categories_and_jql_favorites_through_services() {
 #[test]
 fn external_catalog_sync_removes_manual_areas_not_in_synced_catalog() {
     let services = AppServices::new(open_in_memory_database().expect("database opens"));
+    let manual_area_name = "__manual_area_should_be_pruned__";
     services
-        .create_category("area", "Compra")
+        .create_category("area", manual_area_name)
         .expect("manual area creates");
     assert!(services
         .list_categories(Some("area"))
         .expect("areas list before sync")
         .iter()
-        .any(|category| category.name == "Compra"));
+        .any(|category| category.name == manual_area_name));
 
     let source_url = serve_catalog_once(
         r#"{
@@ -782,7 +783,7 @@ fn external_catalog_sync_removes_manual_areas_not_in_synced_catalog() {
     assert!(areas
         .iter()
         .any(|category| category.name == "Bug" && category.source == "catalog"));
-    assert!(!areas.iter().any(|category| category.name == "Compra"));
+    assert!(!areas.iter().any(|category| category.name == manual_area_name));
     assert!(!areas.iter().any(|category| category.name == "3D"));
 }
 
