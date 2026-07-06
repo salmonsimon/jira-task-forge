@@ -58,6 +58,8 @@ pub struct EpicMappingBackup {
     pub id: String,
     pub project_category_id: String,
     pub area_category_id: String,
+    #[serde(default)]
+    pub scope: Option<String>,
     pub jira_epic_key: String,
     pub jira_epic_url: Option<String>,
     pub synced_at: Option<String>,

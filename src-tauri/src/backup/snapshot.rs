@@ -33,7 +33,7 @@ pub(crate) fn export_snapshot(connection: &Connection) -> DbResult<BackupData> {
 fn list_trays(connection: &Connection) -> DbResult<Vec<Tray>> {
     let mut statement = connection.prepare(
         "
-        SELECT id, name, state, created_at, updated_at, archived_at
+        SELECT id, name, state, epic_scope, transversal_epic_scope, created_at, updated_at, archived_at
         FROM trays
         ORDER BY updated_at DESC, created_at DESC
         ",
@@ -52,9 +52,11 @@ fn list_trays(connection: &Connection) -> DbResult<Vec<Tray>> {
                         message.into(),
                     )
                 })?,
-                created_at: row.get(3)?,
-                updated_at: row.get(4)?,
-                archived_at: row.get(5)?,
+                epic_scope: row.get(3)?,
+                transversal_epic_scope: row.get(4)?,
+                created_at: row.get(5)?,
+                updated_at: row.get(6)?,
+                archived_at: row.get(7)?,
             })
         })?
         .collect::<Result<Vec<_>, _>>()
@@ -83,7 +85,7 @@ fn list_tasks(connection: &Connection) -> DbResult<Vec<LocalTask>> {
 fn list_epic_mappings(connection: &Connection) -> DbResult<Vec<EpicMappingBackup>> {
     let mut statement = connection.prepare(
         "
-        SELECT id, project_category_id, area_category_id, jira_epic_key, jira_epic_url,
+        SELECT id, project_category_id, area_category_id, scope, jira_epic_key, jira_epic_url,
                synced_at, created_at, updated_at
         FROM epic_mappings
         ORDER BY updated_at DESC, created_at DESC
@@ -96,11 +98,12 @@ fn list_epic_mappings(connection: &Connection) -> DbResult<Vec<EpicMappingBackup
                 id: row.get(0)?,
                 project_category_id: row.get(1)?,
                 area_category_id: row.get(2)?,
-                jira_epic_key: row.get(3)?,
-                jira_epic_url: row.get(4)?,
-                synced_at: row.get(5)?,
-                created_at: row.get(6)?,
-                updated_at: row.get(7)?,
+                scope: row.get(3)?,
+                jira_epic_key: row.get(4)?,
+                jira_epic_url: row.get(5)?,
+                synced_at: row.get(6)?,
+                created_at: row.get(7)?,
+                updated_at: row.get(8)?,
             })
         })?
         .collect::<Result<Vec<_>, _>>()

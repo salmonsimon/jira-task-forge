@@ -74,6 +74,8 @@ describe("Tauri command contract mappers", () => {
       id: "tray-1",
       name: "Live QA",
       state: "NeedsAttention",
+      epic_scope: "Demo Version 1",
+      transversal_epic_scope: null,
       created_at: "2026-05-26T12:00:00Z",
       updated_at: "invalid-local-date",
       archived_at: null

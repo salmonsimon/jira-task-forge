@@ -7,6 +7,7 @@ use crate::area_catalog::{
 };
 use crate::attachment_storage::validate_managed_relative_path;
 use crate::db::{utc_now_string, DbError, DbResult};
+use crate::epic_scope::normalize_epic_scope;
 use crate::integrations::jira::normalize_jira_site_url;
 use crate::models::{
     AppSettings, AssistedDescriptionProposal, AssistedDescriptionProposalSection,
@@ -2194,6 +2195,28 @@ fn map_task_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<LocalTask> {
     })
 }
 
+fn map_tray_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Tray> {
+    let state_value: String = row.get("state")?;
+    let state = TrayState::from_db_value(&state_value).map_err(|message| {
+        rusqlite::Error::FromSqlConversionFailure(
+            state_value.len(),
+            rusqlite::types::Type::Text,
+            Box::new(DbError::InvalidData(message)),
+        )
+    })?;
+
+    Ok(Tray {
+        id: row.get("id")?,
+        name: row.get("name")?,
+        state,
+        epic_scope: row.get("epic_scope")?,
+        transversal_epic_scope: row.get("transversal_epic_scope")?,
+        created_at: row.get("created_at")?,
+        updated_at: row.get("updated_at")?,
+        archived_at: row.get("archived_at")?,
+    })
+}
+
 fn map_issue_relationship_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<LocalIssueRelationship> {
     Ok(LocalIssueRelationship {
         id: row.get("id")?,
@@ -2300,6 +2323,10 @@ fn normalize_display_name(name: &str) -> DbResult<String> {
         return Err(DbError::InvalidData("name is required".to_string()));
     }
     Ok(normalized)
+}
+
+fn normalize_optional_epic_scope(scope: Option<&str>) -> DbResult<Option<String>> {
+    Ok(normalize_epic_scope(scope))
 }
 
 fn normalize_jql(jql: &str) -> DbResult<String> {
@@ -2449,6 +2476,8 @@ impl<'connection> TrayRepository<'connection> {
             id: Uuid::new_v4().to_string(),
             name: new_tray.name,
             state: TrayState::Active,
+            epic_scope: None,
+            transversal_epic_scope: None,
             created_at: now.clone(),
             updated_at: now,
             archived_at: None,
@@ -2456,13 +2485,17 @@ impl<'connection> TrayRepository<'connection> {
 
         self.connection.execute(
             "
-            INSERT INTO trays (id, name, state, created_at, updated_at, archived_at)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+            INSERT INTO trays (
+                id, name, state, epic_scope, transversal_epic_scope, created_at, updated_at, archived_at
+            )
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
             ",
             params![
                 tray.id,
                 tray.name,
                 tray.state.as_db_value(),
+                tray.epic_scope,
+                tray.transversal_epic_scope,
                 tray.created_at,
                 tray.updated_at,
                 tray.archived_at
@@ -2475,32 +2508,14 @@ impl<'connection> TrayRepository<'connection> {
     pub fn list(&self) -> DbResult<Vec<Tray>> {
         let mut statement = self.connection.prepare(
             "
-            SELECT id, name, state, created_at, updated_at, archived_at
+            SELECT id, name, state, epic_scope, transversal_epic_scope, created_at, updated_at, archived_at
             FROM trays
             ORDER BY updated_at DESC, created_at DESC
             ",
         )?;
 
         let trays = statement
-            .query_map([], |row| {
-                let state_value: String = row.get("state")?;
-                let state = TrayState::from_db_value(&state_value).map_err(|message| {
-                    rusqlite::Error::FromSqlConversionFailure(
-                        state_value.len(),
-                        rusqlite::types::Type::Text,
-                        Box::new(DbError::InvalidData(message)),
-                    )
-                })?;
-
-                Ok(Tray {
-                    id: row.get("id")?,
-                    name: row.get("name")?,
-                    state,
-                    created_at: row.get("created_at")?,
-                    updated_at: row.get("updated_at")?,
-                    archived_at: row.get("archived_at")?,
-                })
-            })?
+            .query_map([], map_tray_row)?
             .collect::<Result<Vec<_>, _>>()?;
 
         Ok(trays)
@@ -2509,31 +2524,13 @@ impl<'connection> TrayRepository<'connection> {
     pub fn find_by_id(&self, id: &str) -> DbResult<Option<Tray>> {
         let mut statement = self.connection.prepare(
             "
-            SELECT id, name, state, created_at, updated_at, archived_at
+            SELECT id, name, state, epic_scope, transversal_epic_scope, created_at, updated_at, archived_at
             FROM trays
             WHERE id = ?1
             ",
         )?;
 
-        let result = statement.query_row([id], |row| {
-            let state_value: String = row.get("state")?;
-            let state = TrayState::from_db_value(&state_value).map_err(|message| {
-                rusqlite::Error::FromSqlConversionFailure(
-                    state_value.len(),
-                    rusqlite::types::Type::Text,
-                    Box::new(DbError::InvalidData(message)),
-                )
-            })?;
-
-            Ok(Tray {
-                id: row.get("id")?,
-                name: row.get("name")?,
-                state,
-                created_at: row.get("created_at")?,
-                updated_at: row.get("updated_at")?,
-                archived_at: row.get("archived_at")?,
-            })
-        });
+        let result = statement.query_row([id], map_tray_row);
 
         match result {
             Ok(tray) => Ok(Some(tray)),
@@ -2547,6 +2544,39 @@ impl<'connection> TrayRepository<'connection> {
         let changed = self.connection.execute(
             "UPDATE trays SET name = ?1, updated_at = ?2 WHERE id = ?3",
             (name, updated_at, id),
+        )?;
+
+        if changed == 0 {
+            return Ok(None);
+        }
+
+        self.find_by_id(id)
+    }
+
+    pub fn update_epic_scopes(
+        &self,
+        id: &str,
+        epic_scope: Option<&str>,
+        transversal_epic_scope: Option<&str>,
+    ) -> DbResult<Option<Tray>> {
+        let normalized_epic_scope = normalize_optional_epic_scope(epic_scope)?;
+        let normalized_transversal_scope = match normalized_epic_scope.as_deref() {
+            Some("TBD") => None,
+            _ => normalize_optional_epic_scope(transversal_epic_scope)?,
+        };
+        let updated_at = utc_now_string()?;
+        let changed = self.connection.execute(
+            "
+            UPDATE trays
+            SET epic_scope = ?1, transversal_epic_scope = ?2, updated_at = ?3
+            WHERE id = ?4
+            ",
+            (
+                normalized_epic_scope.as_deref(),
+                normalized_transversal_scope.as_deref(),
+                updated_at.as_str(),
+                id,
+            ),
         )?;
 
         if changed == 0 {

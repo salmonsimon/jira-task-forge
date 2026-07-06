@@ -70,7 +70,7 @@ If local state is ambiguous after a crash, timeout, or partial failure, retry
 must search for the remote correlation marker before creating another Jira
 issue. If the marker search fails, the app should retry that search once with a
 short backoff. If the marker still cannot be confirmed, retry must pause the
-affected local task or `Project + Area` group for manual recovery instead of
+affected local task or `Project + Area + Scope` group for manual recovery instead of
 creating another Jira issue. Healthy groups may continue. The manual recovery
 path should let the user link the local task to an existing Jira issue or
 explicitly confirm a duplicate-risk create. The audit log should record a
@@ -95,7 +95,8 @@ When a tray contains nested work, sync order should be dependency-aware:
 
 1. validate credentials and required local fields
 2. validate Jira project creation metadata and payload mappings
-3. search for required epics by the `[{Project}] {Area}` naming rule
+3. search for required epics by the `[{Project}] [{Area}] {Scope}` naming rule,
+   while accepting exact legacy `[{Project}] {Area}` matches for existing epics
 4. create any missing required epics
 5. create parent stories or bugs linked to their resolved epics
 6. create accepted sub-tasks under their saved parent Jira issues
@@ -113,7 +114,7 @@ parent; it should retry only the missing child operations. If the app cannot
 confirm whether a parent Jira issue was created, retry must first search by the
 remote correlation marker before attempting another create.
 
-Sync should also preserve progress across independent `Project + Area` groups.
+Sync should also preserve progress across independent `Project + Area + Scope` groups.
 If epic lookup or epic creation fails for one group, that group should pause with
 an actionable warning while other groups continue when their own preflight and
 epic resolution are safe. After a partial sync, the UI may offer to create a
@@ -149,7 +150,7 @@ a new Jira issue.
   task instead of auto-creating a possible duplicate.
 - 2026-06-14: Remote marker recovery should retry marker search once with a
   short backoff after an ambiguous sync failure. If marker confirmation still
-  fails, block only the affected task or `Project + Area` group, continue healthy
+  fails, block only the affected task or `Project + Area + Scope` group, continue healthy
   groups, and record sanitized audit history. Do not allow blind retry.
 - 2026-05-23: Epics are required for normal Jira sync. For every `Project +
   Area` represented in the tray, the app should search Jira for `[{Project}]
@@ -158,6 +159,9 @@ a new Jira issue.
 - 2026-05-23: Jira sync should continue healthy `Project + Area` groups when
   another group has an epic lookup/creation failure, and should surface the
   failed group with an actionable warning.
+- 2026-07-05: Epic grouping now uses `Project + Area + Scope` for new Jira epic
+  resolution and creation. Exact legacy `[{Project}] {Area}` epics remain a
+  compatibility fallback for existing data.
 - 2026-05-23: Recovery trays should move failed or paused tasks without
   duplicating them, preserving each local task's identity for retry safety.
 - 2026-05-23: Jira writes must validate the configured Jira project's creation

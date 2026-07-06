@@ -1,6 +1,7 @@
 import { Archive, Check, FolderKanban, PanelRightOpen, Pencil, RotateCcw, Trash2, Plus, X } from "lucide-react";
 import { useState } from "react";
 import { Button, IconButton, TrayStateBadge } from "../../components/ui";
+import { CreateTrayDialog, type CreateTrayInput } from "./CreateTrayDialog";
 import { deriveTrayStatusTag } from "../../lib/domain";
 import type { Tray } from "../../lib/types";
 
@@ -8,6 +9,7 @@ export function TraySelector({
   trays,
   onOpenTray,
   onCreateTray,
+  onSuggestTransversalScope,
   onRenameTray,
   onArchiveTray,
   onRestoreTray,
@@ -17,7 +19,8 @@ export function TraySelector({
 }: {
   trays: Tray[];
   onOpenTray: (tray: Tray) => void;
-  onCreateTray: () => void;
+  onCreateTray: (input: CreateTrayInput) => void | Promise<void>;
+  onSuggestTransversalScope?: (epicScope: string) => Promise<string>;
   onRenameTray: (trayId: string, name: string) => void;
   onArchiveTray: (trayId: string) => void;
   onRestoreTray: (trayId: string) => void;
@@ -27,6 +30,7 @@ export function TraySelector({
 }) {
   const [editingTrayId, setEditingTrayId] = useState<string | null>(null);
   const [draftName, setDraftName] = useState("");
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
 
   function beginRename(tray: Tray) {
     setEditingTrayId(tray.id);
@@ -53,7 +57,7 @@ export function TraySelector({
           <h1 className="text-xl font-semibold">Trays</h1>
           <p className="text-sm text-[#6b778c]">Open a saved tray or start a focused one.</p>
         </div>
-        <Button icon={<Plus size={14} />} onClick={onCreateTray}>
+        <Button icon={<Plus size={14} />} onClick={() => setIsCreateDialogOpen(true)}>
           New tray
         </Button>
       </div>
@@ -145,6 +149,13 @@ export function TraySelector({
           {showArchived ? "View active" : "View archived"}
         </Button>
       </div>
+      {isCreateDialogOpen ? (
+        <CreateTrayDialog
+          onClose={() => setIsCreateDialogOpen(false)}
+          onCreateTray={onCreateTray}
+          onSuggestTransversalScope={onSuggestTransversalScope}
+        />
+      ) : null}
     </section>
   );
 }

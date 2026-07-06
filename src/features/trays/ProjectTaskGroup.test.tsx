@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import type { LocalTask } from "../../lib/types";
+import type { LocalTask, Tray } from "../../lib/types";
 import { ProjectTaskGroup } from "./ProjectTaskGroup";
 
 const task: LocalTask = {
@@ -15,13 +15,26 @@ const task: LocalTask = {
   language: "Spanish"
 };
 
+const tray: Tray = {
+  id: "tray-1",
+  name: "Workflow",
+  state: "Active",
+  epicScope: "Demo Version 1",
+  transversalEpicScope: "Demos Version 1",
+  summary: "1 task",
+  updatedAt: "Just now",
+  tasks: [task]
+};
+
 describe("ProjectTaskGroup", () => {
   it("lets inline area and issue type dropdown menus render above table rows", () => {
     const html = renderToStaticMarkup(
       <ProjectTaskGroup
         project="Transversal"
+        tray={tray}
         tasks={[task]}
         areas={["3D", "Selección Recurso"]}
+        onUpdateTrayEpicScopes={() => undefined}
         selectedTaskId={null}
         onOpenTask={() => undefined}
         onUpdateTask={() => undefined}
@@ -38,8 +51,10 @@ describe("ProjectTaskGroup", () => {
     const html = renderToStaticMarkup(
       <ProjectTaskGroup
         project="STT"
+        tray={tray}
         tasks={[{ ...task, area: "Bug", issueType: "Bug", priority: "Highest", syncStatus: "Failed" }]}
         areas={["Bug", "3D"]}
+        onUpdateTrayEpicScopes={() => undefined}
         selectedTaskId={null}
         onOpenTask={() => undefined}
         onUpdateTask={() => undefined}
@@ -53,4 +68,27 @@ describe("ProjectTaskGroup", () => {
     expect(html).toContain("inline-flex h-6 max-w-full items-center");
     expect(html).not.toContain("inline-flex w-full max-w-full items-center");
   });
+});
+
+
+it("keeps the Epic Scope editor available when the tray scope is TBD", () => {
+  const html = renderToStaticMarkup(
+    <ProjectTaskGroup
+      project="STT"
+      tray={{ ...tray, epicScope: "TBD", transversalEpicScope: undefined }}
+      tasks={[{ ...task, project: "STT", area: "UI" }]}
+      areas={["UI"]}
+      onUpdateTrayEpicScopes={() => undefined}
+      selectedTaskId={null}
+      onOpenTask={() => undefined}
+      onUpdateTask={() => undefined}
+      onDuplicateTask={() => undefined}
+      onDeleteTask={() => undefined}
+      onOpenJiraIssue={() => undefined}
+    />
+  );
+
+  expect(html).toContain("Scope:");
+  expect(html).toContain("TBD");
+  expect(html).toContain('aria-label="Edit epic scope for STT"');
 });

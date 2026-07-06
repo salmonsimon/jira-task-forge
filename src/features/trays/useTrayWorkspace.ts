@@ -4,6 +4,7 @@ import {
   createPersistedSubtask,
   createPersistedTask,
   createPersistedTray,
+  updatePersistedTrayEpicScopes,
   deletePersistedTask,
   deletePersistedTray,
   renamePersistedTray,
@@ -112,14 +113,16 @@ export function useTrayWorkspace({
     setSelectedTrayId(null);
   }
 
-  async function createTray() {
-    const trayName = "New tray";
+  async function createTray(input: { name: string; epicScope?: string | null; transversalEpicScope?: string | null }) {
+    const trayName = input.name.trim();
     const nextTray = usesTauriPersistence
-      ? await createPersistedTray(trayName)
+      ? await createPersistedScopedTray(trayName, input.epicScope ?? null, input.transversalEpicScope ?? null)
       : {
           id: `tray-local-${Date.now().toString(36)}`,
           name: trayName,
           state: "Active" as const,
+          epicScope: input.epicScope ?? undefined,
+          transversalEpicScope: input.epicScope === "TBD" ? undefined : (input.transversalEpicScope ?? undefined),
           summary: "No tasks",
           updatedAt: "Just now",
           tasks: []
@@ -129,6 +132,12 @@ export function useTrayWorkspace({
     lastSelectedTrayId.current = nextTray.id;
     setSelectedTrayId(nextTray.id);
     setSelectedTaskId(null);
+  }
+
+  async function createPersistedScopedTray(name: string, epicScope: string | null, transversalEpicScope: string | null): Promise<Tray> {
+    const createdTray = await createPersistedTray(name);
+    const scopedTray = await updatePersistedTrayEpicScopes(createdTray.id, epicScope, transversalEpicScope);
+    return scopedTray ? { ...scopedTray, tasks: [] } : createdTray;
   }
 
   async function renameTray(trayId: string, name: string) {

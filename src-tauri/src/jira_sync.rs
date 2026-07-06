@@ -16,6 +16,7 @@ use crate::attachment_storage::{
     sanitize_attachment_audit_name, JIRA_CLOUD_FALLBACK_ATTACHMENT_UPLOAD_LIMIT_BYTES,
 };
 use crate::db::DbError;
+use crate::epic_scope::EpicTarget;
 use crate::integrations::jira::JiraClient;
 use crate::models::{
     JiraAttachmentSettings, JiraCreateAllowedValue, JiraCreateFieldMetadata,
@@ -202,6 +203,8 @@ where
             &tasks,
             JiraCreationPlanningOptions {
                 creation_project_key: &self.creation_project_key,
+                epic_scope: tray.epic_scope.as_deref(),
+                transversal_epic_scope: tray.transversal_epic_scope.as_deref(),
                 allow_missing_descriptions,
                 include_exported_tasks,
                 include_missing_description_tasks,
@@ -379,8 +382,8 @@ where
                     .map(|key| (task.id.clone(), key.clone()))
             })
             .collect::<HashMap<_, _>>();
-        for ((local_project, area), group_tasks) in &plan.project_area_groups {
-            let epic_summary = format!("[{local_project}] {area}");
+        for (target, group_tasks) in &plan.epic_target_groups {
+            let epic_summary = target.summary();
             recorder.progress(
                 "epic",
                 "Resolving Jira epic",
@@ -392,9 +395,7 @@ where
                 &recorder,
                 &plan,
                 &self.creation_project_key,
-                local_project,
-                area,
-                &epic_summary,
+                target,
                 reporter_account_id.as_deref(),
             ) {
                 Ok(key) => {
@@ -769,40 +770,50 @@ fn resolve_or_create_epic<Gateway, F>(
     recorder: &SyncAttemptRecorder<'_, '_, F>,
     plan: &JiraCreationPlan,
     jira_project_key: &str,
-    local_project: &str,
-    area: &str,
-    epic_summary: &str,
+    target: &EpicTarget,
     reporter_account_id: Option<&str>,
 ) -> Result<String, String>
 where
     Gateway: JiraIssueGateway,
     F: FnMut(JiraCreateProgress),
 {
+    let [epic_summary, fallback_summary] = target.searchable_summaries();
     let jql = format!(
-        "project = {} AND summary ~ \"{}\" ORDER BY created DESC",
+        "project = {} AND (summary ~ \"{}\" OR summary ~ \"{}\") ORDER BY created DESC",
         escape_jql_identifier(jira_project_key),
-        escape_jql_string(epic_summary)
+        escape_jql_string(&epic_summary),
+        escape_jql_string(&fallback_summary)
     );
     let search_response = gateway.search_jql(&jql, 20)?;
-    if let Some(existing_epic) = search_response.results.into_iter().find(|issue| {
-        issue.summary == epic_summary
-            && issue_type_name_matches(&issue.issue_type, IssueTypeRole::Epic)
-    }) {
+    let matching_epics = search_response
+        .results
+        .into_iter()
+        .filter(|issue| issue_type_name_matches(&issue.issue_type, IssueTypeRole::Epic))
+        .collect::<Vec<_>>();
+    if let Some(existing_epic) = matching_epics
+        .iter()
+        .find(|issue| issue.summary == epic_summary)
+        .or_else(|| {
+            matching_epics
+                .iter()
+                .find(|issue| target.matches_existing_summary(&issue.summary))
+        })
+    {
         recorder.record_event(
             None,
             "jira.epic.resolved",
             "succeeded",
-            jira_epic_resolved_detail(&existing_epic.key, epic_summary, "search"),
+            jira_epic_resolved_detail(&existing_epic.key, &epic_summary, "search"),
         )?;
-        return Ok(existing_epic.key);
+        return Ok(existing_epic.key.clone());
     }
 
     let payload = build_epic_payload(
         plan,
         jira_project_key,
-        local_project,
-        area,
-        epic_summary,
+        &target.local_project,
+        &target.area,
+        &epic_summary,
         recorder.sync_attempt_id(),
         reporter_account_id,
     );
@@ -811,7 +822,7 @@ where
         None,
         "jira.epic.created",
         "succeeded",
-        jira_epic_detail(&created_epic.key, epic_summary),
+        jira_epic_detail(&created_epic.key, &epic_summary),
     )?;
     Ok(created_epic.key)
 }
@@ -1498,6 +1509,9 @@ mod tests {
                 name: "Jira sync".to_string(),
             })
             .expect("tray creates");
+        tray_repository
+            .update_epic_scopes(&tray.id, Some("Demo Version 1"), Some("Demos Version 1"))
+            .expect("tray scopes update");
         let task = task_repository
             .create(NewTask {
                 tray_id: tray.id.clone(),
@@ -1534,7 +1548,7 @@ mod tests {
         assert_eq!(gateway.created_payloads.len(), 2);
         assert_eq!(
             gateway.created_payloads[0]["fields"]["summary"],
-            json!("[STT] Bug")
+            json!("[STT] [Bug] Demo Version 1")
         );
         assert_eq!(
             gateway.created_payloads[0]["fields"]["labels"],
@@ -1560,6 +1574,267 @@ mod tests {
             gateway.created_payloads[1]["properties"][0]["value"]["localTaskId"],
             json!(task.id)
         );
+    }
+
+    #[test]
+    fn creates_epics_with_project_area_and_scope_targets() {
+        let connection = open_in_memory_database().expect("database opens");
+        let tray_repository = TrayRepository::new(&connection);
+        let task_repository = TaskRepository::new(&connection);
+        let tray = tray_repository
+            .create(NewTray {
+                name: "Scoped sync".to_string(),
+            })
+            .expect("tray creates");
+        tray_repository
+            .update_epic_scopes(&tray.id, Some("Demo Versión 1"), Some("Demos Versión 1"))
+            .expect("tray scopes update");
+        task_repository
+            .create(NewTask {
+                tray_id: tray.id.clone(),
+                project: "STT".to_string(),
+                area: "Programacion".to_string(),
+                title: "Build demo flow".to_string(),
+                priority: "High".to_string(),
+                issue_type: "Story".to_string(),
+                content_language: "Spanish".to_string(),
+            })
+            .expect("task creates");
+        task_repository
+            .create(NewTask {
+                tray_id: tray.id.clone(),
+                project: "Transversal".to_string(),
+                area: "Animacion".to_string(),
+                title: "Coordinate animation demo".to_string(),
+                priority: "Medium".to_string(),
+                issue_type: "Story".to_string(),
+                content_language: "Spanish".to_string(),
+            })
+            .expect("task creates");
+        let mut gateway = FakeJiraGateway::new();
+        gateway.created_keys = vec![
+            "JTFTEST-100".to_string(),
+            "JTFTEST-101".to_string(),
+            "JTFTEST-102".to_string(),
+            "JTFTEST-103".to_string(),
+        ];
+
+        let mut runner = JiraSyncRunner::new(&connection, &mut gateway, "JTFTEST".to_string());
+        let result = runner
+            .create_parent_issues_from_tray(&tray.id, true)
+            .expect("sync succeeds");
+
+        assert_eq!(result.status, "succeeded");
+        assert_eq!(
+            gateway.created_payloads[0]["fields"]["summary"],
+            json!("[STT] [Programacion] Demo Versión 1")
+        );
+        assert_eq!(
+            gateway.created_payloads[2]["fields"]["summary"],
+            json!("[Transversal] [Animacion] Demos Versión 1")
+        );
+    }
+
+    #[test]
+    fn uses_tbd_literal_for_normal_and_transversal_epics() {
+        let connection = open_in_memory_database().expect("database opens");
+        let tray_repository = TrayRepository::new(&connection);
+        let task_repository = TaskRepository::new(&connection);
+        let tray = tray_repository
+            .create(NewTray {
+                name: "TBD sync".to_string(),
+            })
+            .expect("tray creates");
+        tray_repository
+            .update_epic_scopes(&tray.id, Some("[TBD]"), Some("Should not persist"))
+            .expect("tray scopes update");
+        task_repository
+            .create(NewTask {
+                tray_id: tray.id.clone(),
+                project: "PilotLab".to_string(),
+                area: "UI".to_string(),
+                title: "Park UI work".to_string(),
+                priority: "Medium".to_string(),
+                issue_type: "Story".to_string(),
+                content_language: "Spanish".to_string(),
+            })
+            .expect("task creates");
+        task_repository
+            .create(NewTask {
+                tray_id: tray.id.clone(),
+                project: "Transversal".to_string(),
+                area: "Concept".to_string(),
+                title: "Park concept work".to_string(),
+                priority: "Medium".to_string(),
+                issue_type: "Story".to_string(),
+                content_language: "Spanish".to_string(),
+            })
+            .expect("task creates");
+        let mut gateway = FakeJiraGateway::new();
+        gateway.created_keys = vec![
+            "JTFTEST-110".to_string(),
+            "JTFTEST-111".to_string(),
+            "JTFTEST-112".to_string(),
+            "JTFTEST-113".to_string(),
+        ];
+
+        let mut runner = JiraSyncRunner::new(&connection, &mut gateway, "JTFTEST".to_string());
+        let result = runner
+            .create_parent_issues_from_tray(&tray.id, true)
+            .expect("sync succeeds");
+
+        assert_eq!(result.status, "succeeded");
+        assert_eq!(
+            gateway.created_payloads[0]["fields"]["summary"],
+            json!("[PilotLab] [UI] TBD")
+        );
+        assert_eq!(
+            gateway.created_payloads[2]["fields"]["summary"],
+            json!("[Transversal] [Concept] TBD")
+        );
+        let persisted_tray = tray_repository
+            .find_by_id(&tray.id)
+            .expect("tray reads")
+            .expect("tray exists");
+        assert_eq!(persisted_tray.epic_scope.as_deref(), Some("TBD"));
+        assert_eq!(persisted_tray.transversal_epic_scope, None);
+    }
+
+    #[test]
+    fn blocks_jira_creation_when_required_scope_is_missing() {
+        let connection = open_in_memory_database().expect("database opens");
+        let tray_repository = TrayRepository::new(&connection);
+        let task_repository = TaskRepository::new(&connection);
+        let tray = tray_repository
+            .create(NewTray {
+                name: "Missing scope".to_string(),
+            })
+            .expect("tray creates");
+        task_repository
+            .create(NewTask {
+                tray_id: tray.id.clone(),
+                project: "STT".to_string(),
+                area: "Programacion".to_string(),
+                title: "Needs scope".to_string(),
+                priority: "High".to_string(),
+                issue_type: "Story".to_string(),
+                content_language: "Spanish".to_string(),
+            })
+            .expect("task creates");
+        let mut gateway = FakeJiraGateway::new();
+
+        let mut runner = JiraSyncRunner::new(&connection, &mut gateway, "JTFTEST".to_string());
+        let result = runner
+            .create_parent_issues_from_tray(&tray.id, true)
+            .expect("sync returns blocked result");
+
+        assert_eq!(result.status, "blocked");
+        assert!(result
+            .messages
+            .iter()
+            .any(|message| message.contains("missing Epic Scope")));
+        assert!(gateway.created_payloads.is_empty());
+    }
+
+    #[test]
+    fn blocks_only_transversal_groups_when_transversal_scope_is_missing() {
+        let connection = open_in_memory_database().expect("database opens");
+        let tray_repository = TrayRepository::new(&connection);
+        let task_repository = TaskRepository::new(&connection);
+        let tray = tray_repository
+            .create(NewTray {
+                name: "Missing transversal".to_string(),
+            })
+            .expect("tray creates");
+        tray_repository
+            .update_epic_scopes(&tray.id, Some("Demo Versión 1"), None)
+            .expect("tray scopes update");
+        task_repository
+            .create(NewTask {
+                tray_id: tray.id.clone(),
+                project: "STT".to_string(),
+                area: "Programacion".to_string(),
+                title: "Normal task".to_string(),
+                priority: "High".to_string(),
+                issue_type: "Story".to_string(),
+                content_language: "Spanish".to_string(),
+            })
+            .expect("task creates");
+        task_repository
+            .create(NewTask {
+                tray_id: tray.id.clone(),
+                project: "Transversal".to_string(),
+                area: "Animacion".to_string(),
+                title: "Transversal task".to_string(),
+                priority: "Medium".to_string(),
+                issue_type: "Story".to_string(),
+                content_language: "Spanish".to_string(),
+            })
+            .expect("task creates");
+        let mut gateway = FakeJiraGateway::new();
+
+        let mut runner = JiraSyncRunner::new(&connection, &mut gateway, "JTFTEST".to_string());
+        let result = runner
+            .create_parent_issues_from_tray(&tray.id, true)
+            .expect("sync returns blocked result");
+
+        assert_eq!(result.status, "blocked");
+        assert_eq!(
+            result
+                .messages
+                .iter()
+                .filter(|message| message.contains("missing Epic Scope"))
+                .count(),
+            1
+        );
+        assert!(result
+            .messages
+            .iter()
+            .any(|message| message.contains("Transversal task")));
+        assert!(gateway.created_payloads.is_empty());
+    }
+
+    #[test]
+    fn resolves_legacy_epic_without_creating_duplicate() {
+        let connection = open_in_memory_database().expect("database opens");
+        let tray_repository = TrayRepository::new(&connection);
+        let task_repository = TaskRepository::new(&connection);
+        let tray = tray_repository
+            .create(NewTray {
+                name: "Legacy epic".to_string(),
+            })
+            .expect("tray creates");
+        tray_repository
+            .update_epic_scopes(&tray.id, Some("Demo Versión 1"), None)
+            .expect("tray scopes update");
+        task_repository
+            .create(NewTask {
+                tray_id: tray.id.clone(),
+                project: "STT".to_string(),
+                area: "Programacion".to_string(),
+                title: "Use legacy epic".to_string(),
+                priority: "High".to_string(),
+                issue_type: "Story".to_string(),
+                content_language: "Spanish".to_string(),
+            })
+            .expect("task creates");
+        let mut gateway = FakeJiraGateway::new();
+        gateway.search_results = vec![epic_search_result("JTFTEST-90", "[STT] Programacion")];
+        gateway.created_keys = vec!["JTFTEST-91".to_string()];
+
+        let mut runner = JiraSyncRunner::new(&connection, &mut gateway, "JTFTEST".to_string());
+        let result = runner
+            .create_parent_issues_from_tray(&tray.id, true)
+            .expect("sync succeeds");
+
+        assert_eq!(result.status, "succeeded");
+        assert_eq!(gateway.created_payloads.len(), 1);
+        assert_eq!(
+            gateway.created_payloads[0]["fields"]["parent"]["key"],
+            json!("JTFTEST-90")
+        );
+        assert!(gateway.search_jqls[0].contains("[STT] [Programacion] Demo Versión 1"));
+        assert!(gateway.search_jqls[0].contains("[STT] Programacion"));
     }
 
     #[test]
@@ -1594,6 +1869,9 @@ mod tests {
                 name: "Attachment sync".to_string(),
             })
             .expect("tray creates");
+        tray_repository
+            .update_epic_scopes(&tray.id, Some("Demo Version 1"), Some("Demos Version 1"))
+            .expect("tray scopes update");
         let task = task_repository
             .create(NewTask {
                 tray_id: tray.id.clone(),
@@ -1725,6 +2003,9 @@ mod tests {
                 name: "Attachment sync failure".to_string(),
             })
             .expect("tray creates");
+        tray_repository
+            .update_epic_scopes(&tray.id, Some("Demo Version 1"), Some("Demos Version 1"))
+            .expect("tray scopes update");
         let task = task_repository
             .create(NewTask {
                 tray_id: tray.id.clone(),
@@ -1797,6 +2078,9 @@ mod tests {
                 name: "Oversized attachment".to_string(),
             })
             .expect("tray creates");
+        tray_repository
+            .update_epic_scopes(&tray.id, Some("Demo Version 1"), Some("Demos Version 1"))
+            .expect("tray scopes update");
         let task = task_repository
             .create(NewTask {
                 tray_id: tray.id.clone(),
@@ -1859,6 +2143,9 @@ mod tests {
                 name: "Unsafe attachment".to_string(),
             })
             .expect("tray creates");
+        tray_repository
+            .update_epic_scopes(&tray.id, Some("Demo Version 1"), Some("Demos Version 1"))
+            .expect("tray scopes update");
         let task = task_repository
             .create(NewTask {
                 tray_id: tray.id.clone(),
@@ -1928,6 +2215,9 @@ mod tests {
                 name: "AI-only attachment".to_string(),
             })
             .expect("tray creates");
+        tray_repository
+            .update_epic_scopes(&tray.id, Some("Demo Version 1"), Some("Demos Version 1"))
+            .expect("tray scopes update");
         let task = task_repository
             .create(NewTask {
                 tray_id: tray.id.clone(),
@@ -2002,6 +2292,9 @@ mod tests {
                 name: "AI-only missing attachment".to_string(),
             })
             .expect("tray creates");
+        tray_repository
+            .update_epic_scopes(&tray.id, Some("Demo Version 1"), Some("Demos Version 1"))
+            .expect("tray scopes update");
         let task = task_repository
             .create(NewTask {
                 tray_id: tray.id.clone(),
@@ -2057,6 +2350,9 @@ mod tests {
                 name: "Exported mix".to_string(),
             })
             .expect("tray creates");
+        tray_repository
+            .update_epic_scopes(&tray.id, Some("Demo Version 1"), Some("Demos Version 1"))
+            .expect("tray scopes update");
         let exported_task = task_repository
             .create(NewTask {
                 tray_id: tray.id.clone(),
@@ -2124,6 +2420,9 @@ mod tests {
                 name: "Sub-task sync".to_string(),
             })
             .expect("tray creates");
+        tray_repository
+            .update_epic_scopes(&tray.id, Some("Demo Version 1"), Some("Demos Version 1"))
+            .expect("tray scopes update");
         let parent_task = task_repository
             .create(NewTask {
                 tray_id: tray.id.clone(),
@@ -2197,6 +2496,9 @@ mod tests {
                 name: "Sub-task retry".to_string(),
             })
             .expect("tray creates");
+        tray_repository
+            .update_epic_scopes(&tray.id, Some("Demo Version 1"), Some("Demos Version 1"))
+            .expect("tray scopes update");
         let parent_task = task_repository
             .create(NewTask {
                 tray_id: tray.id.clone(),
@@ -2259,6 +2561,9 @@ mod tests {
                 name: "Missing parent key".to_string(),
             })
             .expect("tray creates");
+        tray_repository
+            .update_epic_scopes(&tray.id, Some("Demo Version 1"), Some("Demos Version 1"))
+            .expect("tray scopes update");
         let parent_task = task_repository
             .create(NewTask {
                 tray_id: tray.id.clone(),
@@ -2374,6 +2679,9 @@ mod tests {
                 name: "JTFTEST priority".to_string(),
             })
             .expect("tray creates");
+        tray_repository
+            .update_epic_scopes(&tray.id, Some("Demo Version 1"), Some("Demos Version 1"))
+            .expect("tray scopes update");
         let task = task_repository
             .create(NewTask {
                 tray_id: tray.id.clone(),
@@ -2424,6 +2732,9 @@ mod tests {
                 name: "Priority warning".to_string(),
             })
             .expect("tray creates");
+        tray_repository
+            .update_epic_scopes(&tray.id, Some("Demo Version 1"), Some("Demos Version 1"))
+            .expect("tray scopes update");
         let task = task_repository
             .create(NewTask {
                 tray_id: tray.id.clone(),
@@ -2475,6 +2786,9 @@ mod tests {
                 name: "Needs review".to_string(),
             })
             .expect("tray creates");
+        tray_repository
+            .update_epic_scopes(&tray.id, Some("Demo Version 1"), Some("Demos Version 1"))
+            .expect("tray scopes update");
         let task = task_repository
             .create(NewTask {
                 tray_id: tray.id.clone(),
@@ -2517,6 +2831,9 @@ mod tests {
                 name: "Partial sync".to_string(),
             })
             .expect("tray creates");
+        tray_repository
+            .update_epic_scopes(&tray.id, Some("Demo Version 1"), Some("Demos Version 1"))
+            .expect("tray scopes update");
         let failing_task = task_repository
             .create(NewTask {
                 tray_id: tray.id.clone(),
@@ -2584,6 +2901,9 @@ mod tests {
                 name: "JTFTEST metadata".to_string(),
             })
             .expect("tray creates");
+        tray_repository
+            .update_epic_scopes(&tray.id, Some("Demo Version 1"), Some("Demos Version 1"))
+            .expect("tray scopes update");
         let task = task_repository
             .create(NewTask {
                 tray_id: tray.id.clone(),
@@ -2640,6 +2960,9 @@ mod tests {
                 name: "Remote marker recovery".to_string(),
             })
             .expect("tray creates");
+        tray_repository
+            .update_epic_scopes(&tray.id, Some("Demo Version 1"), Some("Demos Version 1"))
+            .expect("tray scopes update");
         let task = task_repository
             .create(NewTask {
                 tray_id: tray.id.clone(),
@@ -2711,6 +3034,9 @@ mod tests {
                 name: "No marker retry".to_string(),
             })
             .expect("tray creates");
+        tray_repository
+            .update_epic_scopes(&tray.id, Some("Demo Version 1"), Some("Demos Version 1"))
+            .expect("tray scopes update");
         let task = task_repository
             .create(NewTask {
                 tray_id: tray.id.clone(),
@@ -2767,6 +3093,9 @@ mod tests {
                 name: "Marker lookup failure".to_string(),
             })
             .expect("tray creates");
+        tray_repository
+            .update_epic_scopes(&tray.id, Some("Demo Version 1"), Some("Demos Version 1"))
+            .expect("tray scopes update");
         let task = task_repository
             .create(NewTask {
                 tray_id: tray.id.clone(),
@@ -2823,6 +3152,8 @@ mod tests {
         created_payloads: Vec<Value>,
         updated_payloads: Vec<(String, Value)>,
         uploaded_attachments: Vec<(String, String, Option<String>, Vec<u8>)>,
+        search_results: Vec<JqlResult>,
+        search_jqls: Vec<String>,
         created_keys: Vec<String>,
         create_failures: Vec<String>,
         update_failures: Vec<String>,
@@ -2843,6 +3174,8 @@ mod tests {
                 created_payloads: Vec::new(),
                 updated_payloads: Vec::new(),
                 uploaded_attachments: Vec::new(),
+                search_results: Vec::new(),
+                search_jqls: Vec::new(),
                 created_keys: Vec::new(),
                 create_failures: Vec::new(),
                 update_failures: Vec::new(),
@@ -2875,11 +3208,12 @@ mod tests {
 
         fn search_jql(
             &mut self,
-            _jql: &str,
+            jql: &str,
             _max_results: usize,
         ) -> Result<JqlSearchResponse, String> {
+            self.search_jqls.push(jql.to_string());
             Ok(JqlSearchResponse {
-                results: Vec::<JqlResult>::new(),
+                results: self.search_results.clone(),
                 is_last: true,
                 next_page_token: None,
                 warning_messages: Vec::new(),
@@ -3097,6 +3431,18 @@ mod tests {
                 })
                 .collect(),
             schema: None,
+        }
+    }
+
+    fn epic_search_result(key: &str, summary: &str) -> JqlResult {
+        JqlResult {
+            key: key.to_string(),
+            project: "JTFTEST".to_string(),
+            issue_type: "Epic".to_string(),
+            priority: "Medium".to_string(),
+            status: "To Do".to_string(),
+            summary: summary.to_string(),
+            assignee: "Unassigned".to_string(),
         }
     }
 }

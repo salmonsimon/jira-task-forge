@@ -83,7 +83,7 @@ This document captures the product scope decisions from the grill session. UI co
 ## Trays
 
 - The app supports multiple named tray drafts.
-- Creating a new tray immediately opens the normal tray editor with a temporary highlighted name such as `New tray`, ready to overwrite by typing.
+- Creating a new tray opens a guided modal that asks for tray name and canonical Epic Scope first, then asks for the confirmed Transversal plural scope when the canonical scope is not `TBD`. The Transversal suggestion may be AI-assisted, but the user must review or edit it before the tray is created.
 - Tray states are:
   - `Active`
   - `Needs attention`
@@ -254,7 +254,7 @@ This document captures the product scope decisions from the grill session. UI co
 - Sync progress should be visible and non-blocking.
 - The user should not need to press buttons to advance normal sync.
 - If a decision is required during sync, pause only that part and show an actionable warning.
-- Jira sync should continue with healthy `Project + Area` groups when another
+- Jira sync should continue with healthy `Project + Area + Scope` groups when another
   group is paused by epic lookup/creation failure.
 - Successful tray CSV exports should show a prominent centered confirmation
   notification with the exported task count and saved filename.

@@ -25,7 +25,8 @@ The initial schema should store these concepts separately:
 - `tasks`, with stable local ids, sync status, Jira issue link fields, and task
   order within a tray/project group
 - `categories` for projects and areas, including hidden/ignored state
-- `epic_mappings` from project + area to Jira epic identity
+- `epic_mappings` from project + area + optional scope to Jira epic identity,
+  preserving legacy project + area mappings for already-created data
 - `attachments`, with original file metadata and managed relative paths stored
   separately from file contents
 - `attachment_variants`, with accepted compressed derivatives and metadata

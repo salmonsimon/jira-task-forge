@@ -59,7 +59,7 @@ Una opcion guardada de **Project** o **Area** que aparece en los controles de ca
 _Avoid_: Label
 
 **Epic Mapping**:
-La asociacion local entre **Project** + **Area** y una epic existente o nueva de Jira con nombre `[{Project}] {Area}`. **Jira Sync** debe resolver esta asociacion antes de crear las tareas hijas.
+La asociacion local entre **Project** + **Area** + **Scope** y una epic existente o nueva de Jira con nombre `[{Project}] [{Area}] {Scope}`. **Jira Sync** debe resolver esta asociacion antes de crear las tareas hijas. Las epics legacy `[{Project}] {Area}` siguen siendo compatibles para datos ya existentes.
 _Avoid_: hardcoded Jira key
 
 **Priority**:
@@ -139,7 +139,7 @@ _Avoid_: content version history
   uploaded to Jira as issue content or comments
 - A **Local Task** may have zero or more attachments with **Attachment Purpose**
 - A **Local Task** may have zero or more sub-tasks
-- A **Project** and **Area** may resolve to one **Epic Mapping**
+- A **Project**, **Area**, and **Scope** may resolve to one **Epic Mapping**
 - A **Local Task** must have a resolved **Epic Mapping** before **Jira Sync**
   creates its linked **Jira Issue**
 - A **CSV Export** contains one or more **Local Tasks**

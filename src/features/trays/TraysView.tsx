@@ -7,16 +7,19 @@ import { groupTasksByProject } from "./groupTasksByProject";
 import { ProjectTaskGroup } from "./ProjectTaskGroup";
 import { QuickCapture } from "./QuickCapture";
 import { TraySelector } from "./TraySelector";
+import type { CreateTrayInput } from "./CreateTrayDialog";
 
 export function TraysView({
   trays,
   selectedTray,
   onOpenTray,
   onCreateTray,
+  onSuggestTransversalScope,
   onRenameTray,
   onArchiveTray,
   onRestoreTray,
   onDeleteTray,
+  onUpdateTrayEpicScopes,
   onExportCsv,
   onCreateInJira,
   isRunningJiraPreflight,
@@ -36,11 +39,13 @@ export function TraysView({
   trays: Tray[];
   selectedTray: Tray | null;
   onOpenTray: (tray: Tray) => void;
-  onCreateTray: () => void;
+  onCreateTray: (input: CreateTrayInput) => void | Promise<void>;
+  onSuggestTransversalScope?: (epicScope: string) => Promise<string>;
   onRenameTray: (trayId: string, name: string) => void;
   onArchiveTray: (trayId: string) => void;
   onRestoreTray: (trayId: string) => void;
   onDeleteTray: (trayId: string) => void;
+  onUpdateTrayEpicScopes: (trayId: string, epicScope: string | null, transversalEpicScope: string | null) => void | Promise<void>;
   onExportCsv: (tray: Tray) => void | Promise<void>;
   onCreateInJira: (tray: Tray) => void | Promise<void>;
   isRunningJiraPreflight: boolean;
@@ -69,6 +74,7 @@ export function TraysView({
         trays={trays}
         onOpenTray={onOpenTray}
         onCreateTray={onCreateTray}
+        onSuggestTransversalScope={onSuggestTransversalScope}
         onRenameTray={onRenameTray}
         onArchiveTray={onArchiveTray}
         onRestoreTray={onRestoreTray}
@@ -169,8 +175,10 @@ export function TraysView({
               <ProjectTaskGroup
                 key={project}
                 project={project}
+                tray={selectedTray}
                 tasks={tasks}
                 areas={areas}
+                onUpdateTrayEpicScopes={onUpdateTrayEpicScopes}
                 selectedTaskId={selectedTaskId}
                 onOpenTask={onOpenTask}
                 onUpdateTask={onUpdateTask}

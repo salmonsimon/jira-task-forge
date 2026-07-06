@@ -49,7 +49,8 @@ describe("preflight domain helpers", () => {
 
   it("classifies missing description, epic, and failed retry as resolvable", () => {
     const warnings = classifyTaskPreflightWarnings(
-      task({ descriptionStatus: "Missing", epic: undefined, syncStatus: "Failed" })
+      task({ descriptionStatus: "Missing", epic: undefined, syncStatus: "Failed" }),
+      { epicScope: "Demo Version 1" }
     );
 
     expect(warnings.map((warning) => warning.code)).toEqual([
@@ -73,9 +74,54 @@ describe("preflight domain helpers", () => {
   });
 
   it("flags exported tasks as duplicate risk", () => {
-    const warnings = classifyTrayPreflightWarnings([task({ syncStatus: "Exported" })]);
+    const warnings = classifyTrayPreflightWarnings({
+      id: "tray-1",
+      name: "Tray",
+      state: "Active",
+      epicScope: "Demo Version 1",
+      summary: "1 task",
+      updatedAt: "Just now",
+      tasks: [task({ syncStatus: "Exported" })]
+    });
 
     expect(warnings.some((warning) => warning.code === "exported-duplicate-risk")).toBe(true);
+  });
+
+  it("blocks unresolved parent tasks when epic scope is missing", () => {
+    const warnings = classifyTrayPreflightWarnings([task({ epic: undefined })]);
+
+    expect(warnings).toContainEqual({
+      code: "missing-epic-scope",
+      severity: "blocking",
+      taskId: "task-1",
+      message: "Epic Scope is required before creating this task in Jira."
+    });
+    expect(warnings.some((warning) => warning.code === "missing-epic")).toBe(false);
+  });
+
+  it("blocks only Transversal tasks when transversal scope is skipped", () => {
+    const warnings = classifyTrayPreflightWarnings({
+      id: "tray-1",
+      name: "Tray",
+      state: "Active",
+      epicScope: "Demo Version 1",
+      summary: "2 tasks",
+      updatedAt: "Just now",
+      tasks: [
+        task({ id: "normal", epic: undefined, project: "STT" }),
+        task({ id: "transversal", epic: undefined, project: "Transversal" })
+      ]
+    });
+
+    expect(warnings.filter((warning) => warning.code === "missing-epic-scope")).toEqual([
+      {
+        code: "missing-epic-scope",
+        severity: "blocking",
+        taskId: "transversal",
+        message: "Epic Scope is required before creating this task in Jira."
+      }
+    ]);
+    expect(warnings.filter((warning) => warning.code === "missing-epic").map((warning) => warning.taskId)).toEqual(["normal"]);
   });
 
   it("does not require descriptions or direct epic mappings for sub-tasks", () => {
@@ -111,16 +157,25 @@ describe("preflight domain helpers", () => {
       task({ id: "task-2", project: "STT", area: "3D", title: "Model ticket machine", epic: undefined }),
       task({ id: "task-3", project: "PilotLab", area: "Bug", title: "Fix onboarding", epic: undefined })
     ];
-    const warnings = classifyTrayPreflightWarnings(tasks).filter((warning) => warning.code === "missing-epic");
+    const tray = {
+      id: "tray-1",
+      name: "Tray",
+      state: "Active" as const,
+      epicScope: "Demo Version 1",
+      summary: "3 tasks",
+      updatedAt: "Just now",
+      tasks
+    };
+    const warnings = classifyTrayPreflightWarnings(tray).filter((warning) => warning.code === "missing-epic");
 
-    expect(groupEpicResolutionWarnings(warnings, tasks)).toEqual([
+    expect(groupEpicResolutionWarnings(warnings, tasks, tray)).toEqual([
       {
-        target: "[STT] 3D",
+        target: "[STT] [3D] Demo Version 1",
         taskTitles: ["Model vending machine", "Model ticket machine"],
         warnings: [warnings[0], warnings[1]]
       },
       {
-        target: "[PilotLab] Bug",
+        target: "[PilotLab] [Bug] Demo Version 1",
         taskTitles: ["Fix onboarding"],
         warnings: [warnings[2]]
       }

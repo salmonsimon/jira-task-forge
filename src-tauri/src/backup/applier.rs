@@ -303,15 +303,16 @@ fn import_epic_mappings(
         imported += connection.execute(
             "
             INSERT OR IGNORE INTO epic_mappings (
-                id, project_category_id, area_category_id, jira_epic_key, jira_epic_url,
+                id, project_category_id, area_category_id, scope, jira_epic_key, jira_epic_url,
                 synced_at, created_at, updated_at
             )
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
             ",
             params![
                 mapping.id,
                 mapping.project_category_id,
                 mapping.area_category_id,
+                mapping.scope,
                 mapping.jira_epic_key,
                 mapping.jira_epic_url,
                 mapping.synced_at,

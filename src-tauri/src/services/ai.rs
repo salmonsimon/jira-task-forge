@@ -1,7 +1,7 @@
 use super::credentials::AI_API_KEY_ACCOUNT;
 use super::AppServices;
 use crate::integrations::ai::{ai_model_or_default, AiClient, AiCredentials, AiProvider};
-use crate::models::{AssistedDescriptionDraft, JqlAiDraft};
+use crate::models::{AssistedDescriptionDraft, EpicScopePluralSuggestion, JqlAiDraft};
 use crate::repositories::{CategoryRepository, TaskRepository};
 
 impl AppServices {
@@ -13,6 +13,19 @@ impl AppServices {
         let client = self.ai_client(provider)?;
         let model = ai_model_or_default(provider, &settings.ai_model);
         client.draft_jql(&model, prompt, Some(&settings.jira_creation_project_key))
+    }
+
+    pub fn suggest_transversal_epic_scope(
+        &self,
+        epic_scope: &str,
+    ) -> Result<EpicScopePluralSuggestion, String> {
+        let settings = self
+            .get_app_settings()
+            .map_err(|error| format!("Could not load AI settings: {error}"))?;
+        let provider = AiProvider::from_settings_value(&settings.ai_provider)?;
+        let client = self.ai_client(provider)?;
+        let model = ai_model_or_default(provider, &settings.ai_model);
+        client.suggest_transversal_epic_scope(&model, epic_scope)
     }
 
     pub fn generate_task_description(

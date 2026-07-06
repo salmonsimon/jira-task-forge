@@ -27,6 +27,22 @@ pub fn rename_tray(
 }
 
 #[tauri::command]
+pub fn update_tray_epic_scopes(
+    services: State<'_, AppServices>,
+    tray_id: String,
+    epic_scope: Option<String>,
+    transversal_epic_scope: Option<String>,
+) -> Result<Option<Tray>, String> {
+    services
+        .update_tray_epic_scopes(
+            &tray_id,
+            epic_scope.as_deref(),
+            transversal_epic_scope.as_deref(),
+        )
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 pub fn archive_tray(
     services: State<'_, AppServices>,
     tray_id: String,

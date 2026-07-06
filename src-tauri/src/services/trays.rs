@@ -19,6 +19,20 @@ impl AppServices {
         TrayRepository::new(&connection).update_name(tray_id, name)
     }
 
+    pub fn update_tray_epic_scopes(
+        &self,
+        tray_id: &str,
+        epic_scope: Option<&str>,
+        transversal_epic_scope: Option<&str>,
+    ) -> DbResult<Option<Tray>> {
+        let connection = self.connection();
+        TrayRepository::new(&connection).update_epic_scopes(
+            tray_id,
+            epic_scope,
+            transversal_epic_scope,
+        )
+    }
+
     pub fn archive_tray(&self, tray_id: &str) -> DbResult<Option<Tray>> {
         let connection = self.connection();
         TrayRepository::new(&connection).archive(tray_id)
