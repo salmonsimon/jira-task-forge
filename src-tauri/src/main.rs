@@ -28,6 +28,8 @@ pub fn run() {
                 .path()
                 .app_data_dir()
                 .map_err(|error| format!("failed to resolve app data directory: {error}"))?;
+            attachment_storage::cleanup_stale_attachment_staging_files(&app_data_dir)
+                .map_err(|error| format!("failed to clean stale attachment staging: {error}"))?;
             let connection = db::open_app_database(&app_data_dir)
                 .map_err(|error| format!("failed to open app database: {error}"))?;
 

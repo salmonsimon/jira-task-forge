@@ -1,4 +1,7 @@
 use super::AppServices;
+use crate::attachment_storage::{
+    complete_backup_import_staging, fail_backup_import_staging, stage_backup_import_file,
+};
 use crate::backup::{
     export_backup, import_backup, BackupExportResult, BackupFile, BackupImportResult,
 };
@@ -33,11 +36,36 @@ impl AppServices {
             return Err("Backup path cannot be empty.".to_string());
         }
 
-        let contents = std::fs::read_to_string(path)
-            .map_err(|error| format!("Could not read backup file: {error}"))?;
-        let backup: BackupFile = serde_json::from_str(&contents)
-            .map_err(|error| format!("Could not parse backup file: {error}"))?;
+        let staging =
+            stage_backup_import_file(self.app_data_dir(), std::path::Path::new(path.trim()))
+                .map_err(|error| error.to_string())?;
+        let contents = match std::fs::read_to_string(staging.staged_file()) {
+            Ok(contents) => contents,
+            Err(error) => {
+                let message = format!("Could not read backup file: {error}");
+                let _ = fail_backup_import_staging(&staging, &message);
+                return Err(message);
+            }
+        };
+        let backup: BackupFile = match serde_json::from_str(&contents) {
+            Ok(backup) => backup,
+            Err(error) => {
+                let message = format!("Could not parse backup file: {error}");
+                let _ = fail_backup_import_staging(&staging, &message);
+                return Err(message);
+            }
+        };
         let mut connection = self.connection();
-        import_backup(&mut connection, backup).map_err(|error| error.to_string())
+        match import_backup(&mut connection, backup) {
+            Ok(result) => {
+                complete_backup_import_staging(&staging).map_err(|error| error.to_string())?;
+                Ok(result)
+            }
+            Err(error) => {
+                let message = error.to_string();
+                let _ = fail_backup_import_staging(&staging, &message);
+                Err(message)
+            }
+        }
     }
 }

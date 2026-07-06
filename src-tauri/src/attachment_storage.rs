@@ -1,5 +1,6 @@
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use uuid::Uuid;
 
@@ -9,6 +10,12 @@ pub const JIRA_CLOUD_FALLBACK_ATTACHMENT_UPLOAD_LIMIT_BYTES: u64 = 1_000_000_000
 pub const PERSONAL_V1_JIRA_ATTACHMENT_MAX_BYTES: u64 = 100 * 1024 * 1024;
 
 const ATTACHMENTS_DIR: &str = "attachments";
+const STAGING_DIR: &str = "staging";
+const IMPORTS_STAGING_DIR: &str = "imports";
+const ACTIVE_STAGING_MARKER: &str = ".jtf-staging-active";
+const FAILURE_EVIDENCE_FILE: &str = "import-error.txt";
+const STAGED_IMPORT_FILE: &str = "backup.json";
+const DEFAULT_STALE_STAGING_AGE: Duration = Duration::from_secs(24 * 60 * 60);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AttachmentFileGrant {
@@ -28,6 +35,18 @@ pub struct ManagedAttachmentFile {
     pub size_bytes: u64,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AttachmentImportStaging {
+    operation_dir: PathBuf,
+    staged_file: PathBuf,
+}
+
+impl AttachmentImportStaging {
+    pub fn staged_file(&self) -> &Path {
+        self.staged_file.as_path()
+    }
+}
+
 pub fn managed_attachment_relative_path(task_id: &str, filename: &str) -> String {
     [
         ATTACHMENTS_DIR.to_string(),
@@ -35,6 +54,96 @@ pub fn managed_attachment_relative_path(task_id: &str, filename: &str) -> String
         format!("{}-{}", Uuid::new_v4(), sanitize_path_segment(filename)),
     ]
     .join("/")
+}
+
+pub fn stage_backup_import_file(
+    app_data_dir: &Path,
+    source_path: &Path,
+) -> DbResult<AttachmentImportStaging> {
+    let source_metadata = fs::symlink_metadata(source_path)?;
+    if source_metadata.file_type().is_symlink() {
+        return Err(DbError::InvalidData(
+            "Backup import source must not be a symbolic link.".to_string(),
+        ));
+    }
+    if !source_metadata.is_file() {
+        return Err(DbError::InvalidData(
+            "Backup import source must be a file.".to_string(),
+        ));
+    }
+
+    let staging_root = attachment_staging_root(app_data_dir);
+    ensure_staging_root_is_safe(&staging_root)?;
+
+    let operation_dir = staging_root
+        .join(IMPORTS_STAGING_DIR)
+        .join(Uuid::new_v4().to_string());
+    fs::create_dir_all(&operation_dir)?;
+    ensure_path_stays_under_staging_root(&staging_root, &operation_dir)?;
+
+    fs::write(operation_dir.join(ACTIVE_STAGING_MARKER), b"active\n")?;
+    let staged_file = operation_dir.join(STAGED_IMPORT_FILE);
+    fs::copy(source_path, &staged_file)?;
+
+    Ok(AttachmentImportStaging {
+        operation_dir,
+        staged_file,
+    })
+}
+
+pub fn complete_backup_import_staging(staging: &AttachmentImportStaging) -> DbResult<()> {
+    remove_staging_operation_dir(&staging.operation_dir)
+}
+
+pub fn fail_backup_import_staging(
+    staging: &AttachmentImportStaging,
+    error_message: &str,
+) -> DbResult<()> {
+    if staging.staged_file.exists() {
+        remove_file_without_following_symlink(&staging.staged_file)?;
+    }
+    let evidence = sanitize_staging_failure_evidence(error_message);
+    fs::write(staging.operation_dir.join(FAILURE_EVIDENCE_FILE), evidence)?;
+    let marker = staging.operation_dir.join(ACTIVE_STAGING_MARKER);
+    if marker.exists() {
+        remove_file_without_following_symlink(&marker)?;
+    }
+    Ok(())
+}
+
+pub fn cleanup_stale_attachment_staging_files(app_data_dir: &Path) -> DbResult<()> {
+    cleanup_stale_attachment_staging_files_older_than(app_data_dir, DEFAULT_STALE_STAGING_AGE)
+}
+
+pub fn cleanup_stale_attachment_staging_files_older_than(
+    app_data_dir: &Path,
+    stale_after: Duration,
+) -> DbResult<()> {
+    let staging_root = attachment_staging_root(app_data_dir);
+    match fs::symlink_metadata(&staging_root) {
+        Ok(_) => ensure_staging_root_is_safe(&staging_root)?,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(error.into()),
+    }
+
+    for entry in fs::read_dir(&staging_root)? {
+        let entry = entry?;
+        let file_type = entry.file_type()?;
+        let path = entry.path();
+        if file_type.is_symlink() {
+            remove_file_without_following_symlink(&path)?;
+            continue;
+        }
+        if file_type.is_dir() {
+            cleanup_stale_staging_children(&staging_root, &path, stale_after)?;
+            remove_dir_if_empty(&path)?;
+        } else if is_stale(&entry.metadata()?, stale_after)? {
+            remove_file_without_following_symlink(&path)?;
+        }
+    }
+
+    remove_dir_if_empty(&staging_root)?;
+    Ok(())
 }
 
 pub fn validate_managed_relative_path(relative_path: &str) -> DbResult<String> {
@@ -195,6 +304,128 @@ pub fn remove_managed_attachment_file(app_data_dir: &Path, relative_path: &str) 
     Ok(())
 }
 
+fn attachment_staging_root(app_data_dir: &Path) -> PathBuf {
+    app_data_dir.join(ATTACHMENTS_DIR).join(STAGING_DIR)
+}
+
+fn ensure_staging_root_is_safe(staging_root: &Path) -> DbResult<()> {
+    match fs::symlink_metadata(staging_root) {
+        Ok(metadata) => {
+            if metadata.file_type().is_symlink() {
+                return Err(DbError::InvalidData(
+                    "attachment staging root must not be a symbolic link".to_string(),
+                ));
+            }
+            if !metadata.is_dir() {
+                return Err(DbError::InvalidData(
+                    "attachment staging root must be a directory".to_string(),
+                ));
+            }
+            Ok(())
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            fs::create_dir_all(staging_root)?;
+            Ok(())
+        }
+        Err(error) => Err(error.into()),
+    }
+}
+
+fn ensure_path_stays_under_staging_root(staging_root: &Path, path: &Path) -> DbResult<()> {
+    let canonical_root = staging_root.canonicalize()?;
+    let canonical_path = path.canonicalize()?;
+    if !canonical_path.starts_with(&canonical_root) {
+        return Err(DbError::InvalidData(
+            "attachment staging path escapes managed storage".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+fn cleanup_stale_staging_children(
+    staging_root: &Path,
+    parent: &Path,
+    stale_after: Duration,
+) -> DbResult<()> {
+    for entry in fs::read_dir(parent)? {
+        let entry = entry?;
+        let file_type = entry.file_type()?;
+        let path = entry.path();
+        if file_type.is_symlink() {
+            remove_file_without_following_symlink(&path)?;
+            continue;
+        }
+        if file_type.is_dir() {
+            ensure_path_stays_under_staging_root(staging_root, &path)?;
+            let marker = path.join(ACTIVE_STAGING_MARKER);
+            if marker.exists() && is_stale(&fs::metadata(&marker)?, stale_after)? {
+                remove_staging_operation_dir(&path)?;
+            }
+        } else if is_stale(&entry.metadata()?, stale_after)? {
+            remove_file_without_following_symlink(&path)?;
+        }
+    }
+    Ok(())
+}
+
+fn remove_staging_operation_dir(operation_dir: &Path) -> DbResult<()> {
+    if !operation_dir.exists() {
+        return Ok(());
+    }
+    let metadata = fs::symlink_metadata(operation_dir)?;
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        return Err(DbError::InvalidData(
+            "attachment staging operation path must be a directory".to_string(),
+        ));
+    }
+    fs::remove_dir_all(operation_dir)?;
+    Ok(())
+}
+
+fn remove_file_without_following_symlink(path: &Path) -> DbResult<()> {
+    match fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error.into()),
+    }
+}
+
+fn remove_dir_if_empty(path: &Path) -> DbResult<()> {
+    match fs::remove_dir(path) {
+        Ok(()) => Ok(()),
+        Err(error)
+            if matches!(
+                error.kind(),
+                std::io::ErrorKind::NotFound | std::io::ErrorKind::DirectoryNotEmpty
+            ) =>
+        {
+            Ok(())
+        }
+        Err(error) => Err(error.into()),
+    }
+}
+
+fn is_stale(metadata: &fs::Metadata, stale_after: Duration) -> DbResult<bool> {
+    let modified = metadata.modified()?;
+    Ok(modified.elapsed().unwrap_or_default() >= stale_after)
+}
+
+fn sanitize_staging_failure_evidence(error_message: &str) -> String {
+    let sanitized = error_message
+        .chars()
+        .map(|character| {
+            if character.is_control() && character != '\n' {
+                ' '
+            } else {
+                character
+            }
+        })
+        .collect::<String>();
+    let sanitized = sanitized.trim();
+    let clipped = sanitized.chars().take(2_000).collect::<String>();
+    format!("Import failed before staged attachment bytes could be retained.\nError: {clipped}\n")
+}
+
 pub fn sanitize_attachment_audit_name(filename: &str) -> String {
     let sanitized = filename
         .chars()
@@ -244,7 +475,14 @@ fn sanitize_path_segment(value: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{managed_attachment_relative_path, validate_managed_relative_path};
+    use super::{
+        cleanup_stale_attachment_staging_files_older_than, complete_backup_import_staging,
+        fail_backup_import_staging, managed_attachment_relative_path, stage_backup_import_file,
+        validate_managed_relative_path,
+    };
+    use std::fs;
+    use std::time::Duration;
+    use uuid::Uuid;
 
     #[test]
     fn validates_managed_attachment_relative_paths() {
@@ -280,5 +518,112 @@ mod tests {
         assert!(relative_path.starts_with("attachments/"));
         assert!(!relative_path.contains(".."));
         validate_managed_relative_path(&relative_path).expect("generated path validates");
+    }
+
+    #[test]
+    fn successful_import_staging_is_removed_after_completion() {
+        let app_data_dir =
+            std::env::temp_dir().join(format!("jtf-staging-success-{}", Uuid::new_v4()));
+        let source = app_data_dir.join("source-backup.json");
+        fs::create_dir_all(&app_data_dir).expect("app data dir creates");
+        fs::write(&source, "{}").expect("source backup writes");
+
+        let staging = stage_backup_import_file(&app_data_dir, &source).expect("backup stages");
+        assert!(staging.staged_file().exists());
+        let operation_dir = staging
+            .staged_file()
+            .parent()
+            .expect("staged file has operation dir")
+            .to_path_buf();
+
+        complete_backup_import_staging(&staging).expect("staging completes");
+
+        assert!(!operation_dir.exists());
+        fs::remove_dir_all(&app_data_dir).expect("app data cleanup");
+    }
+
+    #[test]
+    fn failed_import_staging_keeps_error_evidence_without_file_bytes() {
+        let app_data_dir =
+            std::env::temp_dir().join(format!("jtf-staging-failure-{}", Uuid::new_v4()));
+        let source = app_data_dir.join("source-backup.json");
+        fs::create_dir_all(&app_data_dir).expect("app data dir creates");
+        fs::write(&source, "{\"bad\":").expect("source backup writes");
+
+        let staging = stage_backup_import_file(&app_data_dir, &source).expect("backup stages");
+        let operation_dir = staging
+            .staged_file()
+            .parent()
+            .expect("staged file has operation dir")
+            .to_path_buf();
+
+        fail_backup_import_staging(&staging, "parse failed").expect("failure records evidence");
+
+        assert!(!staging.staged_file().exists());
+        let evidence =
+            fs::read_to_string(operation_dir.join("import-error.txt")).expect("evidence reads");
+        assert!(evidence.contains("parse failed"));
+        fs::remove_dir_all(&app_data_dir).expect("app data cleanup");
+    }
+
+    #[test]
+    fn stale_staging_cleanup_is_idempotent_and_removes_interrupted_operations() {
+        let app_data_dir =
+            std::env::temp_dir().join(format!("jtf-staging-stale-{}", Uuid::new_v4()));
+        let source = app_data_dir.join("source-backup.json");
+        fs::create_dir_all(&app_data_dir).expect("app data dir creates");
+        fs::write(&source, "{}").expect("source backup writes");
+        let staging = stage_backup_import_file(&app_data_dir, &source).expect("backup stages");
+        let operation_dir = staging
+            .staged_file()
+            .parent()
+            .expect("staged file has operation dir")
+            .to_path_buf();
+
+        cleanup_stale_attachment_staging_files_older_than(&app_data_dir, Duration::ZERO)
+            .expect("stale cleanup succeeds");
+        cleanup_stale_attachment_staging_files_older_than(&app_data_dir, Duration::ZERO)
+            .expect("stale cleanup is idempotent");
+
+        assert!(!operation_dir.exists());
+        fs::remove_dir_all(&app_data_dir).expect("app data cleanup");
+    }
+
+    #[test]
+    fn staging_cleanup_rejects_symlinked_staging_root_without_touching_target() {
+        let app_data_dir =
+            std::env::temp_dir().join(format!("jtf-staging-symlink-{}", Uuid::new_v4()));
+        let outside_dir =
+            std::env::temp_dir().join(format!("jtf-staging-outside-{}", Uuid::new_v4()));
+        let outside_file = outside_dir.join("sentinel.txt");
+        fs::create_dir_all(app_data_dir.join("attachments")).expect("attachments dir creates");
+        fs::create_dir_all(&outside_dir).expect("outside dir creates");
+        fs::write(&outside_file, "keep").expect("outside file writes");
+
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(
+            &outside_dir,
+            app_data_dir.join("attachments").join("staging"),
+        )
+        .expect("staging symlink creates");
+
+        #[cfg(windows)]
+        std::os::windows::fs::symlink_dir(
+            &outside_dir,
+            app_data_dir.join("attachments").join("staging"),
+        )
+        .expect("staging symlink creates");
+
+        let error =
+            cleanup_stale_attachment_staging_files_older_than(&app_data_dir, Duration::ZERO)
+                .expect_err("symlinked root rejected");
+
+        assert!(error.to_string().contains("staging root"));
+        assert_eq!(
+            fs::read_to_string(&outside_file).expect("outside file remains"),
+            "keep"
+        );
+        fs::remove_dir_all(&app_data_dir).expect("app data cleanup");
+        fs::remove_dir_all(&outside_dir).expect("outside cleanup");
     }
 }
