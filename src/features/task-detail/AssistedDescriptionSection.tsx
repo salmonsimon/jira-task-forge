@@ -1,5 +1,5 @@
 import { Check, ChevronDown, Eye, Loader2, MessageCircle, Pencil, Sparkles, X } from "lucide-react";
-import { useEffect, useMemo, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useEffect, useMemo, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Button, FeedbackNote, IconButton } from "../../components/ui";
 import { appOverlayLayers, useAppOverlay } from "../../lib/app-overlays";
@@ -978,6 +978,82 @@ function ProposalLogList({ entries }: { entries: DescriptionProposalLogEntry[] }
   );
 }
 
+type TaskDetailNestedModalShellProps = {
+  badges?: ReactNode;
+  busyOverlay?: ReactNode;
+  children: ReactNode;
+  dataDescriptionEditor?: boolean;
+  footer?: ReactNode;
+  icon: ReactNode;
+  maxWidthClassName: string;
+  onClose: () => void;
+  overlay: ReturnType<typeof useAppOverlay>;
+  subtitle?: ReactNode;
+  surfaceClassName?: string;
+  title: string;
+};
+
+export function TaskDetailNestedModalShell({
+  badges,
+  busyOverlay,
+  children,
+  dataDescriptionEditor = false,
+  footer,
+  icon,
+  maxWidthClassName,
+  onClose,
+  overlay,
+  subtitle,
+  surfaceClassName,
+  title
+}: TaskDetailNestedModalShellProps) {
+  const titleId = `${overlay.id}-title`;
+
+  return (
+    <div
+      className="fixed inset-0 z-[70] flex items-center justify-center bg-[#091e42]/70 px-4 py-6 backdrop-blur-sm"
+      {...overlay.backdropProps}
+    >
+      <section
+        aria-labelledby={titleId}
+        aria-modal="true"
+        className={cn(
+          "relative w-full overflow-hidden rounded border border-[#5d6470] bg-[#25272c] text-[#dfe1e6] shadow-2xl",
+          maxWidthClassName,
+          surfaceClassName
+        )}
+        data-description-editor={dataDescriptionEditor ? true : undefined}
+        role="dialog"
+        {...overlay.surfaceProps}
+      >
+        {busyOverlay}
+
+        <div className="flex items-start justify-between gap-4 border-b border-[#454852] px-5 py-4">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-[#f4f5f7]" id={titleId}>
+              {icon}
+              {title}
+              {badges}
+            </div>
+            {subtitle ? <p className="mt-1 truncate text-sm text-[#aeb3bd]">{subtitle}</p> : null}
+          </div>
+          <IconButton title="Close" onClick={onClose}>
+            <X size={18} />
+          </IconButton>
+        </div>
+
+        {children}
+
+        {footer ? (
+          <div className="flex flex-wrap items-center justify-end gap-2 border-t border-[#454852] bg-[#22252a] px-5 py-4">
+            {footer}
+          </div>
+        ) : null}
+      </section>
+    </div>
+  );
+}
+
 export function DescriptionPromptModal({
   clarificationQuestions,
   descriptionContext,
@@ -1011,41 +1087,42 @@ export function DescriptionPromptModal({
   const aiProviderSetupActionLabel = descriptionMessage ? getAiProviderSetupActionLabel(descriptionMessage) : "Configure OpenAI";
 
   return (
-    <div
-      className="fixed inset-0 z-[70] flex items-center justify-center bg-[#091e42]/70 px-4 py-6 backdrop-blur-sm"
-      {...overlay.backdropProps}
-    >
-      <section
-        className="relative w-full max-w-[520px] overflow-hidden rounded border border-[#5d6470] bg-[#25272c] text-[#dfe1e6] shadow-2xl"
-        data-description-editor
-        {...overlay.surfaceProps}
-      >
-        {isGeneratingDescription ? (
+    <TaskDetailNestedModalShell
+      busyOverlay={
+        isGeneratingDescription ? (
           <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#1f2126]/80 px-4 text-sm font-medium text-[#dfe1e6] backdrop-blur-[2px]">
             <span className="inline-flex items-center gap-2 rounded border border-[#454852] bg-[#25272c] px-4 py-3 shadow-xl">
               <Loader2 className="animate-spin text-[#85b8ff]" size={16} />
               Generating proposal...
             </span>
           </div>
-        ) : null}
-
-        <div className="flex items-start justify-between gap-4 border-b border-[#454852] px-5 py-4">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 text-sm font-semibold text-[#f4f5f7]">
-              <Sparkles size={15} className="text-[#85b8ff]" />
-              Description proposal
-            </div>
-            <p className="mt-1 text-sm text-[#aeb3bd]">You can leave the request empty.</p>
-          </div>
-          <IconButton
-            title="Close"
-            onClick={() => {
-              if (!isGeneratingDescription) onCancel();
-            }}
+        ) : null
+      }
+      dataDescriptionEditor
+      footer={
+        <>
+          <Button disabled={isGeneratingDescription} variant="darkSecondary" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button
+            disabled={isGeneratingDescription}
+            icon={isGeneratingDescription ? <Loader2 className="animate-spin" size={14} /> : <Sparkles size={14} />}
+            variant="darkPrimary"
+            onClick={onGenerate}
           >
-            <X size={18} />
-          </IconButton>
-        </div>
+            {isGeneratingDescription ? "Generating" : "Generate proposal"}
+          </Button>
+        </>
+      }
+      icon={<Sparkles size={15} className="text-[#85b8ff]" />}
+      maxWidthClassName="max-w-[520px]"
+      onClose={() => {
+        if (!isGeneratingDescription) onCancel();
+      }}
+      overlay={overlay}
+      subtitle="You can leave the request empty."
+      title="Description proposal"
+    >
 
         <div className="space-y-3 px-5 py-4">
           <textarea
@@ -1089,22 +1166,7 @@ export function DescriptionPromptModal({
             </FeedbackNote>
           ) : null}
         </div>
-
-        <div className="flex justify-end gap-2 border-t border-[#454852] bg-[#22252a] px-5 py-4">
-          <Button disabled={isGeneratingDescription} variant="darkSecondary" onClick={onCancel}>
-            Cancel
-          </Button>
-          <Button
-            disabled={isGeneratingDescription}
-            icon={isGeneratingDescription ? <Loader2 className="animate-spin" size={14} /> : <Sparkles size={14} />}
-            variant="darkPrimary"
-            onClick={onGenerate}
-          >
-            {isGeneratingDescription ? "Generating" : "Generate proposal"}
-          </Button>
-        </div>
-      </section>
-    </div>
+    </TaskDetailNestedModalShell>
   );
 }
 
@@ -1183,15 +1245,15 @@ function AssistedDescriptionProposalReviewModal({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 bg-[#091e42]/70 px-4 py-6 backdrop-blur-sm"
-      {...overlay.backdropProps}
-    >
-      <section
-        className="relative mx-auto flex h-full max-h-[840px] w-full max-w-[1040px] flex-col overflow-hidden rounded border border-[#5d6470] bg-[#25272c] text-[#dfe1e6] shadow-2xl"
-        {...overlay.surfaceProps}
-      >
-        {isRequestingChanges ? (
+    <TaskDetailNestedModalShell
+      badges={
+        <>
+          <ProposalStatusBadge status={proposal.status} />
+          <ProviderModelLabel model={proposal.model} provider={proposal.provider} />
+        </>
+      }
+      busyOverlay={
+        isRequestingChanges ? (
           <div className="absolute inset-0 z-20 flex items-center justify-center bg-[#091e42]/70 px-6 backdrop-blur-[2px]">
             <div className="w-full max-w-sm rounded border border-[#454852] bg-[#25272c] px-5 py-4 text-center shadow-2xl">
               <Loader2 className="mx-auto mb-3 animate-spin text-[#85b8ff]" size={24} />
@@ -1201,94 +1263,10 @@ function AssistedDescriptionProposalReviewModal({
               </div>
             </div>
           </div>
-        ) : null}
-        <div className="flex items-start justify-between gap-4 border-b border-[#454852] px-5 py-4">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-[#f4f5f7]">
-              <Sparkles size={16} className="text-[#85b8ff]" />
-              Proposal review
-              <ProposalStatusBadge status={proposal.status} />
-              <ProviderModelLabel model={proposal.model} provider={proposal.provider} />
-            </div>
-            <p className="mt-1 truncate text-sm text-[#aeb3bd]">{proposal.title}</p>
-          </div>
-          <IconButton title="Close" onClick={onClose}>
-            <X size={18} />
-          </IconButton>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-5">
-          <div className="mb-4 rounded border border-[#454852] bg-[#1f2126] px-4 py-3">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-[#f4f5f7]">
-                  {proposal.summary ?? "Review proposed Jira description changes."}
-                </p>
-                {proposal.userComment ? (
-                  <p className="mt-1 text-xs leading-relaxed text-[#aeb3bd]">{proposal.userComment}</p>
-                ) : null}
-              </div>
-              {proposal.status === "Pending" && !readOnly ? (
-                <Button
-                  disabled={isBusy}
-                  icon={<MessageCircle size={14} />}
-                  onClick={() => setChangeRequestOpen((current) => !current)}
-                  variant="darkSecondary"
-                >
-                  Request changes
-                </Button>
-              ) : null}
-            </div>
-            {changeRequestOpen ? (
-              <div className="mt-4 border-t border-[#454852] pt-4" data-description-editor>
-                <textarea
-                  className="min-h-20 w-full resize-y rounded border border-[#454852] bg-[#25272c] px-3 py-2 text-sm leading-relaxed text-[#dfe1e6] outline-none placeholder:text-[#7f858f] focus:border-[#85b8ff]"
-                  onChange={(event) => setChangeRequest(event.target.value)}
-                  onKeyDown={handleChangeRequestKeyDown}
-                  placeholder="Ask for a revision to the remaining proposal sections."
-                  value={changeRequest}
-                />
-                <div className="mt-3 flex justify-end">
-                  <Button
-                    disabled={isBusy || !changeRequest.trim()}
-                    icon={isRequestingChanges ? <Loader2 className="animate-spin" size={14} /> : <Sparkles size={14} />}
-                    onClick={() => {
-                      void submitChangeRequest();
-                    }}
-                    variant="darkPrimary"
-                  >
-                    Send adjustment
-                  </Button>
-                </div>
-              </div>
-            ) : null}
-          </div>
-
-          {reviewMessage ? (
-            <FeedbackNote className="mb-4 px-4 py-3 text-sm" surface="dark" variant="error">
-              {reviewMessage}
-            </FeedbackNote>
-          ) : null}
-
-          <div className="space-y-3">
-            {proposalItems.map((item) => (
-              <ProposalDiffItemRow
-                disabled={readOnly || isBusy}
-                editing={editingItemId === item.id}
-                item={item}
-                key={item.id}
-                onEditProposedContent={(proposedContent) => onEditProposalItem(proposal, item, proposedContent)}
-                onRequestChanges={onRequestChanges}
-                onResolve={(accepted) => onResolveItem(proposal, item, accepted)}
-                proposal={proposal}
-                resolving={resolvingItemId === item.id}
-                sections={sections}
-              />
-            ))}
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center justify-end gap-2 border-t border-[#454852] bg-[#22252a] p-4">
+        ) : null
+      }
+      footer={
+        <>
           {isBusy ? (
             <div className="mr-auto flex items-center gap-2 text-sm text-[#b7bbc4]" role="status" aria-live="polite">
               <Loader2 className="animate-spin text-[#85b8ff]" size={14} />
@@ -1327,9 +1305,87 @@ function AssistedDescriptionProposalReviewModal({
               Close
             </Button>
           )}
+        </>
+      }
+      icon={<Sparkles size={16} className="text-[#85b8ff]" />}
+      maxWidthClassName="max-w-[1040px]"
+      onClose={onClose}
+      overlay={overlay}
+      subtitle={proposal.title}
+      surfaceClassName="flex h-full max-h-[840px] flex-col"
+      title="Proposal review"
+    >
+      <div className="flex-1 overflow-y-auto p-5">
+        <div className="mb-4 rounded border border-[#454852] bg-[#1f2126] px-4 py-3">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-[#f4f5f7]">
+                {proposal.summary ?? "Review proposed Jira description changes."}
+              </p>
+              {proposal.userComment ? (
+                <p className="mt-1 text-xs leading-relaxed text-[#aeb3bd]">{proposal.userComment}</p>
+              ) : null}
+            </div>
+            {proposal.status === "Pending" && !readOnly ? (
+              <Button
+                disabled={isBusy}
+                icon={<MessageCircle size={14} />}
+                onClick={() => setChangeRequestOpen((current) => !current)}
+                variant="darkSecondary"
+              >
+                Request changes
+              </Button>
+            ) : null}
+          </div>
+          {changeRequestOpen ? (
+            <div className="mt-4 border-t border-[#454852] pt-4" data-description-editor>
+              <textarea
+                className="min-h-20 w-full resize-y rounded border border-[#454852] bg-[#25272c] px-3 py-2 text-sm leading-relaxed text-[#dfe1e6] outline-none placeholder:text-[#7f858f] focus:border-[#85b8ff]"
+                onChange={(event) => setChangeRequest(event.target.value)}
+                onKeyDown={handleChangeRequestKeyDown}
+                placeholder="Ask for a revision to the remaining proposal sections."
+                value={changeRequest}
+              />
+              <div className="mt-3 flex justify-end">
+                <Button
+                  disabled={isBusy || !changeRequest.trim()}
+                  icon={isRequestingChanges ? <Loader2 className="animate-spin" size={14} /> : <Sparkles size={14} />}
+                  onClick={() => {
+                    void submitChangeRequest();
+                  }}
+                  variant="darkPrimary"
+                >
+                  Send adjustment
+                </Button>
+              </div>
+            </div>
+          ) : null}
         </div>
-      </section>
-    </div>
+
+        {reviewMessage ? (
+          <FeedbackNote className="mb-4 px-4 py-3 text-sm" surface="dark" variant="error">
+            {reviewMessage}
+          </FeedbackNote>
+        ) : null}
+
+        <div className="space-y-3">
+          {proposalItems.map((item) => (
+            <ProposalDiffItemRow
+              disabled={readOnly || isBusy}
+              editing={editingItemId === item.id}
+              item={item}
+              key={item.id}
+              onEditProposedContent={(proposedContent) => onEditProposalItem(proposal, item, proposedContent)}
+              onRequestChanges={onRequestChanges}
+              onResolve={(accepted) => onResolveItem(proposal, item, accepted)}
+              proposal={proposal}
+              resolving={resolvingItemId === item.id}
+              sections={sections}
+            />
+          ))}
+        </div>
+      </div>
+    </TaskDetailNestedModalShell>
   );
 }
 
