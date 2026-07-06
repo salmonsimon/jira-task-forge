@@ -7,50 +7,28 @@ import type {
   IssueType,
   NewAssistedDescriptionProposal
 } from "../types";
+import {
+  defaultAssistedDescriptionSectionDefinitions,
+  findAssistedDescriptionSectionId,
+  getAllAssistedDescriptionSectionDefinitions,
+  getAssistedDescriptionSectionDefinitions,
+  getAssistedDescriptionSectionIds,
+  getAssistedDescriptionSectionLabel,
+  isAssistedDescriptionWrapperHeading
+} from "./assistedDescriptionTemplates";
 
 export type { AssistedDescriptionSectionId, DescriptionSectionStatus } from "../types";
-
-export const storyAssistedDescriptionSectionDefinitions = [
-  { id: "user_story", label: "User story", markdownHeading: "Historia de usuario" },
-  { id: "problem", label: "Context", markdownHeading: "Contexto" },
-  { id: "scope", label: "Scope", markdownHeading: "Alcance" },
-  { id: "acceptance_criteria", label: "Acceptance criteria", markdownHeading: "Criterios de aceptacion" },
-  { id: "minimum_deliverable", label: "Minimum deliverable", markdownHeading: "Entregable mínimo" },
-  { id: "review_checklist", label: "Review checklist", markdownHeading: "Checklist antes de Review" }
-] as const satisfies readonly {
-  id: AssistedDescriptionSectionId;
-  label: string;
-  markdownHeading: string;
-}[];
-
-export const bugAssistedDescriptionSectionDefinitions = [
-  { id: "problem", label: "Problem", markdownHeading: "Problema" },
-  { id: "context_impact", label: "Context / impact", markdownHeading: "Contexto / impacto" },
-  { id: "reproduction_steps", label: "Steps to reproduce", markdownHeading: "Pasos para reproducir" },
-  { id: "actual_result", label: "Actual result", markdownHeading: "Resultado actual" },
-  { id: "expected_result", label: "Expected result", markdownHeading: "Resultado esperado" },
-  { id: "evidence", label: "Evidence", markdownHeading: "Evidencia" },
-  { id: "acceptance_criteria", label: "Acceptance criteria", markdownHeading: "Criterios de aceptacion" },
-  { id: "minimum_deliverable", label: "Minimum deliverable", markdownHeading: "Entregable mínimo" },
-  { id: "review_checklist", label: "Review checklist", markdownHeading: "Checklist antes de Review" }
-] as const satisfies readonly {
-  id: AssistedDescriptionSectionId;
-  label: string;
-  markdownHeading: string;
-}[];
-
-export const assistedDescriptionSectionDefinitions = storyAssistedDescriptionSectionDefinitions;
-
-const allAssistedDescriptionSectionDefinitions = [
-  ...storyAssistedDescriptionSectionDefinitions,
-  ...bugAssistedDescriptionSectionDefinitions.filter(
-    (bugSection) => !storyAssistedDescriptionSectionDefinitions.some((storySection) => storySection.id === bugSection.id)
-  )
-] as const satisfies readonly {
-  id: AssistedDescriptionSectionId;
-  label: string;
-  markdownHeading: string;
-}[];
+export {
+  bugAssistedDescriptionSectionDefinitions,
+  buildAssistedDescriptionGenerationContext,
+  defaultAssistedDescriptionSectionDefinitions as assistedDescriptionSectionDefinitions,
+  formatAssistedDescriptionSectionScopeLabel,
+  getAssistedDescriptionSectionDefinitions,
+  getAssistedDescriptionSectionIds,
+  getAssistedDescriptionSectionLabel,
+  getAssistedDescriptionTemplatePolicy,
+  storyAssistedDescriptionSectionDefinitions
+} from "./assistedDescriptionTemplates";
 
 export type AssistedDescriptionSections = Record<AssistedDescriptionSectionId, string>;
 export type AssistedDescriptionSectionStatuses = Record<AssistedDescriptionSectionId, DescriptionSectionStatus>;
@@ -83,61 +61,9 @@ export type AssistedDescriptionParagraphDiff = {
   proposed: string;
 };
 
-const sectionAliases: Record<AssistedDescriptionSectionId, string[]> = {
-  user_story: ["historia de usuario", "user story"],
-  problem: ["problema", "problem", "contexto", "context"],
-  context_impact: ["contexto impacto", "contexto / impacto", "context impact", "impacto"],
-  scope: [
-    "alcance",
-    "scope",
-    "objetivo",
-    "objective",
-    "goal",
-    "expected impact",
-    "impacto esperado",
-    "impacto",
-    "fuera de alcance",
-    "out of scope",
-    "no incluye",
-    "not included",
-    "flujos principales",
-    "main flows",
-    "flows",
-    "flujo principal",
-    "requisitos funcionales",
-    "functional requirements",
-    "requisitos no funcionales relevantes",
-    "requisitos no funcionales",
-    "non functional requirements",
-    "nonfunctional requirements",
-    "restricciones y dependencias",
-    "constraints and dependencies",
-    "constraints dependencies"
-  ],
-  reproduction_steps: ["pasos para reproducir", "steps to reproduce", "reproduccion", "reproduction"],
-  actual_result: ["resultado actual", "actual result", "comportamiento actual", "observed result"],
-  expected_result: ["resultado esperado", "expected result", "comportamiento esperado"],
-  evidence: ["evidencia", "evidence", "captura", "video", "log"],
-  acceptance_criteria: [
-    "criterios de aceptacion de alto nivel",
-    "criterios de aceptacion",
-    "acceptance criteria",
-    "criterios de acceptance",
-    "riesgos y preguntas abiertas",
-    "riesgos",
-    "risks",
-    "open questions",
-    "preguntas abiertas"
-  ],
-  minimum_deliverable: ["entregable minimo", "entregable mínimo", "minimum deliverable"],
-  review_checklist: ["checklist antes de review", "checklist", "review checklist"]
-};
-
-const sectionIdByNormalizedHeading = buildSectionAliasIndex();
-
 export function createEmptyAssistedDescriptionSections(): AssistedDescriptionSections {
   const sections = {} as AssistedDescriptionSections;
-  for (const section of allAssistedDescriptionSectionDefinitions) {
+  for (const section of getAllAssistedDescriptionSectionDefinitions()) {
     sections[section.id] = "";
   }
   return sections;
@@ -145,27 +71,10 @@ export function createEmptyAssistedDescriptionSections(): AssistedDescriptionSec
 
 export function createEmptyAssistedDescriptionSectionStatuses(): AssistedDescriptionSectionStatuses {
   const statuses = {} as AssistedDescriptionSectionStatuses;
-  for (const section of allAssistedDescriptionSectionDefinitions) {
+  for (const section of getAllAssistedDescriptionSectionDefinitions()) {
     statuses[section.id] = "Raw";
   }
   return statuses;
-}
-
-export function getAssistedDescriptionSectionDefinitions(issueType?: IssueType | string | null) {
-  return isBugDescriptionIssueType(issueType) ? bugAssistedDescriptionSectionDefinitions : storyAssistedDescriptionSectionDefinitions;
-}
-
-export function getAssistedDescriptionSectionIds(issueType?: IssueType | string | null): AssistedDescriptionSectionId[] {
-  return getAssistedDescriptionSectionDefinitions(issueType).map((section) => section.id);
-}
-
-export function getAssistedDescriptionSectionLabel(
-  sectionId: AssistedDescriptionSectionId,
-  issueType?: IssueType | string | null
-): string {
-  return getAssistedDescriptionSectionDefinitions(issueType).find((section) => section.id === sectionId)?.label
-    ?? allAssistedDescriptionSectionDefinitions.find((section) => section.id === sectionId)?.label
-    ?? sectionId;
 }
 
 export function parseAssistedDescriptionMarkdown(
@@ -175,7 +84,7 @@ export function parseAssistedDescriptionMarkdown(
   const sections = createEmptyAssistedDescriptionSections();
   const lines = (markdown ?? "").replace(/\r\n/g, "\n").split("\n");
   let currentSectionId: AssistedDescriptionSectionId | null = null;
-  const fallbackSectionId: AssistedDescriptionSectionId = isBugDescriptionIssueType(issueType) ? "problem" : "problem";
+  const fallbackSectionId: AssistedDescriptionSectionId = "problem";
 
   for (const line of lines) {
     const heading = line.match(/^(#{1,6})\s+(.+?)\s*$/);
@@ -185,7 +94,7 @@ export function parseAssistedDescriptionMarkdown(
         currentSectionId = sectionId;
         continue;
       }
-      if (isWrapperHeading(heading[2])) {
+      if (isAssistedDescriptionWrapperHeading(heading[2])) {
         currentSectionId = null;
         continue;
       }
@@ -195,7 +104,7 @@ export function parseAssistedDescriptionMarkdown(
     sections[targetSectionId] = appendSectionLine(sections[targetSectionId], line);
   }
 
-  for (const section of allAssistedDescriptionSectionDefinitions) {
+  for (const section of getAllAssistedDescriptionSectionDefinitions()) {
     sections[section.id] = trimSectionContent(sections[section.id]);
   }
 
@@ -232,7 +141,7 @@ export function serializeAssistedDescriptionSectionsForProposal(
 }
 
 export function hasMeaningfulAssistedDescriptionContent(sections: AssistedDescriptionSections): boolean {
-  return allAssistedDescriptionSectionDefinitions.some((section) => Boolean(sections[section.id].trim()));
+  return getAllAssistedDescriptionSectionDefinitions().some((section) => Boolean(sections[section.id].trim()));
 }
 
 export function applyManualAssistedDescriptionSectionEdit(
@@ -645,38 +554,6 @@ function appendSerializedSection(lines: string[], level: 2 | 3, heading: string,
   lines.push("");
 }
 
-function buildSectionAliasIndex(): Map<string, AssistedDescriptionSectionId> {
-  const index = new Map<string, AssistedDescriptionSectionId>();
-  for (const section of allAssistedDescriptionSectionDefinitions) {
-    index.set(normalizeHeading(section.markdownHeading), section.id);
-    index.set(normalizeHeading(section.label), section.id);
-    for (const alias of sectionAliases[section.id]) {
-      index.set(normalizeHeading(alias), section.id);
-    }
-  }
-  return index;
-}
-
-function findAssistedDescriptionSectionId(heading: string): AssistedDescriptionSectionId | null {
-  return sectionIdByNormalizedHeading.get(normalizeHeading(heading)) ?? null;
-}
-
-function normalizeHeading(value: string): string {
-  return value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/^\d+[\).\s-]+/, "")
-    .replace(/[`*_]/g, "")
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim();
-}
-
-function isWrapperHeading(value: string): boolean {
-  const heading = normalizeHeading(value);
-  return heading === "srs lite" || heading === "jira srs lite";
-}
-
 function getUniqueSectionIds(
   sectionIds: AssistedDescriptionSectionId[] | undefined,
   issueType?: IssueType | string | null
@@ -696,11 +573,6 @@ function buildProposalSummary(sectionIds: AssistedDescriptionSectionId[], change
   if (request) return `Requested adjustment: ${truncateSummary(request)}`;
   if (sectionIds.length === 1) return `Review proposed changes to ${getAssistedDescriptionSectionLabel(sectionIds[0])}.`;
   return "Review proposed Jira description changes.";
-}
-
-function isBugDescriptionIssueType(issueType?: IssueType | string | null): boolean {
-  const normalized = normalizeHeading(issueType ?? "");
-  return normalized === "bug" || normalized === "error";
 }
 
 function truncateSummary(value: string): string {

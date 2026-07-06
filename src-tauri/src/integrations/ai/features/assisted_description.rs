@@ -1,5 +1,6 @@
 use serde_json::{json, Value};
 
+use self::template_policy::{normalize_heading, TemplatePolicy};
 use super::{strip_json_fence, JsonFeatureRequest};
 use crate::area_catalog::{catalog_context_for_area, resolve_catalog_area, CatalogAreaResolution};
 use crate::integrations::ai::AiProvider;
@@ -8,28 +9,33 @@ use crate::models::{AssistedDescriptionDraft, LocalTask};
 const SIMPLE_TASK_TITLE_WORD_LIMIT: usize = 4;
 const ASSISTED_DESCRIPTION_BASE_CONTEXT: &str =
     include_str!("../../../../../docs/assisted-description-context.md");
-const STORY_REQUIRED_HEADINGS: &[&str] = &[
-    "Historia de usuario",
-    "Contexto",
-    "Alcance",
-    "Criterios de aceptacion",
-    "Entregable mínimo",
-    "Checklist antes de Review",
-];
-const BUG_REQUIRED_HEADINGS: &[&str] = &[
-    "Problema",
-    "Contexto / impacto",
-    "Pasos para reproducir",
-    "Resultado actual",
-    "Resultado esperado",
-    "Evidencia",
-    "Criterios de aceptacion",
-    "Entregable mínimo",
-    "Checklist antes de Review",
-];
-const ASSISTED_DESCRIPTION_FINAL_HEADINGS: &[&str] =
-    &["## Entregable mínimo", "## Checklist antes de Review"];
-const STORY_ASSISTED_DESCRIPTION_TEMPLATE: &str = r#"## Historia de usuario
+
+mod template_policy {
+    pub(super) struct TemplatePolicy {
+        required_headings: &'static [&'static str],
+        template: &'static str,
+    }
+
+    const STORY_REQUIRED_HEADINGS: &[&str] = &[
+        "Historia de usuario",
+        "Contexto",
+        "Alcance",
+        "Criterios de aceptacion",
+        "Entregable mínimo",
+        "Checklist antes de Review",
+    ];
+    const BUG_REQUIRED_HEADINGS: &[&str] = &[
+        "Problema",
+        "Contexto / impacto",
+        "Pasos para reproducir",
+        "Resultado actual",
+        "Resultado esperado",
+        "Evidencia",
+        "Criterios de aceptacion",
+        "Entregable mínimo",
+        "Checklist antes de Review",
+    ];
+    const STORY_ASSISTED_DESCRIPTION_TEMPLATE: &str = r#"## Historia de usuario
 
 Como [usuario/persona],
 quiero [necesidad],
@@ -59,7 +65,7 @@ No incluye:
 
 - ...
 "#;
-const BUG_ASSISTED_DESCRIPTION_TEMPLATE: &str = r#"## Problema
+    const BUG_ASSISTED_DESCRIPTION_TEMPLATE: &str = r#"## Problema
 
 [Que falla.]
 
@@ -95,6 +101,71 @@ const BUG_ASSISTED_DESCRIPTION_TEMPLATE: &str = r#"## Problema
 
 - [Evidencia disponible para revisar.]
 "#;
+
+    impl TemplatePolicy {
+        pub(super) fn for_issue_type(issue_type: &str) -> Self {
+            if is_bug_issue_type(issue_type) {
+                Self {
+                    required_headings: BUG_REQUIRED_HEADINGS,
+                    template: BUG_ASSISTED_DESCRIPTION_TEMPLATE,
+                }
+            } else {
+                Self {
+                    required_headings: STORY_REQUIRED_HEADINGS,
+                    template: STORY_ASSISTED_DESCRIPTION_TEMPLATE,
+                }
+            }
+        }
+
+        pub(super) fn template(&self) -> &'static str {
+            self.template
+        }
+
+        pub(super) fn required_headings(&self) -> &'static [&'static str] {
+            self.required_headings
+        }
+
+        pub(super) fn final_headings(&self) -> [&'static str; 2] {
+            ["Entregable mínimo", "Checklist antes de Review"]
+        }
+
+        pub(super) fn allows_heading(&self, heading: &str) -> bool {
+            let normalized_heading = normalize_heading(heading);
+            self.required_headings()
+                .iter()
+                .any(|required_heading| normalize_heading(required_heading) == normalized_heading)
+        }
+    }
+
+    pub(super) fn normalize_heading(value: &str) -> String {
+        value
+            .trim()
+            .to_lowercase()
+            .replace('á', "a")
+            .replace('é', "e")
+            .replace('í', "i")
+            .replace('ó', "o")
+            .replace('ú', "u")
+            .replace('ü', "u")
+            .replace('ñ', "n")
+            .chars()
+            .map(|character| {
+                if character.is_ascii_alphanumeric() {
+                    character
+                } else {
+                    ' '
+                }
+            })
+            .collect::<String>()
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+
+    fn is_bug_issue_type(issue_type: &str) -> bool {
+        matches!(normalize_heading(issue_type).as_str(), "bug" | "error")
+    }
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum AssistedDescriptionRequest {
@@ -205,7 +276,7 @@ fn task_description_generation_context(
         additional_context
     };
 
-    let template = assisted_description_template_for_issue_type(&task.issue_type);
+    let policy = TemplatePolicy::for_issue_type(&task.issue_type);
 
     format!(
         "Base context:\n{base_context}\n\n\
@@ -234,7 +305,7 @@ Target Markdown format:\n{template}",
         priority = task.priority,
         language = task.content_language,
         title = task.title,
-        template = template
+        template = policy.template()
     )
 }
 
@@ -286,9 +357,10 @@ fn validate_assisted_description_draft(
             let Some(description) = draft.description.as_deref() else {
                 return Err("AI provider returned an empty assisted description.".to_string());
             };
-            validate_required_description_sections(description, issue_type)?;
-            validate_no_extra_description_sections(description, issue_type)?;
-            validate_final_description_sections(description)?;
+            let policy = TemplatePolicy::for_issue_type(issue_type);
+            validate_required_description_sections(description, &policy)?;
+            validate_no_extra_description_sections(description, &policy)?;
+            validate_final_description_sections(description, &policy)?;
             draft.clarification_questions.clear();
         }
         "needs_clarification" => {
@@ -310,36 +382,17 @@ fn validate_assisted_description_draft(
     Ok(draft)
 }
 
-fn assisted_description_template_for_issue_type(issue_type: &str) -> &'static str {
-    if is_bug_issue_type(issue_type) {
-        BUG_ASSISTED_DESCRIPTION_TEMPLATE
-    } else {
-        STORY_ASSISTED_DESCRIPTION_TEMPLATE
-    }
-}
-
-fn required_headings_for_issue_type(issue_type: &str) -> &'static [&'static str] {
-    if is_bug_issue_type(issue_type) {
-        BUG_REQUIRED_HEADINGS
-    } else {
-        STORY_REQUIRED_HEADINGS
-    }
-}
-
-fn is_bug_issue_type(issue_type: &str) -> bool {
-    matches!(normalize_heading(issue_type).as_str(), "bug" | "error")
-}
-
 fn validate_required_description_sections(
     description: &str,
-    issue_type: &str,
+    policy: &TemplatePolicy,
 ) -> Result<(), String> {
     let headings = markdown_headings(description);
     let normalized_headings = headings
         .iter()
         .map(|heading| normalize_heading(heading))
         .collect::<Vec<_>>();
-    if let Some(missing_heading) = required_headings_for_issue_type(issue_type)
+    if let Some(missing_heading) = policy
+        .required_headings()
         .iter()
         .find(|heading| !normalized_headings.contains(&normalize_heading(heading)))
     {
@@ -352,14 +405,10 @@ fn validate_required_description_sections(
 
 fn validate_no_extra_description_sections(
     description: &str,
-    issue_type: &str,
+    policy: &TemplatePolicy,
 ) -> Result<(), String> {
-    let allowed_headings = required_headings_for_issue_type(issue_type)
-        .iter()
-        .map(|heading| normalize_heading(heading))
-        .collect::<Vec<_>>();
     for heading in markdown_headings(description) {
-        if !allowed_headings.contains(&normalize_heading(&heading)) {
+        if !policy.allows_heading(&heading) {
             return Err(format!(
                 "AI provider returned out-of-template assisted description section ## {heading}."
             ));
@@ -368,28 +417,22 @@ fn validate_no_extra_description_sections(
     Ok(())
 }
 
-fn validate_final_description_sections(description: &str) -> Result<(), String> {
+fn validate_final_description_sections(
+    description: &str,
+    policy: &TemplatePolicy,
+) -> Result<(), String> {
     let heading_positions = markdown_heading_positions(description);
+    let [deliverable_heading, checklist_heading] = policy.final_headings();
     let deliverable_index = heading_positions
         .iter()
-        .find(|(_, heading)| {
-            normalize_heading(heading)
-                == normalize_heading(
-                    ASSISTED_DESCRIPTION_FINAL_HEADINGS[0].trim_start_matches("# "),
-                )
-        })
+        .find(|(_, heading)| normalize_heading(heading) == normalize_heading(deliverable_heading))
         .map(|(index, _)| *index)
         .ok_or_else(|| {
             "AI provider omitted final assisted description deliverable section.".to_string()
         })?;
     let checklist_index = heading_positions
         .iter()
-        .find(|(_, heading)| {
-            normalize_heading(heading)
-                == normalize_heading(
-                    ASSISTED_DESCRIPTION_FINAL_HEADINGS[1].trim_start_matches("# "),
-                )
-        })
+        .find(|(_, heading)| normalize_heading(heading) == normalize_heading(checklist_heading))
         .map(|(index, _)| *index)
         .ok_or_else(|| {
             "AI provider omitted final assisted description checklist section.".to_string()
@@ -438,31 +481,6 @@ fn markdown_heading_positions(description: &str) -> Vec<(usize, String)> {
         })
         .flatten()
         .collect()
-}
-
-fn normalize_heading(value: &str) -> String {
-    value
-        .trim()
-        .to_lowercase()
-        .replace('á', "a")
-        .replace('é', "e")
-        .replace('í', "i")
-        .replace('ó', "o")
-        .replace('ú', "u")
-        .replace('ü', "u")
-        .replace('ñ', "n")
-        .chars()
-        .map(|character| {
-            if character.is_ascii_alphanumeric() {
-                character
-            } else {
-                ' '
-            }
-        })
-        .collect::<String>()
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
 }
 
 fn task_description_needs_clarification(task: &LocalTask, additional_context: &str) -> bool {

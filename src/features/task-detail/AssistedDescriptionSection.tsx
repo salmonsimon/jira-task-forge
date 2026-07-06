@@ -5,11 +5,13 @@ import { Button, FeedbackNote, IconButton } from "../../components/ui";
 import { appOverlayLayers, useAppOverlay } from "../../lib/app-overlays";
 import {
   applyManualAssistedDescriptionSectionEdit,
+  buildAssistedDescriptionGenerationContext,
   buildAssistedDescriptionParagraphDiff,
   buildAssistedDescriptionProposal,
   buildResolveAssistedDescriptionProposalItemPatch,
   buildResolveAssistedDescriptionProposalPatch,
   createEmptyAssistedDescriptionSectionStatuses,
+  formatAssistedDescriptionSectionScopeLabel,
   getAssistedDescriptionProposalItems,
   getAssistedDescriptionSectionDefinitions,
   getAssistedDescriptionSectionIds,
@@ -196,7 +198,10 @@ export function AssistedDescriptionSection({
     setReviewMessage(null);
 
     try {
-      const draft = await onGenerateDescription(task.id, buildGenerationContext(changeRequest, sectionIds, task.issueType));
+      const draft = await onGenerateDescription(
+        task.id,
+        buildAssistedDescriptionGenerationContext({ changeRequest, issueType: task.issueType, sectionIds })
+      );
       if (draft.status === "needs_clarification") {
         setDescriptionMessage("More context is needed before generating a useful proposal.");
         setClarificationQuestions(draft.clarificationQuestions);
@@ -254,7 +259,7 @@ export function AssistedDescriptionSection({
     if (readOnly || isRequestingProposalChanges || isGeneratingDescription || !changeRequest.trim()) return false;
 
     setIsRequestingProposalChanges(true);
-    setRequestingProposalChangeLabel(formatSectionScopeLabel(sectionIds, task.issueType));
+    setRequestingProposalChangeLabel(formatAssistedDescriptionSectionScopeLabel(sectionIds, task.issueType));
     setReviewMessage(null);
     try {
       if (isEmptySectionChangeRequest(changeRequest)) {
@@ -289,7 +294,10 @@ export function AssistedDescriptionSection({
         return true;
       }
 
-      const draft = await onGenerateDescription(task.id, buildGenerationContext(changeRequest, sectionIds, task.issueType));
+      const draft = await onGenerateDescription(
+        task.id,
+        buildAssistedDescriptionGenerationContext({ changeRequest, issueType: task.issueType, sectionIds })
+      );
       if (draft.status === "needs_clarification") {
         setReviewMessage(`More context is needed: ${draft.clarificationQuestions.join(" ")}`);
         return false;
@@ -1703,29 +1711,6 @@ function formatProposalLogTimestamp(timestamp: string): string {
     hour: "2-digit",
     minute: "2-digit"
   });
-}
-
-function buildGenerationContext(changeRequest: string, sectionIds: AssistedDescriptionSectionId[], issueType: LocalTask["issueType"]) {
-  const request = changeRequest.trim();
-  const activeSectionDefinitions = getAssistedDescriptionSectionDefinitions(issueType);
-  const sectionLabels = sectionIds.map((sectionId) => getAssistedDescriptionSectionLabel(sectionId, issueType)).join(", ");
-  const allowedLabels = activeSectionDefinitions.map((section) => section.label).join(", ");
-  const scope =
-    sectionIds.length === activeSectionDefinitions.length
-      ? `Generate a complete proposal for the fixed ${issueType} Jira description sections.`
-      : `Revise only these fixed ${issueType} Jira description sections: ${sectionLabels}. Leave other sections unchanged.`;
-
-  return [
-    request,
-    scope,
-    `Use only these fixed sections: ${allowedLabels}. Do not include suggested sub-tasks inside the description. If missing information materially changes scope or acceptance criteria, ask targeted clarification questions instead of inventing Jira content.`
-  ].filter(Boolean).join("\n\n");
-}
-
-function formatSectionScopeLabel(sectionIds: AssistedDescriptionSectionId[], issueType?: LocalTask["issueType"]): string {
-  if (sectionIds.length === 1) return getAssistedDescriptionSectionLabel(sectionIds[0], issueType);
-  if (sectionIds.length === getAssistedDescriptionSectionDefinitions(issueType).length) return "all proposal sections";
-  return `${sectionIds.length} proposal sections`;
 }
 
 export function isAiProviderSetupMessage(message: string): boolean {
