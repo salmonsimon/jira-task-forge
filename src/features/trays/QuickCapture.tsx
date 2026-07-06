@@ -1,6 +1,6 @@
 import { Check, ChevronDown, FolderKanban, Plus } from "lucide-react";
-import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
-import { Button, SelectLike } from "../../components/ui";
+import { useState, type FormEvent } from "react";
+import { Button, SelectLike, useListboxDropdown } from "../../components/ui";
 import type { Priority } from "../../lib/types";
 
 const priorities: Priority[] = ["Highest", "High", "Medium", "Low", "Lowest"];
@@ -81,99 +81,41 @@ function CaptureSelect({
   disabled?: boolean;
   width?: string;
 }) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [isOpen, setIsOpen] = useState(false);
-  const selectedIndex = Math.max(0, options.indexOf(value));
-
-  useEffect(() => {
-    if (!isOpen) return;
-
-    function closeOnOutsideClick(event: MouseEvent) {
-      if (!containerRef.current?.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    }
-
-    window.addEventListener("mousedown", closeOnOutsideClick);
-    return () => window.removeEventListener("mousedown", closeOnOutsideClick);
-  }, [isOpen]);
+  const listbox = useListboxDropdown({ disabled, onChange, options, value });
 
   if (options.length === 0) {
     return <SelectLike value={value} width={width} />;
   }
 
-  function choose(nextValue: string) {
-    onChange(nextValue);
-    setIsOpen(false);
-  }
-
-  function moveSelection(direction: 1 | -1) {
-    const nextIndex = (selectedIndex + direction + options.length) % options.length;
-    onChange(options[nextIndex]);
-  }
-
-  function handleKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      if (!isOpen) {
-        setIsOpen(true);
-        return;
-      }
-      moveSelection(1);
-    }
-
-    if (event.key === "ArrowUp") {
-      event.preventDefault();
-      if (!isOpen) {
-        setIsOpen(true);
-        return;
-      }
-      moveSelection(-1);
-    }
-
-    if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      setIsOpen((current) => !current);
-    }
-
-    if (event.key === "Escape") {
-      setIsOpen(false);
-    }
-  }
-
   return (
-    <div className={`relative ${width}`} ref={containerRef}>
+    <div className={`relative ${width}`} ref={listbox.containerRef}>
       <button
-        aria-expanded={isOpen}
-        aria-haspopup="listbox"
         aria-label={ariaLabel}
         className="flex h-9 w-full items-center justify-between rounded border border-[#c1c7d0] bg-white px-3 text-left text-sm outline-none focus:border-[#4c9aff] focus:ring-2 focus:ring-[#deebff] disabled:cursor-not-allowed disabled:opacity-45 dark:border-[#5c606a] dark:bg-[#303238] dark:text-[#f4f5f7] dark:focus:border-[#85b8ff] dark:focus:ring-[#1d355c]"
         disabled={disabled}
-        onClick={() => setIsOpen((current) => !current)}
-        onKeyDown={handleKeyDown}
+        onClick={listbox.toggleMenu}
         type="button"
+        {...listbox.buttonProps}
       >
         <span className="truncate">{value}</span>
         <ChevronDown size={15} className="shrink-0 text-[#6b778c] dark:text-[#dfe1e6]" />
       </button>
 
-      {isOpen ? (
+      {listbox.isOpen ? (
         <div
           className="app-select-menu absolute left-0 top-[calc(100%+4px)] z-30 max-h-60 w-full overflow-y-auto overscroll-contain rounded border border-[#5c606a] bg-[#2b2d31] py-1 text-sm text-[#f4f5f7] shadow-xl"
-          role="listbox"
+          {...listbox.listboxProps}
         >
           {options.map((option) => {
             const isSelected = option === value;
             return (
               <button
-                aria-selected={isSelected}
                 className={`app-select-option flex h-8 w-full items-center justify-between px-3 text-left hover:bg-[#1d355c] ${
                   isSelected ? "bg-[#0c66e4] text-white" : "text-[#dfe1e6]"
                 }`}
                 key={option}
-                onClick={() => choose(option)}
-                role="option"
                 type="button"
+                {...listbox.getOptionProps(option)}
               >
                 <span className="truncate">{option}</span>
                 {isSelected ? <Check size={14} /> : null}

@@ -1,6 +1,6 @@
 import { Bug, Check, ChevronDown, ClipboardList, Copy, Layers3, Link2, PanelRightOpen, Pencil, Sparkles, Trash2 } from "lucide-react";
-import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent as ReactMouseEvent } from "react";
-import { AreaBadge, DescriptionBadge, IconButton, IssueTypeBadge, PriorityBadge, SyncBadge } from "../../components/ui";
+import { useEffect, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { AreaBadge, DescriptionBadge, IconButton, IssueTypeBadge, PriorityBadge, SyncBadge, useListboxDropdown } from "../../components/ui";
 import { canDeleteTask, canDuplicateTask } from "../../lib/domain";
 import type { IssueType, LocalTask, Priority } from "../../lib/types";
 import { cn } from "../../lib/utils";
@@ -272,120 +272,58 @@ function InlineTaskSelect({
   value: string;
   onChange: (value: string) => void | Promise<void>;
 }) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [isOpen, setIsOpen] = useState(false);
   const [opensUp, setOpensUp] = useState(false);
   const effectiveOptions = options.includes(value) ? options : [value, ...options];
-  const selectedIndex = Math.max(0, effectiveOptions.indexOf(value));
+  const listbox = useListboxDropdown({
+    onChange,
+    onOpen: updateOpenDirection,
+    options: effectiveOptions,
+    value
+  });
 
-  useEffect(() => {
-    if (!isOpen) return;
-
-    function closeOnOutsideClick(event: MouseEvent) {
-      if (!containerRef.current?.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    }
-
-    window.addEventListener("mousedown", closeOnOutsideClick);
-    return () => window.removeEventListener("mousedown", closeOnOutsideClick);
-  }, [isOpen]);
-
-  function choose(nextValue: string) {
-    void onChange(nextValue);
-    setIsOpen(false);
-  }
-
-  function openMenu() {
-    const rect = containerRef.current?.getBoundingClientRect();
+  function updateOpenDirection() {
+    const rect = listbox.containerRef.current?.getBoundingClientRect();
     if (rect) {
       const spaceBelow = window.innerHeight - rect.bottom;
       setOpensUp(spaceBelow < 240 && rect.top > spaceBelow);
     }
-    setIsOpen(true);
-  }
-
-  function toggleMenu() {
-    if (isOpen) {
-      setIsOpen(false);
-      return;
-    }
-    openMenu();
-  }
-
-  function moveSelection(direction: 1 | -1) {
-    const nextIndex = (selectedIndex + direction + effectiveOptions.length) % effectiveOptions.length;
-    void onChange(effectiveOptions[nextIndex]);
-  }
-
-  function handleKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      if (!isOpen) {
-        openMenu();
-        return;
-      }
-      moveSelection(1);
-    }
-
-    if (event.key === "ArrowUp") {
-      event.preventDefault();
-      if (!isOpen) {
-        openMenu();
-        return;
-      }
-      moveSelection(-1);
-    }
-
-    if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      toggleMenu();
-    }
-
-    if (event.key === "Escape") {
-      setIsOpen(false);
-    }
   }
 
   return (
-    <div className={cn("relative inline-block max-w-full align-middle", isOpen && "z-[300]")} ref={containerRef} onClick={(event) => event.stopPropagation()}>
+    <div className={cn("relative inline-block max-w-full align-middle", listbox.isOpen && "z-[300]")} ref={listbox.containerRef} onClick={(event) => event.stopPropagation()}>
       <button
-        aria-expanded={isOpen}
-        aria-haspopup="listbox"
         aria-label={ariaLabel}
         className={cn(
           "inline-flex h-6 max-w-full items-center gap-1 rounded px-2 text-left text-xs font-medium leading-none outline-none transition hover:brightness-95 focus:ring-2 focus:ring-[#deebff]",
           getInlineSelectClasses(variant, value)
         )}
-        onKeyDown={handleKeyDown}
         type="button"
-        onClick={toggleMenu}
+        onClick={listbox.toggleMenu}
+        {...listbox.buttonProps}
       >
         {variant === "type" ? getIssueTypeIcon(value) : null}
         <span className="truncate">{value}</span>
         <ChevronDown size={11} className="shrink-0 opacity-70" />
       </button>
 
-      {isOpen ? (
+      {listbox.isOpen ? (
         <div
           className={cn(
             "app-select-menu absolute left-0 z-[400] max-h-56 min-w-[150px] overflow-y-auto overscroll-contain rounded border border-[#5c606a] bg-[#2b2d31] py-1 text-sm text-[#f4f5f7] shadow-xl",
             opensUp ? "bottom-[calc(100%+4px)]" : "top-[calc(100%+4px)]"
           )}
-          role="listbox"
+          {...listbox.listboxProps}
         >
           {effectiveOptions.map((option) => {
             const isSelected = option === value;
             return (
               <button
-                aria-selected={isSelected}
                 className={`app-select-option flex h-8 w-full items-center justify-between px-3 text-left hover:bg-[#1d355c] ${
                   isSelected ? "bg-[#0c66e4] text-white" : "text-[#dfe1e6]"
                 }`}
                 key={option}
-                onClick={() => choose(option)}
-                role="option"
                 type="button"
+                {...listbox.getOptionProps(option)}
               >
                 <span className="truncate">{option}</span>
                 {isSelected ? <Check size={14} /> : null}

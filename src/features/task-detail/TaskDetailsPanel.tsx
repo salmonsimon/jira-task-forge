@@ -1,6 +1,6 @@
 import { Check, ChevronDown, Settings } from "lucide-react";
-import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
-import { DescriptionBadge, PriorityBadge, SyncBadge } from "../../components/ui";
+import { type ReactNode } from "react";
+import { DescriptionBadge, PriorityBadge, SyncBadge, useListboxDropdown } from "../../components/ui";
 import type { LocalTask, Priority } from "../../lib/types";
 
 const priorities: Priority[] = ["Highest", "High", "Medium", "Low", "Lowest"];
@@ -142,94 +142,36 @@ function DetailSelect({
   tone?: DetailTone;
   onChange: (value: string) => void;
 }) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [isOpen, setIsOpen] = useState(false);
-  const selectedIndex = Math.max(0, options.indexOf(value));
-
-  useEffect(() => {
-    if (!isOpen) return;
-
-    function closeOnOutsideClick(event: MouseEvent) {
-      if (!containerRef.current?.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    }
-
-    window.addEventListener("mousedown", closeOnOutsideClick);
-    return () => window.removeEventListener("mousedown", closeOnOutsideClick);
-  }, [isOpen]);
-
-  function choose(nextValue: string) {
-    onChange(nextValue);
-    setIsOpen(false);
-  }
-
-  function moveSelection(direction: 1 | -1) {
-    const nextIndex = (selectedIndex + direction + options.length) % options.length;
-    onChange(options[nextIndex]);
-  }
-
-  function handleKeyDown(event: ReactKeyboardEvent<HTMLButtonElement>) {
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      if (!isOpen) {
-        setIsOpen(true);
-        return;
-      }
-      moveSelection(1);
-    }
-
-    if (event.key === "ArrowUp") {
-      event.preventDefault();
-      if (!isOpen) {
-        setIsOpen(true);
-        return;
-      }
-      moveSelection(-1);
-    }
-
-    if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      setIsOpen((current) => !current);
-    }
-
-    if (event.key === "Escape") {
-      setIsOpen(false);
-    }
-  }
+  const listbox = useListboxDropdown({ onChange, options, value });
 
   return (
-    <div className="relative inline-block max-w-full" ref={containerRef}>
+    <div className="relative inline-block max-w-full" ref={listbox.containerRef}>
       <button
-        aria-expanded={isOpen}
-        aria-haspopup="listbox"
         aria-label={ariaLabel}
         className={`inline-flex h-6 max-w-full items-center gap-1.5 rounded px-2 text-left text-xs font-medium outline-none transition hover:brightness-110 focus:ring-2 focus:ring-[#85b8ff] ${getDetailSelectToneClasses(tone)}`}
-        onClick={() => setIsOpen((current) => !current)}
-        onKeyDown={handleKeyDown}
+        onClick={listbox.toggleMenu}
         type="button"
+        {...listbox.buttonProps}
       >
         <span className="truncate">{value}</span>
         <ChevronDown size={12} className="shrink-0 opacity-80" />
       </button>
 
-      {isOpen ? (
+      {listbox.isOpen ? (
         <div
           className="absolute left-0 top-[calc(100%+4px)] z-50 max-h-56 min-w-[160px] overflow-y-auto overscroll-contain rounded border border-[#5c606a] bg-[#2b2d31] py-1 text-sm text-[#f4f5f7] shadow-xl"
-          role="listbox"
+          {...listbox.listboxProps}
         >
           {options.map((option) => {
             const isSelected = option === value;
             return (
               <button
-                aria-selected={isSelected}
                 className={`flex h-8 w-full items-center justify-between px-3 text-left hover:bg-[#1d355c] ${
                   isSelected ? "bg-[#0c66e4] text-white" : "text-[#dfe1e6]"
                 }`}
                 key={option}
-                onClick={() => choose(option)}
-                role="option"
                 type="button"
+                {...listbox.getOptionProps(option)}
               >
                 <span className="truncate">{option}</span>
                 {isSelected ? <Check size={14} /> : null}

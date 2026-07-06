@@ -1,7 +1,6 @@
 import { Check, ChevronDown, Link2, Plus, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { KeyboardEvent as ReactKeyboardEvent } from "react";
-import { Button, IssueTypeBadge, SyncBadge } from "../../components/ui";
+import { useEffect, useMemo, useState } from "react";
+import { Button, IssueTypeBadge, SyncBadge, useListboxDropdown } from "../../components/ui";
 import {
   addLocalIssueRelationship,
   findIssueRelationshipTarget,
@@ -154,105 +153,47 @@ function RelationshipSelect({
   value: string;
   onChange: (value: string) => void;
 }) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [isOpen, setIsOpen] = useState(false);
-  const selectedIndex = Math.max(0, options.findIndex((option) => option.value === value));
   const selectedOption = options.find((option) => option.value === value) ?? options[0];
   const selectedLabel = selectedOption?.label ?? emptyLabel;
-
-  useEffect(() => {
-    if (!isOpen) return;
-
-    function closeOnOutsideClick(event: MouseEvent) {
-      if (!containerRef.current?.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    }
-
-    window.addEventListener("mousedown", closeOnOutsideClick);
-    return () => window.removeEventListener("mousedown", closeOnOutsideClick);
-  }, [isOpen]);
-
-  function choose(nextValue: string) {
-    onChange(nextValue);
-    setIsOpen(false);
-  }
-
-  function moveSelection(direction: 1 | -1) {
-    if (!options.length) return;
-    const nextIndex = (selectedIndex + direction + options.length) % options.length;
-    onChange(options[nextIndex].value);
-  }
-
-  function toggleMenu() {
-    if (disabled || !options.length) return;
-    setIsOpen((current) => !current);
-  }
-
-  function handleKeyDown(event: ReactKeyboardEvent<HTMLButtonElement>) {
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      if (!isOpen) {
-        toggleMenu();
-        return;
-      }
-      moveSelection(1);
-    }
-
-    if (event.key === "ArrowUp") {
-      event.preventDefault();
-      if (!isOpen) {
-        toggleMenu();
-        return;
-      }
-      moveSelection(-1);
-    }
-
-    if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      toggleMenu();
-    }
-
-    if (event.key === "Escape") {
-      setIsOpen(false);
-    }
-  }
+  const optionValues = options.map((option) => option.value);
+  const listbox = useListboxDropdown({
+    disabled: disabled || !options.length,
+    onChange,
+    options: optionValues,
+    value
+  });
 
   return (
-    <div className="relative min-w-0" ref={containerRef}>
+    <div className="relative min-w-0" ref={listbox.containerRef}>
       <button
-        aria-expanded={isOpen}
-        aria-haspopup="listbox"
         aria-label={ariaLabel}
         className="flex h-9 w-full min-w-0 items-center justify-between gap-2 rounded border border-[#5c606a] bg-[#1f2126] px-3 text-left text-sm text-[#f4f5f7] outline-none transition hover:bg-[#2b2d31] focus:border-[#85b8ff] disabled:cursor-not-allowed disabled:opacity-50"
         disabled={disabled || !options.length}
-        onClick={toggleMenu}
-        onKeyDown={handleKeyDown}
+        onClick={listbox.toggleMenu}
         title={selectedLabel}
         type="button"
+        {...listbox.buttonProps}
       >
         <span className="min-w-0 truncate">{selectedLabel}</span>
         <ChevronDown size={15} className="shrink-0 text-[#dfe1e6]" />
       </button>
 
-      {isOpen ? (
+      {listbox.isOpen ? (
         <div
           className="absolute left-0 top-[calc(100%+4px)] z-50 max-h-60 w-full min-w-0 overflow-y-auto overscroll-contain rounded border border-[#5c606a] bg-[#2b2d31] py-1 text-sm text-[#f4f5f7] shadow-xl"
-          role="listbox"
+          {...listbox.listboxProps}
         >
           {options.map((option) => {
             const isSelected = option.value === value;
             return (
               <button
-                aria-selected={isSelected}
                 className={`flex h-8 w-full min-w-0 items-center justify-between gap-2 px-3 text-left hover:bg-[#1d355c] ${
                   isSelected ? "bg-[#0c66e4] text-white" : "text-[#dfe1e6]"
                 }`}
                 key={option.value}
-                onClick={() => choose(option.value)}
-                role="option"
                 title={option.label}
                 type="button"
+                {...listbox.getOptionProps(option.value)}
               >
                 <span className="min-w-0 truncate">{option.label}</span>
                 {isSelected ? <Check size={14} className="shrink-0" /> : null}
