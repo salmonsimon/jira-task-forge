@@ -63,6 +63,10 @@ procedure.
 For local storage locations, cleanup expectations, and Windows/WSL app data
 caveats, see [`docs/local-data-storage-inventory.md`](docs/local-data-storage-inventory.md).
 
+For the Notion catalog sync source contract, see
+[`docs/notion-catalog-source-requirements.md`](docs/notion-catalog-source-requirements.md)
+and the stable Notion reference linked there.
+
 ## Local Git Guard
 
 This repo uses a local Git hook to block direct pushes to `main` from this workspace.

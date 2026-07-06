@@ -9,7 +9,7 @@ import { FeedbackNote } from "./components/ui";
 import { CategoriesPanel } from "./features/categories";
 import { JiraPreflightDialog, type JiraCreatePreflight } from "./features/jira-preflight";
 import { JqlView } from "./features/jql";
-import { AiProviderSetupGuide, SettingsPanel } from "./features/settings";
+import { AiProviderSetupGuide, notionCatalogSourceRequirementsUrl, SettingsPanel } from "./features/settings";
 import { TaskFocusWindow } from "./features/task-detail";
 import { TraysView, useTrayWorkspace } from "./features/trays";
 import { mockAppDataAdapter } from "./lib/adapters";
@@ -48,6 +48,7 @@ import {
   openPersistedAiProviderApiKeysPage,
   openPersistedAtlassianApiTokensPage,
   openPersistedJiraIssueUrl,
+  openPersistedNotionCatalogSourceRequirementsPage,
   openPersistedNotionDevelopersPage,
   runPersistedJqlQuery,
   saveCsvFile,
@@ -685,6 +686,19 @@ export default function App() {
     }
 
     window.open(url, "_blank", "noopener,noreferrer");
+  }
+
+  async function openCatalogSourceRequirementsPage() {
+    if (usesTauriPersistence) {
+      try {
+        await openPersistedNotionCatalogSourceRequirementsPage();
+        return;
+      } catch {
+        console.warn(`Could not open catalog source requirements automatically. Open ${notionCatalogSourceRequirementsUrl} in your browser.`);
+      }
+    }
+
+    window.open(notionCatalogSourceRequirementsUrl, "_blank", "noopener,noreferrer");
   }
 
   function showConnectionNotice(notice: Omit<ConnectionNotice, "id">) {
@@ -1644,6 +1658,7 @@ export default function App() {
             }
             onListJiraProjectsForConnection={listJiraProjectsForConnection}
             onOpenJiraApiTokens={openJiraApiTokensPage}
+            onOpenCatalogSourceRequirements={openCatalogSourceRequirementsPage}
             onOpenNotionDevelopers={openNotionDevelopersPage}
             onOpenAiProviderApiKeys={openAiProviderApiKeysPage}
             onExportBackup={exportBackup}

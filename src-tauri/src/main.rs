@@ -112,6 +112,7 @@ pub fn run() {
             commands::external_links::open_atlassian_api_tokens_page,
             commands::external_links::open_ai_provider_api_keys_page,
             commands::external_links::open_notion_developers_page,
+            commands::external_links::open_notion_catalog_source_requirements_page,
             commands::external_links::open_jira_issue_url
         ])
         .run(tauri::generate_context!())

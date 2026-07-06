@@ -42,6 +42,7 @@ describe("SettingsPanel", () => {
         onTestNotionCatalogConnection={async () => ({ ok: true, message: "Connected", title: "JTF Sync Catalog", extractedBlockCount: 1 })}
         onListJiraProjectsForConnection={async () => []}
         onOpenJiraApiTokens={() => undefined}
+        onOpenCatalogSourceRequirements={() => undefined}
         onOpenNotionDevelopers={() => undefined}
         onOpenAiProviderApiKeys={() => undefined}
         onExportBackup={() => undefined}
@@ -83,6 +84,7 @@ describe("SettingsPanel", () => {
         onTestNotionCatalogConnection={async () => ({ ok: true, message: "Connected", title: "JTF Sync Catalog", extractedBlockCount: 1 })}
         onListJiraProjectsForConnection={async () => []}
         onOpenJiraApiTokens={() => undefined}
+        onOpenCatalogSourceRequirements={() => undefined}
         onOpenNotionDevelopers={() => undefined}
         onOpenAiProviderApiKeys={() => undefined}
         onExportBackup={() => undefined}
@@ -124,6 +126,7 @@ describe("SettingsPanel", () => {
         onTestNotionCatalogConnection={async () => ({ ok: true, message: "Connected", title: "JTF Sync Catalog", extractedBlockCount: 1 })}
         onListJiraProjectsForConnection={async () => []}
         onOpenJiraApiTokens={() => undefined}
+        onOpenCatalogSourceRequirements={() => undefined}
         onOpenNotionDevelopers={() => undefined}
         onOpenAiProviderApiKeys={() => undefined}
         onExportBackup={() => undefined}

@@ -171,9 +171,11 @@ Still pending:
   workflow.
 - Issue #139: run JTFTEST live workflow QA for the landed Story/Bug templates
   and Epic Scope workflow. This requires credentials in the runtime under test.
-- Issue #179 documents the minimum contract for the Notion catalog sync source,
-  using the current Notion page as the reference example while keeping the
-  contract portable to Obsidian, Markdown, or another structured source.
+- Issue #179 documents the minimum contract for the Notion catalog sync source
+  in [`docs/notion-catalog-source-requirements.md`](notion-catalog-source-requirements.md)
+  and the linked stable Notion reference, using the current Notion page as the
+  example while keeping the contract portable to Obsidian, Markdown, or another
+  structured source.
 - Issue #153 packages the Windows app and chooses/applies the final icon after
   Issue #138, Issue #139, and Issue #179, so the team can run the app without
   `npm run tauri dev` and still has a clear catalog-source maintenance
@@ -210,9 +212,9 @@ Recommended stack to work next:
 - Run Issue #139 JTFTEST live workflow QA against the landed Story/Bug template
   and Epic Scope behavior, including credentialed Jira writes and local sync
   audit verification.
-- Document the minimum Notion catalog sync source contract in Issue #179 before
-  packaging, so the source can be maintained or ported without relying on memory
-  of the current page.
+- Verify the Issue #179 Notion catalog source reference during packaging, so the
+  source can be maintained or ported without relying on memory of the current
+  page.
 - Run Issue #153 packaging/icon after Issue #138, Issue #139, and Issue #179 so
   the Windows build reflects the reviewed workflow, QA evidence, and catalog
   source maintenance docs.
