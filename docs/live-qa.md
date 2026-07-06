@@ -257,7 +257,7 @@ not invent or enforce a formal performance budget from this smoke scenario.
   explicit inclusion because of CSV duplicate risk.
 - Confirm failed tasks are shown as retry candidates with their existing local
   identity.
-- Confirm epic resolution warnings group by `[{Project}] {Area}` target and
+- Confirm epic resolution warnings group by `[{Project}] [{Area}] {Scope}` target and
   expand to task titles only when review is useful.
 - Confirm metadata failures block before creating Jira issues when required
   issue types or fields are unavailable.
@@ -272,7 +272,7 @@ not invent or enforce a formal performance budget from this smoke scenario.
 - Confirm missing descriptions require explicit acknowledgement.
 - Confirm sub-task creation counts are visible before starting.
 - Start creation.
-- Verify required epics are resolved or created as `[{Project}] {Area}`.
+- Verify required epics are resolved or created as `[{Project}] [{Area}] {Scope}`.
 - Verify parent Story/Bug issues are created in `JTFTEST`.
 - Verify accepted/present sub-tasks are created after their parent issues and
   have the Jira parent relationship.

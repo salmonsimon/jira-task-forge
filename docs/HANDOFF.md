@@ -83,7 +83,8 @@ High-level shape:
 - AI is manually triggered. Implemented AI slices now draft JQL and generate
   per-task Assisted Description drafts through the Tauri backend, with local
   proposal review and logs before accepted content becomes the Jira description.
-- Epics follow `[{Project}] {Area}` and are synced from Jira to avoid duplicates.
+- New epics follow `[{Project}] [{Area}] {Scope}` and are synced from Jira to
+  avoid duplicates, while legacy `[{Project}] {Area}` epics remain compatible.
 - Local SQLite persistence, backup/export without secrets, and sync audit logs are part of v1 scope.
 - Technical stack is Tauri + React + TypeScript + shadcn/ui + Tailwind + SQLite.
 - Jira and AI calls should run through the Rust/Tauri backend, not directly from React.
@@ -96,8 +97,7 @@ High-level shape:
 
 ## Current Engineering Checkpoint
 
-As of the merged PR #144 official catalog sync checkpoint, the
-app includes:
+As of the merged PR #170 overlay/listbox checkpoint, the app includes:
 
 - Tauri + React shell with Jira-like styling.
 - SQLite-backed local trays and local tasks.
@@ -118,10 +118,10 @@ app includes:
   Diagnostics` detail view.
 - `Create in Jira` preflight, including credential/project/task validation and a configurable Jira creation project key.
 - Jira write path behind preflight: creation metadata validation, epic
-  search/create by `[{Project}] {Area}`, parent Story/Bug creation, accepted
-  sub-task creation, selected Jira-ready attachment upload, local Jira key/link
-  persistence, remote correlation markers through Jira issue properties, sync
-  audit events, and partial recovery via moving failed tasks to a recovery tray.
+  search/create, parent Story/Bug creation, accepted sub-task creation, selected
+  Jira-ready attachment upload, local Jira key/link persistence, remote
+  correlation markers through Jira issue properties, sync audit events, and
+  partial recovery via moving failed tasks to a recovery tray.
 - A reusable backend Jira client and read-only JQL query command wired to the JQL panel.
 - Persisted JQL favorites, session recent JQL history, and honest empty/error/loading states in the JQL panel.
 - OpenAI key storage, connection testing, and AI-assisted JQL draft generation through the Rust/Tauri backend.
@@ -147,38 +147,28 @@ app includes:
 - The post-PR #26 stabilization work has landed: Jira credential diagnostics,
   audit-log error redaction/capping, command-worker responsiveness, Jira
   response mapping helpers, and coverage-focused tests are now on `main`.
+- Recent workflow polish has also landed: tray selector markup fixes, Notion
+  setup direct routing, Jira token/setup copy, AI provider setup, shared drawer
+  scrims, topmost overlay Escape behavior, nested modal/listbox popup
+  standardization, local data storage inventory, managed attachment byte
+  cleanup after Jira sync, and bounded stale backup-import staging cleanup.
 
 Still pending:
 
-- Re-check native/live QA after the PR #144 catalog, Notion sync, Assisted
-  Description template-context, and Jira payload changes. Use `JTFTEST` for
-  writes and keep `DTS` read-only.
-- Issue #150: audit all popup/modal/dialog/sidebar/popover-like surfaces with
-  screenshots before choosing a standard component pattern. Saimon should choose
-  the preferred visual/interaction pattern before implementation consolidation.
-- Issue #149: complete or verify Escape behavior for Settings, Categories, and
-  nested modals without double-closing underlying surfaces.
-- Issue #147: clarify Jira setup Verify/Token order and messages. The current
-  guide still presents `Verify` before `Token`, so this remains a focused UX
-  cleanup.
-- Issue #146: create a reusable AI Provider setup modal after the popup audit
-  chooses the target pattern.
-- Issue #152: open the Notion setup guide directly from Categories Sync when
-  sync is blocked by missing Notion configuration.
-- Issue #140: fix invalid nested button markup in the tray selector.
+- Re-check native/live QA after the catalog, Notion sync, Assisted Description
+  template-context, Jira payload, overlay/listbox, setup, and attachment
+  lifecycle changes. Use `JTFTEST` for writes and keep `DTS` read-only.
 - Issue #134: separate exact Story and Bug Assisted Description target
-  templates. PR #144 added catalog delivery-format context but still validates a
-  single Story-shaped Markdown target.
-- Issue #132: implement Epic Scope modeling as a dedicated HITL-sensitive slice.
-- Issue #103: add documentation-only local data cleanup/storage inventory. Do
-  not add destructive cleanup UI or commands.
-- Issue #157: implement managed attachment byte cleanup after successful Jira
-  upload and after `AI only` attachments no longer need local bytes once a task
-  is `Created`.
-- Issue #158: implement bounded cleanup for stale `attachments/staging` files
-  after import or interrupted staging work.
-- Issue #138 and Issue #139 remain follow-ups after the remaining workflow
-  behavior changes land: docs alignment first, then JTFTEST live workflow QA.
+  templates. The docs now define both templates, but the implementation still
+  needs prompt/validation behavior by issue type.
+- Issue #132: implement Epic Scope modeling as a dedicated HITL-sensitive
+  workflow slice. New epics should use `[{Project}] [{Area}] {Scope}` while
+  preserving legacy `[{Project}] {Area}` compatibility.
+- Issue #138: documentation alignment remains the current docs workstream until
+  product decisions, handoff, live QA, and format docs all reflect the new
+  workflow.
+- Issue #139: run JTFTEST live workflow QA after Issue #134 and Issue #132 land,
+  because its acceptance cases depend on Bug templates and Epic Scope.
 - Issue #153 packages the Windows app and chooses/applies the final icon after
   Issue #138 and Issue #139, so the team can run the app without `npm run tauri
   dev`.
@@ -208,22 +198,15 @@ grill areas:
 
 Recommended stack to work next:
 
-- Launch Batch 1 as parallel AFK work: Issue #152 Notion setup direct routing,
-  Issue #140 tray selector nested button fix, Issue #103 storage inventory docs,
-  and Issue #150 screenshot-first popup/modal surface audit.
-- Then run setup and overlay polish: Issue #149 Escape behavior, Issue #147 Jira
-  Verify/Token ordering, and Issue #146 AI Provider setup modal. Issue #146
-  should use the Jira/Notion setup visual family with a two-step provider/model
-  then key/test flow.
-- Run storage lifecycle hardening next: Issue #157 managed attachment byte
-  cleanup and Issue #158 stale staging cleanup. Keep both AFK-scoped to backend
-  filesystem/sync/import behavior and focused tests; do not add broad cleanup UI
-  or app-data reset commands.
-- Treat Issue #134 Story/Bug template separation and Issue #132 Epic Scope
-  modeling as deeper workflow slices with focused tests. The Scope product rule
-  is already decided as `[{Project}] [{Area}] {Scope}`.
-- Run Issue #138 docs alignment and Issue #139 JTFTEST live workflow QA after
-  the behavior they document or validate has landed.
+- Finish Issue #138 docs alignment first enough that future agents do not
+  relaunch already-merged work or follow stale `[{Project}] {Area}` guidance.
+- Launch Issue #134 Story/Bug template separation and Issue #132 Epic Scope
+  modeling as the next implementation batch. They touch related workflow
+  contracts, but should run in separate WSL worktrees with explicit file
+  ownership and test boundaries.
+- Run Issue #139 JTFTEST live workflow QA after Issue #134 and Issue #132 land,
+  because its required cases include Bug descriptions and the new epic naming
+  rule.
 - Run Issue #153 packaging/icon after Issue #138 and Issue #139 so the Windows
   build reflects the reviewed workflow and QA evidence.
 
