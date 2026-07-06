@@ -261,7 +261,7 @@ This document captures the product scope decisions from the grill session. UI co
 - Partial sync results should clearly show which groups and tasks were created,
   paused, or failed.
 - Preflight warning groups should aggregate repeated warnings where possible.
-  Epic resolution warnings should group by `[{Project}] {Area}` epic target,
+  Epic resolution warnings should group by `[{Project}] [{Area}] {Scope}` epic target,
   show the affected task count, and allow expanding to task titles only when
   review is useful. Normal epic targets should not fill the preflight panel when
   there is no action required.
@@ -303,8 +303,8 @@ This document captures the product scope decisions from the grill session. UI co
   should search for the remote marker before creating again. If that search
   fails, the app should retry the search once with a short backoff. If the marker
   still cannot be confirmed, block creation only for the affected task or
-  `Project + Area` group, continue healthy groups, and record sanitized audit
-  history. Do not allow blind retry that could duplicate Jira issues.
+  `Project + Area + Scope` group, continue healthy groups, and record sanitized
+  audit history. Do not allow blind retry that could duplicate Jira issues.
 
 ## Jira Cloud Test Boundary
 
@@ -318,14 +318,34 @@ This document captures the product scope decisions from the grill session. UI co
 
 ## Epics
 
-- Epic naming rule is `[{Project}] {Area}`.
+- Epic naming rule is `[{Project}] [{Area}] {Scope}`.
+- `Scope` is the human-readable suffix of the epic summary. It is required for
+  Jira creation, but the app should let Saimon capture Local Tasks before the
+  tray has scope.
+- The app edits and displays the scope value, not a free-form full epic name.
+  The full Jira epic summary is derived from project, area, and scope.
+- `TBD` is a valid literal scope. It is not written as `[TBD]`, does not trigger
+  AI pluralization, and is also valid for `Transversal`.
+- Scope definition happens in two steps when needed:
+  1. singular/canonical scope, such as `Demo Version 1` or `TBD`;
+  2. optional confirmed transversal/plural scope for `Transversal`, assisted by
+     AI only as an editable proposal.
+- The app must never use AI-generated transversal scope silently. Saimon must
+  accept, edit, or skip the proposal.
+- If singular scope is skipped, preflight blocks Jira creation for every group
+  that needs scope. If only the transversal scope is skipped, preflight blocks
+  only `Transversal` groups.
 - Existing Jira epics are searched online before creating new ones.
-- The app derives projects, areas, and mappings from epics matching the naming rule.
-- The app maintains a mapping of `Project + Area -> Epic`.
-- During Jira sync, each task's `Project + Area` must resolve to an epic before
-  creating the story, bug, or sub-task that belongs to it.
+- The app derives projects, areas, scopes, and mappings from epics matching the
+  naming rule.
+- The app maintains a mapping of `Project + Area + Scope -> Epic`.
+- During Jira sync, each task's `Project + Area + Scope` must resolve to an
+  epic before creating the story, bug, or sub-task that belongs to it.
 - If no matching epic is found online through Jira search, the app creates the
   missing epic with the naming rule before creating the rest of that group.
+- Legacy epics using the old `[{Project}] {Area}` pattern should not break
+  existing local data or discovery, but new epics should not be created with the
+  legacy format.
 - Normal sync should not create stories, bugs, or sub-tasks without their
   resolved epic link.
 - If epic search or creation fails, pause the affected group and show an
@@ -346,9 +366,10 @@ This document captures the product scope decisions from the grill session. UI co
 - Projects and areas can be created locally.
 - Locally created categories become available immediately for task capture.
 - Projects and areas are synced from Jira on demand by reading existing epics.
-- The first Jira category sync should only read existing epics whose summaries
-  match the `[{Project}] {Area}` pattern. It should not infer categories from
-  arbitrary issue labels, summaries, or global Jira scans.
+- Jira category sync should read existing epics whose summaries match the
+  current `[{Project}] [{Area}] {Scope}` pattern, while preserving compatibility
+  with legacy `[{Project}] {Area}` epics for already-created data. It should not
+  infer categories from arbitrary issue labels, summaries, or global Jira scans.
 - Newly detected projects/areas are shown as suggestions and must be approved before becoming local categories.
 - Already-known categories should not create noise during sync.
 - Ignored suggestions may be remembered to avoid repeated noise.
@@ -469,6 +490,33 @@ description. If information is missing and materially changes the scope or
 acceptance criteria, the app should ask targeted clarification questions before
 drafting instead of leaving a generic uncertainty section in the Jira
 description.
+
+Bug descriptions use a separate bug-focused template instead of the Story
+template. They should include:
+
+```markdown
+## Problema
+
+## Contexto / impacto
+
+## Pasos para reproducir
+
+## Resultado actual
+
+## Resultado esperado
+
+## Evidencia
+
+## Criterios de aceptacion
+
+## Entregable minimo
+
+## Checklist antes de Review
+```
+
+Bug descriptions should explain what fails, how to reproduce it, what should
+happen instead, and what evidence proves the fix. Story descriptions should
+stay focused on user value, scope, and acceptance criteria.
 
 Personal v1 refines the current "Crear descripciones de JIRA" chat format into
 the fixed internal template captured in `docs/jira-description-format.md`. Keep
