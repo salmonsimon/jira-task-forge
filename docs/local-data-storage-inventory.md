@@ -91,8 +91,18 @@ attachments/
 
 The current implementation stores managed attachment files under relative paths
 rooted at `attachments/` and validates that stored paths cannot escape managed
-storage. Exact subdirectory shape is implementation-owned and may differ while
-Issue #95 finalizes the attachment lifecycle.
+storage. Backup import staging uses:
+
+```text
+attachments/staging/imports/{operation_id}/
+```
+
+The import operation copies the selected backup into this operation directory,
+removes the operation directory after a successful import, and removes staged
+file bytes on import failure while leaving a small sanitized `import-error.txt`
+evidence file. On app startup, interrupted active staging operations older than
+the conservative stale threshold are removed. Cleanup rejects a symlinked
+staging root and only removes paths inside app-managed staging.
 
 Files inside app data areas such as `data/`, `settings/`, `credentials/`,
 `logs/`, `logs/diagnostics/`, `backups/`, and `attachments/` should not be used
@@ -120,6 +130,11 @@ Implemented behavior:
   metadata when the task is not `Created`.
 - If creating attachment metadata fails after a file copy, the copied managed
   file is removed.
+- Successful backup imports remove their managed staging operation directory.
+- Failed backup imports remove staged file bytes and retain only a small
+  sanitized failure-evidence file under `attachments/staging/imports/`.
+- App startup removes stale interrupted attachment staging operations from
+  app-managed `attachments/staging/` only.
 - Attachment source validation blocks symbolic links, empty files, app-data
   internal sources, unsafe relative paths, and Jira-ready files over the Personal
   v1 100 MB product limit.
@@ -132,8 +147,6 @@ Accepted lifecycle rules that are not yet safe to treat as fully implemented:
 - `AI only` attachment bytes should be removed when the Local Task becomes
   `Created`, leaving only metadata/audit history needed to explain what was
   prepared.
-- Import staging files should be cleaned after import, and stale staging files
-  should be cleaned on next app start after a crash.
 - Backup bundles should include attachment bytes only while those bytes still
   exist in managed local storage.
 
