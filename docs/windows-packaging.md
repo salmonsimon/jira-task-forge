@@ -8,7 +8,7 @@ Issue #153 packaging must stay draft / not merge-ready until Issue #179 is merge
 
 ## Icon Assets
 
-The final app icon source lives at:
+The final app icon source is a transparent-background PNG and lives at:
 
 ```text
 src-tauri/icons/icon.png
