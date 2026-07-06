@@ -34,6 +34,14 @@ No incluye:
 ## Criterios de aceptacion
 
 - [Resultado verificable.]
+
+## Entregable minimo
+
+- [Cambio minimo necesario para completar la historia.]
+
+## Checklist antes de Review
+
+- [Evidencia disponible para revisar.]
 ```
 
 Bug descriptions should include only:

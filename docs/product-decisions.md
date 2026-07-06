@@ -482,6 +482,14 @@ No incluye:
 ## Criterios de aceptacion
 
 - ...
+
+## Entregable minimo
+
+- ...
+
+## Checklist antes de Review
+
+- ...
 ```
 
 Do not include mandatory `SRS Lite`, `SRE Lite`, validation, risk, rollback,

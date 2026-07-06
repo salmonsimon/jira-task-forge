@@ -38,7 +38,12 @@ const DEFAULT_JQL_FAVORITES: &[(&str, &str)] = &[
 const ASSISTED_DESCRIPTION_SECTION_DEFINITIONS: &[(&str, &str)] = &[
     ("user_story", "Historia de usuario"),
     ("problem", "Contexto"),
+    ("context_impact", "Contexto / impacto"),
     ("scope", "Alcance"),
+    ("reproduction_steps", "Pasos para reproducir"),
+    ("actual_result", "Resultado actual"),
+    ("expected_result", "Resultado esperado"),
+    ("evidence", "Evidencia"),
     ("acceptance_criteria", "Criterios de aceptacion"),
     ("minimum_deliverable", "Entregable mínimo"),
     ("review_checklist", "Checklist antes de Review"),
@@ -2353,7 +2358,10 @@ fn normalize_proposal_sections(
 
             Ok(AssistedDescriptionProposalSection {
                 section_id: (*section_id).to_string(),
-                heading: (*heading).to_string(),
+                heading: incoming
+                    .map(|section| section.heading.trim().to_string())
+                    .filter(|heading| !heading.is_empty())
+                    .unwrap_or_else(|| (*heading).to_string()),
                 current_content,
                 proposed_content,
                 status,
@@ -2404,29 +2412,11 @@ fn render_assisted_description_from_sections(
     sections: &[AssistedDescriptionProposalSection],
 ) -> String {
     let mut parts = Vec::new();
-    if let Some(user_story) = sections
-        .iter()
-        .find(|section| section.section_id == "user_story")
-    {
-        if let Some(content) = accepted_or_current_section_content(user_story) {
-            parts.push(format!("## Historia de usuario\n\n{content}"));
-        }
-    }
-
-    for (section_id, heading) in ASSISTED_DESCRIPTION_SECTION_DEFINITIONS
-        .iter()
-        .filter(|(section_id, _)| *section_id != "user_story")
-    {
-        let Some(section) = sections
-            .iter()
-            .find(|section| section.section_id == *section_id)
-        else {
-            continue;
-        };
+    for section in sections {
         let Some(content) = accepted_or_current_section_content(section) else {
             continue;
         };
-        parts.push(format!("## {heading}\n\n{content}"));
+        parts.push(format!("## {}\n\n{content}", section.heading));
     }
 
     parts.join("\n\n")

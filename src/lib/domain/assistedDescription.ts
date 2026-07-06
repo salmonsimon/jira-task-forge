@@ -4,18 +4,48 @@ import type {
   AssistedDescriptionProposalStatus,
   AssistedDescriptionSectionId,
   DescriptionSectionStatus,
+  IssueType,
   NewAssistedDescriptionProposal
 } from "../types";
 
 export type { AssistedDescriptionSectionId, DescriptionSectionStatus } from "../types";
 
-export const assistedDescriptionSectionDefinitions = [
+export const storyAssistedDescriptionSectionDefinitions = [
   { id: "user_story", label: "User story", markdownHeading: "Historia de usuario" },
   { id: "problem", label: "Context", markdownHeading: "Contexto" },
   { id: "scope", label: "Scope", markdownHeading: "Alcance" },
   { id: "acceptance_criteria", label: "Acceptance criteria", markdownHeading: "Criterios de aceptacion" },
   { id: "minimum_deliverable", label: "Minimum deliverable", markdownHeading: "Entregable mínimo" },
   { id: "review_checklist", label: "Review checklist", markdownHeading: "Checklist antes de Review" }
+] as const satisfies readonly {
+  id: AssistedDescriptionSectionId;
+  label: string;
+  markdownHeading: string;
+}[];
+
+export const bugAssistedDescriptionSectionDefinitions = [
+  { id: "problem", label: "Problem", markdownHeading: "Problema" },
+  { id: "context_impact", label: "Context / impact", markdownHeading: "Contexto / impacto" },
+  { id: "reproduction_steps", label: "Steps to reproduce", markdownHeading: "Pasos para reproducir" },
+  { id: "actual_result", label: "Actual result", markdownHeading: "Resultado actual" },
+  { id: "expected_result", label: "Expected result", markdownHeading: "Resultado esperado" },
+  { id: "evidence", label: "Evidence", markdownHeading: "Evidencia" },
+  { id: "acceptance_criteria", label: "Acceptance criteria", markdownHeading: "Criterios de aceptacion" },
+  { id: "minimum_deliverable", label: "Minimum deliverable", markdownHeading: "Entregable mínimo" },
+  { id: "review_checklist", label: "Review checklist", markdownHeading: "Checklist antes de Review" }
+] as const satisfies readonly {
+  id: AssistedDescriptionSectionId;
+  label: string;
+  markdownHeading: string;
+}[];
+
+export const assistedDescriptionSectionDefinitions = storyAssistedDescriptionSectionDefinitions;
+
+const allAssistedDescriptionSectionDefinitions = [
+  ...storyAssistedDescriptionSectionDefinitions,
+  ...bugAssistedDescriptionSectionDefinitions.filter(
+    (bugSection) => !storyAssistedDescriptionSectionDefinitions.some((storySection) => storySection.id === bugSection.id)
+  )
 ] as const satisfies readonly {
   id: AssistedDescriptionSectionId;
   label: string;
@@ -56,6 +86,7 @@ export type AssistedDescriptionParagraphDiff = {
 const sectionAliases: Record<AssistedDescriptionSectionId, string[]> = {
   user_story: ["historia de usuario", "user story"],
   problem: ["problema", "problem", "contexto", "context"],
+  context_impact: ["contexto impacto", "contexto / impacto", "context impact", "impacto"],
   scope: [
     "alcance",
     "scope",
@@ -83,6 +114,10 @@ const sectionAliases: Record<AssistedDescriptionSectionId, string[]> = {
     "constraints and dependencies",
     "constraints dependencies"
   ],
+  reproduction_steps: ["pasos para reproducir", "steps to reproduce", "reproduccion", "reproduction"],
+  actual_result: ["resultado actual", "actual result", "comportamiento actual", "observed result"],
+  expected_result: ["resultado esperado", "expected result", "comportamiento esperado"],
+  evidence: ["evidencia", "evidence", "captura", "video", "log"],
   acceptance_criteria: [
     "criterios de aceptacion de alto nivel",
     "criterios de aceptacion",
@@ -102,7 +137,7 @@ const sectionIdByNormalizedHeading = buildSectionAliasIndex();
 
 export function createEmptyAssistedDescriptionSections(): AssistedDescriptionSections {
   const sections = {} as AssistedDescriptionSections;
-  for (const section of assistedDescriptionSectionDefinitions) {
+  for (const section of allAssistedDescriptionSectionDefinitions) {
     sections[section.id] = "";
   }
   return sections;
@@ -110,20 +145,37 @@ export function createEmptyAssistedDescriptionSections(): AssistedDescriptionSec
 
 export function createEmptyAssistedDescriptionSectionStatuses(): AssistedDescriptionSectionStatuses {
   const statuses = {} as AssistedDescriptionSectionStatuses;
-  for (const section of assistedDescriptionSectionDefinitions) {
+  for (const section of allAssistedDescriptionSectionDefinitions) {
     statuses[section.id] = "Raw";
   }
   return statuses;
 }
 
-export function getAssistedDescriptionSectionLabel(sectionId: AssistedDescriptionSectionId): string {
-  return assistedDescriptionSectionDefinitions.find((section) => section.id === sectionId)?.label ?? sectionId;
+export function getAssistedDescriptionSectionDefinitions(issueType?: IssueType | string | null) {
+  return isBugDescriptionIssueType(issueType) ? bugAssistedDescriptionSectionDefinitions : storyAssistedDescriptionSectionDefinitions;
 }
 
-export function parseAssistedDescriptionMarkdown(markdown: string | null | undefined): AssistedDescriptionSections {
+export function getAssistedDescriptionSectionIds(issueType?: IssueType | string | null): AssistedDescriptionSectionId[] {
+  return getAssistedDescriptionSectionDefinitions(issueType).map((section) => section.id);
+}
+
+export function getAssistedDescriptionSectionLabel(
+  sectionId: AssistedDescriptionSectionId,
+  issueType?: IssueType | string | null
+): string {
+  return getAssistedDescriptionSectionDefinitions(issueType).find((section) => section.id === sectionId)?.label
+    ?? allAssistedDescriptionSectionDefinitions.find((section) => section.id === sectionId)?.label
+    ?? sectionId;
+}
+
+export function parseAssistedDescriptionMarkdown(
+  markdown: string | null | undefined,
+  issueType?: IssueType | string | null
+): AssistedDescriptionSections {
   const sections = createEmptyAssistedDescriptionSections();
   const lines = (markdown ?? "").replace(/\r\n/g, "\n").split("\n");
   let currentSectionId: AssistedDescriptionSectionId | null = null;
+  const fallbackSectionId: AssistedDescriptionSectionId = isBugDescriptionIssueType(issueType) ? "problem" : "problem";
 
   for (const line of lines) {
     const heading = line.match(/^(#{1,6})\s+(.+?)\s*$/);
@@ -139,28 +191,48 @@ export function parseAssistedDescriptionMarkdown(markdown: string | null | undef
       }
     }
 
-    const targetSectionId = currentSectionId ?? "problem";
+    const targetSectionId = currentSectionId ?? fallbackSectionId;
     sections[targetSectionId] = appendSectionLine(sections[targetSectionId], line);
   }
 
-  for (const section of assistedDescriptionSectionDefinitions) {
+  for (const section of allAssistedDescriptionSectionDefinitions) {
     sections[section.id] = trimSectionContent(sections[section.id]);
   }
 
   return sections;
 }
 
-export function serializeAssistedDescriptionSections(sections: AssistedDescriptionSections): string {
+export function serializeAssistedDescriptionSections(
+  sections: AssistedDescriptionSections,
+  issueType?: IssueType | string | null
+): string {
   const lines: string[] = [];
-  for (const section of assistedDescriptionSectionDefinitions) {
+  for (const section of getAssistedDescriptionSectionDefinitions(issueType)) {
     appendSerializedSection(lines, 2, section.markdownHeading, sections[section.id]);
   }
 
   return lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
+export function serializeAssistedDescriptionSectionsForProposal(
+  sections: AssistedDescriptionSections,
+  proposal: AssistedDescriptionProposal
+): string {
+  const lines: string[] = [];
+  for (const proposalSection of proposal.sections) {
+    appendSerializedSection(
+      lines,
+      2,
+      proposalSection.heading || getAssistedDescriptionSectionLabel(proposalSection.sectionId),
+      sections[proposalSection.sectionId]
+    );
+  }
+
+  return lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
 export function hasMeaningfulAssistedDescriptionContent(sections: AssistedDescriptionSections): boolean {
-  return assistedDescriptionSectionDefinitions.some((section) => Boolean(sections[section.id].trim()));
+  return allAssistedDescriptionSectionDefinitions.some((section) => Boolean(sections[section.id].trim()));
 }
 
 export function applyManualAssistedDescriptionSectionEdit(
@@ -204,7 +276,8 @@ export function buildAssistedDescriptionProposal({
   proposedMarkdown,
   provider,
   sectionIds,
-  taskId
+  taskId,
+  issueType
 }: {
   changeRequest?: string;
   currentMarkdown: string;
@@ -215,13 +288,15 @@ export function buildAssistedDescriptionProposal({
   provider?: string | null;
   sectionIds?: AssistedDescriptionSectionId[];
   taskId: string;
+  issueType?: IssueType | string | null;
 }): AssistedDescriptionProposal {
   const proposalId = id ?? `proposal-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-  const currentSections = parseAssistedDescriptionMarkdown(currentMarkdown);
-  const proposedSections = parseAssistedDescriptionMarkdown(proposedMarkdown);
-  const uniqueSectionIds = getUniqueSectionIds(sectionIds);
+  const currentSections = parseAssistedDescriptionMarkdown(currentMarkdown, issueType);
+  const proposedSections = parseAssistedDescriptionMarkdown(proposedMarkdown, issueType);
+  const activeSectionDefinitions = getAssistedDescriptionSectionDefinitions(issueType);
+  const uniqueSectionIds = getUniqueSectionIds(sectionIds, issueType);
   const selectedSectionIds = new Set(uniqueSectionIds);
-  const sections: AssistedDescriptionProposalSection[] = assistedDescriptionSectionDefinitions.map((section) => {
+  const sections: AssistedDescriptionProposalSection[] = activeSectionDefinitions.map((section) => {
     const proposedContent = selectedSectionIds.has(section.id) ? proposedSections[section.id] : "";
     return {
       currentContent: currentSections[section.id],
@@ -245,7 +320,7 @@ export function buildAssistedDescriptionProposal({
     summary: buildProposalSummary(uniqueSectionIds, changeRequest),
     taskId,
     title: uniqueSectionIds.length === 1
-      ? `AI proposal: ${getAssistedDescriptionSectionLabel(uniqueSectionIds[0])}`
+      ? `AI proposal: ${getAssistedDescriptionSectionLabel(uniqueSectionIds[0], issueType)}`
       : "AI description proposal",
     updatedAt: now,
     userComment: changeRequest.trim() || null
@@ -289,7 +364,7 @@ export function reviseAssistedDescriptionProposal(
   now = new Date().toISOString()
 ): AssistedDescriptionProposal {
   const revisionSectionsBySectionId = new Map(revision.sections.map((section) => [section.sectionId, section]));
-  const targetSectionIds = new Set(getUniqueSectionIds(sectionIds));
+  const targetSectionIds = new Set(sectionIds?.length ? sectionIds : proposal.sections.map((section) => section.sectionId));
 
   return {
     ...proposal,
@@ -324,7 +399,7 @@ export function getAssistedDescriptionProposalItems(
     .map((section) => ({
       currentValue: section.currentContent,
       id: `${proposal.id}-${section.sectionId}`,
-      label: getAssistedDescriptionSectionLabel(section.sectionId),
+      label: section.heading || getAssistedDescriptionSectionLabel(section.sectionId),
       proposedValue: section.proposedContent,
       reviewerComment: section.reviewerComment ?? null,
       sectionId: section.sectionId,
@@ -390,7 +465,7 @@ export function buildResolveAssistedDescriptionProposalItemPatch(
 
   return {
     ...nextState,
-    markdown: serializeAssistedDescriptionSections(nextState.sections),
+    markdown: serializeAssistedDescriptionSectionsForProposal(nextState.sections, proposal),
     proposal: nextProposal,
     shouldApplyDescription: accepted
   };
@@ -439,7 +514,7 @@ export function buildResolveAssistedDescriptionProposalPatch(
 
   return {
     ...nextState,
-    markdown: serializeAssistedDescriptionSections(nextState.sections),
+    markdown: serializeAssistedDescriptionSectionsForProposal(nextState.sections, proposal),
     proposal: nextProposal,
     shouldApplyDescription: accepted || nextStatus === "Partial"
   };
@@ -572,7 +647,7 @@ function appendSerializedSection(lines: string[], level: 2 | 3, heading: string,
 
 function buildSectionAliasIndex(): Map<string, AssistedDescriptionSectionId> {
   const index = new Map<string, AssistedDescriptionSectionId>();
-  for (const section of assistedDescriptionSectionDefinitions) {
+  for (const section of allAssistedDescriptionSectionDefinitions) {
     index.set(normalizeHeading(section.markdownHeading), section.id);
     index.set(normalizeHeading(section.label), section.id);
     for (const alias of sectionAliases[section.id]) {
@@ -602,8 +677,11 @@ function isWrapperHeading(value: string): boolean {
   return heading === "srs lite" || heading === "jira srs lite";
 }
 
-function getUniqueSectionIds(sectionIds: AssistedDescriptionSectionId[] | undefined): AssistedDescriptionSectionId[] {
-  const fallback = assistedDescriptionSectionDefinitions.map((section) => section.id);
+function getUniqueSectionIds(
+  sectionIds: AssistedDescriptionSectionId[] | undefined,
+  issueType?: IssueType | string | null
+): AssistedDescriptionSectionId[] {
+  const fallback = getAssistedDescriptionSectionIds(issueType);
   const selectedSectionIds = sectionIds?.length ? sectionIds : fallback;
   const seen = new Set<AssistedDescriptionSectionId>();
   return selectedSectionIds.filter((sectionId) => {
@@ -618,6 +696,11 @@ function buildProposalSummary(sectionIds: AssistedDescriptionSectionId[], change
   if (request) return `Requested adjustment: ${truncateSummary(request)}`;
   if (sectionIds.length === 1) return `Review proposed changes to ${getAssistedDescriptionSectionLabel(sectionIds[0])}.`;
   return "Review proposed Jira description changes.";
+}
+
+function isBugDescriptionIssueType(issueType?: IssueType | string | null): boolean {
+  const normalized = normalizeHeading(issueType ?? "");
+  return normalized === "bug" || normalized === "error";
 }
 
 function truncateSummary(value: string): string {

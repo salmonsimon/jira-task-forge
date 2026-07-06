@@ -13,7 +13,12 @@ export type AssistedDescriptionProposalStatus = "Pending" | "Accepted" | "Reject
 export type AssistedDescriptionSectionId =
   | "user_story"
   | "problem"
+  | "context_impact"
   | "scope"
+  | "reproduction_steps"
+  | "actual_result"
+  | "expected_result"
+  | "evidence"
   | "acceptance_criteria"
   | "minimum_deliverable"
   | "review_checklist";
