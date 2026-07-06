@@ -5,13 +5,16 @@ import { Button, FeedbackNote, IconButton } from "../../components/ui";
 import { appOverlayLayers, useAppOverlay } from "../../lib/app-overlays";
 import {
   applyManualAssistedDescriptionSectionEdit,
-  assistedDescriptionSectionDefinitions,
+  buildAssistedDescriptionGenerationContext,
   buildAssistedDescriptionParagraphDiff,
   buildAssistedDescriptionProposal,
   buildResolveAssistedDescriptionProposalItemPatch,
   buildResolveAssistedDescriptionProposalPatch,
   createEmptyAssistedDescriptionSectionStatuses,
+  formatAssistedDescriptionSectionScopeLabel,
   getAssistedDescriptionProposalItems,
+  getAssistedDescriptionSectionDefinitions,
+  getAssistedDescriptionSectionIds,
   getAssistedDescriptionSectionLabel,
   hasAcceptedAssistedDescriptionProposalSections,
   hasMeaningfulAssistedDescriptionContent,
@@ -43,8 +46,6 @@ import { AssistedDescriptionMarkdown } from "./AssistedDescriptionMarkdown";
 import { TaskFocusSection } from "./TaskFocusSection";
 
 export const assistedDescriptionEditorSelector = "[data-description-editor]";
-
-const allSectionIds = assistedDescriptionSectionDefinitions.map((section) => section.id);
 
 export function AssistedDescriptionSection({
   task,
@@ -92,9 +93,11 @@ export function AssistedDescriptionSection({
   proposalModel?: string | null;
   proposalProvider?: string | null;
 }) {
-  const sections = useMemo(() => parseAssistedDescriptionMarkdown(task.description), [task.description]);
+  const activeSectionDefinitions = useMemo(() => getAssistedDescriptionSectionDefinitions(task.issueType), [task.issueType]);
+  const allSectionIds = useMemo(() => getAssistedDescriptionSectionIds(task.issueType), [task.issueType]);
+  const sections = useMemo(() => parseAssistedDescriptionMarkdown(task.description, task.issueType), [task.description, task.issueType]);
   const hasDescriptionContent = hasMeaningfulAssistedDescriptionContent(sections);
-  const hasEmptySections = assistedDescriptionSectionDefinitions.some((section) => !sections[section.id].trim());
+  const hasEmptySections = activeSectionDefinitions.some((section) => !sections[section.id].trim());
   const canLoadPersistedProposals = Boolean(onListProposals || onListProposalLog);
   const [sectionStatuses, setSectionStatuses] = useState<AssistedDescriptionSectionStatuses>(() =>
     createEmptyAssistedDescriptionSectionStatuses()
@@ -121,7 +124,7 @@ export function AssistedDescriptionSection({
   const [editingProposalItemId, setEditingProposalItemId] = useState<string | null>(null);
 
   useEffect(() => {
-    const nextSections = parseAssistedDescriptionMarkdown(task.description);
+    const nextSections = parseAssistedDescriptionMarkdown(task.description, task.issueType);
     setSectionStatuses(createEmptyAssistedDescriptionSectionStatuses());
     setShowEmptySections(false);
     setDescriptionContext("");
@@ -167,7 +170,7 @@ export function AssistedDescriptionSection({
     return () => {
       isCurrent = false;
     };
-  }, [task.id, canLoadPersistedProposals]);
+  }, [task.id, task.issueType, canLoadPersistedProposals]);
 
   const activeProposal = activeProposalId ? proposals.find((proposal) => proposal.id === activeProposalId) ?? null : null;
 
@@ -195,7 +198,10 @@ export function AssistedDescriptionSection({
     setReviewMessage(null);
 
     try {
-      const draft = await onGenerateDescription(task.id, buildGenerationContext(changeRequest, sectionIds));
+      const draft = await onGenerateDescription(
+        task.id,
+        buildAssistedDescriptionGenerationContext({ changeRequest, issueType: task.issueType, sectionIds })
+      );
       if (draft.status === "needs_clarification") {
         setDescriptionMessage("More context is needed before generating a useful proposal.");
         setClarificationQuestions(draft.clarificationQuestions);
@@ -210,7 +216,8 @@ export function AssistedDescriptionSection({
 
       const proposal = buildAssistedDescriptionProposal({
         changeRequest,
-        currentMarkdown: serializeAssistedDescriptionSections(sections),
+        currentMarkdown: serializeAssistedDescriptionSections(sections, task.issueType),
+        issueType: task.issueType,
         model: proposalModel,
         proposedMarkdown: draft.description,
         provider: proposalProvider,
@@ -252,18 +259,19 @@ export function AssistedDescriptionSection({
     if (readOnly || isRequestingProposalChanges || isGeneratingDescription || !changeRequest.trim()) return false;
 
     setIsRequestingProposalChanges(true);
-    setRequestingProposalChangeLabel(formatSectionScopeLabel(sectionIds));
+    setRequestingProposalChangeLabel(formatAssistedDescriptionSectionScopeLabel(sectionIds, task.issueType));
     setReviewMessage(null);
     try {
       if (isEmptySectionChangeRequest(changeRequest)) {
         const emptyRevision = buildAssistedDescriptionProposal({
           changeRequest,
-          currentMarkdown: serializeAssistedDescriptionSections(sections),
+          currentMarkdown: serializeAssistedDescriptionSections(sections, task.issueType),
+          issueType: task.issueType,
           model: proposalModel,
           proposedMarkdown: serializeAssistedDescriptionSections({
             ...sections,
             ...Object.fromEntries(sectionIds.map((sectionId) => [sectionId, ""]))
-          } as AssistedDescriptionSections),
+          } as AssistedDescriptionSections, task.issueType),
           provider: proposalProvider,
           sectionIds,
           taskId: task.id
@@ -286,7 +294,10 @@ export function AssistedDescriptionSection({
         return true;
       }
 
-      const draft = await onGenerateDescription(task.id, buildGenerationContext(changeRequest, sectionIds));
+      const draft = await onGenerateDescription(
+        task.id,
+        buildAssistedDescriptionGenerationContext({ changeRequest, issueType: task.issueType, sectionIds })
+      );
       if (draft.status === "needs_clarification") {
         setReviewMessage(`More context is needed: ${draft.clarificationQuestions.join(" ")}`);
         return false;
@@ -298,7 +309,8 @@ export function AssistedDescriptionSection({
 
       const revision = buildAssistedDescriptionProposal({
         changeRequest,
-        currentMarkdown: serializeAssistedDescriptionSections(sections),
+        currentMarkdown: serializeAssistedDescriptionSections(sections, task.issueType),
+        issueType: task.issueType,
         model: proposalModel,
         proposedMarkdown: draft.description,
         provider: proposalProvider,
@@ -343,7 +355,7 @@ export function AssistedDescriptionSection({
     setSavingSectionId(sectionId);
     setSectionMessages((currentMessages) => ({ ...currentMessages, [sectionId]: undefined }));
     try {
-      await onSaveDescription(task.id, serializeAssistedDescriptionSections(nextState.sections));
+      await onSaveDescription(task.id, serializeAssistedDescriptionSections(nextState.sections, task.issueType));
       setSectionStatuses(nextState.sectionStatuses);
       return true;
     } catch (error) {
@@ -594,13 +606,14 @@ export function AssistedDescriptionSection({
           notes={task.notes}
           onMarkSectionOk={markSectionOk}
           onRequestSectionProposal={(sectionId) => {
-            openDescriptionPrompt([sectionId], `Revise only ${getAssistedDescriptionSectionLabel(sectionId)}.`);
+            openDescriptionPrompt([sectionId], `Revise only ${getAssistedDescriptionSectionLabel(sectionId, task.issueType)}.`);
           }}
           onSaveSection={saveSection}
           readOnly={readOnly}
           savingSectionId={savingSectionId}
           sectionMessages={sectionMessages}
           sectionStatuses={sectionStatuses}
+          sectionDefinitions={activeSectionDefinitions}
           sections={sections}
           showEmptySections={showEmptySections}
         />
@@ -657,6 +670,7 @@ function AssistedDescriptionSectionList({
   savingSectionId,
   sectionMessages,
   sectionStatuses,
+  sectionDefinitions,
   sections,
   showEmptySections
 }: {
@@ -669,12 +683,13 @@ function AssistedDescriptionSectionList({
   savingSectionId: AssistedDescriptionSectionId | null;
   sectionMessages: Partial<Record<AssistedDescriptionSectionId, string>>;
   sectionStatuses: AssistedDescriptionSectionStatuses;
+  sectionDefinitions: ReturnType<typeof getAssistedDescriptionSectionDefinitions>;
   sections: AssistedDescriptionSections;
   showEmptySections: boolean;
 }) {
   const visibleSections = showEmptySections
-    ? assistedDescriptionSectionDefinitions
-    : assistedDescriptionSectionDefinitions.filter((section) => sections[section.id].trim());
+    ? sectionDefinitions
+    : sectionDefinitions.filter((section) => sections[section.id].trim());
 
   if (!hasDescriptionContent && !showEmptySections) {
     return (
@@ -701,7 +716,7 @@ function AssistedDescriptionSectionList({
           title={section.label}
         />
       ))}
-      {!showEmptySections && assistedDescriptionSectionDefinitions.some((section) => !sections[section.id].trim()) ? (
+      {!showEmptySections && sectionDefinitions.some((section) => !sections[section.id].trim()) ? (
         <div className="rounded border border-dashed border-[#454852] bg-[#22252a] px-4 py-3 text-xs text-[#9aa0aa]">
           Empty Jira description sections are hidden in read mode.
         </div>
@@ -1696,27 +1711,6 @@ function formatProposalLogTimestamp(timestamp: string): string {
     hour: "2-digit",
     minute: "2-digit"
   });
-}
-
-function buildGenerationContext(changeRequest: string, sectionIds: AssistedDescriptionSectionId[]) {
-  const request = changeRequest.trim();
-  const sectionLabels = sectionIds.map((sectionId) => getAssistedDescriptionSectionLabel(sectionId)).join(", ");
-  const scope =
-    sectionIds.length === assistedDescriptionSectionDefinitions.length
-      ? "Generate a complete proposal for the fixed DTS Jira description sections."
-      : `Revise only these fixed DTS Jira description sections: ${sectionLabels}. Leave other sections unchanged.`;
-
-  return [
-    request,
-    scope,
-    "Use only these fixed sections: User story, Context, Scope, Acceptance criteria. If missing information materially changes scope or acceptance criteria, ask targeted clarification questions instead of inventing Jira content."
-  ].filter(Boolean).join("\n\n");
-}
-
-function formatSectionScopeLabel(sectionIds: AssistedDescriptionSectionId[]): string {
-  if (sectionIds.length === 1) return getAssistedDescriptionSectionLabel(sectionIds[0]);
-  if (sectionIds.length === assistedDescriptionSectionDefinitions.length) return "all proposal sections";
-  return `${sectionIds.length} proposal sections`;
 }
 
 export function isAiProviderSetupMessage(message: string): boolean {

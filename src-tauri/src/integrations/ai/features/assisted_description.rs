@@ -1,5 +1,6 @@
 use serde_json::{json, Value};
 
+use self::template_policy::{normalize_heading, TemplatePolicy};
 use super::{strip_json_fence, JsonFeatureRequest};
 use crate::area_catalog::{catalog_context_for_area, resolve_catalog_area, CatalogAreaResolution};
 use crate::integrations::ai::AiProvider;
@@ -8,17 +9,33 @@ use crate::models::{AssistedDescriptionDraft, LocalTask};
 const SIMPLE_TASK_TITLE_WORD_LIMIT: usize = 4;
 const ASSISTED_DESCRIPTION_BASE_CONTEXT: &str =
     include_str!("../../../../../docs/assisted-description-context.md");
-const ASSISTED_DESCRIPTION_REQUIRED_HEADINGS: &[&str] = &[
-    "## Historia de usuario",
-    "## Contexto",
-    "## Alcance",
-    "## Criterios de aceptacion",
-    "## Entregable mínimo",
-    "## Checklist antes de Review",
-];
-const ASSISTED_DESCRIPTION_FINAL_HEADINGS: &[&str] =
-    &["## Entregable mínimo", "## Checklist antes de Review"];
-const ASSISTED_DESCRIPTION_TEMPLATE: &str = r#"## Historia de usuario
+
+mod template_policy {
+    pub(super) struct TemplatePolicy {
+        required_headings: &'static [&'static str],
+        template: &'static str,
+    }
+
+    const STORY_REQUIRED_HEADINGS: &[&str] = &[
+        "Historia de usuario",
+        "Contexto",
+        "Alcance",
+        "Criterios de aceptacion",
+        "Entregable mínimo",
+        "Checklist antes de Review",
+    ];
+    const BUG_REQUIRED_HEADINGS: &[&str] = &[
+        "Problema",
+        "Contexto / impacto",
+        "Pasos para reproducir",
+        "Resultado actual",
+        "Resultado esperado",
+        "Evidencia",
+        "Criterios de aceptacion",
+        "Entregable mínimo",
+        "Checklist antes de Review",
+    ];
+    const STORY_ASSISTED_DESCRIPTION_TEMPLATE: &str = r#"## Historia de usuario
 
 Como [usuario/persona],
 quiero [necesidad],
@@ -48,6 +65,107 @@ No incluye:
 
 - ...
 "#;
+    const BUG_ASSISTED_DESCRIPTION_TEMPLATE: &str = r#"## Problema
+
+[Que falla.]
+
+## Contexto / impacto
+
+[A quien afecta y por que importa.]
+
+## Pasos para reproducir
+
+1. [Paso verificable.]
+
+## Resultado actual
+
+[Comportamiento observado.]
+
+## Resultado esperado
+
+[Comportamiento correcto.]
+
+## Evidencia
+
+- [Captura, video, log, PR, build, o referencia accesible.]
+
+## Criterios de aceptacion
+
+- [Resultado verificable.]
+
+## Entregable mínimo
+
+- [Cambio minimo necesario para resolver el problema.]
+
+## Checklist antes de Review
+
+- [Evidencia disponible para revisar.]
+"#;
+
+    impl TemplatePolicy {
+        pub(super) fn for_issue_type(issue_type: &str) -> Self {
+            if is_bug_issue_type(issue_type) {
+                Self {
+                    required_headings: BUG_REQUIRED_HEADINGS,
+                    template: BUG_ASSISTED_DESCRIPTION_TEMPLATE,
+                }
+            } else {
+                Self {
+                    required_headings: STORY_REQUIRED_HEADINGS,
+                    template: STORY_ASSISTED_DESCRIPTION_TEMPLATE,
+                }
+            }
+        }
+
+        pub(super) fn template(&self) -> &'static str {
+            self.template
+        }
+
+        pub(super) fn required_headings(&self) -> &'static [&'static str] {
+            self.required_headings
+        }
+
+        pub(super) fn final_headings(&self) -> [&'static str; 2] {
+            ["Entregable mínimo", "Checklist antes de Review"]
+        }
+
+        pub(super) fn allows_heading(&self, heading: &str) -> bool {
+            let normalized_heading = normalize_heading(heading);
+            self.required_headings()
+                .iter()
+                .any(|required_heading| normalize_heading(required_heading) == normalized_heading)
+        }
+    }
+
+    pub(super) fn normalize_heading(value: &str) -> String {
+        value
+            .trim()
+            .to_lowercase()
+            .replace('á', "a")
+            .replace('é', "e")
+            .replace('í', "i")
+            .replace('ó', "o")
+            .replace('ú', "u")
+            .replace('ü', "u")
+            .replace('ñ', "n")
+            .chars()
+            .map(|character| {
+                if character.is_ascii_alphanumeric() {
+                    character
+                } else {
+                    ' '
+                }
+            })
+            .collect::<String>()
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+
+    fn is_bug_issue_type(issue_type: &str) -> bool {
+        matches!(normalize_heading(issue_type).as_str(), "bug" | "error")
+    }
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum AssistedDescriptionRequest {
@@ -82,6 +200,7 @@ pub(crate) fn build_request(
 pub(crate) fn parse_draft(
     provider: AiProvider,
     output_text: &str,
+    issue_type: &str,
 ) -> Result<AssistedDescriptionDraft, String> {
     let draft: AssistedDescriptionDraft = serde_json::from_str(&strip_json_fence(output_text))
         .map_err(|error| {
@@ -90,7 +209,7 @@ pub(crate) fn parse_draft(
                 provider.label()
             )
         })?;
-    validate_assisted_description_draft(draft)
+    validate_assisted_description_draft(draft, issue_type)
 }
 
 fn provider_task_description_json_prompt(input: &str) -> String {
@@ -126,9 +245,10 @@ fn task_description_generation_instructions() -> &'static str {
     "You generate Assisted Descriptions for Jira Task Forge Local Tasks. Return only valid JSON matching the schema. \
 Generated Jira task descriptions may be Spanish when the task language is Spanish. UI copy is not part of the response. \
 Use the exact Markdown section headings from the requested template. \
+Do not add headings or sections that are not present in the requested template. \
 Use the base context as user and project preference context, especially stack defaults. \
 Do not invent product behavior, implementation scope, or acceptance criteria. \
-Do not add validation, risk, rollback, observability, or open-question sections. \
+Do not add validation, risk, rollback, observability, open-question, suggested-subtask, or subtasks sections. \
 When synced Notion catalog template context is present, treat its minimum deliverable and review checklist as mandatory requirements for the draft. The description must always end with the final sections ## Entregable mínimo and ## Checklist antes de Review, in that order. \
 Catalog template headings are content requirements only; map them into the Target Markdown format and never replace the Target Markdown format headings. \
 Prefer drafting over asking for clarification when the title, area, and user context describe a concrete problem or desired outcome. \
@@ -155,6 +275,8 @@ fn task_description_generation_context(
     } else {
         additional_context
     };
+
+    let policy = TemplatePolicy::for_issue_type(&task.issue_type);
 
     format!(
         "Base context:\n{base_context}\n\n\
@@ -183,7 +305,7 @@ Target Markdown format:\n{template}",
         priority = task.priority,
         language = task.content_language,
         title = task.title,
-        template = ASSISTED_DESCRIPTION_TEMPLATE
+        template = policy.template()
     )
 }
 
@@ -205,9 +327,9 @@ fn missing_or_fallback_catalog_context(
         CatalogAreaResolution::Blocked => format!(
             "Manual catalog guidance:\n\
 - No synced Notion catalog template context was found for Area: {area}.\n\
-- Preserve the Target Markdown format exactly, including historia de usuario, contexto, alcance, criterios de aceptacion, entregable, and checklist.\n\
+- Preserve the Target Markdown format exactly, including only the headings requested for this issue type.\n\
 - Do not pretend official catalog template requirements exist for this Area.\n\
-- If the title and user context do not give enough information for scope, acceptance criteria, deliverable, or checklist, return needs_clarification with targeted questions.",
+- If the title and user context do not give enough information for the requested sections, return needs_clarification with targeted questions.",
             area = task.area
         ),
     }
@@ -215,6 +337,7 @@ fn missing_or_fallback_catalog_context(
 
 fn validate_assisted_description_draft(
     mut draft: AssistedDescriptionDraft,
+    issue_type: &str,
 ) -> Result<AssistedDescriptionDraft, String> {
     draft.status = draft.status.trim().to_string();
     draft.description = draft
@@ -234,15 +357,10 @@ fn validate_assisted_description_draft(
             let Some(description) = draft.description.as_deref() else {
                 return Err("AI provider returned an empty assisted description.".to_string());
             };
-            if let Some(missing_heading) = ASSISTED_DESCRIPTION_REQUIRED_HEADINGS
-                .iter()
-                .find(|heading| !description.contains(**heading))
-            {
-                return Err(format!(
-                    "AI provider omitted required assisted description section {missing_heading}."
-                ));
-            }
-            validate_final_description_sections(description)?;
+            let policy = TemplatePolicy::for_issue_type(issue_type);
+            validate_required_description_sections(description, &policy)?;
+            validate_no_extra_description_sections(description, &policy)?;
+            validate_final_description_sections(description, &policy)?;
             draft.clarification_questions.clear();
         }
         "needs_clarification" => {
@@ -264,14 +382,58 @@ fn validate_assisted_description_draft(
     Ok(draft)
 }
 
-fn validate_final_description_sections(description: &str) -> Result<(), String> {
-    let deliverable_index = description
-        .find(ASSISTED_DESCRIPTION_FINAL_HEADINGS[0])
+fn validate_required_description_sections(
+    description: &str,
+    policy: &TemplatePolicy,
+) -> Result<(), String> {
+    let headings = markdown_headings(description);
+    let normalized_headings = headings
+        .iter()
+        .map(|heading| normalize_heading(heading))
+        .collect::<Vec<_>>();
+    if let Some(missing_heading) = policy
+        .required_headings()
+        .iter()
+        .find(|heading| !normalized_headings.contains(&normalize_heading(heading)))
+    {
+        return Err(format!(
+            "AI provider omitted required assisted description section ## {missing_heading}."
+        ));
+    }
+    Ok(())
+}
+
+fn validate_no_extra_description_sections(
+    description: &str,
+    policy: &TemplatePolicy,
+) -> Result<(), String> {
+    for heading in markdown_headings(description) {
+        if !policy.allows_heading(&heading) {
+            return Err(format!(
+                "AI provider returned out-of-template assisted description section ## {heading}."
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_final_description_sections(
+    description: &str,
+    policy: &TemplatePolicy,
+) -> Result<(), String> {
+    let heading_positions = markdown_heading_positions(description);
+    let [deliverable_heading, checklist_heading] = policy.final_headings();
+    let deliverable_index = heading_positions
+        .iter()
+        .find(|(_, heading)| normalize_heading(heading) == normalize_heading(deliverable_heading))
+        .map(|(index, _)| *index)
         .ok_or_else(|| {
             "AI provider omitted final assisted description deliverable section.".to_string()
         })?;
-    let checklist_index = description
-        .find(ASSISTED_DESCRIPTION_FINAL_HEADINGS[1])
+    let checklist_index = heading_positions
+        .iter()
+        .find(|(_, heading)| normalize_heading(heading) == normalize_heading(checklist_heading))
+        .map(|(index, _)| *index)
         .ok_or_else(|| {
             "AI provider omitted final assisted description checklist section.".to_string()
         })?;
@@ -293,6 +455,32 @@ fn validate_final_description_sections(description: &str) -> Result<(), String> 
         );
     }
     Ok(())
+}
+
+fn markdown_headings(description: &str) -> Vec<String> {
+    markdown_heading_positions(description)
+        .into_iter()
+        .map(|(_, heading)| heading)
+        .collect()
+}
+
+fn markdown_heading_positions(description: &str) -> Vec<(usize, String)> {
+    description
+        .lines()
+        .scan(0, |offset, line| {
+            let current_offset = *offset;
+            *offset += line.len() + 1;
+            let trimmed = line.trim();
+            Some(
+                trimmed
+                    .strip_prefix("## ")
+                    .map(str::trim)
+                    .filter(|heading| !heading.is_empty())
+                    .map(|heading| (current_offset, heading.to_string())),
+            )
+        })
+        .flatten()
+        .collect()
 }
 
 fn task_description_needs_clarification(task: &LocalTask, additional_context: &str) -> bool {
@@ -475,6 +663,29 @@ mod tests {
     }
 
     #[test]
+    fn bug_task_context_uses_bug_description_template() {
+        let task = LocalTask {
+            area: "Bug".to_string(),
+            issue_type: "Bug".to_string(),
+            ..task_with_title("Resolver timer que no se detiene al completar objetivos")
+        };
+        let context = task_description_generation_context(
+            &task,
+            "El timer queda corriendo despues del estado Completed.",
+            None,
+        );
+
+        assert!(context.contains("## Problema"));
+        assert!(context.contains("## Contexto / impacto"));
+        assert!(context.contains("## Pasos para reproducir"));
+        assert!(context.contains("## Resultado actual"));
+        assert!(context.contains("## Resultado esperado"));
+        assert!(context.contains("## Evidencia"));
+        assert!(!context.contains("## Historia de usuario"));
+        assert!(!context.contains("Como [usuario/persona]"));
+    }
+
+    #[test]
     fn task_description_context_separates_area_display_name_from_jira_label() {
         let task = LocalTask {
             area: "Selección Recurso".to_string(),
@@ -512,6 +723,7 @@ mod tests {
         let draft = parse_draft(
             AiProvider::Gemini,
             "```json\n{\"status\":\"needs_clarification\",\"description\":null,\"clarificationQuestions\":[\"Que falta?\"]}\n```",
+            "Story",
         )
         .expect("draft parses");
 
@@ -522,10 +734,11 @@ mod tests {
 
     #[test]
     fn validates_assisted_description_template_sections() {
-        let draft = validate_assisted_description_draft(AssistedDescriptionDraft {
-            status: " drafted ".to_string(),
-            description: Some(
-                "## Historia de usuario
+        let draft = validate_assisted_description_draft(
+            AssistedDescriptionDraft {
+                status: " drafted ".to_string(),
+                description: Some(
+                    "## Historia de usuario
 
 Como usuario,
 quiero algo,
@@ -554,10 +767,12 @@ No incluye:
 ## Checklist antes de Review
 
 - Checklist"
-                    .to_string(),
-            ),
-            clarification_questions: vec!["  ".to_string(), "extra".to_string()],
-        })
+                        .to_string(),
+                ),
+                clarification_questions: vec!["  ".to_string(), "extra".to_string()],
+            },
+            "Story",
+        )
         .expect("description template validates");
 
         assert_eq!(draft.status, "drafted");
@@ -566,11 +781,111 @@ No incluye:
     }
 
     #[test]
+    fn validates_bug_description_template_sections() {
+        let draft = validate_assisted_description_draft(
+            AssistedDescriptionDraft {
+                status: "drafted".to_string(),
+                description: Some(
+                    "## Problema
+
+El timer no se detiene.
+
+## Contexto / impacto
+
+Afecta QA de cierre de objetivos.
+
+## Pasos para reproducir
+
+1. Completar el objetivo.
+
+## Resultado actual
+
+El timer sigue corriendo.
+
+## Resultado esperado
+
+El timer se detiene.
+
+## Evidencia
+
+- Video de QA.
+
+## Criterios de aceptación
+
+- El timer se detiene al completar objetivos.
+
+## Entregable minimo
+
+- Fix aplicado al cierre del flujo.
+
+## Checklist antes de Review
+
+- Evidencia adjunta."
+                        .to_string(),
+                ),
+                clarification_questions: Vec::new(),
+            },
+            "Error",
+        )
+        .expect("bug description template validates");
+
+        assert_eq!(draft.status, "drafted");
+        assert!(draft.description.is_some());
+    }
+
+    #[test]
+    fn rejects_out_of_template_sections_and_suggested_subtasks() {
+        let error = validate_assisted_description_draft(
+            AssistedDescriptionDraft {
+                status: "drafted".to_string(),
+                description: Some(
+                    "## Historia de usuario
+
+Como usuario, quiero algo.
+
+## Contexto
+
+Contexto.
+
+## Alcance
+
+Incluye:
+- A
+
+## Criterios de aceptacion
+
+- Criterio
+
+## Entregable mínimo
+
+- Entregable
+
+## Checklist antes de Review
+
+- Checklist
+
+## Subtasks sugeridas
+
+- Crear una subtarea."
+                        .to_string(),
+                ),
+                clarification_questions: Vec::new(),
+            },
+            "Story",
+        )
+        .expect_err("out-of-template heading should fail");
+
+        assert!(error.contains("out-of-template"));
+        assert!(error.contains("Subtasks sugeridas"));
+    }
+
+    #[test]
     fn rejects_descriptions_without_final_deliverable_and_checklist_sections() {
-        let error = validate_assisted_description_draft(AssistedDescriptionDraft {
-            status: "drafted".to_string(),
-            description: Some(
-                "## Historia de usuario
+        let error = validate_assisted_description_draft(
+            AssistedDescriptionDraft {
+                status: "drafted".to_string(),
+                description: Some(
+                    "## Historia de usuario
 
 Como usuario, quiero algo.
 
@@ -594,10 +909,12 @@ Incluye:
 ## Entregable mínimo
 
 - Entregable"
-                    .to_string(),
-            ),
-            clarification_questions: Vec::new(),
-        })
+                        .to_string(),
+                ),
+                clarification_questions: Vec::new(),
+            },
+            "Story",
+        )
         .expect_err("wrong final section order should fail");
 
         assert!(error.contains("wrong order"));
@@ -605,15 +922,18 @@ Incluye:
 
     #[test]
     fn validates_clarification_question_payload() {
-        let draft = validate_assisted_description_draft(AssistedDescriptionDraft {
-            status: "needs_clarification".to_string(),
-            description: Some("ignore me".to_string()),
-            clarification_questions: vec![
-                " Que usuario se ve afectado? ".to_string(),
-                " ".to_string(),
-                " Que validacion espera? ".to_string(),
-            ],
-        })
+        let draft = validate_assisted_description_draft(
+            AssistedDescriptionDraft {
+                status: "needs_clarification".to_string(),
+                description: Some("ignore me".to_string()),
+                clarification_questions: vec![
+                    " Que usuario se ve afectado? ".to_string(),
+                    " ".to_string(),
+                    " Que validacion espera? ".to_string(),
+                ],
+            },
+            "Story",
+        )
         .expect("clarification validates");
 
         assert_eq!(draft.description, None);

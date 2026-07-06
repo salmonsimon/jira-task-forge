@@ -68,7 +68,7 @@ impl AiClient {
         let model = ai_model_or_default(self.provider, model);
         let output_text = self.transport.create_json(&model, &request)?;
 
-        features::assisted_description::parse_draft(self.provider, &output_text)
+        features::assisted_description::parse_draft(self.provider, &output_text, &task.issue_type)
     }
 
     pub fn test_connection(&self, model: &str) -> Result<(), String> {

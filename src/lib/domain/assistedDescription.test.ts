@@ -2,12 +2,14 @@ import { describe, expect, it } from "vitest";
 import {
   applyManualAssistedDescriptionSectionEdit,
   assistedDescriptionSectionDefinitions,
+  bugAssistedDescriptionSectionDefinitions,
   buildAssistedDescriptionParagraphDiff,
   buildAssistedDescriptionProposal,
   buildResolveAssistedDescriptionProposalItemPatch,
   buildResolveAssistedDescriptionProposalPatch,
   createEmptyAssistedDescriptionSectionStatuses,
   getAssistedDescriptionProposalItems,
+  getAssistedDescriptionSectionIds,
   hasReviewableAssistedDescriptionProposalItems,
   parseAssistedDescriptionMarkdown,
   reviseAssistedDescriptionProposal,
@@ -34,7 +36,59 @@ Incluye:
     expect(sections.problem).toBe("El timer no siempre termina.");
     expect(sections.scope).toBe("Incluye:\n- Ajustar el cierre del timer.");
     expect(sections.acceptance_criteria).toBe("");
-    expect(Object.keys(sections)).toEqual(assistedDescriptionSectionDefinitions.map((section) => section.id));
+    expect(getAssistedDescriptionSectionIds("Story").every((sectionId) => sectionId in sections)).toBe(true);
+  });
+
+  it("parses and serializes the Bug template without converting it to Story headings", () => {
+    const sections = parseAssistedDescriptionMarkdown(`## Problema
+
+El timer no se detiene.
+
+## Contexto / impacto
+
+Afecta cierre de objetivos.
+
+## Pasos para reproducir
+
+1. Completar el objetivo.
+
+## Resultado actual
+
+El timer sigue corriendo.
+
+## Resultado esperado
+
+El timer se detiene.
+
+## Evidencia
+
+- Video de QA.
+
+## Criterios de aceptación
+
+- El timer se detiene.
+
+## Entregable mínimo
+
+- Fix aplicado.
+
+## Checklist antes de Review
+
+- Evidencia disponible.`, "Bug");
+
+    expect(sections.problem).toBe("El timer no se detiene.");
+    expect(sections.context_impact).toBe("Afecta cierre de objetivos.");
+    expect(sections.reproduction_steps).toBe("1. Completar el objetivo.");
+    expect(sections.actual_result).toBe("El timer sigue corriendo.");
+    expect(sections.expected_result).toBe("El timer se detiene.");
+    expect(sections.evidence).toBe("- Video de QA.");
+
+    const markdown = serializeAssistedDescriptionSections(sections, "Bug");
+    expect(markdown).toContain("## Problema\n\nEl timer no se detiene.");
+    expect(markdown).toContain("## Contexto / impacto\n\nAfecta cierre de objetivos.");
+    expect(markdown).toContain("## Pasos para reproducir\n\n1. Completar el objetivo.");
+    expect(markdown).not.toContain("## Historia de usuario");
+    expect(markdown).not.toContain("## Alcance");
   });
 
   it("maps legacy prototype headings into DTS section ids", () => {
@@ -125,6 +179,40 @@ Objetivo anterior.`);
       provider: "OpenAI",
       model: "gpt-4.1"
     });
+  });
+
+  it("builds Bug proposals with only Bug review sections", () => {
+    const currentSections = parseAssistedDescriptionMarkdown("", "Bug");
+    const proposedSections = {
+      ...currentSections,
+      problem: "El timer no se detiene.",
+      context_impact: "Bloquea QA del cierre.",
+      reproduction_steps: "1. Completar el objetivo.",
+      actual_result: "El timer sigue activo.",
+      expected_result: "El timer se detiene.",
+      evidence: "- Video de QA.",
+      acceptance_criteria: "- Timer detenido.",
+      minimum_deliverable: "- Fix aplicado.",
+      review_checklist: "- Evidencia disponible."
+    };
+    const proposal = buildAssistedDescriptionProposal({
+      currentMarkdown: serializeAssistedDescriptionSections(currentSections, "Bug"),
+      id: "proposal-bug",
+      issueType: "Bug",
+      now: "2026-05-27T12:00:00.000Z",
+      proposedMarkdown: serializeAssistedDescriptionSections(proposedSections, "Bug"),
+      taskId: "task-bug"
+    });
+
+    expect(proposal.sections.map((section) => section.sectionId)).toEqual(
+      bugAssistedDescriptionSectionDefinitions.map((section) => section.id)
+    );
+    expect(proposal.sections.map((section) => section.heading)).toEqual(
+      bugAssistedDescriptionSectionDefinitions.map((section) => section.markdownHeading)
+    );
+    expect(proposal.sections.some((section) => section.sectionId === "user_story")).toBe(false);
+    expect(proposal.sections.some((section) => section.sectionId === "scope")).toBe(false);
+    expect(getAssistedDescriptionProposalItems(proposal)).toHaveLength(bugAssistedDescriptionSectionDefinitions.length);
   });
 
   it("identifies provider output with no reviewable changes", () => {
