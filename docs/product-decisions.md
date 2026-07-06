@@ -872,7 +872,8 @@ the implemented prompt shape and required sections aligned with the dedicated
   - AI API keys
   - OAuth refresh/access tokens
   - JQL history
-- Backup should be a single bundle, such as a zip containing metadata plus attachments.
+- Backup uses the accepted Personal v1 versioned JSON format.
+- Backup includes attachment metadata but does not copy attachment bytes.
 - Import merges into the current database.
 - Import does not wipe existing local data.
 - If a tray with the same local id already exists, skip it and report that in the import summary.

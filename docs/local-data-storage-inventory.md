@@ -50,9 +50,9 @@ save dialog. They include local trays/tasks, categories, epic mappings, JQL
 favorites, non-secret settings, attachment metadata, and redacted audit
 summaries where available. They exclude Jira and AI credentials.
 
-ADR 0006 defines the future preferred full backup bundle as a zip with data
-files and an attachments directory. That bundle format is an accepted direction,
-but the current backup drill documents JSON backup behavior and known gaps.
+ADR 0006 now defines the Personal v1 backup format as a versioned JSON file
+without secrets or attachment bytes. Earlier archive-based backup notes are no
+longer planned for the current roadmap.
 
 Backup files selected by the user are portable artifacts. They are not an
 automatic cleanup mechanism and should not be edited in place as a substitute
@@ -110,9 +110,9 @@ as attachment sources. Choose an external original file instead.
 
 ### Generated files
 
-Generated local artifacts include user-selected JSON backups, CSV exports,
-future backup bundles, build outputs, and test/QA evidence. These are not the
-primary app store unless a document says so explicitly.
+Generated local artifacts include user-selected JSON backups, CSV exports, build
+outputs, and test/QA evidence. These are not the primary app store unless a
+document says so explicitly.
 
 Repo-local generated folders such as frontend build output, Rust build output,
 coverage output, and temporary QA artifacts are development artifacts. Do not
@@ -139,20 +139,14 @@ Implemented behavior:
   internal sources, unsafe relative paths, and Jira-ready files over the Personal
   v1 100 MB product limit.
 
-Accepted lifecycle rules that are not yet safe to treat as fully implemented:
+Implemented post-sync lifecycle rules:
 
-- After a Jira-ready attachment uploads successfully, Jira Task Forge should
-  delete the local managed bytes and keep only minimal redacted metadata/audit
-  history.
-- `AI only` attachment bytes should be removed when the Local Task becomes
-  `Created`, leaving only metadata/audit history needed to explain what was
-  prepared.
-- Backup bundles should include attachment bytes only while those bytes still
-  exist in managed local storage.
-
-These pending details are blocked on the final attachment lifecycle work from
-Issue #95 and should be verified in code and QA before being documented as
-guaranteed behavior.
+- After a Jira-ready attachment uploads successfully, Jira Task Forge deletes
+  the local managed bytes and keeps metadata/audit history.
+- `AI only` attachment bytes are removed when the Local Task becomes `Created`,
+  leaving metadata/audit history needed to explain what was prepared.
+- Personal v1 JSON backups include attachment metadata and managed relative
+  paths, but do not copy attachment bytes.
 
 ## Manual Or Pending Cleanup
 

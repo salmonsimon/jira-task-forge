@@ -66,7 +66,7 @@ include Jira or AI credentials. Recommended UI copy:
 
 ## Consequences
 
-- API keys and Jira tokens stay out of local JSON/zip bundles.
+- API keys and Jira tokens stay out of local backup files.
 - Backend commands become the security boundary for integrations.
 - Restored backups remain portable without silently reusing credentials on a new
   machine.
