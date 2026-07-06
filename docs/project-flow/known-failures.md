@@ -111,3 +111,37 @@ validated explicit target selection with both
 `controls share --target <target-id>`, and validated
 `close <target-id>` against a duplicate `JTF Sync Catalog` tab. Use `quit` to
 close the dedicated Chrome CDP window after the agent flow finishes.
+
+## WSL live QA may not have the native app credential store
+
+Observed on 2026-07-06 in `/home/saimon/Development/jira-task-forge` while
+preparing Issue #139 live QA.
+
+The local SQLite settings under
+`/home/saimon/.local/share/com.salmonsimon.jira-task-forge` may be correctly
+configured for Jira site, account email, and `JTFTEST`, while the Jira API token
+is still unavailable to the WSL `keyring` backend. A direct read using the same
+service/account as the app backend failed with:
+
+```text
+keyring-read: No matching entry found in secure storage
+```
+
+Do not treat configured non-secret settings as proof that live Jira writes can
+run. Before attempting Issue #139-style Jira write QA from WSL, verify the
+credential store can read `jira-task-forge:jira` / `api-token` without printing
+the secret. If it cannot, live JTFTEST writes are blocked until the token is
+saved in the credential store available to that runtime, or a deliberate
+temporary credential path is added and approved.
+
+The same run showed that `npm run tauri dev` can compile and launch from WSL but
+still be unsuitable as visual/native evidence when the environment reports:
+
+```text
+dconf-CRITICAL: unable to create file '/run/user/1000/dconf/user': Read-only file system
+Failed to create hard link ... WebKitCache ...
+```
+
+In that state, record it as a partial native launch/build signal only. Do not
+claim drawer, notice, save-dialog, or Jira-result visual QA passed without a
+separate reliable desktop inspection path.
