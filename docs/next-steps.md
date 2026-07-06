@@ -402,14 +402,13 @@ Branch: `feature/backup-csv-export`
 Owns:
 
 - backup/export services in `src-tauri/src/services/`
-- filesystem bundle code
 - CSV export code
 - related Tauri commands
 - attachment path policy if not handled in its own branch
 
 Goal:
 
-- Add JSON/zip backup without secrets.
+- Maintain versioned JSON backup without secrets.
 - Add import that merges without wiping current data.
 - Keep minimal Jira-importable CSV export working for pending/failed/exported tasks.
 - Test manual Jira admin CSV import after API creation is proven, since API
@@ -419,7 +418,8 @@ Goal:
 HITL:
 
 - Required for import conflict policy, destructive behavior, attachment path handling, and marking tasks as `Exported`.
-- Required before implementing filesystem path canonicalization rules, attachment copy/delete lifecycle, or backup bundle layout.
+- Required before implementing filesystem path canonicalization rules or
+  attachment copy/delete lifecycle.
 
 ### 6. Jira Integration Track
 

@@ -180,9 +180,9 @@ Issue #101 added a focused backend seam test,
 `realistic_backup_restore_drill_keeps_local_data_useful_without_secrets`, that
 uses in-memory SQLite backup/import flow to cover realistic trays, Local Tasks,
 Jira links, JQL Favorites, attachment metadata, audit-summary export policy, and
-secret exclusion. Keep broader native dialog and attachment-byte restore checks
-in `docs/backup-restore-drill.md` until the future zip bundle format is
-implemented.
+secret exclusion. Keep broader native dialog checks in
+`docs/backup-restore-drill.md`. Attachment-byte restore is outside the accepted
+Personal v1 backup format.
 
 ## Remaining Gaps
 

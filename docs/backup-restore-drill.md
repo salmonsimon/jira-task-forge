@@ -21,10 +21,8 @@ Covered by the implemented backup format:
 
 Known implementation gaps to check explicitly:
 
-- Current backups are JSON files, not the future zip bundle from
-  `docs/adr/0006-backup-import-bundle-format.md`.
-- Attachment bytes are not copied by the current JSON backup; the drill verifies
-  metadata and managed paths only.
+- Attachment bytes are intentionally not copied by the Personal v1 JSON backup;
+  the drill verifies metadata and managed paths only.
 - Sync Audit Log summaries are exported and reviewed during import, but are not
   restored into `sync_audit_events` yet. Import reports them under
   `skipped_counts.auditSummaries` with a warning.
@@ -132,4 +130,5 @@ advisory `JTFTEST` check.
 - Visual confirmation that restored links and attachment metadata are clear to
   the user.
 - Any live Jira create/read verification, limited to `JTFTEST`.
-- Future zip bundle restore once ADR 0006's bundle format is implemented.
+- Attachment-byte restore is out of scope for the accepted Personal v1 backup
+  format unless a future product review reopens it.
