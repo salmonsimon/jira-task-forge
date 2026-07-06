@@ -97,7 +97,7 @@ High-level shape:
 
 ## Current Engineering Checkpoint
 
-As of the merged PR #170 overlay/listbox checkpoint, the app includes:
+As of the merged PR #175 Epic Scope checkpoint, the app includes:
 
 - Tauri + React shell with Jira-like styling.
 - SQLite-backed local trays and local tasks.
@@ -152,26 +152,32 @@ As of the merged PR #170 overlay/listbox checkpoint, the app includes:
   scrims, topmost overlay Escape behavior, nested modal/listbox popup
   standardization, local data storage inventory, managed attachment byte
   cleanup after Jira sync, and bounded stale backup-import staging cleanup.
+- Story/Bug Assisted Description template separation has landed, including
+  issue-type-specific prompt/validation behavior and Bug-specific required
+  sections.
+- Epic Scope modeling has landed, including tray-level canonical scope,
+  optional confirmed Transversal scope, `TBD` handling without brackets, legacy
+  epic compatibility, scoped preflight blocking, and Jira epic search/create
+  with `[{Project}] [{Area}] {Scope}` targets.
 
 Still pending:
 
 - Re-check native/live QA after the catalog, Notion sync, Assisted Description
-  template-context, Jira payload, overlay/listbox, setup, and attachment
-  lifecycle changes. Use `JTFTEST` for writes and keep `DTS` read-only.
-- Issue #134: separate exact Story and Bug Assisted Description target
-  templates. The docs now define both templates, but the implementation still
-  needs prompt/validation behavior by issue type.
-- Issue #132: implement Epic Scope modeling as a dedicated HITL-sensitive
-  workflow slice. New epics should use `[{Project}] [{Area}] {Scope}` while
-  preserving legacy `[{Project}] {Area}` compatibility.
+  template-context, Jira payload, Epic Scope, overlay/listbox, setup, and
+  attachment lifecycle changes. Use `JTFTEST` for writes and keep `DTS`
+  read-only.
 - Issue #138: documentation alignment remains the current docs workstream until
   product decisions, handoff, live QA, and format docs all reflect the new
   workflow.
-- Issue #139: run JTFTEST live workflow QA after Issue #134 and Issue #132 land,
-  because its acceptance cases depend on Bug templates and Epic Scope.
+- Issue #139: run JTFTEST live workflow QA for the landed Story/Bug templates
+  and Epic Scope workflow. This requires credentials in the runtime under test.
+- Issue #179 documents the minimum contract for the Notion catalog sync source,
+  using the current Notion page as the reference example while keeping the
+  contract portable to Obsidian, Markdown, or another structured source.
 - Issue #153 packages the Windows app and chooses/applies the final icon after
-  Issue #138 and Issue #139, so the team can run the app without `npm run tauri
-  dev`.
+  Issue #138, Issue #139, and Issue #179, so the team can run the app without
+  `npm run tauri dev` and still has a clear catalog-source maintenance
+  reference.
 - Regularizacion is out of current JTF scope. Issue #135 is closed as not
   planned and should not block current roadmap, docs, or QA work.
 - Full native QA in an environment with the Linux system dependencies needed by
@@ -198,17 +204,18 @@ grill areas:
 
 Recommended stack to work next:
 
-- Finish Issue #138 docs alignment first enough that future agents do not
-  relaunch already-merged work or follow stale `[{Project}] {Area}` guidance.
-- Launch Issue #134 Story/Bug template separation and Issue #132 Epic Scope
-  modeling as the next implementation batch. They touch related workflow
-  contracts, but should run in separate WSL worktrees with explicit file
-  ownership and test boundaries.
-- Run Issue #139 JTFTEST live workflow QA after Issue #134 and Issue #132 land,
-  because its required cases include Bug descriptions and the new epic naming
-  rule.
-- Run Issue #153 packaging/icon after Issue #138 and Issue #139 so the Windows
-  build reflects the reviewed workflow and QA evidence.
+- Finish Issue #138 docs alignment so future agents do not relaunch
+  already-merged workflow model work or follow stale `[{Project}] {Area}`
+  guidance.
+- Run Issue #139 JTFTEST live workflow QA against the landed Story/Bug template
+  and Epic Scope behavior, including credentialed Jira writes and local sync
+  audit verification.
+- Document the minimum Notion catalog sync source contract in Issue #179 before
+  packaging, so the source can be maintained or ported without relying on memory
+  of the current page.
+- Run Issue #153 packaging/icon after Issue #138, Issue #139, and Issue #179 so
+  the Windows build reflects the reviewed workflow, QA evidence, and catalog
+  source maintenance docs.
 
 ## Suggested Skills For Next Session
 

@@ -1,5 +1,27 @@
 # Known Failures
 
+## Markdown PR or issue bodies can execute shell substitutions
+
+Observed on 2026-07-06 in `/home/saimon/Development/jira-task-forge` while
+editing GitHub issue and PR bodies with WSL `gh`.
+
+Passing Markdown directly through shell arguments executed text inside
+backticks before `gh` received the body. This accidentally tried to run command
+names from the Markdown, including issue titles, script names, and API paths.
+Use `--body-file` for any `gh issue create`, `gh issue edit`, `gh pr create`,
+or `gh pr edit` body that contains Markdown code spans, fenced code, `$`,
+parentheses, or other shell-sensitive text.
+
+Safer pattern:
+
+```bash
+gh pr edit <number> --body-file /tmp/pr-body.md
+gh issue edit <number> --body-file /tmp/issue-body.md
+```
+
+Do not pass rich Markdown through `--body "..."` unless the body is already
+known to be shell-safe.
+
 ## Chrome plugin and Computer Use can fail before JavaScript starts
 
 Observed on 2026-07-03 in `/home/saimon/Development/jira-task-forge`.

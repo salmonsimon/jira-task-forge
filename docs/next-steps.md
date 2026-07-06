@@ -9,7 +9,7 @@ Date: 2026-07-06
 Main is up to date through:
 
 ```text
-#170 Standardize nested modals and listbox behavior
+#175 Implement epic scope mapping
 ```
 
 Recent Personal v1 hardening merged since the older May checkpoint:
@@ -76,6 +76,16 @@ Recent Personal v1 hardening merged since the older May checkpoint:
   durable attachment storage.
 - PR #170 standardized nested modals and listbox behavior for the remaining
   popup-standardization slice.
+- PR #171 aligned roadmap, handoff, live QA, product decisions, and Jira
+  description docs after the workflow batches.
+- PR #172 separated Story and Bug Assisted Description templates, including
+  issue-type-specific prompt/validation behavior and Bug-specific required
+  sections.
+- PR #175 implemented Epic Scope modeling across tray scope capture, preflight,
+  Jira epic search/create, legacy epic compatibility, `TBD`, Transversal scope
+  confirmation, and focused tests.
+- PR #176 removed the backup bundle concept from the roadmap and kept backup
+  scope aligned with current JSON/metadata behavior.
 
 Historical baseline from the first checkpoint:
 
@@ -252,10 +262,10 @@ Expected limitations right now:
   attachment ingestion, Jira attachment upload, minimal CSP, sync audit detail
   allowlisting, setup-time `Privacy & Diagnostics`, shared overlay behavior,
   setup-guide polish, local storage inventory, and attachment cleanup lifecycle
-  have landed and still need regular native/live QA coverage. Remaining open
-  roadmap slices are now tracked in GitHub issues: Story vs Bug description
-  template separation, Epic Scope modeling, docs alignment, JTFTEST workflow QA,
-  and Windows packaging/icon.
+  have landed and still need regular native/live QA coverage. Story vs Bug
+  description templates and Epic Scope modeling have landed; remaining open
+  roadmap slices are now docs alignment, JTFTEST workflow QA, and Windows
+  packaging/icon.
 - Task detail `Details` supports editable project, area, and priority for editable non-archived tasks. Auto-generated epic and labels remain visible but muted/read-only.
 
 Near-term decided follow-ups:
@@ -271,17 +281,17 @@ Recommended next implementation:
 - Issue #138: complete the docs alignment pass so the handoff, roadmap,
   product decisions, live QA expectations, and description-format docs point at
   the current merged checkpoint and do not relaunch closed work.
-- Issue #134: separate exact Story and Bug Assisted Description templates.
-  The docs now define both targets, but implementation still needs prompt,
-  validation, and proposal behavior by issue type.
-- Issue #132: implement Epic Scope modeling as its own HITL-sensitive slice
-  because it changes local modeling, preflight grouping, Jira epic search/create,
-  and sync tests. The accepted naming rule is `[{Project}] [{Area}] {Scope}`.
-- Issue #139: run live JTFTEST workflow QA after Issue #134 and Issue #132 land,
-  because the QA cases require Bug templates and the new Epic Scope model.
+- Issue #139: run live JTFTEST workflow QA for the landed Story/Bug templates
+  and Epic Scope model. The QA cases require credentialed Jira writes in
+  `JTFTEST`, DTS read-only reference checks, payload verification, sync audit
+  verification, and evidence under `docs/live-qa-results/`.
+- Issue #179: document the minimum contract for the Notion catalog sync source
+  before packaging, using the current Notion page as the reference example while
+  keeping the contract portable to Obsidian, Markdown, or another structured
+  source.
 - Issue #153: package the Windows app and choose/apply the final icon after
-  Issue #138 and Issue #139, so the shareable build reflects the reviewed docs
-  and live QA evidence.
+  Issue #138, Issue #139, and Issue #179, so the shareable build reflects the
+  reviewed docs, live QA evidence, and catalog-source maintenance reference.
 - Regularizacion is out of scope for now and is no longer a planned roadmap
   slice. Do not block any current issue, QA path, or documentation update on
   Regularizacion behavior.
@@ -579,7 +589,7 @@ Batch 1 status:
   unavailable, API token management remains separate, and `Privacy &
   Diagnostics` is available inside the guide.
 
-Roadmap cleanup status after PR #170 and issue review:
+Roadmap cleanup status after PR #175 and issue review:
 
 - Issue #102 visible Settings privacy copy: closed after PR #128 because
   `Privacy & Diagnostics` is the accepted setup-time explanation for Personal
@@ -596,29 +606,27 @@ Roadmap cleanup status after PR #170 and issue review:
 - Issue #140, Issue #146, Issue #147, Issue #149, Issue #150, Issue #152,
   Issue #157, and Issue #158 are no longer roadmap blockers after PR #155
   through PR #170.
-- Issue #134 remains open because the app still needs issue-type-specific
-  Assisted Description prompt and validation behavior for Story vs Bug.
-- Issue #132 remains open because Epic Scope changes the local model, preflight,
-  Jira epic search/create, AI-assisted transversal scope proposal, and sync QA.
+- Issue #134 is no longer a roadmap blocker after PR #172 separated Story and
+  Bug Assisted Description prompt/validation behavior.
+- Issue #132 is no longer a roadmap blocker after PR #175 implemented Epic
+  Scope modeling and Jira epic targets.
+- Issue #138 remains open until docs alignment is current enough to prevent
+  future agents from relaunching already-merged workflow model work.
+- Issue #139 remains open until the landed workflow receives credentialed
+  JTFTEST write QA evidence.
+- Issue #179 is open to document the minimum Notion catalog sync source contract
+  before packaging, including what must be preserved if the source is moved to
+  Obsidian or another structured store.
 
 Recommended AFK batches from the current open issues:
 
-Batch 1: workflow model implementation.
-Issues: Issue #134 and Issue #132.
-Scope: separate Story/Bug Assisted Description behavior, then implement Epic
-Scope with the accepted `[{Project}] [{Area}] {Scope}` rule. These can start in
-parallel only with clear ownership: Issue #134 owns prompt/validation/docs for
-description templates; Issue #132 owns model/preflight/Jira epic resolution and
-scope UI. Merge order should be deliberate because Issue #139 depends on both.
-Stop condition: pause Issue #132 if schema or migration semantics require a new
-HITL decision beyond the accepted scope rule.
-
-Batch 2: validation and release preparation.
-Issues: Issue #139 and Issue #153.
-Scope: run live JTFTEST workflow QA only after Issue #134 and Issue #132 land,
-then package the Windows app and apply the final icon after QA/docs are current.
-These are sequential, not parallel, because packaging should reflect the QA'd
-workflow.
+Batch 1: validation and release preparation.
+Issues: Issue #139, Issue #179, and Issue #153.
+Scope: run live JTFTEST workflow QA for the landed Story/Bug template and Epic
+Scope behavior, document the Notion catalog source contract, then package the
+Windows app and apply the final icon after QA/docs are current. These are
+sequential, not parallel, because packaging should reflect the QA'd workflow and
+the documented sync-source maintenance path.
 
 Final packaging slice.
 Issue: Issue #153.
@@ -639,27 +647,6 @@ Recommended next implementation slice:
 
 Branch family:
 
-- `codex/workflow-model-*`
-
-Deliverables:
-
-- Issue #134: implement issue-type-specific Story/Bug Assisted Description
-  prompts, required headings, validation, and focused tests.
-- Issue #132: implement Epic Scope modeling with `TBD`, legacy epic
-  compatibility, pending-scope preflight blocking, and focused tests.
-
-Reason:
-
-- These are the last behavior slices before live JTFTEST QA. They should use
-  separate WSL worktrees and draft PRs, with coordination around shared
-  description/Jira payload tests.
-
-## Following Slice
-
-Recommended following implementation slice:
-
-Branch family:
-
 - `codex/live-qa-139`
 
 Deliverables:
@@ -669,8 +656,30 @@ Deliverables:
 
 Reason:
 
-- The live QA cases depend on the Story/Bug template separation and Epic Scope
-  behavior from Issue #134 and Issue #132.
+- The workflow behavior needed by Issue #139 has landed. The remaining risk is
+  credentialed Jira write validation, local sync audit verification, and native
+  evidence capture.
+
+## Following Slice
+
+Recommended following implementation slice:
+
+Branch:
+
+- `codex/package-windows-153`
+
+Deliverables:
+
+- Issue #179: document the minimum Notion catalog sync source contract and link
+  it from the relevant JTF docs.
+- Issue #153: package the Windows app and apply the final icon after QA/docs and
+  catalog-source docs are current.
+
+Reason:
+
+- Packaging should reflect the workflow that was actually validated in
+  JTFTEST and should not ship without a clear maintenance reference for the
+  catalog sync source.
 
 Separate hardening follow-up:
 
