@@ -1192,6 +1192,24 @@ impl<'connection> TaskRepository<'connection> {
             .collect())
     }
 
+    pub fn mark_attachment_bytes_cleaned(
+        &self,
+        task_id: &str,
+        attachment_id: &str,
+        cleanup_status: &str,
+    ) -> DbResult<()> {
+        let now = utc_now_string()?;
+        self.connection.execute(
+            "
+            UPDATE attachments
+            SET restore_status = ?1, updated_at = ?2
+            WHERE id = ?3 AND task_id = ?4
+            ",
+            (cleanup_status, now.as_str(), attachment_id, task_id),
+        )?;
+        Ok(())
+    }
+
     pub fn delete(&self, task_id: &str) -> DbResult<bool> {
         let tray_id = self.connection.query_row(
             "SELECT tray_id FROM tasks WHERE id = ?1 AND sync_status != 'Created'",
@@ -2689,7 +2707,11 @@ mod tests {
         assert_eq!(created.source, "local");
 
         let renamed = repository
-            .update(&created.id, Some("__manual_area_edit_fixture__ beta"), Some(true))
+            .update(
+                &created.id,
+                Some("__manual_area_edit_fixture__ beta"),
+                Some(true),
+            )
             .expect("manual area updates")
             .expect("manual area exists");
         assert_eq!(renamed.name, "__manual_area_edit_fixture__ beta");
@@ -2738,7 +2760,9 @@ mod tests {
         assert!(areas
             .iter()
             .any(|category| category.name == "Programación" && category.source == "catalog"));
-        assert!(!areas.iter().any(|category| category.name == manual_area_name));
+        assert!(!areas
+            .iter()
+            .any(|category| category.name == manual_area_name));
         assert!(!areas.iter().any(|category| category.name == "Bug"));
     }
 
