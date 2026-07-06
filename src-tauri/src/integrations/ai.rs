@@ -2,7 +2,7 @@ mod features;
 mod provider;
 mod transport;
 
-use crate::models::{AssistedDescriptionDraft, JqlAiDraft, LocalTask};
+use crate::models::{AssistedDescriptionDraft, EpicScopePluralSuggestion, JqlAiDraft, LocalTask};
 
 pub use provider::{ai_model_or_default, ai_provider_api_key_page_url, AiCredentials, AiProvider};
 use transport::AiTransportClient;
@@ -42,6 +42,18 @@ impl AiClient {
         let output_text = self.transport.create_json(&model, &request)?;
 
         features::jql::parse_draft(self.provider, &output_text)
+    }
+
+    pub fn suggest_transversal_epic_scope(
+        &self,
+        model: &str,
+        epic_scope: &str,
+    ) -> Result<EpicScopePluralSuggestion, String> {
+        let request = features::epic_scope::build_plural_scope_request(epic_scope)?;
+        let model = ai_model_or_default(self.provider, model);
+        let output_text = self.transport.create_json(&model, &request)?;
+
+        features::epic_scope::parse_plural_scope_suggestion(self.provider, &output_text)
     }
 
     pub fn draft_task_description(

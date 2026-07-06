@@ -29,6 +29,7 @@ export type PreflightWarningCode =
   | "missing-title"
   | "missing-parent-task"
   | "missing-description"
+  | "missing-epic-scope"
   | "missing-epic"
   | "retry-failed-task"
   | "exported-duplicate-risk";
@@ -81,6 +82,8 @@ export type Tray = {
   id: string;
   name: string;
   state: TrayState;
+  epicScope?: string;
+  transversalEpicScope?: string;
   summary: string;
   updatedAt: string;
   tasks: LocalTask[];

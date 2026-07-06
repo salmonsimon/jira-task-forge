@@ -1,7 +1,7 @@
 use tauri::State;
 
 use super::worker::run_blocking_result;
-use crate::models::AssistedDescriptionDraft;
+use crate::models::{AssistedDescriptionDraft, EpicScopePluralSuggestion};
 use crate::services::AppServices;
 
 #[tauri::command]
@@ -65,4 +65,18 @@ pub async fn generate_task_description(
         services.generate_task_description(&task_id, additional_context.as_deref())
     })
     .await
+}
+
+#[tauri::command]
+pub async fn suggest_transversal_epic_scope(
+    services: State<'_, AppServices>,
+    epic_scope: String,
+) -> Result<String, String> {
+    let services = services.inner().clone();
+    let suggestion: EpicScopePluralSuggestion =
+        run_blocking_result("Transversal epic scope AI worker", move || {
+            services.suggest_transversal_epic_scope(&epic_scope)
+        })
+        .await?;
+    Ok(suggestion.scope)
 }

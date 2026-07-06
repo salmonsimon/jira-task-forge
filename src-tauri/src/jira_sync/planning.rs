@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use crate::area_catalog::{resolve_catalog_area, CatalogAreaResolution};
+use crate::epic_scope::{EpicScopeConfig, EpicTarget};
 use crate::models::{
     JiraCreateFieldMetadata, JiraCreateIssueTypeMetadata, JiraCreateMetadata, LocalTask,
 };
@@ -8,6 +9,8 @@ use crate::models::{
 #[derive(Debug, Clone, Copy)]
 pub(super) struct JiraCreationPlanningOptions<'a> {
     pub(super) creation_project_key: &'a str,
+    pub(super) epic_scope: Option<&'a str>,
+    pub(super) transversal_epic_scope: Option<&'a str>,
     pub(super) allow_missing_descriptions: bool,
     pub(super) include_exported_tasks: bool,
     pub(super) include_missing_description_tasks: bool,
@@ -17,6 +20,8 @@ pub(super) struct JiraCreationPlanningOptions<'a> {
 pub(super) struct JiraCreationTaskScope {
     pub(super) parent_tasks: Vec<LocalTask>,
     pub(super) subtask_tasks: Vec<LocalTask>,
+    epic_scope: Option<String>,
+    transversal_epic_scope: Option<String>,
     pub(super) skipped_issue_count: usize,
     pub(super) createable_task_count: usize,
     pub(super) progress_total_steps: usize,
@@ -65,10 +70,12 @@ impl JiraCreationTaskScope {
             .collect::<Vec<_>>();
         let createable_task_count = parent_tasks.len() + subtask_tasks.len();
         let skipped_issue_count = tasks.len().saturating_sub(createable_task_count);
-        let epic_group_count = count_project_area_groups(&parent_tasks);
+        let epic_group_count = count_epic_target_groups(&parent_tasks, options);
         let progress_total_steps = 4 + epic_group_count + parent_tasks.len() + subtask_tasks.len();
         let local_blockers = validate_local_preflight(
             options.creation_project_key,
+            options.epic_scope,
+            options.transversal_epic_scope,
             &parent_tasks,
             &subtask_tasks,
             options.allow_missing_descriptions,
@@ -77,6 +84,8 @@ impl JiraCreationTaskScope {
         Self {
             parent_tasks,
             subtask_tasks,
+            epic_scope: options.epic_scope.map(str::to_string),
+            transversal_epic_scope: options.transversal_epic_scope.map(str::to_string),
             skipped_issue_count,
             createable_task_count,
             progress_total_steps,
@@ -132,7 +141,7 @@ pub(super) struct JiraCreationPlan {
     pub(super) subtask_tasks: Vec<LocalTask>,
     pub(super) skipped_issue_count: usize,
     pub(super) createable_task_count: usize,
-    pub(super) project_area_groups: BTreeMap<(String, String), Vec<LocalTask>>,
+    pub(super) epic_target_groups: BTreeMap<EpicTarget, Vec<LocalTask>>,
     pub(super) issue_types: JiraCreationIssueTypePlans,
     pub(super) reporter: ReporterDecision,
     pub(super) missing_description_blockers: Vec<String>,
@@ -169,15 +178,19 @@ impl JiraCreationPlan {
         };
         let missing_description_blockers =
             required_parent_description_blockers(&issue_types, &scope.parent_tasks);
-        let project_area_groups = group_tasks_by_project_area(scope.parent_tasks.clone());
-        let dependency_order = dependency_order_for(&project_area_groups, &scope.subtask_tasks);
+        let epic_target_groups = group_tasks_by_epic_target(
+            scope.parent_tasks.clone(),
+            scope.epic_scope.as_deref(),
+            scope.transversal_epic_scope.as_deref(),
+        );
+        let dependency_order = dependency_order_for(&epic_target_groups, &scope.subtask_tasks);
 
         Ok(Self {
             parent_tasks: scope.parent_tasks,
             subtask_tasks: scope.subtask_tasks,
             skipped_issue_count: scope.skipped_issue_count,
             createable_task_count: scope.createable_task_count,
-            project_area_groups,
+            epic_target_groups,
             issue_types,
             reporter,
             missing_description_blockers,
@@ -451,6 +464,7 @@ pub(super) enum JiraCreationDependencyStep {
     EpicGroup {
         local_project: String,
         area: String,
+        scope: String,
         parent_task_ids: Vec<String>,
     },
     ParentIssue {
@@ -464,6 +478,8 @@ pub(super) enum JiraCreationDependencyStep {
 
 fn validate_local_preflight(
     creation_project_key: &str,
+    epic_scope: Option<&str>,
+    transversal_epic_scope: Option<&str>,
     parent_tasks: &[LocalTask],
     subtask_tasks: &[LocalTask],
     allow_missing_descriptions: bool,
@@ -474,6 +490,23 @@ fn validate_local_preflight(
     }
     if parent_tasks.is_empty() && subtask_tasks.is_empty() {
         messages.push("There are no pending Jira tasks to create.".to_string());
+    }
+
+    for task in parent_tasks {
+        if EpicTarget::for_task(
+            task,
+            EpicScopeConfig {
+                singular_scope: epic_scope,
+                transversal_scope: transversal_epic_scope,
+            },
+        )
+        .is_none()
+        {
+            messages.push(format!(
+                "{} is missing Epic Scope for Jira epic resolution.",
+                task.title
+            ));
+        }
     }
 
     for task in parent_tasks.iter().chain(subtask_tasks.iter()) {
@@ -542,29 +575,40 @@ fn required_parent_description_blockers(
         .collect()
 }
 
-fn group_tasks_by_project_area(
+fn group_tasks_by_epic_target(
     tasks: Vec<LocalTask>,
-) -> BTreeMap<(String, String), Vec<LocalTask>> {
+    epic_scope: Option<&str>,
+    transversal_epic_scope: Option<&str>,
+) -> BTreeMap<EpicTarget, Vec<LocalTask>> {
     let mut groups = BTreeMap::new();
     for task in tasks {
-        groups
-            .entry((
-                task.project.trim().to_string(),
-                task.area.trim().to_string(),
-            ))
-            .or_insert_with(Vec::new)
-            .push(task);
+        let Some(target) = EpicTarget::for_task(
+            &task,
+            EpicScopeConfig {
+                singular_scope: epic_scope,
+                transversal_scope: transversal_epic_scope,
+            },
+        ) else {
+            continue;
+        };
+        groups.entry(target).or_insert_with(Vec::new).push(task);
     }
     groups
 }
 
-fn count_project_area_groups(tasks: &[LocalTask]) -> usize {
+fn count_epic_target_groups(
+    tasks: &[LocalTask],
+    options: JiraCreationPlanningOptions<'_>,
+) -> usize {
     tasks
         .iter()
-        .map(|task| {
-            (
-                task.project.trim().to_string(),
-                task.area.trim().to_string(),
+        .filter_map(|task| {
+            EpicTarget::for_task(
+                task,
+                EpicScopeConfig {
+                    singular_scope: options.epic_scope,
+                    transversal_scope: options.transversal_epic_scope,
+                },
             )
         })
         .collect::<BTreeSet<_>>()
@@ -572,18 +616,19 @@ fn count_project_area_groups(tasks: &[LocalTask]) -> usize {
 }
 
 fn dependency_order_for(
-    groups: &BTreeMap<(String, String), Vec<LocalTask>>,
+    groups: &BTreeMap<EpicTarget, Vec<LocalTask>>,
     subtask_tasks: &[LocalTask],
 ) -> Vec<JiraCreationDependencyStep> {
     let mut steps = Vec::new();
-    for ((local_project, area), group_tasks) in groups {
+    for (target, group_tasks) in groups {
         let parent_task_ids = group_tasks
             .iter()
             .map(|task| task.id.clone())
             .collect::<Vec<_>>();
         steps.push(JiraCreationDependencyStep::EpicGroup {
-            local_project: local_project.clone(),
-            area: area.clone(),
+            local_project: target.local_project.clone(),
+            area: target.area.clone(),
+            scope: target.scope.clone(),
             parent_task_ids,
         });
         for task in group_tasks {
@@ -709,6 +754,8 @@ mod tests {
             &metadata,
             JiraCreationPlanningOptions {
                 creation_project_key: "JTFTEST",
+                epic_scope: Some("Demo Version 1"),
+                transversal_epic_scope: Some("Demos Version 1"),
                 allow_missing_descriptions: true,
                 include_exported_tasks: true,
                 include_missing_description_tasks: true,
@@ -720,7 +767,7 @@ mod tests {
         assert_eq!(plan.skipped_issue_count, 1);
         assert_eq!(plan.parent_tasks.len(), 2);
         assert_eq!(plan.subtask_tasks.len(), 1);
-        assert_eq!(plan.project_area_groups.len(), 2);
+        assert_eq!(plan.epic_target_groups.len(), 2);
         assert_eq!(plan.progress_total_steps, 9);
         assert_eq!(
             plan.issue_type_names(),
@@ -737,6 +784,7 @@ mod tests {
                 JiraCreationDependencyStep::EpicGroup {
                     local_project: "PilotLab".to_string(),
                     area: "Bug".to_string(),
+                    scope: "Demo Version 1".to_string(),
                     parent_task_ids: vec!["parent-2".to_string()],
                 },
                 JiraCreationDependencyStep::ParentIssue {
@@ -745,6 +793,7 @@ mod tests {
                 JiraCreationDependencyStep::EpicGroup {
                     local_project: "STT".to_string(),
                     area: "Programacion".to_string(),
+                    scope: "Demo Version 1".to_string(),
                     parent_task_ids: vec!["parent-1".to_string()],
                 },
                 JiraCreationDependencyStep::ParentIssue {
@@ -772,6 +821,8 @@ mod tests {
             &tasks,
             JiraCreationPlanningOptions {
                 creation_project_key: "",
+                epic_scope: Some("Demo Version 1"),
+                transversal_epic_scope: Some("Demos Version 1"),
                 allow_missing_descriptions: false,
                 include_exported_tasks: true,
                 include_missing_description_tasks: true,
@@ -824,6 +875,8 @@ mod tests {
             &tasks,
             JiraCreationPlanningOptions {
                 creation_project_key: "JTFTEST",
+                epic_scope: Some("Demo Version 1"),
+                transversal_epic_scope: Some("Demos Version 1"),
                 allow_missing_descriptions: false,
                 include_exported_tasks: true,
                 include_missing_description_tasks: false,
@@ -872,6 +925,8 @@ mod tests {
             &[ready_parent, missing_description_child],
             JiraCreationPlanningOptions {
                 creation_project_key: "JTFTEST",
+                epic_scope: Some("Demo Version 1"),
+                transversal_epic_scope: Some("Demos Version 1"),
                 allow_missing_descriptions: false,
                 include_exported_tasks: true,
                 include_missing_description_tasks: false,
@@ -908,6 +963,8 @@ mod tests {
             &metadata,
             JiraCreationPlanningOptions {
                 creation_project_key: "JTFTEST",
+                epic_scope: Some("Demo Version 1"),
+                transversal_epic_scope: Some("Demos Version 1"),
                 allow_missing_descriptions: true,
                 include_exported_tasks: true,
                 include_missing_description_tasks: true,
@@ -939,6 +996,8 @@ mod tests {
             &tasks,
             JiraCreationPlanningOptions {
                 creation_project_key: "JTFTEST",
+                epic_scope: Some("Demo Version 1"),
+                transversal_epic_scope: Some("Demos Version 1"),
                 allow_missing_descriptions: true,
                 include_exported_tasks: false,
                 include_missing_description_tasks: true,
@@ -977,6 +1036,8 @@ mod tests {
             &metadata,
             JiraCreationPlanningOptions {
                 creation_project_key: "JTFTEST",
+                epic_scope: Some("Demo Version 1"),
+                transversal_epic_scope: Some("Demos Version 1"),
                 allow_missing_descriptions: true,
                 include_exported_tasks: true,
                 include_missing_description_tasks: true,

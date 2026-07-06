@@ -1,4 +1,5 @@
 pub(crate) mod assisted_description;
+pub(crate) mod epic_scope;
 pub(crate) mod jql;
 
 use serde_json::Value;

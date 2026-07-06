@@ -18,6 +18,7 @@ function renderTraySelector() {
       trays={[tray]}
       onOpenTray={() => undefined}
       onCreateTray={() => undefined}
+      onSuggestTransversalScope={async () => "Demos Versión 1"}
       onRenameTray={() => undefined}
       onArchiveTray={() => undefined}
       onRestoreTray={() => undefined}

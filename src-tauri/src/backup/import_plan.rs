@@ -131,7 +131,7 @@ impl ImportTargetSnapshot {
             epic_mapping_ids: read_string_set(connection, "SELECT id FROM epic_mappings")?,
             epic_mapping_category_pairs: read_pair_set(
                 connection,
-                "SELECT project_category_id, area_category_id FROM epic_mappings",
+                "SELECT project_category_id, area_category_id || ':' || COALESCE(scope, '') FROM epic_mappings",
             )?,
             assisted_description_proposal_ids: read_string_set(
                 connection,
@@ -253,7 +253,11 @@ pub(crate) fn plan_import_for_target(
 
                 let category_pair = (
                     mapping.project_category_id.clone(),
-                    mapping.area_category_id.clone(),
+                    format!(
+                        "{}:{}",
+                        mapping.area_category_id,
+                        mapping.scope.as_deref().unwrap_or("")
+                    ),
                 );
                 if known_epic_mapping_ids.contains(&mapping.id)
                     || known_epic_mapping_pairs.contains(&category_pair)

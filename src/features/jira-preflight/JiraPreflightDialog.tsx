@@ -2,7 +2,7 @@ import { AlertTriangle, Check, CheckCircle2, ChevronRight, Info, Loader2, Shield
 import { useEffect, useState, type ReactNode } from "react";
 import { Button, FeedbackNote, LoadingOrb, feedbackNoteClassName } from "../../components/ui";
 import { appOverlayLayers, useAppOverlay } from "../../lib/app-overlays";
-import { formatEpicTarget, groupEpicResolutionWarnings, groupSubtasksByParent, isSubtask } from "../../lib/domain";
+import { formatPendingEpicTarget, groupEpicResolutionWarnings, groupSubtasksByParent, isSubtask } from "../../lib/domain";
 import type {
   JiraConnectionTestResult,
   JiraCreateIssuesResult,
@@ -543,7 +543,7 @@ function PreflightWarningGroup({
       </summary>
       <div className="space-y-3 px-3 pb-3">
         {groupedWarnings.map((group) => {
-          const epicGroups = group.code === "missing-epic" ? groupEpicResolutionWarnings(group.warnings, tray.tasks) : [];
+          const epicGroups = group.code === "missing-epic" ? groupEpicResolutionWarnings(group.warnings, tray.tasks, tray) : [];
           const countLabel = group.code === "missing-epic"
             ? `${epicGroups.length} ${epicGroups.length === 1 ? "target" : "targets"}`
             : group.warnings.length;
@@ -668,9 +668,9 @@ function TaskWarningLine({ code, task }: { code: PreflightWarningCode; task: Tra
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
       <span className="block min-w-0 max-w-full truncate" title={task.title || "Untitled task"}>{task.title || "Untitled task"}</span>
-      {code === "missing-epic" && task.project.trim() && task.area.trim() ? (
+      {(code === "missing-epic" || code === "missing-epic-scope") && task.project.trim() && task.area.trim() ? (
         <span className="rounded bg-black/20 px-2 py-0.5 text-xs font-medium text-[#c7d1db]">
-          Epic target: {formatEpicTarget(task.project, task.area)}
+          Epic target: {formatPendingEpicTarget(task.project, task.area)}
         </span>
       ) : null}
     </div>
@@ -701,6 +701,7 @@ function getWarningTitle(code: PreflightWarningCode): string {
     "missing-title": "Missing title",
     "missing-parent-task": "Missing sub-task parent",
     "missing-description": "Missing description",
+    "missing-epic-scope": "Missing epic scope",
     "missing-epic": "Epic resolution",
     "retry-failed-task": "Failed tasks will retry",
     "exported-duplicate-risk": "CSV duplicate risk"
@@ -721,6 +722,7 @@ function getWarningSummary(code: PreflightWarningCode, warning: PreflightWarning
     "missing-title": "These tasks need a title before they can be created.",
     "missing-parent-task": warning.message,
     "missing-description": "These tasks can still be created, but should be reviewed because their description is missing.",
+    "missing-epic-scope": "Set the tray Epic Scope before Jira creation. Capture can continue while scope is pending.",
     "missing-epic": "Jira creation will search for each target epic by name and create it only if Jira has no match.",
     "retry-failed-task": "These failed tasks will be retried with their existing local identity.",
     "exported-duplicate-risk": "These tasks were exported to CSV, so confirm they were not already imported into Jira."

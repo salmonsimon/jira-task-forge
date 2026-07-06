@@ -1,6 +1,7 @@
 import { resolveCatalogArea } from "./catalog";
+import { epicTargetForTask, formatEpicTarget } from "./epicScope";
 import { isSubtask } from "./taskGraph";
-import type { LocalTask, PreflightWarning } from "../types";
+import type { LocalTask, PreflightWarning, Tray } from "../types";
 
 export type EpicResolutionWarningGroup = {
   target: string;
@@ -8,7 +9,7 @@ export type EpicResolutionWarningGroup = {
   warnings: PreflightWarning[];
 };
 
-export function classifyTaskPreflightWarnings(task: LocalTask): PreflightWarning[] {
+export function classifyTaskPreflightWarnings(task: LocalTask, tray?: Pick<Tray, "epicScope" | "transversalEpicScope">): PreflightWarning[] {
   const warnings: PreflightWarning[] = [];
 
   if (!task.project.trim()) {
@@ -63,7 +64,14 @@ export function classifyTaskPreflightWarnings(task: LocalTask): PreflightWarning
     });
   }
 
-  if (!isSubtask(task) && !task.epic) {
+  if (!isSubtask(task) && !task.epic && !epicTargetForTask(task, tray)) {
+    warnings.push({
+      code: "missing-epic-scope",
+      severity: "blocking",
+      taskId: task.id,
+      message: "Epic Scope is required before creating this task in Jira."
+    });
+  } else if (!isSubtask(task) && !task.epic) {
     warnings.push({
       code: "missing-epic",
       severity: "resolvable",
@@ -84,13 +92,10 @@ export function classifyTaskPreflightWarnings(task: LocalTask): PreflightWarning
   return warnings;
 }
 
-export function formatEpicTarget(project: string, area: string): string {
-  return `[${project.trim()}] ${area.trim()}`;
-}
-
 export function groupEpicResolutionWarnings(
   warnings: PreflightWarning[],
-  tasks: LocalTask[]
+  tasks: LocalTask[],
+  tray?: Pick<Tray, "epicScope" | "transversalEpicScope">
 ): EpicResolutionWarningGroup[] {
   const tasksById = new Map(tasks.map((task) => [task.id, task]));
   const groups = new Map<string, EpicResolutionWarningGroup>();
@@ -99,8 +104,9 @@ export function groupEpicResolutionWarnings(
     if (warning.code !== "missing-epic") continue;
 
     const task = warning.taskId ? tasksById.get(warning.taskId) : undefined;
-    const target = task && task.project.trim() && task.area.trim()
-      ? formatEpicTarget(task.project, task.area)
+    const epicTarget = task ? epicTargetForTask(task, tray) : null;
+    const target = epicTarget
+      ? formatEpicTarget(epicTarget)
       : "Unresolved epic target";
     const group = groups.get(target) ?? {
       target,
@@ -116,9 +122,11 @@ export function groupEpicResolutionWarnings(
   return Array.from(groups.values());
 }
 
-export function classifyTrayPreflightWarnings(tasks: LocalTask[]): PreflightWarning[] {
+export function classifyTrayPreflightWarnings(trayOrTasks: Tray | LocalTask[]): PreflightWarning[] {
+  const tasks = Array.isArray(trayOrTasks) ? trayOrTasks : trayOrTasks.tasks;
+  const tray = Array.isArray(trayOrTasks) ? undefined : trayOrTasks;
   const createableTasks = tasks.filter((task) => task.syncStatus !== "Created");
-  const warnings = createableTasks.flatMap(classifyTaskPreflightWarnings);
+  const warnings = createableTasks.flatMap((task) => classifyTaskPreflightWarnings(task, tray));
   const tasksById = new Map(tasks.map((task) => [task.id, task]));
 
   if (createableTasks.length === 0) {

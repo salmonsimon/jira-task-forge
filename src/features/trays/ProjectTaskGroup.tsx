@@ -1,8 +1,8 @@
-import { Bug, Check, ChevronDown, ClipboardList, Copy, Layers3, Link2, PanelRightOpen, Pencil, Sparkles, Trash2 } from "lucide-react";
+import { AlertTriangle, Bug, Check, ChevronDown, ClipboardList, Copy, Layers3, Link2, PanelRightOpen, Pencil, Sparkles, Trash2, X } from "lucide-react";
 import { useEffect, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { AreaBadge, DescriptionBadge, IconButton, IssueTypeBadge, PriorityBadge, SyncBadge, useListboxDropdown } from "../../components/ui";
-import { canDeleteTask, canDuplicateTask } from "../../lib/domain";
-import type { IssueType, LocalTask, Priority } from "../../lib/types";
+import { canDeleteTask, canDuplicateTask, effectiveEpicScopeForProject, normalizeEpicScope } from "../../lib/domain";
+import type { IssueType, LocalTask, Priority, Tray } from "../../lib/types";
 import { cn } from "../../lib/utils";
 
 const priorities: Priority[] = ["Highest", "High", "Medium", "Low", "Lowest"];
@@ -10,8 +10,10 @@ const issueTypes: IssueType[] = ["Story", "Bug", "Sub-task"];
 
 export function ProjectTaskGroup({
   project,
+  tray,
   tasks,
   areas,
+  onUpdateTrayEpicScopes,
   selectedTaskId,
   onOpenTask,
   onUpdateTask,
@@ -21,8 +23,10 @@ export function ProjectTaskGroup({
   readOnly = false
 }: {
   project: string;
+  tray: Tray;
   tasks: LocalTask[];
   areas: string[];
+  onUpdateTrayEpicScopes: (trayId: string, epicScope: string | null, transversalEpicScope: string | null) => void | Promise<void>;
   selectedTaskId: string | null;
   onOpenTask: (task: LocalTask) => void;
   onUpdateTask: (taskId: string, task: Partial<Pick<LocalTask, "area" | "issueType" | "priority" | "title">>) => void | Promise<void>;
@@ -33,10 +37,18 @@ export function ProjectTaskGroup({
 }) {
   return (
     <div className="rounded border border-[#dfe1e6] bg-white shadow-sm">
-      <div className="flex items-center justify-between border-b border-[#dfe1e6] bg-[#f4f5f7] px-4 py-2">
-        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-[#42526e]">
-          <Layers3 size={14} />
-          {project}
+      <div className="flex items-start justify-between gap-3 border-b border-[#dfe1e6] bg-[#f4f5f7] px-4 py-2">
+        <div className="min-w-0 space-y-1">
+          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-[#42526e]">
+            <Layers3 size={14} />
+            {project}
+          </div>
+          <ProjectEpicScopeLine
+            project={project}
+            readOnly={readOnly}
+            tray={tray}
+            onUpdateTrayEpicScopes={onUpdateTrayEpicScopes}
+          />
         </div>
         <span className="text-xs text-[#6b778c]">{tasks.length} tasks</span>
       </div>
@@ -162,6 +174,101 @@ export function ProjectTaskGroup({
           </table>
         </div>
       </div>
+    </div>
+  );
+}
+
+function ProjectEpicScopeLine({
+  project,
+  tray,
+  readOnly,
+  onUpdateTrayEpicScopes
+}: {
+  project: string;
+  tray: Tray;
+  readOnly: boolean;
+  onUpdateTrayEpicScopes: (trayId: string, epicScope: string | null, transversalEpicScope: string | null) => void | Promise<void>;
+}) {
+  const isTransversal = project.trim().toLowerCase() === "transversal";
+  const canonicalScope = normalizeEpicScope(tray.epicScope);
+  const effectiveScope = effectiveEpicScopeForProject(project, tray);
+  const [isEditing, setIsEditing] = useState(false);
+  const [draftScope, setDraftScope] = useState(effectiveScope ?? "");
+
+  useEffect(() => {
+    if (!isEditing) setDraftScope(effectiveScope ?? "");
+  }, [effectiveScope, isEditing]);
+
+  function beginEditing(event: ReactMouseEvent<HTMLButtonElement>) {
+    event.stopPropagation();
+    if (readOnly) return;
+    setDraftScope(isTransversal && canonicalScope ? (tray.transversalEpicScope ?? "") : (tray.epicScope ?? ""));
+    setIsEditing(true);
+  }
+
+  function cancelEditing() {
+    setDraftScope(effectiveScope ?? "");
+    setIsEditing(false);
+  }
+
+  function acceptEditing() {
+    const nextScope = draftScope.trim();
+    if (isTransversal && canonicalScope && canonicalScope !== "TBD") {
+      void onUpdateTrayEpicScopes(tray.id, tray.epicScope ?? null, nextScope || null);
+    } else {
+      void onUpdateTrayEpicScopes(tray.id, nextScope || null, nextScope === "TBD" ? null : (tray.transversalEpicScope ?? null));
+    }
+    setIsEditing(false);
+  }
+
+  if (isEditing) {
+    return (
+      <div className="flex max-w-full flex-wrap items-center gap-1.5 text-xs normal-case tracking-normal">
+        <span className="font-medium text-[#6b778c]">Scope</span>
+        <input
+          autoFocus
+          className="h-7 w-52 rounded border border-[#4c9aff] bg-white px-2 text-xs font-medium text-[#172b4d] outline-none ring-2 ring-[#deebff]"
+          value={draftScope}
+          onBlur={acceptEditing}
+          onChange={(event) => setDraftScope(event.target.value)}
+          onClick={(event) => event.stopPropagation()}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") acceptEditing();
+            if (event.key === "Escape") cancelEditing();
+          }}
+        />
+        <IconButton title="Save scope" onClick={acceptEditing}>
+          <Check size={12} />
+        </IconButton>
+        <IconButton title="Cancel scope edit" onClick={cancelEditing}>
+          <X size={12} />
+        </IconButton>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex max-w-full flex-wrap items-center gap-1.5 text-xs normal-case tracking-normal">
+      {effectiveScope ? (
+        <span className="min-w-0 truncate text-[#6b778c]">
+          Scope: <span className="font-medium text-[#172b4d]">{effectiveScope}</span>
+        </span>
+      ) : (
+        <span className="inline-flex min-w-0 items-center gap-1 text-[#974f0c]">
+          <AlertTriangle size={12} />
+          Scope pending
+        </span>
+      )}
+      {!readOnly ? (
+        <button
+          aria-label={`Edit epic scope for ${project}`}
+          className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-[#6b778c] transition hover:bg-[#ebecf0] hover:text-[#172b4d]"
+          onClick={beginEditing}
+          type="button"
+        >
+          <Pencil size={12} />
+        </button>
+      ) : null}
     </div>
   );
 }

@@ -6,6 +6,10 @@ pub struct Tray {
     pub id: String,
     pub name: String,
     pub state: TrayState,
+    #[serde(default)]
+    pub epic_scope: Option<String>,
+    #[serde(default)]
+    pub transversal_epic_scope: Option<String>,
     pub created_at: String,
     pub updated_at: String,
     pub archived_at: Option<String>,
@@ -43,6 +47,11 @@ impl TrayState {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NewTray {
     pub name: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EpicScopePluralSuggestion {
+    pub scope: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -83,6 +83,25 @@ export async function renamePersistedTray(trayId: string, name: string): Promise
   return mapTray(tray, []);
 }
 
+export async function suggestPersistedTransversalEpicScope(epicScope: string): Promise<string> {
+  return invoke<string>("suggest_transversal_epic_scope", { epicScope });
+}
+
+export async function updatePersistedTrayEpicScopes(
+  trayId: string,
+  epicScope: string | null,
+  transversalEpicScope: string | null
+): Promise<Tray | null> {
+  const tray = await invoke<BackendTray | null>("update_tray_epic_scopes", {
+    trayId,
+    epicScope,
+    transversalEpicScope
+  });
+  if (!tray) return null;
+
+  return mapTray(tray, []);
+}
+
 export async function archivePersistedTray(trayId: string): Promise<Tray | null> {
   const tray = await invoke<BackendTray | null>("archive_tray", { trayId });
   return tray ? mapTray(tray, []) : null;

@@ -20,6 +20,8 @@ export type BackendTray = {
   id: string;
   name: string;
   state: "Active" | "NeedsAttention" | "Completed" | "Archived";
+  epic_scope: string | null;
+  transversal_epic_scope: string | null;
   created_at: string;
   updated_at: string;
   archived_at: string | null;
@@ -192,6 +194,8 @@ export function mapBackendTray(tray: BackendTray, tasks: LocalTask[]): Tray {
     id: tray.id,
     name: tray.name,
     state: mapBackendTrayState(tray.state),
+    epicScope: tray.epic_scope ?? undefined,
+    transversalEpicScope: tray.transversal_epic_scope ?? undefined,
     summary: summarizeTrayTasks(tasks),
     updatedAt: formatTimestamp(tray.updated_at),
     tasks

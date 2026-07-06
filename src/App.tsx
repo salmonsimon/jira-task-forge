@@ -43,6 +43,7 @@ import {
   listPersistedJiraProjectsForConnection,
   listPersistedTaskSyncLog,
   listPersistedTrays,
+  suggestPersistedTransversalEpicScope,
   markPersistedTasksCsvExported,
   openPersistedAiProviderApiKeysPage,
   openPersistedAtlassianApiTokensPage,
@@ -67,11 +68,13 @@ import {
   updatePersistedAssistedDescriptionProposalSection,
   updatePersistedCategory,
   updatePersistedJqlFavorite,
+  updatePersistedTrayEpicScopes,
   updatePersistedTaskAttachmentPurpose
 } from "./lib/adapters/tauriPersistence";
 import {
   addJqlRecentQuery,
   canExportTrayCsv,
+  suggestTransversalEpicScope,
   classifyTrayPreflightWarnings,
   countCsvExportableTasks,
   countTasksBySyncStatus,
@@ -399,6 +402,42 @@ export default function App() {
     trayWorkspace.openTray(tray);
     setActiveTab("trays");
     requestAnimationFrame(() => window.scrollTo({ top: 0, left: 0 }));
+  }
+
+  async function suggestTrayTransversalEpicScope(epicScope: string): Promise<string> {
+    if (!usesTauriPersistence || appSettings.aiProvider === "None" || !hasAiProviderApiKey) {
+      return suggestTransversalEpicScope(epicScope) ?? epicScope;
+    }
+
+    return suggestPersistedTransversalEpicScope(epicScope);
+  }
+
+  async function updateTrayEpicScopes(
+    trayId: string,
+    epicScope: string | null,
+    transversalEpicScope: string | null
+  ) {
+    if (!usesTauriPersistence) {
+      trayWorkspace.replaceTrays(
+        trays.map((tray) =>
+          tray.id === trayId
+            ? {
+                ...tray,
+                epicScope: epicScope ?? undefined,
+                transversalEpicScope: epicScope === "TBD" ? undefined : (transversalEpicScope ?? undefined),
+                updatedAt: "Just now"
+              }
+            : tray
+        ),
+        { fallbackSelectedTrayId: trayId }
+      );
+      return;
+    }
+
+    const updatedTray = await updatePersistedTrayEpicScopes(trayId, epicScope, transversalEpicScope);
+    if (!updatedTray) return;
+    const persistedTrays = await listPersistedTrays();
+    trayWorkspace.replaceTrays(persistedTrays, { fallbackSelectedTrayId: trayId });
   }
 
   async function generateTaskDescription(taskId: string, additionalContext: string): Promise<AssistedDescriptionDraft> {
@@ -1230,7 +1269,7 @@ export default function App() {
     const loadingStartedAt = performance.now();
     await waitForNextPaint();
 
-    const warnings = classifyTrayPreflightWarnings(tray.tasks);
+    const warnings = classifyTrayPreflightWarnings(tray);
     const createableTaskCount = tray.tasks.filter((task) => task.syncStatus !== "Created").length;
     const creationProjectKey = appSettings.jiraCreationProjectKey.trim().toUpperCase();
     const creationTarget = `Jira project ${creationProjectKey || "not set"}`;
@@ -1474,10 +1513,12 @@ export default function App() {
               selectedTray={selectedTray}
               onOpenTray={openTray}
               onCreateTray={trayWorkspace.createTray}
+              onSuggestTransversalScope={suggestTrayTransversalEpicScope}
               onRenameTray={trayWorkspace.renameTray}
               onArchiveTray={trayWorkspace.archiveTray}
               onRestoreTray={trayWorkspace.restoreTray}
               onDeleteTray={trayWorkspace.requestDeleteTray}
+              onUpdateTrayEpicScopes={updateTrayEpicScopes}
               onExportCsv={exportTrayCsv}
               onCreateInJira={createInJiraPreflight}
               isRunningJiraPreflight={isRunningJiraPreflight}

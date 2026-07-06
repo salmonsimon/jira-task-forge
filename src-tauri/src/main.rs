@@ -3,6 +3,7 @@ mod attachment_storage;
 mod backup;
 mod commands;
 mod db;
+mod epic_scope;
 mod integrations;
 mod jira_sync;
 mod models;
@@ -41,6 +42,7 @@ pub fn run() {
             commands::trays::create_tray,
             commands::trays::list_trays,
             commands::trays::rename_tray,
+            commands::trays::update_tray_epic_scopes,
             commands::trays::archive_tray,
             commands::trays::restore_tray,
             commands::trays::delete_tray,
@@ -82,6 +84,7 @@ pub fn run() {
             commands::jql::run_jql_query,
             commands::jql::draft_jql_with_ai,
             commands::ai::generate_task_description,
+            commands::ai::suggest_transversal_epic_scope,
             commands::jira::create_jira_parent_issues,
             commands::tasks::create_task,
             commands::tasks::create_subtask,

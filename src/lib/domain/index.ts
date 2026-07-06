@@ -3,6 +3,7 @@ export * from "./attachments";
 export * from "./catalog";
 export * from "./csvExport";
 export * from "./errors";
+export * from "./epicScope";
 export * from "./jql";
 export * from "./preflight";
 export * from "./projects";
