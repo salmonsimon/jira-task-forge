@@ -12,8 +12,8 @@ use serde_json::{json, Value};
 
 use crate::area_catalog::{catalog_area_display_name, catalog_jira_label};
 use crate::attachment_storage::{
-    resolve_existing_managed_attachment_file, sanitize_attachment_audit_name,
-    JIRA_CLOUD_FALLBACK_ATTACHMENT_UPLOAD_LIMIT_BYTES,
+    remove_managed_attachment_file, resolve_existing_managed_attachment_file,
+    sanitize_attachment_audit_name, JIRA_CLOUD_FALLBACK_ATTACHMENT_UPLOAD_LIMIT_BYTES,
 };
 use crate::db::DbError;
 use crate::integrations::jira::JiraClient;
@@ -37,6 +37,8 @@ use planning::{
 };
 
 const JIRA_TASK_FORGE_PROPERTY_KEY: &str = "jira-task-forge-sync";
+const JIRA_ATTACHMENT_BYTES_CLEANED_STATUS: &str = "Uploaded to Jira; local bytes cleaned";
+const AI_ONLY_BYTES_CLEANED_STATUS: &str = "Created in Jira; local AI-only bytes cleaned";
 const REMOTE_MARKER_LOOKUP_ATTEMPTS: usize = 2;
 const REMOTE_MARKER_LOOKUP_BACKOFF: Duration = Duration::from_millis(100);
 
@@ -457,6 +459,12 @@ where
                         existing_key,
                         &mut result,
                     )?;
+                    had_non_blocking_warning |= cleanup_ai_only_attachments_after_created(
+                        self.connection,
+                        self.app_data_dir.as_deref(),
+                        task,
+                        &mut result,
+                    )?;
                     recorder.advance();
                     continue;
                 }
@@ -509,6 +517,12 @@ where
                                 &mut recorder,
                                 task,
                                 &existing_key,
+                                &mut result,
+                            )?;
+                            had_non_blocking_warning |= cleanup_ai_only_attachments_after_created(
+                                self.connection,
+                                self.app_data_dir.as_deref(),
+                                task,
                                 &mut result,
                             )?;
                             recorder.advance();
@@ -596,6 +610,12 @@ where
                             &created_key_for_upload,
                             &mut result,
                         )?;
+                        had_non_blocking_warning |= cleanup_ai_only_attachments_after_created(
+                            self.connection,
+                            self.app_data_dir.as_deref(),
+                            task,
+                            &mut result,
+                        )?;
                         recorder.advance();
                     }
                     Err(message) => {
@@ -665,6 +685,12 @@ where
                         existing_key,
                         &mut result,
                     )?;
+                    had_non_blocking_warning |= cleanup_ai_only_attachments_after_created(
+                        self.connection,
+                        self.app_data_dir.as_deref(),
+                        subtask,
+                        &mut result,
+                    )?;
                     recorder.advance();
                     continue;
                 }
@@ -711,6 +737,12 @@ where
                             &mut recorder,
                             subtask,
                             &created_key,
+                            &mut result,
+                        )?;
+                        had_non_blocking_warning |= cleanup_ai_only_attachments_after_created(
+                            self.connection,
+                            self.app_data_dir.as_deref(),
+                            subtask,
                             &mut result,
                         )?;
                         recorder.advance();
@@ -1229,6 +1261,14 @@ where
                         managed_file.size_bytes,
                     ),
                 )?;
+                had_warning |= cleanup_attachment_local_bytes(
+                    connection,
+                    Some(app_data_dir),
+                    task,
+                    &attachment,
+                    JIRA_ATTACHMENT_BYTES_CLEANED_STATUS,
+                    result,
+                )?;
             }
             Err(message) => {
                 had_warning = true;
@@ -1246,6 +1286,70 @@ where
     }
 
     Ok(had_warning)
+}
+
+fn cleanup_ai_only_attachments_after_created(
+    connection: &Connection,
+    app_data_dir: Option<&Path>,
+    task: &LocalTask,
+    result: &mut JiraCreateIssuesResult,
+) -> Result<bool, String> {
+    let attachments = task
+        .attachments
+        .iter()
+        .filter(|attachment| attachment.purpose == "AI only" && attachment.restore_status.is_none())
+        .cloned()
+        .collect::<Vec<_>>();
+    if attachments.is_empty() {
+        return Ok(false);
+    }
+
+    let mut had_warning = false;
+    for attachment in attachments {
+        had_warning |= cleanup_attachment_local_bytes(
+            connection,
+            app_data_dir,
+            task,
+            &attachment,
+            AI_ONLY_BYTES_CLEANED_STATUS,
+            result,
+        )?;
+    }
+    Ok(had_warning)
+}
+
+fn cleanup_attachment_local_bytes(
+    connection: &Connection,
+    app_data_dir: Option<&Path>,
+    task: &LocalTask,
+    attachment: &TaskAttachment,
+    cleanup_status: &str,
+    result: &mut JiraCreateIssuesResult,
+) -> Result<bool, String> {
+    let filename = sanitize_attachment_audit_name(&attachment.display_filename);
+    let Some(app_data_dir) = app_data_dir else {
+        result.messages.push(format!(
+            "{} attachment {filename} local bytes could not be cleaned: app data directory was unavailable.",
+            task.title
+        ));
+        return Ok(true);
+    };
+
+    match remove_managed_attachment_file(app_data_dir, &attachment.original_relative_path) {
+        Ok(()) => {
+            TaskRepository::new(connection)
+                .mark_attachment_bytes_cleaned(&task.id, &attachment.id, cleanup_status)
+                .map_err(db_error_message)?;
+            Ok(false)
+        }
+        Err(error) => {
+            result.messages.push(format!(
+                "{} attachment {filename} local bytes could not be cleaned: {error}",
+                task.title
+            ));
+            Ok(true)
+        }
+    }
 }
 
 fn format_byte_size_u64(size_bytes: u64) -> String {
@@ -1547,6 +1651,52 @@ mod tests {
             )
             .expect("upload event count reads");
         assert_eq!(upload_event_count, 1);
+        assert!(
+            !app_data_dir
+                .join("attachments")
+                .join("task")
+                .join("jira-ready.png")
+                .exists(),
+            "Jira-ready bytes are removed after upload"
+        );
+        assert!(
+            !app_data_dir
+                .join("attachments")
+                .join("task")
+                .join("ai-only.png")
+                .exists(),
+            "AI-only bytes are removed after the Local Task is Created"
+        );
+        let persisted_task = task_repository
+            .find_by_id(&task.id)
+            .expect("task reads")
+            .expect("task exists");
+        assert_eq!(persisted_task.sync_status, "Created");
+        assert_eq!(persisted_task.jira_key.as_deref(), Some("JTFTEST-21"));
+        assert_eq!(persisted_task.attachments.len(), 2);
+        let jira_attachment = persisted_task
+            .attachments
+            .iter()
+            .find(|attachment| attachment.display_filename == "jira-ready.png")
+            .expect("jira metadata remains");
+        assert_eq!(jira_attachment.mime_type.as_deref(), Some("image/png"));
+        assert_eq!(jira_attachment.original_size_bytes, 16);
+        assert_eq!(jira_attachment.purpose, "AI + Jira attachment");
+        assert_eq!(
+            jira_attachment.restore_status.as_deref(),
+            Some(JIRA_ATTACHMENT_BYTES_CLEANED_STATUS)
+        );
+        let ai_attachment = persisted_task
+            .attachments
+            .iter()
+            .find(|attachment| attachment.display_filename == "ai-only.png")
+            .expect("ai metadata remains");
+        assert_eq!(ai_attachment.original_size_bytes, 13);
+        assert_eq!(ai_attachment.purpose, "AI only");
+        assert_eq!(
+            ai_attachment.restore_status.as_deref(),
+            Some(AI_ONLY_BYTES_CLEANED_STATUS)
+        );
 
         let _ = fs::remove_dir_all(&app_data_dir);
     }
@@ -1811,6 +1961,88 @@ mod tests {
         assert_eq!(result.status, "succeeded");
         assert_eq!(gateway.attachment_settings_calls, 0);
         assert!(gateway.uploaded_attachments.is_empty());
+        assert!(
+            !app_data_dir
+                .join("attachments")
+                .join("task")
+                .join("context.txt")
+                .exists(),
+            "AI-only bytes are removed once the task is Created"
+        );
+        let persisted_task = task_repository
+            .find_by_id(
+                result.created_issues[0]
+                    .task_id
+                    .as_deref()
+                    .expect("created task id"),
+            )
+            .expect("task reads")
+            .expect("task exists");
+        assert_eq!(
+            persisted_task.attachments[0].restore_status.as_deref(),
+            Some(AI_ONLY_BYTES_CLEANED_STATUS)
+        );
+
+        let _ = fs::remove_dir_all(&app_data_dir);
+    }
+
+    #[test]
+    fn missing_ai_only_attachment_cleanup_after_created_is_idempotent() {
+        let connection = open_in_memory_database().expect("database opens");
+        let app_data_dir = std::env::temp_dir().join(format!(
+            "jira-task-forge-sync-ai-only-missing-{}",
+            Uuid::new_v4()
+        ));
+        fs::create_dir_all(app_data_dir.join("attachments").join("task"))
+            .expect("app data creates");
+        let tray_repository = TrayRepository::new(&connection);
+        let task_repository = TaskRepository::new(&connection);
+        let tray = tray_repository
+            .create(NewTray {
+                name: "AI-only missing attachment".to_string(),
+            })
+            .expect("tray creates");
+        let task = task_repository
+            .create(NewTask {
+                tray_id: tray.id.clone(),
+                project: "STT".to_string(),
+                area: "Bug".to_string(),
+                title: "Create after missing local context".to_string(),
+                priority: "High".to_string(),
+                issue_type: "Story".to_string(),
+                content_language: "Spanish".to_string(),
+            })
+            .expect("task creates");
+        task_repository
+            .create_attachment(NewTaskAttachment {
+                task_id: task.id.clone(),
+                display_filename: "missing-context.txt".to_string(),
+                mime_type: Some("text/plain".to_string()),
+                purpose: "AI only".to_string(),
+                original_size_bytes: 15,
+                original_relative_path: "attachments/task/missing-context.txt".to_string(),
+            })
+            .expect("attachment creates");
+        let mut gateway = FakeJiraGateway::new();
+        gateway.created_keys = vec!["JTFTEST-32".to_string(), "JTFTEST-33".to_string()];
+
+        let mut runner = JiraSyncRunner::new(&connection, &mut gateway, "JTFTEST".to_string())
+            .with_app_data_dir(app_data_dir.clone());
+        let result = runner
+            .create_parent_issues_from_tray(&tray.id, true)
+            .expect("sync succeeds");
+
+        assert_eq!(result.status, "succeeded");
+        assert_eq!(result.created_issue_count, 1);
+        let persisted_task = task_repository
+            .find_by_id(&task.id)
+            .expect("task reads")
+            .expect("task exists");
+        assert_eq!(persisted_task.sync_status, "Created");
+        assert_eq!(
+            persisted_task.attachments[0].restore_status.as_deref(),
+            Some(AI_ONLY_BYTES_CLEANED_STATUS)
+        );
 
         let _ = fs::remove_dir_all(&app_data_dir);
     }
