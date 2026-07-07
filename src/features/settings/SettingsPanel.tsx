@@ -246,6 +246,7 @@ export function SettingsPanel({
                 ["Site URL", settings.jiraSiteUrl || "Not set"],
                 ["Account email", settings.jiraAccountEmail || "Not set"],
                 ["Creation project", settings.jiraCreationProjectKey || "Not set"],
+                ["Project sync", settings.projectSyncEnabled === false ? "Off" : "On"],
                 ["API token", hasJiraApiToken ? "Saved" : "Missing"]
               ]}
             />

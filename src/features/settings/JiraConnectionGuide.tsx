@@ -7,7 +7,7 @@ import { validateJiraSiteUrlDraft } from "../../lib/domain";
 import { getModalMouseNavigationIntent, isMouseNavigationButton, shouldHandleEnterAsWizardAdvance } from "../../lib/modal-navigation";
 import type { AppSettings, JiraConnectionTestResult, JiraProjectOption } from "../../lib/types";
 
-type GuideStep = "site" | "account" | "token" | "verify" | "project" | "review";
+type GuideStep = "site" | "account" | "token" | "verify" | "project" | "project-sync" | "review";
 
 export const jiraConnectionGuideSteps: Array<{ id: GuideStep; label: string }> = [
   { id: "site", label: "Site" },
@@ -15,6 +15,7 @@ export const jiraConnectionGuideSteps: Array<{ id: GuideStep; label: string }> =
   { id: "token", label: "Token" },
   { id: "verify", label: "Verify" },
   { id: "project", label: "Project" },
+  { id: "project-sync", label: "Sync" },
   { id: "review", label: "Review" }
 ];
 
@@ -53,6 +54,7 @@ export function canContinueJiraConnectionGuideStep({
     (step === "token" && hasJiraApiToken && !hasUnsavedTokenDraft && !isSavingToken) ||
     (step === "verify" && hasJiraApiToken) ||
     (step === "project" && hasProjectKey) ||
+    step === "project-sync" ||
     step === "review"
   );
 }
@@ -73,7 +75,7 @@ export function JiraConnectionGuide({
   settings: AppSettings;
   hasJiraApiToken: boolean;
   isTestingJiraConnection: boolean;
-  onSave: (settings: Pick<AppSettings, "jiraSiteUrl" | "jiraAccountEmail" | "jiraCreationProjectKey">) => Promise<boolean>;
+  onSave: (settings: Pick<AppSettings, "jiraSiteUrl" | "jiraAccountEmail" | "jiraCreationProjectKey" | "projectSyncEnabled">) => Promise<boolean>;
   onSaveJiraApiToken: (token: string) => Promise<boolean>;
   onDeleteJiraApiToken: () => void;
   onTestConnection: (siteUrl: string, accountEmail: string) => Promise<JiraConnectionTestResult>;
@@ -90,6 +92,7 @@ export function JiraConnectionGuide({
   const [jiraTokenStatus, setJiraTokenStatus] = useState<"idle" | "testing" | "success" | "failed" | "saving">("idle");
   const [jiraTokenMessage, setJiraTokenMessage] = useState<string | null>(null);
   const [projectKeyDraft, setProjectKeyDraft] = useState(settings.jiraCreationProjectKey);
+  const [projectSyncEnabledDraft, setProjectSyncEnabledDraft] = useState(settings.projectSyncEnabled !== false);
   const [connectionResult, setConnectionResult] = useState<JiraConnectionTestResult | null>(null);
   const [projects, setProjects] = useState<JiraProjectOption[]>([]);
   const [isProjectMenuOpen, setIsProjectMenuOpen] = useState(false);
@@ -208,7 +211,8 @@ export function JiraConnectionGuide({
     const saved = await onSave({
       jiraSiteUrl: siteUrlValidation.value,
       jiraAccountEmail: accountEmail,
-      jiraCreationProjectKey: projectKey
+      jiraCreationProjectKey: projectKey,
+      projectSyncEnabled: projectSyncEnabledDraft
     });
     setIsSaving(false);
     if (saved) {
@@ -282,7 +286,7 @@ export function JiraConnectionGuide({
         ) : (
           <>
             <div className="border-b border-[#dfe1e6] bg-[#f7f8fa] px-5 py-3">
-              <div className="grid grid-cols-6 gap-2">
+              <div className="grid grid-cols-7 gap-2">
                 {jiraConnectionGuideSteps.map((candidate, index) => (
                   <button
                     className={`h-8 rounded border px-2 text-xs font-medium ${
@@ -478,13 +482,32 @@ export function JiraConnectionGuide({
                   ) : null}
                 </GuideSection>
               ) : null}
+              {step === "project-sync" ? (
+                <GuideSection title="Project sync" description="Choose whether Jira Task Forge should discover local Projects from Jira epics in the selected creation project.">
+                  <label className="flex items-start gap-3 rounded border border-[#dfe1e6] bg-[#f7f8fa] p-3 text-sm">
+                    <input
+                      checked={projectSyncEnabledDraft}
+                      className="mt-1"
+                      onChange={(event) => setProjectSyncEnabledDraft(event.target.checked)}
+                      type="checkbox"
+                    />
+                    <span>
+                      <span className="block font-semibold text-[#172b4d]">Use Project sync</span>
+                      <span className="block text-xs leading-relaxed text-[#6b778c]">
+                        When enabled, Categories can sync Projects from Jira epics under the Jira Creation Project Key. When disabled, the Projects sync step is skipped.
+                      </span>
+                    </span>
+                  </label>
+                </GuideSection>
+              ) : null}
               {step === "review" ? (
                 <GuideSection title="Review and save" description="These settings are saved together. API tokens remain separate and are never written to SQLite or backups.">
                   <ReviewRows
                     rows={[
                       ["Jira Site URL", normalizedSiteUrl || "Missing"],
                       ["Account email", accountEmail || "Missing"],
-                      ["Jira creation project key", projectKey || "Missing"]
+                      ["Jira creation project key", projectKey || "Missing"],
+                      ["Project sync", projectSyncEnabledDraft ? "On" : "Off"]
                     ]}
                   />
                   {saveError ? <FeedbackNote className="mt-3" variant="error">{saveError}</FeedbackNote> : null}

@@ -5,6 +5,7 @@ use crate::area_catalog::{
     CatalogSyncResult, DeliveryFormatGateResult, NotionCatalogConnectionTestResult,
 };
 use crate::models::Category;
+use crate::project_sync::{ProjectSyncApplyRequest, ProjectSyncReview};
 use crate::services::AppServices;
 
 #[tauri::command]
@@ -93,4 +94,25 @@ pub fn resolve_delivery_format_gate(
     description_or_deliverable: String,
 ) -> Result<DeliveryFormatGateResult, String> {
     services.resolve_delivery_format_gate(&area, &description_or_deliverable)
+}
+
+#[tauri::command]
+pub async fn discover_project_sync_candidates(
+    services: State<'_, AppServices>,
+) -> Result<ProjectSyncReview, String> {
+    let services = services.inner().clone();
+    run_blocking_result("Project sync discovery worker", move || {
+        services.discover_project_sync_candidates()
+    })
+    .await
+}
+
+#[tauri::command]
+pub fn apply_project_sync_decisions(
+    services: State<'_, AppServices>,
+    request: ProjectSyncApplyRequest,
+) -> Result<Vec<Category>, String> {
+    services
+        .apply_project_sync_decisions(request)
+        .map_err(|error| error.to_string())
 }

@@ -47,6 +47,7 @@ describe("JiraConnectionGuide", () => {
       "Token",
       "Verify",
       "Project",
+      "Sync",
       "Review"
     ]);
 

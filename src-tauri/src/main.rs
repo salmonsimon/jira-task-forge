@@ -7,6 +7,7 @@ mod epic_scope;
 mod integrations;
 mod jira_sync;
 mod models;
+mod project_sync;
 mod redaction;
 mod repositories;
 mod services;
@@ -52,6 +53,8 @@ pub fn run() {
             commands::categories::sync_area_catalog,
             commands::categories::sync_area_catalog_from_source,
             commands::categories::sync_area_catalog_from_notion,
+            commands::categories::discover_project_sync_candidates,
+            commands::categories::apply_project_sync_decisions,
             commands::categories::test_notion_catalog_connection,
             commands::categories::resolve_delivery_format_gate,
             commands::categories::create_category,

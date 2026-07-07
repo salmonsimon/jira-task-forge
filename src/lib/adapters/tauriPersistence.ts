@@ -21,6 +21,8 @@ import type {
   LocalIssueRelationship,
   NewAssistedDescriptionProposal,
   NotionCatalogConnectionTestResult,
+  ProjectSyncApplyRequest,
+  ProjectSyncReview,
   SyncLogEntry,
   Tray
 } from "../types";
@@ -161,6 +163,15 @@ export async function syncPersistedAreaCatalogFromSource(sourceUrl: string): Pro
 
 export async function syncPersistedAreaCatalogFromNotion(pageUrlOrId: string): Promise<CatalogSyncResult> {
   return invoke<CatalogSyncResult>("sync_area_catalog_from_notion", { pageUrlOrId });
+}
+
+export async function discoverPersistedProjectSyncCandidates(): Promise<ProjectSyncReview> {
+  return invoke<ProjectSyncReview>("discover_project_sync_candidates");
+}
+
+export async function applyPersistedProjectSyncDecisions(request: ProjectSyncApplyRequest): Promise<Category[]> {
+  const categories = await invoke<BackendCategory[]>("apply_project_sync_decisions", { request });
+  return categories.map(mapCategory);
 }
 
 export async function testPersistedNotionCatalogConnection(
@@ -562,6 +573,7 @@ function normalizeAppSettings(settings: AppSettings): AppSettings {
     ...settings,
     jiraCreationProjectKey: settings.jiraCreationProjectKey ?? legacySettings.jiraSandboxProjectKey ?? "",
     catalogSourceMode: settings.catalogSourceMode ?? "notion",
-    catalogSourceUrl: settings.catalogSourceUrl ?? ""
+    catalogSourceUrl: settings.catalogSourceUrl ?? "",
+    projectSyncEnabled: settings.projectSyncEnabled ?? true
   };
 }

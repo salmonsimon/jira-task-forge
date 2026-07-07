@@ -224,6 +224,36 @@ export type AppSettings = {
   defaultContentLanguage: "Spanish" | "English";
   catalogSourceMode: "notion" | "public-exportable" | "manual";
   catalogSourceUrl: string;
+  projectSyncEnabled?: boolean;
+};
+
+export type ProjectSyncCandidate = {
+  name: string;
+  normalizedName: string;
+  jiraIssueKeys: string[];
+  status: "active" | "ignored" | "archived" | "new";
+  alreadyLocal: boolean;
+  willPromoteLocal: boolean;
+};
+
+export type ProjectSyncReview = {
+  jiraProjectKey: string;
+  jql: string;
+  sections: {
+    active: ProjectSyncCandidate[];
+    newlyAvailable: ProjectSyncCandidate[];
+    ignored: ProjectSyncCandidate[];
+    archived: ProjectSyncCandidate[];
+  };
+  defaultActiveNames: string[];
+  notes: string[];
+};
+
+export type ProjectSyncApplyRequest = {
+  activeProjectNames: string[];
+  ignoredProjectNames: string[];
+  archivedProjectNames: string[];
+  candidates: ProjectSyncCandidate[];
 };
 
 export type CatalogSyncResult = {

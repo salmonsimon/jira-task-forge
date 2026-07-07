@@ -6,6 +6,7 @@ export * from "./errors";
 export * from "./epicScope";
 export * from "./jql";
 export * from "./preflight";
+export * from "./projectSync";
 export * from "./projects";
 export * from "./settings";
 export * from "./taskGraph";

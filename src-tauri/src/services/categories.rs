@@ -6,6 +6,10 @@ use crate::area_catalog::{
 };
 use crate::db::DbResult;
 use crate::models::Category;
+use crate::project_sync::{
+    build_project_sync_review, jira_epic_project_discovery_jql, ProjectSyncApplyRequest,
+    ProjectSyncReview,
+};
 use crate::repositories::{CategoryRepository, SettingsRepository};
 
 impl AppServices {
@@ -37,6 +41,44 @@ impl AppServices {
     pub fn sync_area_catalog(&self) -> DbResult<Vec<Category>> {
         let connection = self.connection();
         CategoryRepository::new(&connection).sync_area_catalog()
+    }
+
+    pub fn discover_project_sync_candidates(&self) -> Result<ProjectSyncReview, String> {
+        let settings = self
+            .get_app_settings()
+            .map_err(|error| format!("Could not load Jira settings: {error}"))?;
+        let jira_project_key = settings.jira_creation_project_key.trim().to_ascii_uppercase();
+        if jira_project_key.is_empty() {
+            return Err("Jira creation project key is required before syncing Projects.".to_string());
+        }
+
+        let jql = jira_epic_project_discovery_jql(&jira_project_key)?;
+        let client = self.jira_client()?;
+        let epics = client.list_epics_for_project(&jira_project_key)?;
+        let connection = self.connection();
+        let repository = CategoryRepository::new(&connection);
+        let projects = repository
+            .list(Some("project"))
+            .map_err(|error| error.to_string())?;
+        let decisions = repository
+            .list_project_sync_decisions()
+            .map_err(|error| error.to_string())?;
+
+        Ok(build_project_sync_review(
+            &jira_project_key,
+            &jql,
+            &projects,
+            &epics,
+            &decisions,
+        ))
+    }
+
+    pub fn apply_project_sync_decisions(
+        &self,
+        request: ProjectSyncApplyRequest,
+    ) -> DbResult<Vec<Category>> {
+        let connection = self.connection();
+        CategoryRepository::new(&connection).apply_project_sync_decisions(request)
     }
 
     pub fn sync_area_catalog_from_source(
