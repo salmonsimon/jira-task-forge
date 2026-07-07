@@ -53,6 +53,16 @@ npm run tauri dev
 npm run build
 ```
 
+## Package Windows Installer
+
+After local validation, build the Personal v1 Windows installer from a Windows packaging host with:
+
+```bash
+npm run package:windows
+```
+
+See [`docs/windows-packaging.md`](docs/windows-packaging.md) for the current packaging gate, install smoke, and Windows-only validation boundary.
+
 ## Internal Release Readiness
 
 Before using a new batch of PRs for daily internal work, run the concise

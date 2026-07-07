@@ -12,7 +12,8 @@
     "coverage:rust": "cd src-tauri && ${CARGO:-$HOME/.cargo/bin/cargo} llvm-cov --summary-only",
     "tauri": "tauri",
     "coverage:frontend": "TMPDIR=${TMPDIR:-/tmp} vitest run --coverage",
-    "audit:js": "npm audit"
+    "audit:js": "npm audit",
+    "package:windows": "tauri build --bundles nsis"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.17",
