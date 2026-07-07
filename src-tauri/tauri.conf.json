@@ -48,7 +48,9 @@
     ],
     "windows": {
       "nsis": {
-        "installerHooks": "nsis/credential-cleanup.nsh"
+        "installerHooks": "nsis/credential-cleanup.nsh",
+        "installerIcon": "icons/icon.ico",
+        "uninstallerIcon": "icons/icon.ico"
       }
     }
   }
