@@ -10,21 +10,38 @@ const extractRoot = join(toolRoot, "root");
 const binDir = join(toolRoot, "bin");
 const xwinCacheDir = join(toolRoot, "xwin");
 
+function hasAptCandidate(pkg) {
+  const result = spawnSync("apt-cache", ["policy", pkg], { encoding: "utf8" });
+  return result.status === 0 && /Candidate:\s*(?!\(none\))\S+/.test(result.stdout);
+}
+
+function firstAvailablePackageVersion(prefix, versions, suffix = "") {
+  const version = versions.find((candidate) => hasAptCandidate(`${prefix}${candidate}${suffix}`));
+  if (!version) {
+    console.error(`No apt candidate found for ${prefix}{${versions.join(",")}}${suffix}.`);
+    process.exit(1);
+  }
+  return version;
+}
+
+const llvmVersion = firstAvailablePackageVersion("llvm-", ["21", "20"]);
+const gccVersion = firstAvailablePackageVersion("libstdc++-", ["15", "14"], "-dev");
+
 const packages = [
   "nsis",
   "nsis-common",
-  "lld-21",
-  "llvm-21",
-  "llvm-21-tools",
-  "llvm-21-linker-tools",
-  "clang-21",
-  "libclang-cpp21",
-  "libclang1-21",
-  "libclang-common-21-dev",
-  "libllvm21",
-  "libstdc++-15-dev",
-  "libgcc-15-dev",
-  "libobjc-15-dev",
+  `lld-${llvmVersion}`,
+  `llvm-${llvmVersion}`,
+  `llvm-${llvmVersion}-tools`,
+  `llvm-${llvmVersion}-linker-tools`,
+  `clang-${llvmVersion}`,
+  `libclang-cpp${llvmVersion}`,
+  `libclang1-${llvmVersion}`,
+  `libclang-common-${llvmVersion}-dev`,
+  `libllvm${llvmVersion}`,
+  `libstdc++-${gccVersion}-dev`,
+  `libgcc-${gccVersion}-dev`,
+  `libobjc-${gccVersion}-dev`,
 ];
 
 function run(command, args, options = {}) {
@@ -115,13 +132,13 @@ const env = {
   PATH: [
     binDir,
     join(extractRoot, "usr/bin"),
-    join(extractRoot, "usr/lib/llvm-21/bin"),
+    join(extractRoot, `usr/lib/llvm-${llvmVersion}/bin`),
     join(process.env.HOME ?? "", ".cargo/bin"),
     process.env.PATH ?? "",
   ].join(":"),
   LD_LIBRARY_PATH: [
     join(extractRoot, "usr/lib/x86_64-linux-gnu"),
-    join(extractRoot, "usr/lib/llvm-21/lib"),
+    join(extractRoot, `usr/lib/llvm-${llvmVersion}/lib`),
     process.env.LD_LIBRARY_PATH ?? "",
   ].join(":"),
   NSISDIR: join(extractRoot, "usr/share/nsis"),
