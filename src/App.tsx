@@ -177,7 +177,7 @@ type JiraCreationNotice = {
 export default function App() {
   const [activeTab, setActiveTab] = useState<MainTab>("trays");
   const [openPanel, setOpenPanel] = useState<Panel>(null);
-  const [settingsInitialGuide, setSettingsInitialGuide] = useState<"notion-synchronization" | null>(null);
+  const [settingsInitialGuide, setSettingsInitialGuide] = useState<"jira-connection" | "notion-synchronization" | null>(null);
   const [isAiProviderSetupOpen, setIsAiProviderSetupOpen] = useState(false);
   const [categories, setCategories] = useState<Category[]>(() => [...appData.listProjects(), ...appData.listAreas()]);
   const [jqlFavorites, setJqlFavorites] = useState<JqlFavorite[]>(() => appData.listJqlFavorites());
@@ -1679,6 +1679,7 @@ export default function App() {
             onDiscoverProjectSync={discoverProjectSync}
             onApplyProjectSync={applyProjectSync}
             onConfigureJira={() => {
+              setSettingsInitialGuide("jira-connection");
               setOpenPanel("settings");
             }}
             onConfigureCatalogSource={openCatalogSourceConfiguration}
@@ -1703,6 +1704,8 @@ export default function App() {
             onListAiProviderModels={listAiProviderModels}
             onTestJiraApiTokenQuiet={testJiraApiTokenQuiet}
             onTestJiraConnectionSettings={testJiraConnectionSettings}
+            onDiscoverProjectSync={discoverProjectSync}
+            onApplyProjectSync={applyProjectSync}
             hasNotionIntegrationToken={usesTauriPersistence ? hasPersistedNotionIntegrationToken : async () => false}
             onSaveNotionIntegrationToken={usesTauriPersistence ? savePersistedNotionIntegrationToken : async () => undefined}
             onDeleteNotionIntegrationToken={usesTauriPersistence ? deletePersistedNotionIntegrationToken : async () => undefined}

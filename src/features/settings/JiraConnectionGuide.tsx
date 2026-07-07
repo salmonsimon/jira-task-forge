@@ -1,11 +1,12 @@
-import { Check, ChevronDown, ChevronLeft, ExternalLink, Info, KeyRound, RefreshCw } from "lucide-react";
+import { Check, ChevronDown, ChevronLeft, ExternalLink, Info, KeyRound, Pencil, RefreshCw } from "lucide-react";
 import type { FocusEvent, KeyboardEvent as ReactKeyboardEvent, MouseEvent, ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Button, FeedbackNote, LoadingOrb, PanelHeader } from "../../components/ui";
+import { Button, FeedbackNote, LoadingOrb, PanelHeader, ToggleSwitch } from "../../components/ui";
 import { appOverlayLayers, useAppOverlay } from "../../lib/app-overlays";
 import { validateJiraSiteUrlDraft } from "../../lib/domain";
 import { getModalMouseNavigationIntent, isMouseNavigationButton, shouldHandleEnterAsWizardAdvance } from "../../lib/modal-navigation";
-import type { AppSettings, JiraConnectionTestResult, JiraProjectOption } from "../../lib/types";
+import type { AppSettings, JiraConnectionTestResult, JiraProjectOption, ProjectSyncApplyRequest, ProjectSyncCandidate, ProjectSyncReview } from "../../lib/types";
+import { mergeProjectSyncCandidates, ProjectSyncDecisionTable } from "../categories/ProjectSyncDecisionTable";
 
 type GuideStep = "site" | "account" | "token" | "verify" | "project" | "project-sync" | "review";
 
@@ -15,7 +16,7 @@ export const jiraConnectionGuideSteps: Array<{ id: GuideStep; label: string }> =
   { id: "token", label: "Token" },
   { id: "verify", label: "Verify" },
   { id: "project", label: "Project" },
-  { id: "project-sync", label: "Sync" },
+  { id: "project-sync", label: "Decide" },
   { id: "review", label: "Review" }
 ];
 
@@ -69,7 +70,10 @@ export function JiraConnectionGuide({
   onTestConnection,
   onTestJiraApiToken,
   onListProjects,
+  onDiscoverProjectSync,
+  onApplyProjectSync,
   onOpenJiraApiTokens,
+  initialStep = "site",
   onClose
 }: {
   settings: AppSettings;
@@ -81,11 +85,14 @@ export function JiraConnectionGuide({
   onTestConnection: (siteUrl: string, accountEmail: string) => Promise<JiraConnectionTestResult>;
   onTestJiraApiToken: (token: string, siteUrl: string, accountEmail: string) => Promise<JiraConnectionTestResult>;
   onListProjects: (siteUrl: string, accountEmail: string) => Promise<JiraProjectOption[]>;
+  onDiscoverProjectSync?: () => Promise<ProjectSyncReview>;
+  onApplyProjectSync?: (request: ProjectSyncApplyRequest) => Promise<void>;
   onOpenJiraApiTokens: () => void;
+  initialStep?: GuideStep;
   onClose: () => void;
 }) {
   const surfaceRef = useRef<HTMLElement | null>(null);
-  const [step, setStep] = useState<GuideStep>("site");
+  const [step, setStep] = useState<GuideStep>(initialStep);
   const [siteUrlDraft, setSiteUrlDraft] = useState(settings.jiraSiteUrl);
   const [accountEmailDraft, setAccountEmailDraft] = useState(settings.jiraAccountEmail);
   const [jiraApiTokenDraft, setJiraApiTokenDraft] = useState("");
@@ -98,6 +105,11 @@ export function JiraConnectionGuide({
   const [isProjectMenuOpen, setIsProjectMenuOpen] = useState(false);
   const [projectDiscoveryState, setProjectDiscoveryState] = useState<"idle" | "loading" | "loaded" | "failed">("idle");
   const [projectDiscoveryMessage, setProjectDiscoveryMessage] = useState<string | null>(null);
+  const [projectSyncReview, setProjectSyncReview] = useState<ProjectSyncReview | null>(null);
+  const [projectSyncActiveNames, setProjectSyncActiveNames] = useState<Set<string>>(() => new Set());
+  const [projectSyncArchivedNames, setProjectSyncArchivedNames] = useState<Set<string>>(() => new Set());
+  const [projectSyncReviewState, setProjectSyncReviewState] = useState<"idle" | "loading" | "loaded" | "failed">("idle");
+  const [projectSyncReviewMessage, setProjectSyncReviewMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [showPrivacyDetails, setShowPrivacyDetails] = useState(false);
@@ -204,6 +216,53 @@ export function JiraConnectionGuide({
     }
   }
 
+  async function discoverProjectSyncDecisions() {
+    if (!onDiscoverProjectSync || !projectSyncEnabledDraft || projectSyncReviewState === "loading") return;
+    setProjectSyncReviewState("loading");
+    setProjectSyncReviewMessage(null);
+    try {
+      const review = await onDiscoverProjectSync();
+      setProjectSyncReview(review);
+      setProjectSyncActiveNames(new Set(review.defaultActiveNames));
+      setProjectSyncArchivedNames(new Set(review.sections.archived.map((candidate) => candidate.name)));
+      setProjectSyncReviewState("loaded");
+    } catch (error) {
+      setProjectSyncReview(null);
+      setProjectSyncReviewState("failed");
+      setProjectSyncReviewMessage(error instanceof Error ? error.message : "Project sync discovery failed.");
+    }
+  }
+
+  function setProjectSyncCandidateActive(candidate: ProjectSyncCandidate, checked: boolean) {
+    if (candidate.normalizedName === "transversal") return;
+    setProjectSyncActiveNames((current) => {
+      const next = new Set(current);
+      if (checked) next.add(candidate.name);
+      else next.delete(candidate.name);
+      return next;
+    });
+    setProjectSyncArchivedNames((current) => {
+      const next = new Set(current);
+      if (checked) next.delete(candidate.name);
+      return next;
+    });
+  }
+
+  function buildProjectSyncApplyRequest(review: ProjectSyncReview): ProjectSyncApplyRequest {
+    const candidates = mergeProjectSyncCandidates(review);
+    const activeProjectNames = Array.from(projectSyncActiveNames);
+    const archivedProjectNames = Array.from(projectSyncArchivedNames).filter((name) => !projectSyncActiveNames.has(name));
+    const ignoredProjectNames = candidates
+      .map((candidate) => candidate.name)
+      .filter((name) => !projectSyncActiveNames.has(name) && !archivedProjectNames.includes(name));
+    return { activeProjectNames, archivedProjectNames, ignoredProjectNames, candidates };
+  }
+
+  useEffect(() => {
+    if (step !== "project-sync" || !projectSyncEnabledDraft || projectSyncReview || projectSyncReviewState !== "idle") return;
+    void discoverProjectSyncDecisions();
+  }, [projectSyncEnabledDraft, projectSyncReview, projectSyncReviewState, step]);
+
   async function saveConnection() {
     if (!siteUrlValidation.ok || !accountEmail || !projectKey) return;
     setIsSaving(true);
@@ -214,6 +273,9 @@ export function JiraConnectionGuide({
       jiraCreationProjectKey: projectKey,
       projectSyncEnabled: projectSyncEnabledDraft
     });
+    if (saved && projectSyncEnabledDraft && projectSyncReview && onApplyProjectSync) {
+      await onApplyProjectSync(buildProjectSyncApplyRequest(projectSyncReview));
+    }
     setIsSaving(false);
     if (saved) {
       onClose();
@@ -289,7 +351,7 @@ export function JiraConnectionGuide({
               <div className="grid grid-cols-7 gap-2">
                 {jiraConnectionGuideSteps.map((candidate, index) => (
                   <button
-                    className={`h-8 rounded border px-2 text-xs font-medium ${
+                    className={`h-8 min-w-0 rounded border px-2 text-xs font-medium leading-none whitespace-nowrap ${
                       candidate.id === step
                         ? "border-[#0052cc] bg-[#deebff] text-[#0747a6]"
                         : index < currentStepIndex
@@ -480,24 +542,45 @@ export function JiraConnectionGuide({
                   {projectDiscoveryMessage ? (
                     <FeedbackNote className="mt-3" variant={projectDiscoveryState === "failed" ? "warning" : "success"}>{projectDiscoveryMessage}</FeedbackNote>
                   ) : null}
+                  <div className="mt-5 rounded border border-[#dfe1e6] bg-[#f7f8fa] p-3">
+                    <ToggleSwitch
+                      checked={projectSyncEnabledDraft}
+                      checkedIcon={<RefreshCw size={13} strokeWidth={2.6} />}
+                      label="Use Project sync"
+                      description="When enabled, Categories can sync Projects from Jira epics under the Jira creation project. When disabled, Projects stay fully manual."
+                      onChange={setProjectSyncEnabledDraft}
+                      uncheckedIcon={<Pencil size={13} strokeWidth={2.6} />}
+                    />
+                  </div>
                 </GuideSection>
               ) : null}
               {step === "project-sync" ? (
-                <GuideSection title="Project sync" description="Choose whether Jira Task Forge should discover local Projects from Jira epics in the selected creation project.">
-                  <label className="flex items-start gap-3 rounded border border-[#dfe1e6] bg-[#f7f8fa] p-3 text-sm">
-                    <input
-                      checked={projectSyncEnabledDraft}
-                      className="mt-1"
-                      onChange={(event) => setProjectSyncEnabledDraft(event.target.checked)}
-                      type="checkbox"
+                <GuideSection title="Project decisions" description="Accept the synced Projects you want to keep active and ignore the rest.">
+                  {!projectSyncEnabledDraft ? (
+                    <FeedbackNote variant="warning">Project sync is disabled. Enable it in the previous step to review Jira Projects.</FeedbackNote>
+                  ) : projectSyncReview ? (
+                    <ProjectSyncDecisionTable
+                      activeNames={projectSyncActiveNames}
+                      candidates={mergeProjectSyncCandidates(projectSyncReview)}
+                      maxVisibleRows={7}
+                      onChange={setProjectSyncCandidateActive}
                     />
-                    <span>
-                      <span className="block font-semibold text-[#172b4d]">Use Project sync</span>
-                      <span className="block text-xs leading-relaxed text-[#6b778c]">
-                        When enabled, Categories can sync Projects from Jira epics under the Jira Creation Project Key. When disabled, the Projects sync step is skipped.
-                      </span>
-                    </span>
-                  </label>
+                  ) : (
+                    <div className="rounded border border-[#dfe1e6] bg-[#f7f8fa] p-4">
+                      <div className="mb-3 text-sm font-semibold text-[#172b4d]">Load Jira Projects</div>
+                      <p className="mb-4 text-xs leading-relaxed text-[#6b778c]">Use the saved Jira connection to find Projects from Jira epics and choose which stay active.</p>
+                      <Button
+                        className="settings-button-test"
+                        disabled={!onDiscoverProjectSync || projectSyncReviewState === "loading"}
+                        icon={projectSyncReviewState === "loading" ? <LoadingOrb size="xs" /> : <RefreshCw size={14} />}
+                        variant="secondary"
+                        onClick={discoverProjectSyncDecisions}
+                      >
+                        {projectSyncReviewState === "loading" ? "Loading..." : "Load Projects"}
+                      </Button>
+                    </div>
+                  )}
+                  {projectSyncReviewMessage ? <FeedbackNote className="mt-3" variant="error">{projectSyncReviewMessage}</FeedbackNote> : null}
                 </GuideSection>
               ) : null}
               {step === "review" ? (

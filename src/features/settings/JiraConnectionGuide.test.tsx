@@ -21,7 +21,7 @@ const settings: AppSettings = {
   catalogSourceUrl: ""
 };
 
-function renderGuide() {
+function renderGuide({ initialStep }: { initialStep?: "site" | "account" | "token" | "verify" | "project" | "project-sync" | "review" } = {}) {
   return renderToStaticMarkup(
     <JiraConnectionGuide
       settings={settings}
@@ -35,6 +35,7 @@ function renderGuide() {
       onSaveJiraApiToken={async () => true}
       onTestConnection={async () => ({ ok: true, message: "Connected", accountDisplayName: null, accountEmail: null })}
       onTestJiraApiToken={async () => ({ ok: true, message: "Connected", accountDisplayName: null, accountEmail: null })}
+      initialStep={initialStep}
     />
   );
 }
@@ -47,13 +48,32 @@ describe("JiraConnectionGuide", () => {
       "Token",
       "Verify",
       "Project",
-      "Sync",
+      "Decide",
       "Review"
     ]);
 
     const html = renderGuide();
     expect(html.indexOf("3. Token")).toBeLessThan(html.indexOf("4. Verify"));
     expect(html.indexOf("4. Verify")).toBeLessThan(html.indexOf("5. Project"));
+    expect(html).toContain("whitespace-nowrap");
+  });
+
+  it("keeps the Project sync switch at the end of the Project step", () => {
+    const html = renderGuide({ initialStep: "project" });
+
+    expect(html).toContain("Use Project sync");
+    expect(html).toContain("app-toggle-track-on");
+    expect(html).not.toContain('type="checkbox"');
+    expect(html.indexOf("Project key")).toBeLessThan(html.indexOf("Use Project sync"));
+  });
+
+  it("uses the Decide step for decision-list guidance instead of the toggle", () => {
+    const html = renderGuide({ initialStep: "project-sync" });
+
+    expect(html).toContain("Project decisions");
+    expect(html).toContain("Load Jira Projects");
+    expect(html).toContain("Load Projects");
+    expect(html).not.toContain("Use Project sync");
   });
 
   it("keeps Token responsible for testing and saving credentials", () => {
