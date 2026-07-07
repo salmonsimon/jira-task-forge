@@ -117,7 +117,10 @@ it("renders manual catalog areas as editable local categories", () => {
     />
   );
 
-  expect(html).not.toContain(">Sync<");
+  expect(html).toContain("Project sync enabled");
+  expect(html).toContain('aria-pressed="true"');
+  expect(html).toContain("app-toggle-track-on");
+  expect(html).toContain("title=\"Sync Projects from Jira epics\"");
   expect(html.match(/>New</g)).toHaveLength(2);
   expect(html).toContain("Rename Bug");
   expect(html).toContain("Delete Bug");

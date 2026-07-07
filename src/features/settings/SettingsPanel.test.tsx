@@ -101,6 +101,46 @@ describe("SettingsPanel", () => {
     expect(html.match(/>Setup<\/button>/g)).toHaveLength(3);
   });
 
+  it("can open the Jira connection guide directly", () => {
+    const html = renderToStaticMarkup(
+      <SettingsPanel
+        settings={settings}
+        hasJiraApiToken={false}
+        hasAiProviderApiKey={false}
+        aiCredentialMessage={null}
+        isTestingJiraConnection={false}
+        isTestingAiProviderConnection={false}
+        onChange={async () => true}
+        onSaveJiraApiToken={async () => true}
+        onDeleteJiraApiToken={() => undefined}
+        onSaveAiProviderApiKey={async () => true}
+        onDeleteAiProviderApiKey={() => undefined}
+        onTestAiProviderConnection={async () => ({ ok: true, message: "Connected" })}
+        onTestAiProviderApiKey={async () => ({ ok: true, message: "Connected" })}
+        onListAiProviderModels={async () => ["gpt-4.1", "gpt-4.1-mini", "o3-mini"]}
+        onTestJiraApiTokenQuiet={async () => ({ ok: true, message: "Connected", accountDisplayName: null, accountEmail: null })}
+        onTestJiraConnectionSettings={async () => ({ ok: true, message: "Connected", accountDisplayName: null, accountEmail: null })}
+        hasNotionIntegrationToken={async () => true}
+        onSaveNotionIntegrationToken={async () => undefined}
+        onDeleteNotionIntegrationToken={async () => undefined}
+        onTestNotionCatalogConnection={async () => ({ ok: true, message: "Connected", title: "JTF Sync Catalog", extractedBlockCount: 1 })}
+        onListJiraProjectsForConnection={async () => []}
+        onOpenJiraApiTokens={() => undefined}
+        onOpenCatalogSourceRequirements={() => undefined}
+        onOpenNotionDevelopers={() => undefined}
+        onOpenAiProviderApiKeys={() => undefined}
+        onExportBackup={() => undefined}
+        onImportBackup={() => undefined}
+        initialGuide="jira-connection"
+        onClose={() => undefined}
+      />
+    );
+
+    expect(html).toContain("Set Jira Connection");
+    expect(html).toContain("Jira site");
+    expect(html.match(/>Setup<\/button>/g)).toHaveLength(3);
+  });
+
   it("can open the AI provider setup guide directly", () => {
     const html = renderToStaticMarkup(
       <SettingsPanel

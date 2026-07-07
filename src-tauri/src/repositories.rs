@@ -16,6 +16,10 @@ use crate::models::{
     NewAssistedDescriptionProposal, NewSubtask, NewTask, NewTaskAttachment, NewTray,
     SyncAuditEvent, TaskAttachment, Tray, TrayState,
 };
+use crate::project_sync::{
+    normalize_project_name, unique_project_names, ProjectSyncApplyRequest, ProjectSyncDecision,
+    ProjectSyncCandidate, TRANSVERSAL_PROJECT_NAME,
+};
 use crate::sync_audit::SyncAuditDetail;
 
 const APP_SETTINGS_KEY: &str = "app_settings";
@@ -240,6 +244,175 @@ impl<'connection> CategoryRepository<'connection> {
             .connection
             .execute("DELETE FROM categories WHERE id = ?1", [id])?;
         Ok(changed > 0)
+    }
+
+    pub fn list_project_sync_decisions(&self) -> DbResult<Vec<ProjectSyncDecision>> {
+        let mut statement = self.connection.prepare(
+            "
+            SELECT normalized_name, display_name, status, jira_issue_keys_json
+            FROM project_sync_decisions
+            ORDER BY display_name COLLATE NOCASE ASC
+            ",
+        )?;
+
+        let decisions = statement
+            .query_map([], |row| {
+                let keys_json: String = row.get("jira_issue_keys_json")?;
+                let jira_issue_keys = serde_json::from_str::<Vec<String>>(&keys_json)
+                    .unwrap_or_else(|_| Vec::new());
+                Ok(ProjectSyncDecision {
+                    name: row.get("display_name")?,
+                    normalized_name: row.get("normalized_name")?,
+                    status: row.get("status")?,
+                    jira_issue_keys,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(decisions)
+    }
+
+    pub fn apply_project_sync_decisions(
+        &self,
+        request: ProjectSyncApplyRequest,
+    ) -> DbResult<Vec<Category>> {
+        let active_names = unique_project_names(&request.active_project_names);
+        let ignored_names = unique_project_names(&request.ignored_project_names);
+        let archived_names = unique_project_names(&request.archived_project_names);
+        let candidate_by_normalized = request
+            .candidates
+            .iter()
+            .map(|candidate| (candidate.normalized_name.clone(), candidate))
+            .collect::<std::collections::HashMap<_, _>>();
+
+        let mut active_names = active_names;
+        if !active_names
+            .iter()
+            .any(|name| normalize_project_name(name) == normalize_project_name(TRANSVERSAL_PROJECT_NAME))
+        {
+            active_names.insert(0, TRANSVERSAL_PROJECT_NAME.to_string());
+        }
+
+        for name in &active_names {
+            self.upsert_project_sync_category(
+                name,
+                "active",
+                false,
+                candidate_by_normalized.get(&normalize_project_name(name)).copied(),
+            )?;
+        }
+
+        for name in archived_names {
+            if normalize_project_name(&name) == normalize_project_name(TRANSVERSAL_PROJECT_NAME) {
+                continue;
+            }
+            self.upsert_project_sync_category(
+                &name,
+                "archived",
+                true,
+                candidate_by_normalized.get(&normalize_project_name(&name)).copied(),
+            )?;
+        }
+
+        for name in ignored_names {
+            if normalize_project_name(&name) == normalize_project_name(TRANSVERSAL_PROJECT_NAME) {
+                continue;
+            }
+            self.remember_project_sync_decision(
+                &name,
+                "ignored",
+                candidate_by_normalized
+                    .get(&normalize_project_name(&name))
+                    .map(|candidate| candidate.jira_issue_keys.as_slice())
+                    .unwrap_or(&[]),
+            )?;
+            self.connection.execute(
+                "
+                UPDATE categories
+                SET ignored = CASE WHEN source = 'jira' THEN 1 ELSE ignored END,
+                    updated_at = ?1
+                WHERE category_type = 'project' AND normalized_name = ?2
+                ",
+                (utc_now_string()?.as_str(), normalize_name(&name).as_str()),
+            )?;
+        }
+
+        self.list(Some("project"))
+    }
+
+    fn upsert_project_sync_category(
+        &self,
+        name: &str,
+        status: &str,
+        hidden: bool,
+        candidate: Option<&ProjectSyncCandidate>,
+    ) -> DbResult<()> {
+        let name = normalize_display_name(name)?;
+        let normalized_name = normalize_name(&name);
+        let now = utc_now_string()?;
+        let id = Uuid::new_v4().to_string();
+        self.connection.execute(
+            "
+            INSERT INTO categories (
+                id, category_type, name, normalized_name, source, hidden, ignored, created_at, updated_at
+            )
+            VALUES (?1, 'project', ?2, ?3, 'jira', ?4, 0, ?5, ?5)
+            ON CONFLICT(category_type, normalized_name) DO UPDATE SET
+                name = excluded.name,
+                source = 'jira',
+                hidden = excluded.hidden,
+                ignored = 0,
+                updated_at = excluded.updated_at
+            ",
+            (
+                id.as_str(),
+                name.as_str(),
+                normalized_name.as_str(),
+                bool_to_db(hidden),
+                now.as_str(),
+            ),
+        )?;
+        self.remember_project_sync_decision(
+            &name,
+            status,
+            candidate
+                .map(|candidate| candidate.jira_issue_keys.as_slice())
+                .unwrap_or(&[]),
+        )
+    }
+
+    fn remember_project_sync_decision(
+        &self,
+        name: &str,
+        status: &str,
+        jira_issue_keys: &[String],
+    ) -> DbResult<()> {
+        let display_name = normalize_display_name(name)?;
+        let normalized_name = normalize_project_name(&display_name);
+        let jira_issue_keys_json = serde_json::to_string(jira_issue_keys)
+            .map_err(|error| DbError::InvalidData(error.to_string()))?;
+        let now = utc_now_string()?;
+        self.connection.execute(
+            "
+            INSERT INTO project_sync_decisions (
+                normalized_name, display_name, status, jira_issue_keys_json, updated_at
+            )
+            VALUES (?1, ?2, ?3, ?4, ?5)
+            ON CONFLICT(normalized_name) DO UPDATE SET
+                display_name = excluded.display_name,
+                status = excluded.status,
+                jira_issue_keys_json = excluded.jira_issue_keys_json,
+                updated_at = excluded.updated_at
+            ",
+            (
+                normalized_name.as_str(),
+                display_name.as_str(),
+                status,
+                jira_issue_keys_json.as_str(),
+                now.as_str(),
+            ),
+        )?;
+        Ok(())
     }
 
     pub fn sync_area_catalog(&self) -> DbResult<Vec<Category>> {
@@ -2965,6 +3138,68 @@ mod tests {
             .expect("area categories list")
             .iter()
             .any(|category| category.id == renamed.id));
+    }
+
+    #[test]
+    fn project_sync_promotes_local_projects_and_remembers_ignored_candidates() {
+        let connection = open_in_memory_database().expect("database opens");
+        let repository = CategoryRepository::new(&connection);
+
+        repository
+            .create("project", "Moon Lab")
+            .expect("local project creates");
+
+        let synced = repository
+            .apply_project_sync_decisions(ProjectSyncApplyRequest {
+                active_project_names: vec!["Moon Lab".to_string()],
+                ignored_project_names: vec!["PilotLab".to_string()],
+                archived_project_names: vec!["Legacy Sandbox".to_string()],
+                candidates: vec![
+                    ProjectSyncCandidate {
+                        name: "Moon Lab".to_string(),
+                        normalized_name: "moon-lab".to_string(),
+                        jira_issue_keys: vec!["JTFTEST-10".to_string()],
+                        status: "new".to_string(),
+                        already_local: true,
+                        will_promote_local: true,
+                    },
+                    ProjectSyncCandidate {
+                        name: "PilotLab".to_string(),
+                        normalized_name: "pilotlab".to_string(),
+                        jira_issue_keys: vec!["JTFTEST-11".to_string()],
+                        status: "new".to_string(),
+                        already_local: false,
+                        will_promote_local: false,
+                    },
+                    ProjectSyncCandidate {
+                        name: "Legacy Sandbox".to_string(),
+                        normalized_name: "legacy-sandbox".to_string(),
+                        jira_issue_keys: vec!["JTFTEST-12".to_string()],
+                        status: "new".to_string(),
+                        already_local: true,
+                        will_promote_local: false,
+                    },
+                ],
+            })
+            .expect("project sync decisions apply");
+
+        assert!(synced.iter().any(|category| {
+            category.name == "Transversal" && category.source == "jira" && !category.hidden
+        }));
+        assert!(synced.iter().any(|category| {
+            category.name == "Moon Lab" && category.source == "jira" && !category.hidden
+        }));
+        assert!(!synced.iter().any(|category| category.name == "PilotLab"));
+        assert!(synced.iter().any(|category| {
+            category.name == "Legacy Sandbox" && category.source == "jira" && category.hidden
+        }));
+
+        let decisions = repository
+            .list_project_sync_decisions()
+            .expect("project sync decisions list");
+        assert!(decisions
+            .iter()
+            .any(|decision| decision.name == "PilotLab" && decision.status == "ignored"));
     }
 
     #[test]

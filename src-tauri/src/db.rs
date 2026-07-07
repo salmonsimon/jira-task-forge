@@ -33,6 +33,10 @@ const MIGRATIONS: &[(&str, &str)] = &[
         "0007_epic_scope",
         include_str!("migrations/0007_epic_scope.sql"),
     ),
+    (
+        "0008_project_sync_decisions",
+        include_str!("migrations/0008_project_sync_decisions.sql"),
+    ),
 ];
 
 pub type DbResult<T> = Result<T, DbError>;
@@ -178,6 +182,7 @@ mod tests {
             "description_proposal_log_entries",
             "epic_mappings",
             "jql_favorites",
+            "project_sync_decisions",
             "schema_migrations",
             "settings",
             "sync_attempts",

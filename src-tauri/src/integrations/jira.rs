@@ -15,6 +15,7 @@ use crate::models::{
     JiraCreateMetadata, JiraMyself, JiraProjectOption, JiraProjectSearchResponse,
     JiraRemoteMarkerIssue, JqlSearchResponse,
 };
+use crate::project_sync::JiraEpicProjectCandidate;
 use crate::redaction::redact_secret_fragments;
 
 const READ_REQUEST_TIMEOUT: Duration = Duration::from_secs(45);
@@ -129,6 +130,23 @@ impl JiraClient {
             next_page_token: response.next_page_token,
             warning_messages: response.warning_messages,
         })
+    }
+
+    pub fn list_epics_for_project(
+        &self,
+        project_key: &str,
+    ) -> Result<Vec<JiraEpicProjectCandidate>, String> {
+        let jql = crate::project_sync::jira_epic_project_discovery_jql(project_key)?;
+        let response = self.search_jql(&jql, 100)?;
+        Ok(response
+            .results
+            .into_iter()
+            .filter(|issue| issue.issue_type.eq_ignore_ascii_case("Epic"))
+            .map(|issue| JiraEpicProjectCandidate {
+                key: issue.key,
+                summary: issue.summary,
+            })
+            .collect())
     }
 
     pub fn get_create_issue_metadata(

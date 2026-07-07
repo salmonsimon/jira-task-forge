@@ -7,3 +7,4 @@ export { AreaBadge, DescriptionBadge, IssueTypeBadge, PriorityBadge, SyncBadge, 
 export { SegmentedControl, SelectLike, TabButton, TopChip } from "./controls";
 export { getNextListboxOptionValue, useListboxDropdown } from "./listbox";
 export { DetailBlock, Field, PanelHeader } from "./panel";
+export { ToggleSwitch } from "./ToggleSwitch";

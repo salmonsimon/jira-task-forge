@@ -2,7 +2,7 @@ import { Bot, Check, Download, KeyRound, Settings, UploadCloud } from "lucide-re
 import { useEffect, useRef, useState } from "react";
 import { Button, DetailBlock, DrawerShell, FeedbackNote, PanelHeader, SegmentedControl } from "../../components/ui";
 import { appOverlayLayers, useAppOverlay } from "../../lib/app-overlays";
-import type { AppSettings, CredentialConnectionTestResult, JiraConnectionTestResult, JiraProjectOption, NotionCatalogConnectionTestResult, ThemeMode } from "../../lib/types";
+import type { AppSettings, CredentialConnectionTestResult, JiraConnectionTestResult, JiraProjectOption, NotionCatalogConnectionTestResult, ProjectSyncApplyRequest, ProjectSyncReview, ThemeMode } from "../../lib/types";
 import { AiProviderSetupGuide, defaultAiProviderModels } from "./AiProviderSetupGuide";
 import { JiraConnectionGuide } from "./JiraConnectionGuide";
 import notionMark from "../../assets/notion-mark.png";
@@ -25,6 +25,8 @@ export function SettingsPanel({
   onListAiProviderModels,
   onTestJiraApiTokenQuiet,
   onTestJiraConnectionSettings,
+  onDiscoverProjectSync,
+  onApplyProjectSync,
   hasNotionIntegrationToken,
   onSaveNotionIntegrationToken,
   onDeleteNotionIntegrationToken,
@@ -56,6 +58,8 @@ export function SettingsPanel({
   onListAiProviderModels: (aiProvider: AppSettings["aiProvider"], apiKey?: string) => Promise<string[]>;
   onTestJiraApiTokenQuiet: (token: string, siteUrl: string, accountEmail: string) => Promise<JiraConnectionTestResult>;
   onTestJiraConnectionSettings: (siteUrl: string, accountEmail: string) => Promise<JiraConnectionTestResult>;
+  onDiscoverProjectSync?: () => Promise<ProjectSyncReview>;
+  onApplyProjectSync?: (request: ProjectSyncApplyRequest) => Promise<void>;
   hasNotionIntegrationToken: () => Promise<boolean>;
   onSaveNotionIntegrationToken: (token: string) => Promise<void>;
   onDeleteNotionIntegrationToken: () => Promise<void>;
@@ -67,12 +71,12 @@ export function SettingsPanel({
   onOpenAiProviderApiKeys: () => void;
   onExportBackup: () => void;
   onImportBackup: () => void;
-  initialGuide?: "notion-synchronization" | "ai-provider" | null;
+  initialGuide?: "jira-connection" | "notion-synchronization" | "ai-provider" | null;
   onInitialGuideClose?: () => void;
   onClose: () => void;
 }) {
   const panelRef = useRef<HTMLElement | null>(null);
-  const [isJiraConnectionGuideOpen, setIsJiraConnectionGuideOpen] = useState(false);
+  const [isJiraConnectionGuideOpen, setIsJiraConnectionGuideOpen] = useState(initialGuide === "jira-connection");
   const [isNotionSynchronizationGuideOpen, setIsNotionSynchronizationGuideOpen] = useState(
     initialGuide === "notion-synchronization"
   );
@@ -101,6 +105,13 @@ export function SettingsPanel({
     surfaceRef: panelRef
   });
 
+  function closeJiraConnectionGuide() {
+    setIsJiraConnectionGuideOpen(false);
+    if (initialGuide === "jira-connection") {
+      onInitialGuideClose?.();
+    }
+  }
+
   function closeNotionSynchronizationGuide() {
     setIsNotionSynchronizationGuideOpen(false);
     if (initialGuide === "notion-synchronization") {
@@ -114,6 +125,12 @@ export function SettingsPanel({
       onInitialGuideClose?.();
     }
   }
+
+  useEffect(() => {
+    if (initialGuide === "jira-connection") {
+      setIsJiraConnectionGuideOpen(true);
+    }
+  }, [initialGuide]);
 
   useEffect(() => {
     if (initialGuide === "notion-synchronization") {
@@ -150,8 +167,10 @@ export function SettingsPanel({
           onTestConnection={onTestJiraConnectionSettings}
           onTestJiraApiToken={onTestJiraApiTokenQuiet}
           onListProjects={onListJiraProjectsForConnection}
+          onDiscoverProjectSync={onDiscoverProjectSync}
+          onApplyProjectSync={onApplyProjectSync}
           onOpenJiraApiTokens={onOpenJiraApiTokens}
-          onClose={() => setIsJiraConnectionGuideOpen(false)}
+          onClose={closeJiraConnectionGuide}
         />
       ) : null}
       {isNotionSynchronizationGuideOpen ? (
@@ -246,6 +265,7 @@ export function SettingsPanel({
                 ["Site URL", settings.jiraSiteUrl || "Not set"],
                 ["Account email", settings.jiraAccountEmail || "Not set"],
                 ["Creation project", settings.jiraCreationProjectKey || "Not set"],
+                ["Project sync", settings.projectSyncEnabled === false ? "Off" : "On"],
                 ["API token", hasJiraApiToken ? "Saved" : "Missing"]
               ]}
             />

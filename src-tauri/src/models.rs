@@ -167,6 +167,8 @@ pub struct AppSettings {
     pub catalog_source_mode: String,
     #[serde(default)]
     pub catalog_source_url: String,
+    #[serde(default = "default_project_sync_enabled")]
+    pub project_sync_enabled: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -459,12 +461,17 @@ impl Default for AppSettings {
             default_content_language: "Spanish".to_string(),
             catalog_source_mode: "notion".to_string(),
             catalog_source_url: String::new(),
+            project_sync_enabled: true,
         }
     }
 }
 
 fn default_catalog_source_mode() -> String {
     "notion".to_string()
+}
+
+fn default_project_sync_enabled() -> bool {
+    true
 }
 
 #[cfg(test)]

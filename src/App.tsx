@@ -22,6 +22,8 @@ import {
   createPersistedJqlFavorite,
   createPersistedRecoveryTrayFromTasks,
   deletePersistedCategory,
+  applyPersistedProjectSyncDecisions,
+  discoverPersistedProjectSyncCandidates,
   deletePersistedAiProviderApiKey,
   deletePersistedNotionIntegrationToken,
   deletePersistedJqlFavorite,
@@ -138,7 +140,8 @@ const defaultAppSettings: AppSettings = {
   aiModel: "gpt-4.1",
   defaultContentLanguage: "Spanish",
   catalogSourceMode: "notion",
-  catalogSourceUrl: ""
+  catalogSourceUrl: "",
+  projectSyncEnabled: true
 };
 const defaultJqlPrompt = "Show me high and highest open bugs for STT, sorted by priority";
 const atlassianApiTokensUrl = "https://id.atlassian.com/manage-profile/security/api-tokens";
@@ -174,7 +177,7 @@ type JiraCreationNotice = {
 export default function App() {
   const [activeTab, setActiveTab] = useState<MainTab>("trays");
   const [openPanel, setOpenPanel] = useState<Panel>(null);
-  const [settingsInitialGuide, setSettingsInitialGuide] = useState<"notion-synchronization" | null>(null);
+  const [settingsInitialGuide, setSettingsInitialGuide] = useState<"jira-connection" | "notion-synchronization" | null>(null);
   const [isAiProviderSetupOpen, setIsAiProviderSetupOpen] = useState(false);
   const [categories, setCategories] = useState<Category[]>(() => [...appData.listProjects(), ...appData.listAreas()]);
   const [jqlFavorites, setJqlFavorites] = useState<JqlFavorite[]>(() => appData.listJqlFavorites());
@@ -614,6 +617,39 @@ export default function App() {
       ...syncedAreas
     ]);
     return null;
+  }
+
+  async function discoverProjectSync() {
+    if (!usesTauriPersistence) {
+      return {
+        jiraProjectKey: appSettings.jiraCreationProjectKey || "JTFTEST",
+        jql: `project = ${appSettings.jiraCreationProjectKey || "JTFTEST"} AND issuetype = Epic ORDER BY updated DESC`,
+        sections: {
+          active: [{ name: "Transversal", normalizedName: "transversal", jiraIssueKeys: [], status: "active" as const, alreadyLocal: true, willPromoteLocal: false }],
+          newlyAvailable: [
+            { name: "PilotLab", normalizedName: "pilotlab", jiraIssueKeys: ["JTFTEST-10"], status: "new" as const, alreadyLocal: false, willPromoteLocal: false }
+          ],
+          ignored: [],
+          archived: []
+        },
+        defaultActiveNames: ["Transversal", "PilotLab"],
+        notes: []
+      };
+    }
+
+    return discoverPersistedProjectSyncCandidates();
+  }
+
+  async function applyProjectSync(request: Parameters<typeof applyPersistedProjectSyncDecisions>[0]) {
+    const syncedProjects = usesTauriPersistence
+      ? await applyPersistedProjectSyncDecisions(request)
+      : projectCategories.map((category) =>
+          request.activeProjectNames.includes(category.name) ? { ...category, source: "jira" as const, hidden: false } : category
+        );
+    setCategories((currentCategories) => [
+      ...currentCategories.filter((category) => category.categoryType !== "project"),
+      ...syncedProjects
+    ]);
   }
 
   function openAppPanel(panel: Panel) {
@@ -1631,10 +1667,21 @@ export default function App() {
             areas={areaCategories}
             catalogSourceMode={appSettings.catalogSourceMode}
             catalogSourceUrl={appSettings.catalogSourceUrl}
+            projectSyncEnabled={appSettings.projectSyncEnabled !== false}
+            isJiraConfigured={Boolean(appSettings.jiraCreationProjectKey.trim() && appSettings.jiraSiteUrl.trim() && appSettings.jiraAccountEmail.trim() && hasJiraApiToken)}
             onCreateCategory={createCategory}
             onUpdateCategory={updateCategory}
             onDeleteCategory={deleteCategory}
             onSyncAreaCatalog={syncAreaCatalog}
+            onToggleProjectSync={(enabled) => {
+              void updateAppSettings({ projectSyncEnabled: enabled });
+            }}
+            onDiscoverProjectSync={discoverProjectSync}
+            onApplyProjectSync={applyProjectSync}
+            onConfigureJira={() => {
+              setSettingsInitialGuide("jira-connection");
+              setOpenPanel("settings");
+            }}
             onConfigureCatalogSource={openCatalogSourceConfiguration}
             onClose={() => setOpenPanel(null)}
           />
@@ -1657,6 +1704,8 @@ export default function App() {
             onListAiProviderModels={listAiProviderModels}
             onTestJiraApiTokenQuiet={testJiraApiTokenQuiet}
             onTestJiraConnectionSettings={testJiraConnectionSettings}
+            onDiscoverProjectSync={discoverProjectSync}
+            onApplyProjectSync={applyProjectSync}
             hasNotionIntegrationToken={usesTauriPersistence ? hasPersistedNotionIntegrationToken : async () => false}
             onSaveNotionIntegrationToken={usesTauriPersistence ? savePersistedNotionIntegrationToken : async () => undefined}
             onDeleteNotionIntegrationToken={usesTauriPersistence ? deletePersistedNotionIntegrationToken : async () => undefined}

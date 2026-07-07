@@ -1,9 +1,10 @@
 import { AlertTriangle, Check, CheckCircle2, Eye, EyeOff, Pencil, Plus, RefreshCw, Tags, Trash2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { Button, DrawerShell, FeedbackNote, PanelHeader } from "../../components/ui";
+import { Button, DrawerShell, FeedbackNote, PanelHeader, ToggleSwitch } from "../../components/ui";
 import { appOverlayLayers, useAppOverlay } from "../../lib/app-overlays";
-import type { AppSettings, CatalogSyncResult, Category } from "../../lib/types";
+import type { AppSettings, CatalogSyncResult, Category, ProjectSyncApplyRequest, ProjectSyncCandidate, ProjectSyncReview } from "../../lib/types";
 import { cn } from "../../lib/utils";
+import { mergeProjectSyncCandidates, ProjectSyncDecisionTable } from "./ProjectSyncDecisionTable";
 
 
 export function CategoriesPanel({
@@ -11,10 +12,16 @@ export function CategoriesPanel({
   areas,
   catalogSourceMode,
   catalogSourceUrl,
+  projectSyncEnabled,
+  isJiraConfigured,
   onCreateCategory,
   onUpdateCategory,
   onDeleteCategory,
   onSyncAreaCatalog,
+  onToggleProjectSync,
+  onDiscoverProjectSync,
+  onApplyProjectSync,
+  onConfigureJira,
   onConfigureCatalogSource,
   onClose
 }: {
@@ -22,15 +29,23 @@ export function CategoriesPanel({
   areas: Category[];
   catalogSourceMode: AppSettings["catalogSourceMode"];
   catalogSourceUrl: string;
+  projectSyncEnabled?: boolean;
+  isJiraConfigured?: boolean;
   onCreateCategory: (categoryType: "project" | "area", name: string) => void | Promise<void>;
   onUpdateCategory: (categoryId: string, patch: Partial<Pick<Category, "hidden" | "name">>) => void | Promise<void>;
   onDeleteCategory: (categoryId: string) => void | Promise<void>;
   onSyncAreaCatalog: (sourceUrl?: string) => Promise<CatalogSyncResult | null>;
+  onToggleProjectSync?: (enabled: boolean) => void | Promise<void>;
+  onDiscoverProjectSync?: () => Promise<ProjectSyncReview>;
+  onApplyProjectSync?: (request: ProjectSyncApplyRequest) => Promise<void>;
+  onConfigureJira?: () => void;
   onConfigureCatalogSource: (target?: "settings" | "notion-synchronization") => void;
   onClose: () => void;
 }) {
   const panelRef = useRef<HTMLElement | null>(null);
   const [catalogNotice, setCatalogNotice] = useState<CatalogSyncResult | null>(null);
+  const [projectSyncReview, setProjectSyncReview] = useState<ProjectSyncReview | null>(null);
+  const [projectSyncError, setProjectSyncError] = useState<string | null>(null);
 
   const overlay = useAppOverlay({
     layer: appOverlayLayers.sidePanel,
@@ -50,9 +65,19 @@ export function CategoriesPanel({
           categoryType="project"
           title="Projects"
           categories={projects}
+          useProjectSync={projectSyncEnabled}
+          isJiraConfigured={isJiraConfigured}
           onCreateCategory={onCreateCategory}
           onUpdateCategory={onUpdateCategory}
           onDeleteCategory={onDeleteCategory}
+          onToggleProjectSync={onToggleProjectSync}
+          onDiscoverProjectSync={onDiscoverProjectSync}
+          onProjectSyncReview={(review) => {
+            setProjectSyncError(null);
+            setProjectSyncReview(review);
+          }}
+          onProjectSyncError={setProjectSyncError}
+          onConfigureJira={onConfigureJira}
         />
         <CategoryList
           categoryType="area"
@@ -70,6 +95,17 @@ export function CategoriesPanel({
         />
       </div>
       {catalogNotice ? <CatalogSyncNotice result={catalogNotice} onClose={() => setCatalogNotice(null)} /> : null}
+      {projectSyncError ? <ProjectSyncErrorNotice message={projectSyncError} onClose={() => setProjectSyncError(null)} /> : null}
+      {projectSyncReview ? (
+        <ProjectSyncModal
+          review={projectSyncReview}
+          onApply={async (request) => {
+            await onApplyProjectSync?.(request);
+            setProjectSyncReview(null);
+          }}
+          onClose={() => setProjectSyncReview(null)}
+        />
+      ) : null}
     </DrawerShell>
   );
 }
@@ -78,10 +114,17 @@ function CategoryList({
   categoryType,
   title,
   categories,
+  useProjectSync = true,
+  isJiraConfigured = false,
   onCreateCategory,
   onUpdateCategory,
   onDeleteCategory,
   onSyncAreaCatalog,
+  onToggleProjectSync,
+  onDiscoverProjectSync,
+  onProjectSyncReview,
+  onProjectSyncError,
+  onConfigureJira,
   onConfigureCatalogSource,
   onSyncResult,
   catalogSourceMode = "notion",
@@ -91,6 +134,8 @@ function CategoryList({
   categoryType: "project" | "area";
   title: string;
   categories: Category[];
+  useProjectSync?: boolean;
+  isJiraConfigured?: boolean;
   isCatalogManaged?: boolean;
   catalogSourceMode?: AppSettings["catalogSourceMode"];
   catalogSourceUrl?: string;
@@ -98,6 +143,11 @@ function CategoryList({
   onUpdateCategory: (categoryId: string, patch: Partial<Pick<Category, "hidden" | "name">>) => void | Promise<void>;
   onDeleteCategory: (categoryId: string) => void | Promise<void>;
   onSyncAreaCatalog?: (sourceUrl?: string) => Promise<CatalogSyncResult | null>;
+  onToggleProjectSync?: (enabled: boolean) => void | Promise<void>;
+  onDiscoverProjectSync?: () => Promise<ProjectSyncReview>;
+  onProjectSyncReview?: (review: ProjectSyncReview) => void;
+  onProjectSyncError?: (message: string) => void;
+  onConfigureJira?: () => void;
   onConfigureCatalogSource?: (target?: "settings" | "notion-synchronization") => void;
   onSyncResult?: (result: CatalogSyncResult | null) => void;
 }) {
@@ -144,11 +194,56 @@ function CategoryList({
     }
   }
 
+  async function syncProjects() {
+    if (!useProjectSync) return;
+    if (!isJiraConfigured) {
+      onConfigureJira?.();
+      return;
+    }
+    if (!onDiscoverProjectSync || isSyncing) return;
+
+    setIsSyncing(true);
+    const startedAt = performance.now();
+    try {
+      const review = await onDiscoverProjectSync();
+      await waitForMinimumElapsed(startedAt, 650);
+      onProjectSyncReview?.(review);
+    } catch (error) {
+      await waitForMinimumElapsed(startedAt, 650);
+      onProjectSyncError?.(catalogSyncErrorMessage(error));
+    } finally {
+      setIsSyncing(false);
+    }
+  }
+
   return (
     <div className="mb-4">
-      <div className="mb-2 flex items-center justify-between">
+      <div className="mb-2 flex items-center justify-between gap-3">
         <h3 className="text-sm font-semibold">{title}</h3>
-        {isCatalogManaged ? (
+        {categoryType === "project" ? (
+          <div className="flex shrink-0 items-center gap-2">
+            <ToggleSwitch
+              checked={Boolean(useProjectSync)}
+              checkedIcon={<RefreshCw size={13} strokeWidth={2.6} />}
+              hideLabel
+              label={useProjectSync ? "Project sync enabled" : "Manual Projects mode"}
+              onChange={(checked) => void onToggleProjectSync?.(checked)}
+              uncheckedIcon={<Pencil size={13} strokeWidth={2.6} />}
+            />
+            <Button
+              variant="ghost"
+              icon={<RefreshCw size={13} className={isSyncing ? "animate-spin" : undefined} />}
+              disabled={isSyncing || !useProjectSync}
+              onClick={() => void syncProjects()}
+              title={useProjectSync ? "Sync Projects from Jira epics" : "Enable project sync before syncing"}
+            >
+              {isSyncing ? "Syncing..." : "Sync"}
+            </Button>
+            <Button variant="ghost" icon={<Plus size={13} />} onClick={() => setIsAdding(true)}>
+              New
+            </Button>
+          </div>
+        ) : isCatalogManaged ? (
           <Button
             variant="ghost"
             icon={<RefreshCw size={13} className={isSyncing ? "animate-spin" : undefined} />}
@@ -165,7 +260,7 @@ function CategoryList({
         )}
       </div>
       <div className="overflow-hidden rounded border border-[#dfe1e6]">
-        {isAdding && !isCatalogManaged ? (
+        {isAdding && (categoryType === "project" || !isCatalogManaged) ? (
           <div className="flex items-center gap-2 border-b border-[#ebecf0] bg-[#f7f8fa] px-3 py-2">
             <Tags size={14} className="shrink-0 text-[#6b778c]" />
             <input
@@ -207,12 +302,112 @@ function CategoryList({
           <CategoryRow
             category={category}
             key={category.id}
-            isCatalogManaged={isCatalogManaged}
+            isCatalogManaged={categoryType === "project" ? category.source === "jira" : isCatalogManaged}
             onDeleteCategory={onDeleteCategory}
             onUpdateCategory={onUpdateCategory}
           />
         ))}
       </div>
+    </div>
+  );
+}
+
+function ProjectSyncErrorNotice({ message, onClose }: { message: string; onClose: () => void }) {
+  return (
+    <CatalogSyncNotice
+      result={{
+        ok: false,
+        sourceUrl: "",
+        syncedAreaCount: 0,
+        deliveryFormatCount: 0,
+        ruleCount: 0,
+        warnings: [],
+        errors: [message],
+        areas: [],
+        deliveryFormats: [],
+        areaFormatRules: []
+      }}
+      onClose={onClose}
+    />
+  );
+}
+
+function ProjectSyncModal({
+  review,
+  onApply,
+  onClose
+}: {
+  review: ProjectSyncReview;
+  onApply: (request: ProjectSyncApplyRequest) => Promise<void>;
+  onClose: () => void;
+}) {
+  const modalRef = useRef<HTMLElement | null>(null);
+  const allCandidates = mergeProjectSyncCandidates(review);
+  const [activeNames, setActiveNames] = useState(() => new Set(review.defaultActiveNames));
+  const [archivedNames, setArchivedNames] = useState(() => new Set(review.sections.archived.map((candidate) => candidate.name)));
+  const [isApplying, setIsApplying] = useState(false);
+  const overlay = useAppOverlay({
+    layer: appOverlayLayers.nestedModal,
+    onDismiss: onClose,
+    dismissOnEscape: true,
+    dismissOnBackdrop: true,
+    dismissOnOutsidePointer: true,
+    lockScroll: true,
+    surfaceRef: modalRef
+  });
+
+  function setCandidateActive(candidate: ProjectSyncCandidate, checked: boolean) {
+    if (candidate.normalizedName === "transversal") return;
+    setActiveNames((current) => {
+      const next = new Set(current);
+      if (checked) next.add(candidate.name);
+      else next.delete(candidate.name);
+      return next;
+    });
+    setArchivedNames((current) => {
+      const next = new Set(current);
+      if (checked) next.delete(candidate.name);
+      return next;
+    });
+  }
+
+  async function apply() {
+    setIsApplying(true);
+    const activeProjectNames = Array.from(activeNames);
+    const archivedProjectNames = Array.from(archivedNames).filter((name) => !activeNames.has(name));
+    const ignoredProjectNames = allCandidates
+      .map((candidate) => candidate.name)
+      .filter((name) => !activeNames.has(name) && !archivedProjectNames.includes(name));
+    await onApply({ activeProjectNames, archivedProjectNames, ignoredProjectNames, candidates: allCandidates });
+    setIsApplying(false);
+  }
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-[rgba(9,30,66,0.66)] px-4" {...overlay.backdropProps}>
+      <section
+        ref={modalRef}
+        className="flex max-h-[84vh] w-full max-w-[620px] flex-col overflow-hidden rounded border border-[#dfe1e6] bg-white text-[#172b4d] shadow-2xl"
+        {...overlay.surfaceProps}
+      >
+        <PanelHeader title="Sync Projects" subtitle={`Jira epics from ${review.jiraProjectKey}`} onClose={onClose} />
+        <div className="flex-1 overflow-y-auto p-4">
+          <FeedbackNote variant="info">Choose which Jira Projects stay active in Jira Task Forge. Active synced Projects become read-only; ignored Projects stay recoverable.</FeedbackNote>
+          {review.notes.length ? (
+            <FeedbackNote className="mt-2" variant="success">
+              {review.notes.join(" ")}
+            </FeedbackNote>
+          ) : null}
+          <div className="mt-3">
+            <ProjectSyncDecisionTable activeNames={activeNames} candidates={allCandidates} maxVisibleRows={6} onChange={setCandidateActive} />
+          </div>
+        </div>
+        <div className="flex justify-end gap-2 border-t border-[#dfe1e6] bg-[#f7f8fa] p-3">
+          <Button variant="secondary" onClick={onClose}>Cancel</Button>
+          <Button variant="primary" disabled={isApplying} onClick={() => void apply()}>
+            {isApplying ? "Applying..." : "Apply"}
+          </Button>
+        </div>
+      </section>
     </div>
   );
 }
@@ -413,6 +608,7 @@ function CategoryRow({
               className="inline-flex h-7 w-7 items-center justify-center rounded text-[#42526e] transition hover:bg-[#ebecf0]"
               onClick={() => void onUpdateCategory(category.id, { hidden: !category.hidden })}
               title={category.hidden ? `Show ${category.name}` : `Hide ${category.name}`}
+              disabled={category.categoryType === "project" && category.name === "Transversal"}
               type="button"
             >
               {category.hidden ? <Eye size={14} /> : <EyeOff size={14} />}
