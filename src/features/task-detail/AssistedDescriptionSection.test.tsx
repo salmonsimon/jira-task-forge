@@ -70,3 +70,33 @@ describe("DescriptionPromptModal AI setup warning", () => {
     expect(html).toContain("Configure OpenAI");
   });
 });
+
+describe("DescriptionPromptModal delivery-format gate", () => {
+  it("renders only valid mapped delivery formats before proposal generation", () => {
+    const html = renderToStaticMarkup(
+      <DescriptionPromptModal
+        clarificationQuestions={[]}
+        deliveryFormatGate={{
+          kind: "needs_confirmation",
+          areaDisplayName: "Arquitectura",
+          suggestedFormat: "Arquitectura - Propuesta Final",
+          options: ["Arquitectura - Brief", "Arquitectura - Propuesta Final"]
+        }}
+        descriptionContext=""
+        descriptionMessage="Confirm the delivery format before generating the description proposal."
+        isGeneratingDescription={false}
+        onCancel={() => undefined}
+        onChange={() => undefined}
+        onGenerate={() => undefined}
+        onKeyDown={() => undefined}
+        onSelectDeliveryFormat={() => undefined}
+        selectedDeliveryFormat="Arquitectura - Propuesta Final"
+      />
+    );
+
+    expect(html).toContain("Delivery format");
+    expect(html).toContain("Arquitectura - Brief");
+    expect(html).toContain("Arquitectura - Propuesta Final (suggested)");
+    expect(html).not.toContain("Formato inventado");
+  });
+});

@@ -59,10 +59,15 @@ pub async fn generate_task_description(
     services: State<'_, AppServices>,
     task_id: String,
     additional_context: Option<String>,
+    delivery_format: Option<String>,
 ) -> Result<AssistedDescriptionDraft, String> {
     let services = services.inner().clone();
     run_blocking_result("Task description AI worker", move || {
-        services.generate_task_description(&task_id, additional_context.as_deref())
+        services.generate_task_description(
+            &task_id,
+            additional_context.as_deref(),
+            delivery_format.as_deref(),
+        )
     })
     .await
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   deriveCatalogIssueType,
+  getDeliveryFormatGateForArea,
   getDeliveryFormatForArea,
   getOfficialAreaOptions,
   officialAreaCatalog,
@@ -69,6 +70,29 @@ describe("official area catalog", () => {
       kind: "conditional",
       areaDisplayName: "Arquitectura",
       format: "Arquitectura - Propuesta Final"
+    });
+  });
+
+  it("requires a delivery-format confirmation instead of silently falling back for multi-format areas", () => {
+    expect(getDeliveryFormatGateForArea("Programación")).toEqual({
+      kind: "auto",
+      areaDisplayName: "Programación",
+      format: "Feature de Programación",
+      options: ["Feature de Programación"]
+    });
+
+    expect(getDeliveryFormatGateForArea("Arquitectura", "Preparar sistema de navegación")).toEqual({
+      kind: "needs_confirmation",
+      areaDisplayName: "Arquitectura",
+      suggestedFormat: null,
+      options: ["Arquitectura - Brief", "Arquitectura - Propuesta Final"]
+    });
+
+    expect(getDeliveryFormatGateForArea("Arquitectura", "Preparar brief tecnico")).toEqual({
+      kind: "needs_confirmation",
+      areaDisplayName: "Arquitectura",
+      suggestedFormat: "Arquitectura - Brief",
+      options: ["Arquitectura - Brief", "Arquitectura - Propuesta Final"]
     });
   });
 

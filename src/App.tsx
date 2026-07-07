@@ -55,6 +55,7 @@ import {
   savePersistedAiProviderApiKey,
   savePersistedJiraApiToken,
   savePersistedNotionIntegrationToken,
+  resolvePersistedDeliveryFormatGate,
   syncPersistedAreaCatalog,
   syncPersistedAreaCatalogFromNotion,
   syncPersistedAreaCatalogFromSource,
@@ -441,7 +442,11 @@ export default function App() {
     trayWorkspace.replaceTrays(persistedTrays, { fallbackSelectedTrayId: trayId });
   }
 
-  async function generateTaskDescription(taskId: string, additionalContext: string): Promise<AssistedDescriptionDraft> {
+  async function generateTaskDescription(
+    taskId: string,
+    additionalContext: string,
+    deliveryFormat?: string | null
+  ): Promise<AssistedDescriptionDraft> {
     const tray = trays.find((candidate) => candidate.tasks.some((task) => task.id === taskId));
     const task = tray?.tasks.find((candidate) => candidate.id === taskId);
     if (!tray || !task || tray.state === "Archived" || task.syncStatus === "Created") {
@@ -459,7 +464,7 @@ export default function App() {
       if (!usesTauriPersistence) return createPreviewAssistedDescription(task, additionalContext);
 
       try {
-        return await generatePersistedTaskDescription(taskId, additionalContext);
+        return await generatePersistedTaskDescription(taskId, additionalContext, deliveryFormat);
       } catch (error) {
         if (isTaskDescriptionCommandUnavailable(error)) {
           return createPreviewAssistedDescription(task, additionalContext);
@@ -1596,6 +1601,7 @@ export default function App() {
             onAddSubtask={trayWorkspace.addSubtaskToTask}
             onDeleteSubtask={trayWorkspace.deleteTask}
             onGenerateDescription={generateTaskDescription}
+            onResolveDeliveryFormatGate={usesTauriPersistence ? resolvePersistedDeliveryFormatGate : undefined}
             onConfigureAiProvider={() => setIsAiProviderSetupOpen(true)}
             onListDescriptionProposals={usesTauriPersistence ? listPersistedAssistedDescriptionProposals : undefined}
             onListDescriptionProposalLog={usesTauriPersistence ? listPersistedDescriptionProposalLog : undefined}

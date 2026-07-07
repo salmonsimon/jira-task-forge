@@ -433,7 +433,114 @@ impl<'connection> CategoryRepository<'connection> {
             &default_delivery_format,
             description_or_deliverable,
         )?;
-        let normalized_format = normalize_name(&delivery_format);
+        self.catalog_template_context_for_format(
+            &area_display_name,
+            &jira_label,
+            &issue_type,
+            &delivery_format,
+            &notes,
+        )
+    }
+
+    pub fn catalog_template_context_for_confirmed_delivery_format(
+        &self,
+        area: &str,
+        delivery_format: &str,
+    ) -> DbResult<Option<String>> {
+        let normalized_area = normalize_name(area);
+        let area_detail = self
+            .connection
+            .query_row(
+                "
+                SELECT area_display_name, jira_label, issue_type, notes
+                FROM catalog_area_details
+                WHERE normalized_name = ?1
+                ",
+                [normalized_area.as_str()],
+                |row| {
+                    Ok((
+                        row.get::<_, String>("area_display_name")?,
+                        row.get::<_, String>("jira_label")?,
+                        row.get::<_, String>("issue_type")?,
+                        row.get::<_, String>("notes")?,
+                    ))
+                },
+            )
+            .optional()?;
+        let Some((area_display_name, jira_label, issue_type, notes)) = area_detail else {
+            return Ok(None);
+        };
+        let valid_formats = self.catalog_delivery_format_options_for_area(&area_display_name)?;
+        let normalized_delivery_format = normalize_name(delivery_format);
+        if !valid_formats
+            .iter()
+            .any(|format| normalize_name(format) == normalized_delivery_format)
+        {
+            return Err(DbError::InvalidData(format!(
+                "Delivery format must be one of the catalog formats mapped to {area_display_name}."
+            )));
+        }
+
+        self.catalog_template_context_for_format(
+            &area_display_name,
+            &jira_label,
+            &issue_type,
+            delivery_format,
+            &notes,
+        )
+    }
+
+    pub fn catalog_delivery_format_options_for_area(&self, area: &str) -> DbResult<Vec<String>> {
+        let normalized_area = normalize_name(area);
+        let mut formats = Vec::new();
+
+        let default_delivery_format = self
+            .connection
+            .query_row(
+                "
+                SELECT default_delivery_format
+                FROM catalog_area_details
+                WHERE normalized_name = ?1
+                ",
+                [normalized_area.as_str()],
+                |row| row.get::<_, String>("default_delivery_format"),
+            )
+            .optional()?;
+        if let Some(default_delivery_format) = default_delivery_format {
+            push_unique_format(&mut formats, default_delivery_format);
+        } else {
+            return Ok(formats);
+        }
+
+        let mut statement = self.connection.prepare(
+            "
+            SELECT delivery_format
+            FROM catalog_area_format_rules
+            WHERE normalized_area_name = ?1
+            ORDER BY priority ASC
+            ",
+        )?;
+        let rule_formats = statement
+            .query_map([normalized_area.as_str()], |row| {
+                row.get::<_, String>("delivery_format")
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        for format in rule_formats {
+            push_unique_format(&mut formats, format);
+        }
+
+        Ok(formats)
+    }
+
+    fn catalog_template_context_for_format(
+        &self,
+        area_display_name: &str,
+        jira_label: &str,
+        issue_type: &str,
+        delivery_format: &str,
+        notes: &str,
+    ) -> DbResult<Option<String>> {
+        let normalized_format = normalize_name(delivery_format);
         let format_detail = self
             .connection
             .query_row(
@@ -486,22 +593,19 @@ impl<'connection> CategoryRepository<'connection> {
             notes.trim().to_string()
         };
 
-        Ok(Some(
-            [
-                "Synced Notion catalog template:".to_string(),
-                format!("- Official area display name: {area_display_name}"),
-                format!("- Jira label: {jira_label}"),
-                format!("- Area issue type: {issue_type}"),
-                format!("- Delivery format: {format_name}"),
-                format!("- Delivery format issue type: {format_issue_type}"),
-                format!("- Required story headings: {headings}"),
-                format!("- Minimum deliverable: {minimum_deliverable}"),
-                "- Review checklist:".to_string(),
-                checklist,
-                format!("- Area notes: {notes}"),
-            ]
-            .join("\n"),
-        ))
+        Ok(Some(format_catalog_template_context(
+            CatalogTemplateContextParts {
+                area_display_name,
+                jira_label,
+                issue_type,
+                format_name: &format_name,
+                format_issue_type: &format_issue_type,
+                headings: &headings,
+                minimum_deliverable: &minimum_deliverable,
+                checklist: &checklist,
+                notes: &notes,
+            },
+        )))
     }
 
     fn delivery_format_for_catalog_area(
@@ -2344,6 +2448,49 @@ fn normalize_name(name: &str) -> String {
         .to_ascii_lowercase()
 }
 
+struct CatalogTemplateContextParts<'a> {
+    area_display_name: &'a str,
+    jira_label: &'a str,
+    issue_type: &'a str,
+    format_name: &'a str,
+    format_issue_type: &'a str,
+    headings: &'a str,
+    minimum_deliverable: &'a str,
+    checklist: &'a str,
+    notes: &'a str,
+}
+
+fn format_catalog_template_context(parts: CatalogTemplateContextParts<'_>) -> String {
+    [
+        "Synced Notion catalog template:".to_string(),
+        format!("- Official area display name: {}", parts.area_display_name),
+        format!("- Jira label: {}", parts.jira_label),
+        format!("- Area issue type: {}", parts.issue_type),
+        format!("- Delivery format: {}", parts.format_name),
+        format!("- Delivery format issue type: {}", parts.format_issue_type),
+        format!("- Required story headings: {}", parts.headings),
+        format!("- Minimum deliverable: {}", parts.minimum_deliverable),
+        "- Review checklist:".to_string(),
+        parts.checklist.to_string(),
+        format!("- Area notes: {}", parts.notes),
+    ]
+    .join("\n")
+}
+
+fn push_unique_format(formats: &mut Vec<String>, format: String) {
+    let format = format.trim();
+    if format.is_empty() {
+        return;
+    }
+    if formats
+        .iter()
+        .any(|existing| normalize_name(existing) == normalize_name(format))
+    {
+        return;
+    }
+    formats.push(format.to_string());
+}
+
 fn bool_to_db(value: bool) -> i64 {
     if value {
         1
@@ -2712,6 +2859,80 @@ mod tests {
         ));
         assert!(context.contains("- PR/MR creado."));
         assert!(context.contains("- Validación en runtime documentada."));
+    }
+
+    #[test]
+    fn catalog_template_context_uses_confirmed_delivery_format_only_when_mapped() {
+        let connection = open_in_memory_database().expect("database opens");
+        let repository = CategoryRepository::new(&connection);
+
+        repository
+            .sync_area_catalog_contract(
+                &[SyncedCatalogArea {
+                    area_display_name: "Arquitectura".to_string(),
+                    jira_label: "Arquitectura".to_string(),
+                    enabled_in_jtf: true,
+                    issue_type: "Story".to_string(),
+                    default_delivery_format: "Arquitectura - Brief".to_string(),
+                    safe_aliases: vec![],
+                    notes: "".to_string(),
+                }],
+                &[
+                    SyncedDeliveryFormat {
+                        format_name: "Arquitectura - Brief".to_string(),
+                        issue_type: "Story".to_string(),
+                        story_headings: vec!["Contexto".to_string()],
+                        minimum_deliverable: "Brief validado desde catálogo.".to_string(),
+                        review_checklist: vec!["Brief revisado.".to_string()],
+                    },
+                    SyncedDeliveryFormat {
+                        format_name: "Arquitectura - Propuesta Final".to_string(),
+                        issue_type: "Story".to_string(),
+                        story_headings: vec!["Alcance".to_string()],
+                        minimum_deliverable: "Propuesta final validada desde catálogo.".to_string(),
+                        review_checklist: vec!["Decisión final revisada.".to_string()],
+                    },
+                ],
+                &[
+                    SyncedAreaFormatRule {
+                        area_display_name: "Arquitectura".to_string(),
+                        priority: 1,
+                        condition: "fallback".to_string(),
+                        delivery_format: "Arquitectura - Brief".to_string(),
+                        blocking: false,
+                    },
+                    SyncedAreaFormatRule {
+                        area_display_name: "Arquitectura".to_string(),
+                        priority: 2,
+                        condition: "fallback".to_string(),
+                        delivery_format: "Arquitectura - Propuesta Final".to_string(),
+                        blocking: false,
+                    },
+                ],
+            )
+            .expect("catalog sync persists");
+
+        let context = repository
+            .catalog_template_context_for_confirmed_delivery_format(
+                "Arquitectura",
+                "Arquitectura - Propuesta Final",
+            )
+            .expect("catalog context loads")
+            .expect("catalog context exists");
+
+        assert!(context.contains("- Delivery format: Arquitectura - Propuesta Final"));
+        assert!(context.contains("- Minimum deliverable: Propuesta final validada desde catálogo."));
+        assert!(!context.contains("Brief validado desde catálogo."));
+
+        let error = repository
+            .catalog_template_context_for_confirmed_delivery_format(
+                "Arquitectura",
+                "Formato inventado",
+            )
+            .expect_err("unmapped format is rejected");
+        assert!(error.to_string().contains(
+            "Delivery format must be one of the catalog formats mapped to Arquitectura."
+        ));
     }
 
     #[test]

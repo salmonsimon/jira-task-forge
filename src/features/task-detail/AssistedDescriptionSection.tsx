@@ -33,6 +33,7 @@ import {
   type AssistedDescriptionSectionStatuses,
   type AssistedDescriptionSections
 } from "../../lib/domain/assistedDescription";
+import { getDeliveryFormatGateForArea, type CatalogDeliveryFormatGate } from "../../lib/domain/catalog";
 import type {
   AssistedDescriptionDraft,
   AssistedDescriptionProposalStatus,
@@ -52,6 +53,7 @@ export function AssistedDescriptionSection({
   readOnly,
   isGeneratingDescription,
   onGenerateDescription,
+  onResolveDeliveryFormatGate,
   onConfigureAiProvider,
   onListProposals,
   onListProposalLog,
@@ -67,7 +69,8 @@ export function AssistedDescriptionSection({
   task: LocalTask;
   readOnly: boolean;
   isGeneratingDescription: boolean;
-  onGenerateDescription: (taskId: string, additionalContext: string) => Promise<AssistedDescriptionDraft>;
+  onGenerateDescription: (taskId: string, additionalContext: string, deliveryFormat?: string | null) => Promise<AssistedDescriptionDraft>;
+  onResolveDeliveryFormatGate?: (area: string, descriptionOrDeliverable: string) => Promise<CatalogDeliveryFormatGate>;
   onConfigureAiProvider?: () => void;
   onListProposals?: (taskId: string) => Promise<AssistedDescriptionProposal[]>;
   onListProposalLog?: (taskId: string) => Promise<DescriptionProposalLogEntry[]>;
@@ -105,6 +108,8 @@ export function AssistedDescriptionSection({
   const [showEmptySections, setShowEmptySections] = useState(false);
   const [descriptionContext, setDescriptionContext] = useState("");
   const [descriptionMessage, setDescriptionMessage] = useState<string | null>(null);
+  const [deliveryFormatGate, setDeliveryFormatGate] = useState<CatalogDeliveryFormatGate | null>(null);
+  const [selectedDeliveryFormat, setSelectedDeliveryFormat] = useState("");
   const [clarificationQuestions, setClarificationQuestions] = useState<string[]>([]);
   const [promptOpen, setPromptOpen] = useState(false);
   const [promptSectionIds, setPromptSectionIds] = useState<AssistedDescriptionSectionId[]>(allSectionIds);
@@ -129,6 +134,8 @@ export function AssistedDescriptionSection({
     setShowEmptySections(false);
     setDescriptionContext("");
     setDescriptionMessage(null);
+    setDeliveryFormatGate(null);
+    setSelectedDeliveryFormat("");
     setClarificationQuestions([]);
     setPromptOpen(false);
     setPromptSectionIds(allSectionIds);
@@ -177,6 +184,8 @@ export function AssistedDescriptionSection({
   function clearDescriptionPrompt() {
     setDescriptionContext("");
     setDescriptionMessage(null);
+    setDeliveryFormatGate(null);
+    setSelectedDeliveryFormat("");
     setClarificationQuestions([]);
     setPromptSectionIds(allSectionIds);
     setPromptOpen(false);
@@ -186,6 +195,8 @@ export function AssistedDescriptionSection({
     setPromptSectionIds(sectionIds);
     setDescriptionContext(initialContext);
     setDescriptionMessage(null);
+    setDeliveryFormatGate(null);
+    setSelectedDeliveryFormat("");
     setClarificationQuestions([]);
     setPromptOpen(true);
   }
@@ -198,9 +209,39 @@ export function AssistedDescriptionSection({
     setReviewMessage(null);
 
     try {
+      const deliveryFormatContext = `${task.title}\n${changeRequest}\n${task.description ?? ""}`;
+      const deliveryFormatResolution = onResolveDeliveryFormatGate
+        ? await onResolveDeliveryFormatGate(task.area, deliveryFormatContext)
+        : getDeliveryFormatGateForArea(task.area, deliveryFormatContext);
+      if (deliveryFormatResolution.kind === "unknown") {
+        setDescriptionMessage(deliveryFormatResolution.message);
+        setProposalPanelOpen(true);
+        setPromptOpen(true);
+        return false;
+      }
+      if (deliveryFormatResolution.kind === "needs_confirmation" && !selectedDeliveryFormat) {
+        setDeliveryFormatGate(deliveryFormatResolution);
+        setSelectedDeliveryFormat(deliveryFormatResolution.suggestedFormat ?? deliveryFormatResolution.options[0] ?? "");
+        setDescriptionMessage("Confirm the delivery format before generating the description proposal.");
+        setProposalPanelOpen(true);
+        setPromptOpen(true);
+        return false;
+      }
+      const deliveryFormat =
+        deliveryFormatResolution.kind === "auto"
+          ? deliveryFormatResolution.format
+          : selectedDeliveryFormat;
+      if (!deliveryFormatResolution.options.includes(deliveryFormat)) {
+        setDescriptionMessage("Choose a valid catalog delivery format before generating the description proposal.");
+        setProposalPanelOpen(true);
+        setPromptOpen(true);
+        return false;
+      }
+
       const draft = await onGenerateDescription(
         task.id,
-        buildAssistedDescriptionGenerationContext({ changeRequest, issueType: task.issueType, sectionIds })
+        buildAssistedDescriptionGenerationContext({ changeRequest, issueType: task.issueType, sectionIds }),
+        deliveryFormat
       );
       if (draft.status === "needs_clarification") {
         setDescriptionMessage("More context is needed before generating a useful proposal.");
@@ -238,6 +279,8 @@ export function AssistedDescriptionSection({
       setActiveProposalId(savedProposal.id);
       setDescriptionContext("");
       setDescriptionMessage(null);
+      setDeliveryFormatGate(null);
+      setSelectedDeliveryFormat("");
       setClarificationQuestions([]);
       setPromptOpen(false);
       setPromptSectionIds(allSectionIds);
@@ -626,14 +669,17 @@ export function AssistedDescriptionSection({
           clarificationQuestions={clarificationQuestions}
           descriptionContext={descriptionContext}
           descriptionMessage={descriptionMessage}
+          deliveryFormatGate={deliveryFormatGate}
           isGeneratingDescription={isGeneratingDescription}
           onCancel={clearDescriptionPrompt}
           onChange={setDescriptionContext}
           onConfigureAiProvider={onConfigureAiProvider}
+          onSelectDeliveryFormat={setSelectedDeliveryFormat}
           onGenerate={() => {
             void generateProposal(promptSectionIds);
           }}
           onKeyDown={handleDescriptionContextKeyDown}
+          selectedDeliveryFormat={selectedDeliveryFormat}
         />
       ) : null}
 
@@ -1073,22 +1119,28 @@ export function DescriptionPromptModal({
   clarificationQuestions,
   descriptionContext,
   descriptionMessage,
+  deliveryFormatGate,
   isGeneratingDescription,
   onCancel,
   onChange,
   onConfigureAiProvider,
   onGenerate,
-  onKeyDown
+  onKeyDown,
+  onSelectDeliveryFormat,
+  selectedDeliveryFormat
 }: {
   clarificationQuestions: string[];
   descriptionContext: string;
   descriptionMessage: string | null;
+  deliveryFormatGate?: CatalogDeliveryFormatGate | null;
   isGeneratingDescription: boolean;
   onCancel: () => void;
   onChange: (value: string) => void;
   onConfigureAiProvider?: () => void;
   onGenerate: () => void;
   onKeyDown: (event: ReactKeyboardEvent<HTMLTextAreaElement>) => void;
+  onSelectDeliveryFormat?: (value: string) => void;
+  selectedDeliveryFormat?: string;
 }) {
   const overlay = useAppOverlay({
     layer: appOverlayLayers.nestedModal,
@@ -1166,6 +1218,26 @@ export function DescriptionPromptModal({
                 ) : null}
               </div>
             </FeedbackNote>
+          ) : null}
+          {deliveryFormatGate?.kind === "needs_confirmation" ? (
+            <div className="rounded border border-[#454852] bg-[#22252a] p-3">
+              <label className="flex flex-col gap-2 text-xs font-semibold uppercase tracking-wide text-[#9aa0aa]">
+                Delivery format
+                <select
+                  className="rounded border border-[#454852] bg-[#1f2126] px-3 py-2 text-sm normal-case text-[#dfe1e6] outline-none focus:border-[#85b8ff]"
+                  disabled={isGeneratingDescription}
+                  onChange={(event) => onSelectDeliveryFormat?.(event.target.value)}
+                  value={selectedDeliveryFormat ?? deliveryFormatGate.suggestedFormat ?? deliveryFormatGate.options[0] ?? ""}
+                >
+                  {deliveryFormatGate.options.map((format) => (
+                    <option key={format} value={format}>
+                      {format}
+                      {format === deliveryFormatGate.suggestedFormat ? " (suggested)" : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
           ) : null}
           {clarificationQuestions.length ? (
             <FeedbackNote className="py-3 text-sm" surface="dark" variant="warning">

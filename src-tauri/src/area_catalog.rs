@@ -47,6 +47,20 @@ pub struct NotionCatalogConnectionTestResult {
     pub extracted_block_count: usize,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeliveryFormatGateResult {
+    pub kind: String,
+    pub area_display_name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub format: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub suggested_format: Option<String>,
+    pub options: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ExportableCatalog {
@@ -539,7 +553,7 @@ pub fn derive_issue_type_from_area(area: &str) -> &'static str {
     }
 }
 
-pub fn catalog_context_for_area(area: &str, description_or_deliverable: &str) -> String {
+pub fn catalog_context_for_area(area: &str, _description_or_deliverable: &str) -> String {
     match resolve_catalog_area(area) {
         CatalogAreaResolution::Official {
             area_display_name,
@@ -548,7 +562,7 @@ pub fn catalog_context_for_area(area: &str, description_or_deliverable: &str) ->
         | CatalogAreaResolution::Normalized {
             area_display_name,
             jira_label,
-        } => catalog_context_for_resolved_area(area_display_name, jira_label, description_or_deliverable),
+        } => catalog_context_for_resolved_area(area_display_name, jira_label),
         CatalogAreaResolution::Blocked => format!(
             "Official catalog context:\n- Catalog version: {CATALOG_VERSION}\n- Catalog synced at: {CATALOG_SYNCED_AT}\n- Source: {CATALOG_SOURCE_URL}\n- Maintenance note: {CATALOG_MAINTENANCE_NOTE}\n- Area status: blocked non-official value\n- Official options: {}\n- Issue type derivation: Story\n- Warning: Choose an official catalog area before generating Jira labels or descriptions.",
             official_area_options()
@@ -563,6 +577,114 @@ pub fn catalog_context_for_area(area: &str, description_or_deliverable: &str) ->
     }
 }
 
+pub fn catalog_delivery_format_options_for_area(area: &str) -> Vec<String> {
+    let resolved_area = match resolve_catalog_area(area) {
+        CatalogAreaResolution::Official {
+            area_display_name, ..
+        }
+        | CatalogAreaResolution::Normalized {
+            area_display_name, ..
+        } => area_display_name,
+        CatalogAreaResolution::Blocked => return Vec::new(),
+    };
+    let Some(catalog_area) = OFFICIAL_AREAS
+        .iter()
+        .find(|entry| entry.area_display_name == resolved_area)
+    else {
+        return Vec::new();
+    };
+
+    let mut formats = Vec::new();
+    push_unique_format(&mut formats, catalog_area.delivery_format);
+    for conditional_format in catalog_area.conditional_delivery_formats {
+        push_unique_format(&mut formats, conditional_format.format);
+    }
+    formats
+}
+
+pub fn catalog_delivery_format_gate_for_area(
+    area: &str,
+    description_or_deliverable: &str,
+) -> DeliveryFormatGateResult {
+    let area_display_name = match resolve_catalog_area(area) {
+        CatalogAreaResolution::Official {
+            area_display_name, ..
+        }
+        | CatalogAreaResolution::Normalized {
+            area_display_name, ..
+        } => area_display_name.to_string(),
+        CatalogAreaResolution::Blocked => {
+            return DeliveryFormatGateResult {
+                kind: "unknown".to_string(),
+                area_display_name: area.trim().to_string(),
+                format: None,
+                suggested_format: None,
+                options: Vec::new(),
+                message: Some(
+                    "Choose an official catalog area before generating a description proposal."
+                        .to_string(),
+                ),
+            };
+        }
+    };
+    let options = catalog_delivery_format_options_for_area(&area_display_name);
+    if options.len() == 1 {
+        return DeliveryFormatGateResult {
+            kind: "auto".to_string(),
+            area_display_name,
+            format: options.first().cloned(),
+            suggested_format: None,
+            options,
+            message: None,
+        };
+    }
+
+    DeliveryFormatGateResult {
+        kind: "needs_confirmation".to_string(),
+        area_display_name,
+        format: None,
+        suggested_format: suggested_fallback_delivery_format(area, description_or_deliverable),
+        options,
+        message: None,
+    }
+}
+
+pub fn catalog_context_for_confirmed_delivery_format(
+    area: &str,
+    delivery_format: &str,
+) -> Result<String, String> {
+    let (area_display_name, jira_label) = match resolve_catalog_area(area) {
+        CatalogAreaResolution::Official {
+            area_display_name,
+            jira_label,
+        }
+        | CatalogAreaResolution::Normalized {
+            area_display_name,
+            jira_label,
+        } => (area_display_name, jira_label),
+        CatalogAreaResolution::Blocked => {
+            return Err(
+                "Choose an official catalog area before generating a description proposal."
+                    .to_string(),
+            );
+        }
+    };
+    let options = catalog_delivery_format_options_for_area(area_display_name);
+    if !options
+        .iter()
+        .any(|format| normalize_catalog_key(format) == normalize_catalog_key(delivery_format))
+    {
+        return Err(format!(
+            "Delivery format must be one of the catalog formats mapped to {area_display_name}."
+        ));
+    }
+    Ok(catalog_context_for_resolved_area_with_format(
+        area_display_name,
+        jira_label,
+        delivery_format.trim(),
+    ))
+}
+
 pub fn official_area_options() -> Vec<OfficialAreaOption> {
     OFFICIAL_AREAS
         .iter()
@@ -573,13 +695,20 @@ pub fn official_area_options() -> Vec<OfficialAreaOption> {
         .collect()
 }
 
-fn catalog_context_for_resolved_area(
+fn catalog_context_for_resolved_area(area_display_name: &str, jira_label: &str) -> String {
+    let delivery_format = OFFICIAL_AREAS
+        .iter()
+        .find(|entry| entry.area_display_name == area_display_name)
+        .map(|entry| entry.delivery_format)
+        .unwrap_or("Decisión pendiente");
+    catalog_context_for_resolved_area_with_format(area_display_name, jira_label, delivery_format)
+}
+
+fn catalog_context_for_resolved_area_with_format(
     area_display_name: &str,
     jira_label: &str,
-    description_or_deliverable: &str,
+    delivery_format: &str,
 ) -> String {
-    let delivery_format = delivery_format_for_area(area_display_name, description_or_deliverable)
-        .unwrap_or("Decisión pendiente");
     [
         "Official catalog context:".to_string(),
         format!("- Catalog version: {CATALOG_VERSION}"),
@@ -600,29 +729,24 @@ fn catalog_context_for_resolved_area(
     .join("\n")
 }
 
-fn delivery_format_for_area(
+fn suggested_fallback_delivery_format(
     area_display_name: &str,
     description_or_deliverable: &str,
-) -> Option<&'static str> {
+) -> Option<String> {
     let catalog_area = OFFICIAL_AREAS
         .iter()
         .find(|entry| entry.area_display_name == area_display_name)?;
     let normalized_context = normalize_catalog_key(description_or_deliverable);
-    if let Some(conditional_format) =
-        catalog_area
-            .conditional_delivery_formats
-            .iter()
-            .find(|candidate| {
-                candidate
-                    .matches
-                    .iter()
-                    .any(|term| normalized_context.contains(normalize_catalog_key(term).as_str()))
-            })
-    {
-        return Some(conditional_format.format);
-    }
-
-    Some(catalog_area.delivery_format)
+    catalog_area
+        .conditional_delivery_formats
+        .iter()
+        .find(|candidate| {
+            candidate
+                .matches
+                .iter()
+                .any(|term| normalized_context.contains(normalize_catalog_key(term).as_str()))
+        })
+        .map(|candidate| candidate.format.to_string())
 }
 
 fn normalize_catalog_key(value: &str) -> String {
@@ -636,6 +760,20 @@ fn normalize_catalog_key(value: &str) -> String {
         .filter(|part| !part.is_empty())
         .collect::<Vec<_>>()
         .join("-")
+}
+
+fn push_unique_format(formats: &mut Vec<String>, format: &str) {
+    let format = format.trim();
+    if format.is_empty() {
+        return;
+    }
+    if formats
+        .iter()
+        .any(|existing| normalize_catalog_key(existing) == normalize_catalog_key(format))
+    {
+        return;
+    }
+    formats.push(format.to_string());
 }
 
 fn fetch_notion_page(notion_token: &str, page_id: &str) -> Result<Value, String> {
@@ -843,7 +981,8 @@ fn normalize_catalog_char(ch: char) -> char {
 #[cfg(test)]
 mod tests {
     use super::{
-        catalog_context_for_area, derive_issue_type_from_area,
+        catalog_context_for_area, catalog_context_for_confirmed_delivery_format,
+        catalog_delivery_format_options_for_area, derive_issue_type_from_area,
         extract_exportable_catalog_json_from_notion_blocks, notion_page_id_from_input,
         official_area_options, parse_exportable_catalog_json, resolve_catalog_area,
         CatalogAreaResolution, OfficialAreaOption, OFFICIAL_AREAS,
@@ -888,10 +1027,33 @@ mod tests {
     }
 
     #[test]
-    fn uses_conditional_delivery_formats() {
-        let context = catalog_context_for_area("Arquitectura", "Preparar brief tecnico");
+    fn requires_confirmed_delivery_format_for_multi_format_fallback_area() {
+        let options = catalog_delivery_format_options_for_area("Arquitectura");
 
-        assert!(context.contains("- Delivery format: Arquitectura - Brief"));
+        assert_eq!(
+            options,
+            vec![
+                "Arquitectura - Brief".to_string(),
+                "Arquitectura - Propuesta Final".to_string()
+            ]
+        );
+
+        let default_context = catalog_context_for_area("Arquitectura", "cerrar propuesta final");
+        assert!(default_context.contains("- Delivery format: Arquitectura - Brief"));
+
+        let confirmed_context = catalog_context_for_confirmed_delivery_format(
+            "Arquitectura",
+            "Arquitectura - Propuesta Final",
+        )
+        .expect("confirmed format is valid");
+        assert!(confirmed_context.contains("- Delivery format: Arquitectura - Propuesta Final"));
+
+        let error =
+            catalog_context_for_confirmed_delivery_format("Arquitectura", "Formato inventado")
+                .expect_err("unmapped format is rejected");
+        assert!(error.contains(
+            "Delivery format must be one of the catalog formats mapped to Arquitectura."
+        ));
     }
 
     #[test]

@@ -53,6 +53,7 @@ pub fn run() {
             commands::categories::sync_area_catalog_from_source,
             commands::categories::sync_area_catalog_from_notion,
             commands::categories::test_notion_catalog_connection,
+            commands::categories::resolve_delivery_format_gate,
             commands::categories::create_category,
             commands::categories::update_category,
             commands::categories::delete_category,
