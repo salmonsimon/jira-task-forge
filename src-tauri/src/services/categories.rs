@@ -1,7 +1,8 @@
 use super::AppServices;
 use crate::area_catalog::{
-    sync_exportable_catalog_from_notion_page, sync_exportable_catalog_from_url,
-    test_notion_catalog_page, CatalogSyncResult, NotionCatalogConnectionTestResult,
+    catalog_delivery_format_gate_for_area, sync_exportable_catalog_from_notion_page,
+    sync_exportable_catalog_from_url, test_notion_catalog_page, CatalogSyncResult,
+    DeliveryFormatGateResult, NotionCatalogConnectionTestResult,
 };
 use crate::db::DbResult;
 use crate::models::Category;
@@ -103,5 +104,43 @@ impl AppServices {
             .map_err(|error| error.to_string())?;
 
         Ok(result)
+    }
+
+    pub fn resolve_delivery_format_gate(
+        &self,
+        area: &str,
+        description_or_deliverable: &str,
+    ) -> Result<DeliveryFormatGateResult, String> {
+        let options = {
+            let connection = self.connection();
+            CategoryRepository::new(&connection)
+                .catalog_delivery_format_options_for_area(area)
+                .map_err(|error| error.to_string())?
+        };
+        if options.is_empty() {
+            return Ok(catalog_delivery_format_gate_for_area(
+                area,
+                description_or_deliverable,
+            ));
+        }
+        if options.len() == 1 {
+            return Ok(DeliveryFormatGateResult {
+                kind: "auto".to_string(),
+                area_display_name: area.trim().to_string(),
+                format: options.first().cloned(),
+                suggested_format: None,
+                options,
+                message: None,
+            });
+        }
+
+        Ok(DeliveryFormatGateResult {
+            kind: "needs_confirmation".to_string(),
+            area_display_name: area.trim().to_string(),
+            format: None,
+            suggested_format: None,
+            options,
+            message: None,
+        })
     }
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { LocalTask, Tray } from "../../lib/types";
-import { cloneTrays, findTask, findTaskTray, repairTrayWorkspaceSelection } from "./trayWorkspace";
+import { buildTaskDetailsUpdate, cloneTrays, findTask, findTaskTray, repairTrayWorkspaceSelection } from "./trayWorkspace";
 
 const baseTask: LocalTask = {
   id: "task-1",
@@ -73,5 +73,23 @@ describe("tray workspace helpers", () => {
     expect(findTaskTray(trays, "task-1")?.id).toBe("tray-1");
     expect(findTask(trays, "missing-task")).toBeNull();
     expect(findTaskTray(trays, null)).toBeNull();
+  });
+
+  it("invalidates an existing description when the task area changes", () => {
+    const readyTask: LocalTask = {
+      ...baseTask,
+      area: "Arquitectura",
+      issueType: "Story",
+      description: "## Contexto\nDescripcion anterior.",
+      descriptionStatus: "Ready"
+    };
+
+    expect(buildTaskDetailsUpdate(readyTask, { area: "Feeling" })).toEqual({
+      ...readyTask,
+      area: "Feeling",
+      issueType: "Story",
+      description: undefined,
+      descriptionStatus: "Missing"
+    });
   });
 });

@@ -1,7 +1,9 @@
 use tauri::State;
 
 use super::worker::run_blocking_result;
-use crate::area_catalog::{CatalogSyncResult, NotionCatalogConnectionTestResult};
+use crate::area_catalog::{
+    CatalogSyncResult, DeliveryFormatGateResult, NotionCatalogConnectionTestResult,
+};
 use crate::models::Category;
 use crate::services::AppServices;
 
@@ -82,4 +84,13 @@ pub async fn sync_area_catalog_from_notion(
         services.sync_area_catalog_from_notion(&page_url_or_id)
     })
     .await
+}
+
+#[tauri::command]
+pub fn resolve_delivery_format_gate(
+    services: State<'_, AppServices>,
+    area: String,
+    description_or_deliverable: String,
+) -> Result<DeliveryFormatGateResult, String> {
+    services.resolve_delivery_format_gate(&area, &description_or_deliverable)
 }

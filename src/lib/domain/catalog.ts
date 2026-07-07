@@ -50,6 +50,26 @@ export type CatalogDeliveryFormatResolution =
       areaDisplayName: string;
     };
 
+export type CatalogDeliveryFormatGate =
+  | {
+      kind: "auto";
+      areaDisplayName: string;
+      format: string;
+      options: string[];
+    }
+  | {
+      kind: "needs_confirmation";
+      areaDisplayName: string;
+      suggestedFormat: string | null;
+      options: string[];
+    }
+  | {
+      kind: "unknown";
+      areaDisplayName: string;
+      options: string[];
+      message: string;
+    };
+
 export type CatalogOfficialAreaOption = {
   areaDisplayName: string;
   jiraLabel: string;
@@ -162,6 +182,45 @@ export function getDeliveryFormatForArea(areaInput: string, descriptionOrDeliver
   };
 }
 
+export function getDeliveryFormatGateForArea(areaInput: string, descriptionOrDeliverable = ""): CatalogDeliveryFormatGate {
+  const resolution = resolveCatalogArea(areaInput);
+  if (resolution.kind === "blocked") {
+    return {
+      kind: "unknown",
+      areaDisplayName: areaInput.trim(),
+      options: [],
+      message: "Choose an official catalog area before generating a description proposal."
+    };
+  }
+
+  const catalogArea = officialAreaCatalog.areas.find((entry) => entry.areaDisplayName === resolution.areaDisplayName);
+  if (!catalogArea) {
+    return {
+      kind: "unknown",
+      areaDisplayName: resolution.areaDisplayName,
+      options: [],
+      message: "Choose an official catalog area before generating a description proposal."
+    };
+  }
+
+  const options = getMappedDeliveryFormats(catalogArea);
+  if (options.length === 1) {
+    return {
+      kind: "auto",
+      areaDisplayName: catalogArea.areaDisplayName,
+      format: options[0],
+      options
+    };
+  }
+
+  return {
+    kind: "needs_confirmation",
+    areaDisplayName: catalogArea.areaDisplayName,
+    suggestedFormat: suggestDeliveryFormat(catalogArea, descriptionOrDeliverable),
+    options
+  };
+}
+
 export function deriveCatalogIssueType(area: string): IssueType {
   const resolution = resolveCatalogArea(area);
   if (resolution.kind !== "blocked" && resolution.areaDisplayName === "Bug") {
@@ -203,4 +262,21 @@ function area(
     deliveryFormat,
     conditionalDeliveryFormats
   };
+}
+
+function getMappedDeliveryFormats(catalogArea: CatalogArea): string[] {
+  const formats = [
+    catalogArea.deliveryFormat,
+    ...(catalogArea.conditionalDeliveryFormats?.map((conditionalFormat) => conditionalFormat.format) ?? [])
+  ];
+  return Array.from(new Set(formats.map((format) => format.trim()).filter(Boolean)));
+}
+
+function suggestDeliveryFormat(catalogArea: CatalogArea, descriptionOrDeliverable: string): string | null {
+  const normalizedContext = normalizeCatalogKey(descriptionOrDeliverable);
+  return (
+    catalogArea.conditionalDeliveryFormats?.find((candidate) =>
+      candidate.match.some((term) => normalizedContext.includes(normalizeCatalogKey(term)))
+    )?.format ?? null
+  );
 }

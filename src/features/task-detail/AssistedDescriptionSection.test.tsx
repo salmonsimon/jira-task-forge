@@ -66,7 +66,96 @@ describe("DescriptionPromptModal AI setup warning", () => {
     expect(getAiProviderSetupActionLabel("Save a OpenAI API key in Settings before generating a description.")).toBe("Save API key");
     expect(html).toContain('role="dialog"');
     expect(html).toContain('aria-modal="true"');
-    expect(html).toContain("Description proposal");
+    expect(html).toContain("Description context");
     expect(html).toContain("Configure OpenAI");
+  });
+});
+
+describe("DescriptionPromptModal delivery-format gate", () => {
+  it("keeps delivery-format confirmation out of the context step", () => {
+    const html = renderToStaticMarkup(
+      <DescriptionPromptModal
+        clarificationQuestions={[]}
+        descriptionContext=""
+        descriptionMessage={null}
+        deliveryFormatGate={{
+          kind: "needs_confirmation",
+          areaDisplayName: "Arquitectura",
+          suggestedFormat: "Arquitectura - Propuesta Final",
+          options: ["Arquitectura - Brief", "Arquitectura - Propuesta Final"]
+        }}
+        isGeneratingDescription={false}
+        onCancel={() => undefined}
+        onChange={() => undefined}
+        onGenerate={() => undefined}
+        onKeyDown={() => undefined}
+        onSelectDeliveryFormat={() => undefined}
+        selectedDeliveryFormat="Arquitectura - Propuesta Final"
+        step="context"
+      />
+    );
+
+    expect(html).toContain("Description context");
+    expect(html).toContain("Continue");
+    expect(html).not.toContain("Delivery format");
+  });
+
+  it("renders only valid mapped delivery formats in the confirmation step", () => {
+    const html = renderToStaticMarkup(
+      <DescriptionPromptModal
+        clarificationQuestions={[]}
+        deliveryFormatGate={{
+          kind: "needs_confirmation",
+          areaDisplayName: "Arquitectura",
+          suggestedFormat: "Arquitectura - Propuesta Final",
+          options: ["Arquitectura - Brief", "Arquitectura - Propuesta Final"]
+        }}
+        descriptionContext=""
+        descriptionMessage="Confirm the delivery format before generating the description proposal."
+        isGeneratingDescription={false}
+        onCancel={() => undefined}
+        onChange={() => undefined}
+        onGenerate={() => undefined}
+        onKeyDown={() => undefined}
+        onSelectDeliveryFormat={() => undefined}
+        selectedDeliveryFormat="Arquitectura - Propuesta Final"
+        step="delivery_format"
+      />
+    );
+
+    expect(html).toContain("Confirm delivery format");
+    expect(html).toContain("Delivery format");
+    expect(html).toContain("Arquitectura - Brief");
+    expect(html).toContain("Arquitectura - Propuesta Final (suggested)");
+    expect(html).not.toContain("Formato inventado");
+  });
+
+  it("warns when delivery format cannot be inferred from the provided context", () => {
+    const html = renderToStaticMarkup(
+      <DescriptionPromptModal
+        clarificationQuestions={[]}
+        deliveryFormatGate={{
+          kind: "needs_confirmation",
+          areaDisplayName: "Arquitectura",
+          suggestedFormat: null,
+          options: ["Arquitectura - Brief", "Arquitectura - Propuesta Final"]
+        }}
+        descriptionContext="Necesitamos ordenar el trabajo pendiente."
+        descriptionMessage={null}
+        isGeneratingDescription={false}
+        onCancel={() => undefined}
+        onChange={() => undefined}
+        onGenerate={() => undefined}
+        onKeyDown={() => undefined}
+        onSelectDeliveryFormat={() => undefined}
+        selectedDeliveryFormat=""
+        step="delivery_format"
+      />
+    );
+
+    expect(html).toContain("Could not infer a delivery format from the provided context.");
+    expect(html).toContain("Choose delivery format");
+    expect(html).not.toContain('value="Arquitectura - Brief" selected');
+    expect(html).not.toContain('value="Arquitectura - Propuesta Final" selected');
   });
 });

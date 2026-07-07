@@ -1,5 +1,6 @@
 use super::credentials::AI_API_KEY_ACCOUNT;
 use super::AppServices;
+use crate::area_catalog;
 use crate::integrations::ai::{ai_model_or_default, AiClient, AiCredentials, AiProvider};
 use crate::models::{AssistedDescriptionDraft, EpicScopePluralSuggestion, JqlAiDraft};
 use crate::repositories::{CategoryRepository, TaskRepository};
@@ -32,6 +33,7 @@ impl AppServices {
         &self,
         task_id: &str,
         additional_context: Option<&str>,
+        delivery_format: Option<&str>,
     ) -> Result<AssistedDescriptionDraft, String> {
         let settings = self
             .get_app_settings()
@@ -49,19 +51,57 @@ impl AppServices {
 
         let catalog_context = {
             let connection = self.connection();
-            CategoryRepository::new(&connection)
-                .catalog_template_context_for_area(
-                    &task.area,
-                    &format!(
-                        "{}
-{}
-{}",
-                        task.title,
-                        additional_context.unwrap_or_default(),
-                        task.description.as_deref().unwrap_or_default()
-                    ),
-                )
-                .map_err(|error| format!("Could not load catalog template context: {error}"))?
+            let category_repository = CategoryRepository::new(&connection);
+            let delivery_format = delivery_format
+                .map(str::trim)
+                .filter(|value| !value.is_empty());
+            let synced_options = category_repository
+                .catalog_delivery_format_options_for_area(&task.area)
+                .map_err(|error| format!("Could not load catalog delivery formats: {error}"))?;
+
+            if let Some(delivery_format) = delivery_format {
+                category_repository
+                    .catalog_template_context_for_confirmed_delivery_format(
+                        &task.area,
+                        delivery_format,
+                    )
+                    .map_err(|error| format!("Could not load catalog template context: {error}"))?
+                    .or_else(|| {
+                        area_catalog::catalog_context_for_confirmed_delivery_format(
+                            &task.area,
+                            delivery_format,
+                        )
+                        .ok()
+                    })
+            } else if synced_options.len() > 1 {
+                return Err(
+                    "Choose a delivery format before generating a description proposal."
+                        .to_string(),
+                );
+            } else if let Some(single_format) = synced_options.first() {
+                category_repository
+                    .catalog_template_context_for_confirmed_delivery_format(
+                        &task.area,
+                        single_format,
+                    )
+                    .map_err(|error| format!("Could not load catalog template context: {error}"))?
+            } else {
+                let fallback_options =
+                    area_catalog::catalog_delivery_format_options_for_area(&task.area);
+                if fallback_options.len() > 1 {
+                    return Err(
+                        "Choose a delivery format before generating a description proposal."
+                            .to_string(),
+                    );
+                }
+                fallback_options.first().and_then(|single_format| {
+                    area_catalog::catalog_context_for_confirmed_delivery_format(
+                        &task.area,
+                        single_format,
+                    )
+                    .ok()
+                })
+            }
         };
 
         client.draft_task_description(

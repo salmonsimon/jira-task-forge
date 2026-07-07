@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { CatalogDeliveryFormatGate } from "../domain/catalog";
 import type {
   AiProvider,
   AppSettings,
@@ -168,6 +169,13 @@ export async function testPersistedNotionCatalogConnection(
   return invoke<NotionCatalogConnectionTestResult>("test_notion_catalog_connection", { pageUrlOrId });
 }
 
+export async function resolvePersistedDeliveryFormatGate(
+  area: string,
+  descriptionOrDeliverable: string
+): Promise<CatalogDeliveryFormatGate> {
+  return invoke<CatalogDeliveryFormatGate>("resolve_delivery_format_gate", { area, descriptionOrDeliverable });
+}
+
 export async function listPersistedJqlFavorites(): Promise<JqlFavorite[]> {
   return (await invoke<BackendJqlFavorite[]>("list_jql_favorites")).map(mapJqlFavorite);
 }
@@ -297,11 +305,13 @@ export async function draftPersistedJqlWithAi(prompt: string): Promise<JqlAiDraf
 
 export async function generatePersistedTaskDescription(
   taskId: string,
-  additionalContext: string
+  additionalContext: string,
+  deliveryFormat?: string | null
 ): Promise<AssistedDescriptionDraft> {
   return invoke<AssistedDescriptionDraft>("generate_task_description", {
     taskId,
-    additionalContext
+    additionalContext,
+    deliveryFormat
   });
 }
 

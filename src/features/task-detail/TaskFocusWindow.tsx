@@ -3,6 +3,7 @@ import { useEffect, useState, type KeyboardEvent as ReactKeyboardEvent } from "r
 import { Button, IconButton, IssueTypeBadge, SyncBadge } from "../../components/ui";
 import { appOverlayLayers, useAppOverlay } from "../../lib/app-overlays";
 import { isTaskReadOnly } from "../../lib/domain";
+import type { CatalogDeliveryFormatGate } from "../../lib/domain/catalog";
 import type {
   AssistedDescriptionDraft,
   AssistedDescriptionProposal,
@@ -38,6 +39,7 @@ export function TaskFocusWindow({
   onAddSubtask,
   onDeleteSubtask,
   onGenerateDescription,
+  onResolveDeliveryFormatGate,
   onConfigureAiProvider,
   onListDescriptionProposals,
   onListDescriptionProposalLog,
@@ -65,7 +67,8 @@ export function TaskFocusWindow({
   onDeleteAttachment?: (taskId: string, attachmentId: string) => void | Promise<void>;
   onAddSubtask: (taskId: string, title: string) => void | Promise<void>;
   onDeleteSubtask: (taskId: string) => void | Promise<void>;
-  onGenerateDescription: (taskId: string, additionalContext: string) => Promise<AssistedDescriptionDraft>;
+  onGenerateDescription: (taskId: string, additionalContext: string, deliveryFormat?: string | null) => Promise<AssistedDescriptionDraft>;
+  onResolveDeliveryFormatGate?: (area: string, descriptionOrDeliverable: string) => Promise<CatalogDeliveryFormatGate>;
   onConfigureAiProvider?: () => void;
   onListDescriptionProposals?: (taskId: string) => Promise<AssistedDescriptionProposal[]>;
   onListDescriptionProposalLog?: (taskId: string) => Promise<DescriptionProposalLogEntry[]>;
@@ -173,6 +176,7 @@ export function TaskFocusWindow({
               readOnly={readOnly}
               isGeneratingDescription={isGeneratingDescription}
               onGenerateDescription={onGenerateDescription}
+              onResolveDeliveryFormatGate={onResolveDeliveryFormatGate}
               onConfigureAiProvider={onConfigureAiProvider}
               onListProposals={onListDescriptionProposals}
               onListProposalLog={onListDescriptionProposalLog}

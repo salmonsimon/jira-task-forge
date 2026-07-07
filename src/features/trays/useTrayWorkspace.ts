@@ -28,7 +28,7 @@ import {
   updateTrayTasks
 } from "../../lib/domain";
 import type { LocalIssueRelationship, LocalTask, Priority, Tray } from "../../lib/types";
-import { cloneTrays, findTask, findTaskTray, repairTrayWorkspaceSelection } from "./trayWorkspace";
+import { buildTaskDetailsUpdate, cloneTrays, findTask, findTaskTray, repairTrayWorkspaceSelection } from "./trayWorkspace";
 
 type ReplaceTraysOptions = {
   fallbackSelectedTrayId?: string | null;
@@ -290,20 +290,15 @@ export function useTrayWorkspace({
     const task = tray?.tasks.find((candidate) => candidate.id === taskId);
     if (!tray || !task || tray.state === "Archived" || task.syncStatus === "Created") return;
 
-    const nextTitle = taskInput.title !== undefined ? taskInput.title.trim() : task.title;
-    if (!nextTitle) return;
+    const nextTask = buildTaskDetailsUpdate(task, taskInput);
+    if (!nextTask) return;
 
-    const nextArea = taskInput.area ?? task.area;
-    const shouldDeriveIssueType = taskInput.area !== undefined && taskInput.issueType === undefined;
-    const nextTask: LocalTask = {
-      ...task,
-      project: taskInput.project ?? task.project,
-      area: nextArea,
-      title: nextTitle,
-      priority: taskInput.priority ?? task.priority,
-      issueType: shouldDeriveIssueType ? deriveIssueTypeFromArea(nextArea) : (taskInput.issueType ?? task.issueType)
-    };
-    const persistedTask = usesTauriPersistence ? await updatePersistedTaskDetails(taskId, nextTask) : nextTask;
+    let persistedTask = usesTauriPersistence ? await updatePersistedTaskDetails(taskId, nextTask) : nextTask;
+    if (persistedTask && nextTask.descriptionStatus === "Missing" && task.descriptionStatus !== "Missing") {
+      persistedTask = usesTauriPersistence
+        ? await updatePersistedTaskDescription(taskId, null, "Missing")
+        : nextTask;
+    }
 
     if (!persistedTask) return;
     const defaultSubtaskTitles = getDefaultSubtaskTitles(persistedTask).filter(
