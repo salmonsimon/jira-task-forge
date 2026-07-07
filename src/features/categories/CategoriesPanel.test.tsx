@@ -144,3 +144,35 @@ it("keeps Notion catalog areas synchronized instead of manually editable", () =>
   expect(html).not.toContain("Rename Bug");
   expect(html).not.toContain("Delete Bug");
 });
+
+it("keeps official projects read-only while syncing from Notion", () => {
+  const html = renderToStaticMarkup(
+    <CategoriesPanel
+      projects={[
+        project,
+        { ...project, id: "project-hidden-official", name: "Legacy Sandbox", hidden: true },
+        { ...project, id: "project-local", name: "Local Project", source: "local" }
+      ]}
+      areas={[{ ...area, source: "catalog" }]}
+      catalogSourceMode="notion"
+      catalogSourceUrl="https://app.notion.com/p/example"
+      onCreateCategory={() => undefined}
+      onDeleteCategory={() => undefined}
+      onUpdateCategory={() => undefined}
+      onSyncAreaCatalog={async () => null}
+      onConfigureCatalogSource={() => undefined}
+      onClose={() => undefined}
+    />
+  );
+
+  expect(html.match(/>New</g)).toHaveLength(1);
+  expect(html).toContain("Official");
+  expect(html).not.toContain("Rename DTS");
+  expect(html).not.toContain("Hide DTS");
+  expect(html).not.toContain("Delete DTS");
+  expect(html).not.toContain("Show Legacy Sandbox");
+  expect(html).not.toContain(">Hidden<");
+  expect(html).toContain("Rename Local Project");
+  expect(html).toContain("Hide Local Project");
+  expect(html).toContain("Delete Local Project");
+});

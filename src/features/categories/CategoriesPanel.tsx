@@ -2,6 +2,7 @@ import { AlertTriangle, Check, CheckCircle2, Eye, EyeOff, Pencil, Plus, RefreshC
 import { useEffect, useRef, useState } from "react";
 import { Button, DrawerShell, FeedbackNote, PanelHeader } from "../../components/ui";
 import { appOverlayLayers, useAppOverlay } from "../../lib/app-overlays";
+import { isNotionSyncedProjectReadOnly } from "../../lib/categoryPolicy";
 import type { AppSettings, CatalogSyncResult, Category } from "../../lib/types";
 import { cn } from "../../lib/utils";
 
@@ -50,6 +51,7 @@ export function CategoriesPanel({
           categoryType="project"
           title="Projects"
           categories={projects}
+          catalogSourceMode={catalogSourceMode}
           onCreateCategory={onCreateCategory}
           onUpdateCategory={onUpdateCategory}
           onDeleteCategory={onDeleteCategory}
@@ -208,6 +210,7 @@ function CategoryList({
             category={category}
             key={category.id}
             isCatalogManaged={isCatalogManaged}
+            isReadOnly={isNotionSyncedProjectReadOnly(category, catalogSourceMode)}
             onDeleteCategory={onDeleteCategory}
             onUpdateCategory={onUpdateCategory}
           />
@@ -329,10 +332,12 @@ function CategoryRow({
   category,
   onDeleteCategory,
   onUpdateCategory,
-  isCatalogManaged = false
+  isCatalogManaged = false,
+  isReadOnly = false
 }: {
   category: Category;
   isCatalogManaged?: boolean;
+  isReadOnly?: boolean;
   onDeleteCategory: (categoryId: string) => void | Promise<void>;
   onUpdateCategory: (categoryId: string, patch: Partial<Pick<Category, "hidden" | "name">>) => void | Promise<void>;
 }) {
@@ -359,7 +364,11 @@ function CategoryRow({
   return (
     <div className="group flex min-w-0 items-center justify-between gap-2 border-b border-[#ebecf0] px-3 py-2 last:border-b-0">
       <div className={cn("flex min-w-0 flex-1 items-center gap-2 text-sm", category.hidden && "text-[#6b778c]")}>
-        {category.hidden ? <EyeOff size={14} className="shrink-0 text-[#6b778c]" /> : <Tags size={14} className="shrink-0 text-[#6b778c]" />}
+        {category.hidden && !isReadOnly ? (
+          <EyeOff size={14} className="shrink-0 text-[#6b778c]" />
+        ) : (
+          <Tags size={14} className="shrink-0 text-[#6b778c]" />
+        )}
         {isEditing ? (
           <input
             autoFocus
@@ -377,7 +386,7 @@ function CategoryRow({
         )}
       </div>
       <div className="flex shrink-0 items-center gap-1">
-        <span className="mr-1 text-xs text-[#6b778c]">{category.hidden ? "Hidden" : category.source}</span>
+        <span className="mr-1 text-xs text-[#6b778c]">{isReadOnly ? "Official" : category.hidden ? "Hidden" : category.source}</span>
         {isEditing ? (
           <>
             <button
@@ -399,7 +408,7 @@ function CategoryRow({
           </>
         ) : (
           <>
-            {!isCatalogManaged ? (
+            {!isCatalogManaged && !isReadOnly ? (
               <button
                 className="inline-flex h-7 w-7 items-center justify-center rounded text-[#42526e] opacity-0 transition hover:bg-[#ebecf0] group-hover:opacity-100 focus:opacity-100"
                 onClick={() => setIsEditing(true)}
@@ -409,15 +418,17 @@ function CategoryRow({
                 <Pencil size={14} />
               </button>
             ) : null}
-            <button
-              className="inline-flex h-7 w-7 items-center justify-center rounded text-[#42526e] transition hover:bg-[#ebecf0]"
-              onClick={() => void onUpdateCategory(category.id, { hidden: !category.hidden })}
-              title={category.hidden ? `Show ${category.name}` : `Hide ${category.name}`}
-              type="button"
-            >
-              {category.hidden ? <Eye size={14} /> : <EyeOff size={14} />}
-            </button>
-            {!isCatalogManaged ? (
+            {!isReadOnly ? (
+              <button
+                className="inline-flex h-7 w-7 items-center justify-center rounded text-[#42526e] transition hover:bg-[#ebecf0]"
+                onClick={() => void onUpdateCategory(category.id, { hidden: !category.hidden })}
+                title={category.hidden ? `Show ${category.name}` : `Hide ${category.name}`}
+                type="button"
+              >
+                {category.hidden ? <Eye size={14} /> : <EyeOff size={14} />}
+              </button>
+            ) : null}
+            {!isCatalogManaged && !isReadOnly ? (
               <button
                 className="inline-flex h-7 w-7 items-center justify-center rounded text-[#42526e] opacity-0 transition hover:bg-[#ffebe6] hover:text-[#bf2600] group-hover:opacity-100 focus:opacity-100"
                 onClick={() => void onDeleteCategory(category.id)}

@@ -14,6 +14,7 @@ import { TaskFocusWindow } from "./features/task-detail";
 import { TraysView, useTrayWorkspace } from "./features/trays";
 import { mockAppDataAdapter } from "./lib/adapters";
 import { appOverlayLayers, useAppOverlay } from "./lib/app-overlays";
+import { isNotionSyncedProjectReadOnly } from "./lib/categoryPolicy";
 import {
   choosePersistedTaskAttachmentFiles,
   createPersistedCategory,
@@ -237,8 +238,13 @@ export default function App() {
   const projectCategories = useMemo(() => categories.filter((category) => category.categoryType === "project"), [categories]);
   const areaCategories = useMemo(() => categories.filter((category) => category.categoryType === "area"), [categories]);
   const projectOptions = useMemo(
-    () => orderProjectNames(projectCategories.filter((project) => !project.hidden).map((project) => project.name)),
-    [projectCategories]
+    () =>
+      orderProjectNames(
+        projectCategories
+          .filter((project) => !project.hidden || isNotionSyncedProjectReadOnly(project, appSettings.catalogSourceMode))
+          .map((project) => project.name)
+      ),
+    [appSettings.catalogSourceMode, projectCategories]
   );
   const areaOptions = useMemo(() => areaCategories.filter((area) => !area.hidden).map((area) => area.name), [areaCategories]);
 
@@ -540,6 +546,9 @@ export default function App() {
   }
 
   async function updateCategory(categoryId: string, patch: Partial<Pick<Category, "hidden" | "name">>) {
+    const currentCategory = categories.find((category) => category.id === categoryId);
+    if (currentCategory && isNotionSyncedProjectReadOnly(currentCategory, appSettings.catalogSourceMode)) return;
+
     const nextPatch: Partial<Pick<Category, "hidden" | "name">> = {};
     if (patch.name !== undefined) {
       const nextName = patch.name.trim();
@@ -563,6 +572,9 @@ export default function App() {
   }
 
   async function deleteCategory(categoryId: string) {
+    const currentCategory = categories.find((category) => category.id === categoryId);
+    if (currentCategory && isNotionSyncedProjectReadOnly(currentCategory, appSettings.catalogSourceMode)) return;
+
     if (usesTauriPersistence) {
       const deleted = await deletePersistedCategory(categoryId);
       if (!deleted) return;
