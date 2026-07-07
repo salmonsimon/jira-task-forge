@@ -1,9 +1,10 @@
 import { Check, ChevronDown, ChevronLeft, ExternalLink, Info, KeyRound, RefreshCw } from "lucide-react";
-import type { FocusEvent, MouseEvent, ReactNode } from "react";
+import type { FocusEvent, KeyboardEvent as ReactKeyboardEvent, MouseEvent, ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, FeedbackNote, LoadingOrb, PanelHeader } from "../../components/ui";
 import { appOverlayLayers, useAppOverlay } from "../../lib/app-overlays";
 import { validateJiraSiteUrlDraft } from "../../lib/domain";
+import { getModalMouseNavigationIntent, shouldHandleEnterAsWizardAdvance } from "../../lib/modal-navigation";
 import type { AppSettings, JiraConnectionTestResult, JiraProjectOption } from "../../lib/types";
 
 type GuideStep = "site" | "account" | "token" | "verify" | "project" | "review";
@@ -76,7 +77,7 @@ export function JiraConnectionGuide({
   onSaveJiraApiToken: (token: string) => Promise<boolean>;
   onDeleteJiraApiToken: () => void;
   onTestConnection: (siteUrl: string, accountEmail: string) => Promise<JiraConnectionTestResult>;
-  onTestJiraApiToken: (token: string) => Promise<JiraConnectionTestResult>;
+  onTestJiraApiToken: (token: string, siteUrl: string, accountEmail: string) => Promise<JiraConnectionTestResult>;
   onListProjects: (siteUrl: string, accountEmail: string) => Promise<JiraProjectOption[]>;
   onOpenJiraApiTokens: () => void;
   onClose: () => void;
@@ -148,7 +149,7 @@ export function JiraConnectionGuide({
     if (!siteUrlValidation.ok || !accountEmail) return;
     setJiraTokenStatus("testing");
     setJiraTokenMessage(null);
-    const result = token ? await onTestJiraApiToken(token) : await onTestConnection(siteUrlValidation.value, accountEmail);
+    const result = token ? await onTestJiraApiToken(token, siteUrlValidation.value, accountEmail) : await onTestConnection(siteUrlValidation.value, accountEmail);
     setJiraTokenStatus(result.ok ? "success" : "failed");
     setJiraTokenMessage(result.message);
   }
@@ -217,6 +218,39 @@ export function JiraConnectionGuide({
     setSaveError("Could not save Jira connection settings.");
   }
 
+  function handleWizardEnter(event: ReactKeyboardEvent<HTMLElement>) {
+    if (event.key !== "Enter" || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+    if (!shouldHandleEnterAsWizardAdvance(event.target)) return;
+    if (step === "review") {
+      if (!canContinue || isSaving) return;
+      event.preventDefault();
+      void saveConnection();
+      return;
+    }
+    if (!canContinue) return;
+    event.preventDefault();
+    moveNext();
+  }
+
+  function handleModalMouseUp(event: MouseEvent<HTMLElement>) {
+    const intent = getModalMouseNavigationIntent(event.button, {
+      canGoBack: currentStepIndex > 0,
+      canGoForward: step === "review" ? canContinue && !isSaving : canContinue
+    });
+    if (!intent) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (intent === "back") {
+      moveBack();
+      return;
+    }
+    if (step === "review") {
+      void saveConnection();
+      return;
+    }
+    moveNext();
+  }
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(9,30,66,0.54)] px-4"
@@ -233,7 +267,9 @@ export function JiraConnectionGuide({
         className="flex max-h-[86vh] w-full max-w-[800px] flex-col overflow-hidden rounded border border-[#c1c7d0] bg-white shadow-2xl"
         {...overlay.surfaceProps}
         onAuxClick={preventMouseNavigation}
+        onKeyDown={handleWizardEnter}
         onMouseDown={preventMouseNavigation}
+        onMouseUp={handleModalMouseUp}
       >
         <PanelHeader
           title={showPrivacyDetails ? "Privacy & Diagnostics" : "Set Jira Connection"}
