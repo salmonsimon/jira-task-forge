@@ -285,10 +285,10 @@ Recommended next implementation:
   and Epic Scope model. The QA cases require credentialed Jira writes in
   `JTFTEST`, DTS read-only reference checks, payload verification, sync audit
   verification, and evidence under `docs/live-qa-results/`.
-- Issue #179: document the minimum contract for the Notion catalog sync source
-  before packaging, using the current Notion page as the reference example while
-  keeping the contract portable to Obsidian, Markdown, or another structured
-  source.
+- Issue #179: verify the linked Notion catalog sync source reference before
+  packaging. The minimum contract now lives in
+  [`docs/notion-catalog-source-requirements.md`](notion-catalog-source-requirements.md)
+  and the stable Notion reference linked from that doc.
 - Issue #153: package the Windows app and choose/apply the final icon after
   Issue #138, Issue #139, and Issue #179, so the shareable build reflects the
   reviewed docs, live QA evidence, and catalog-source maintenance reference.
@@ -614,7 +614,7 @@ Roadmap cleanup status after PR #175 and issue review:
   future agents from relaunching already-merged workflow model work.
 - Issue #139 remains open until the landed workflow receives credentialed
   JTFTEST write QA evidence.
-- Issue #179 is open to document the minimum Notion catalog sync source contract
+- Issue #179 is open to review the linked Notion catalog sync source contract
   before packaging, including what must be preserved if the source is moved to
   Obsidian or another structured store.
 
@@ -623,7 +623,7 @@ Recommended AFK batches from the current open issues:
 Batch 1: validation and release preparation.
 Issues: Issue #139, Issue #179, and Issue #153.
 Scope: run live JTFTEST workflow QA for the landed Story/Bug template and Epic
-Scope behavior, document the Notion catalog source contract, then package the
+Scope behavior, review the Notion catalog source contract, then package the
 Windows app and apply the final icon after QA/docs are current. These are
 sequential, not parallel, because packaging should reflect the QA'd workflow and
 the documented sync-source maintenance path.
@@ -670,8 +670,8 @@ Branch:
 
 Deliverables:
 
-- Issue #179: document the minimum Notion catalog sync source contract and link
-  it from the relevant JTF docs.
+- Issue #179: review the linked Notion catalog sync source contract before
+  packaging.
 - Issue #153: package the Windows app and apply the final icon after QA/docs and
   catalog-source docs are current.
 

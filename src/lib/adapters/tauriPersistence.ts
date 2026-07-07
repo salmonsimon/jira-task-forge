@@ -396,6 +396,10 @@ export async function openPersistedNotionDevelopersPage(): Promise<void> {
   await invoke("open_notion_developers_page");
 }
 
+export async function openPersistedNotionCatalogSourceRequirementsPage(): Promise<void> {
+  await invoke("open_notion_catalog_source_requirements_page");
+}
+
 export async function openPersistedJiraIssueUrl(url: string): Promise<void> {
   await invoke("open_jira_issue_url", { url });
 }

@@ -7,6 +7,7 @@ import type { AppSettings, NotionCatalogConnectionTestResult } from "../../lib/t
 
 const notionDeveloperPortalUrl = "https://app.notion.com/developers/connections";
 export const defaultNotionCatalogUrl = "https://app.notion.com/p/capacitacion-interna-dts/JTF-Sync-Catalog-387c335aece481c292baf6991a86a5c3";
+export const notionCatalogSourceRequirementsUrl = "https://app.notion.com/p/395c335aece48144b2dbe2cc2e0de298";
 
 type NotionStep = "source" | "token" | "review";
 
@@ -27,6 +28,7 @@ export function NotionSynchronizationGuide({
   onChangeCatalogSettings,
   onClose,
   onDeleteNotionIntegrationToken,
+  onOpenCatalogSourceRequirements,
   onOpenNotionDevelopers,
   onSaveNotionIntegrationToken,
   onTestNotionCatalogConnection
@@ -36,6 +38,7 @@ export function NotionSynchronizationGuide({
   onChangeCatalogSettings: (settings: Partial<AppSettings>) => Promise<boolean>;
   onClose: () => void;
   onDeleteNotionIntegrationToken: () => Promise<void>;
+  onOpenCatalogSourceRequirements: () => void;
   onOpenNotionDevelopers: () => void;
   onSaveNotionIntegrationToken: (token: string) => Promise<void>;
   onTestNotionCatalogConnection: (pageUrlOrId: string) => Promise<NotionCatalogConnectionTestResult>;
@@ -189,15 +192,26 @@ export function NotionSynchronizationGuide({
             <GuideSection title="Catalog source" description="Choose whether Areas are managed locally or synced from the Notion catalog. Manual catalog saves immediately and skips external setup.">
               <SourceModeSelect label="Catalog mode" value={mode} options={catalogModeOptions} onChange={setMode} />
               {mode !== "manual" ? (
-                <GuideInput
-                  label="Notion page URL or ID"
-                  placeholder={defaultNotionCatalogUrl}
-                  value={sourceUrl}
-                  onChange={(value) => {
-                    setSourceUrl(value);
-                    setTestResult(null);
-                  }}
-                />
+                <>
+                  <GuideInput
+                    label="Notion page URL or ID"
+                    placeholder={defaultNotionCatalogUrl}
+                    value={sourceUrl}
+                    onChange={(value) => {
+                      setSourceUrl(value);
+                      setTestResult(null);
+                    }}
+                  />
+                  <Button
+                    className="settings-button-secondary"
+                    icon={<ExternalLink size={13} />}
+                    title={notionCatalogSourceRequirementsUrl}
+                    variant="secondary"
+                    onClick={onOpenCatalogSourceRequirements}
+                  >
+                    View source requirements
+                  </Button>
+                </>
               ) : (
                 <FeedbackNote variant="warning">Manual catalog keeps Areas editable in Categories. No Notion token, page URL, or connection test is needed.</FeedbackNote>
               )}

@@ -9,6 +9,8 @@ use crate::services::AppServices;
 const ATLASSIAN_API_TOKENS_URL: &str =
     "https://id.atlassian.com/manage-profile/security/api-tokens";
 const NOTION_DEVELOPERS_URL: &str = "https://app.notion.com/developers/connections";
+const NOTION_CATALOG_SOURCE_REQUIREMENTS_URL: &str =
+    "https://app.notion.com/p/395c335aece48144b2dbe2cc2e0de298";
 
 #[tauri::command]
 pub fn open_atlassian_api_tokens_page() -> Result<(), String> {
@@ -23,6 +25,11 @@ pub fn open_ai_provider_api_keys_page(ai_provider: String) -> Result<(), String>
 #[tauri::command]
 pub fn open_notion_developers_page() -> Result<(), String> {
     open_external_url(NOTION_DEVELOPERS_URL)
+}
+
+#[tauri::command]
+pub fn open_notion_catalog_source_requirements_page() -> Result<(), String> {
+    open_external_url(NOTION_CATALOG_SOURCE_REQUIREMENTS_URL)
 }
 
 #[tauri::command]

@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { AppSettings } from "../../lib/types";
-import { catalogModeOptions, NotionSynchronizationGuide } from "./NotionSynchronizationGuide";
+import { catalogModeOptions, notionCatalogSourceRequirementsUrl, NotionSynchronizationGuide } from "./NotionSynchronizationGuide";
 
 const settings: AppSettings = {
   themeMode: "light",
@@ -25,6 +25,7 @@ describe("NotionSynchronizationGuide", () => {
         onChangeCatalogSettings={async () => true}
         onClose={() => undefined}
         onDeleteNotionIntegrationToken={async () => undefined}
+        onOpenCatalogSourceRequirements={() => undefined}
         onOpenNotionDevelopers={() => undefined}
         onSaveNotionIntegrationToken={async () => undefined}
         onTestNotionCatalogConnection={async () => ({
@@ -40,6 +41,9 @@ describe("NotionSynchronizationGuide", () => {
     expect(html).toContain("Catalog source");
     expect(html).toContain("Catalog mode");
     expect(html).toContain("Notion page URL or ID");
+    expect(html).toContain("View source requirements");
+    expect(html).toContain(`title="${notionCatalogSourceRequirementsUrl}"`);
+    expect(html).not.toContain(`href="${notionCatalogSourceRequirementsUrl}"`);
     expect(html).not.toContain("New integration token");
     expect(html.indexOf("1. Source")).toBeLessThan(html.indexOf("2. Token"));
   });
@@ -52,6 +56,7 @@ describe("NotionSynchronizationGuide", () => {
         onChangeCatalogSettings={async () => true}
         onClose={() => undefined}
         onDeleteNotionIntegrationToken={async () => undefined}
+        onOpenCatalogSourceRequirements={() => undefined}
         onOpenNotionDevelopers={() => undefined}
         onSaveNotionIntegrationToken={async () => undefined}
         onTestNotionCatalogConnection={async () => ({
@@ -75,6 +80,7 @@ describe("NotionSynchronizationGuide", () => {
         onChangeCatalogSettings={async () => true}
         onClose={() => undefined}
         onDeleteNotionIntegrationToken={async () => undefined}
+        onOpenCatalogSourceRequirements={() => undefined}
         onOpenNotionDevelopers={() => undefined}
         onSaveNotionIntegrationToken={async () => undefined}
         onTestNotionCatalogConnection={async () => ({
@@ -93,6 +99,7 @@ describe("NotionSynchronizationGuide", () => {
     expect(html).not.toContain("2. Token");
     expect(html).not.toContain("3. Review");
     expect(html).not.toContain("Notion page URL or ID");
+    expect(html).not.toContain("View source requirements");
     expect(html).not.toContain("New integration token");
     expect(html).not.toContain("Test source");
   });
