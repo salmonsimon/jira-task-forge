@@ -204,15 +204,6 @@ export function getDeliveryFormatGateForArea(areaInput: string, descriptionOrDel
   }
 
   const options = getMappedDeliveryFormats(catalogArea);
-  if (options.length === 1) {
-    return {
-      kind: "auto",
-      areaDisplayName: catalogArea.areaDisplayName,
-      format: options[0],
-      options
-    };
-  }
-
   return {
     kind: "needs_confirmation",
     areaDisplayName: catalogArea.areaDisplayName,

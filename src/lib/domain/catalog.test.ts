@@ -75,9 +75,9 @@ describe("official area catalog", () => {
 
   it("requires a delivery-format confirmation instead of silently falling back for multi-format areas", () => {
     expect(getDeliveryFormatGateForArea("Programación")).toEqual({
-      kind: "auto",
+      kind: "needs_confirmation",
       areaDisplayName: "Programación",
-      format: "Feature de Programación",
+      suggestedFormat: null,
       options: ["Feature de Programación"]
     });
 

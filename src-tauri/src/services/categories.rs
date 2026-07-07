@@ -165,17 +165,6 @@ impl AppServices {
                 description_or_deliverable,
             ));
         }
-        if options.len() == 1 {
-            return Ok(DeliveryFormatGateResult {
-                kind: "auto".to_string(),
-                area_display_name: area.trim().to_string(),
-                format: options.first().cloned(),
-                suggested_format: None,
-                options,
-                message: None,
-            });
-        }
-
         Ok(DeliveryFormatGateResult {
             kind: "needs_confirmation".to_string(),
             area_display_name: area.trim().to_string(),

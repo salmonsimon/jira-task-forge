@@ -251,6 +251,7 @@ Do not invent product behavior, implementation scope, or acceptance criteria. \
 Do not add validation, risk, rollback, observability, open-question, suggested-subtask, or subtasks sections. \
 When synced Notion catalog template context is present, treat its minimum deliverable and review checklist as mandatory requirements for the draft. The description must always end with the final sections ## Entregable mínimo and ## Checklist antes de Review, in that order. \
 Catalog template headings are content requirements only; map them into the Target Markdown format and never replace the Target Markdown format headings. \
+When only fallback official catalog context is present, use its delivery format as classification only. Do not invent minimum-deliverable or review-checklist requirements from the area name, delivery format, UE5 defaults, or asset assumptions. \
 Prefer drafting over asking for clarification when the title, area, and user context describe a concrete problem or desired outcome. \
 Do not ask about known defaults from the base context, such as the engine or primary stack. \
 When no synced catalog template guidance exists for a manual or custom Area, do not invent area-specific delivery requirements, review checklist items, or synced catalog context; ask concise clarification questions when user input is needed to make those sections honest. \

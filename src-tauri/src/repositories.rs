@@ -2025,7 +2025,7 @@ impl<'connection> AssistedDescriptionProposalRepository<'connection> {
             if let Some(status) = status {
                 section.status = status;
             }
-            if proposed_content_changed {
+            if proposed_content_changed || reviewer_comment.is_some() {
                 section.reviewer_comment = reviewer_comment
                     .clone()
                     .or_else(|| section.reviewer_comment.clone());
@@ -2075,9 +2075,17 @@ impl<'connection> AssistedDescriptionProposalRepository<'connection> {
         };
 
         let now = utc_now_string()?;
-        if status == AssistedDescriptionProposalStatus::Accepted {
+        let accepted_remaining_sections = reviewer_comment
+            .is_some_and(|comment| comment.trim().eq_ignore_ascii_case("Accepted remaining proposal sections."));
+        if status == AssistedDescriptionProposalStatus::Accepted
+            || (status == AssistedDescriptionProposalStatus::Partial
+                && apply_to_task_description
+                && accepted_remaining_sections)
+        {
             for section in &mut proposal.sections {
-                if !section.proposed_content.trim().is_empty() {
+                if !section.proposed_content.trim().is_empty()
+                    && !is_rejected_proposal_section(section.reviewer_comment.as_deref())
+                {
                     section.status = DescriptionSectionStatus::Polished;
                     section.updated_at = Some(now.clone());
                 }
@@ -2198,6 +2206,28 @@ impl<'connection> AssistedDescriptionProposalRepository<'connection> {
         let detail_json = serde_json::to_string(&detail)
             .map_err(|error| DbError::InvalidData(error.to_string()))?;
         let user_comment = normalize_optional_text(user_comment);
+        let duplicate_count: i64 = self.connection.query_row(
+            "
+            SELECT COUNT(*)
+            FROM description_proposal_log_entries
+            WHERE proposal_id = ?1
+              AND event_type = ?2
+              AND status = ?3
+              AND COALESCE(user_comment, '') = COALESCE(?4, '')
+              AND detail_json = ?5
+            ",
+            params![
+                proposal.id.as_str(),
+                event_type,
+                proposal.status.as_db_value(),
+                user_comment.as_deref(),
+                detail_json.as_str()
+            ],
+            |row| row.get(0),
+        )?;
+        if duplicate_count > 0 {
+            return Ok(());
+        }
 
         self.connection.execute(
             "
@@ -2746,6 +2776,12 @@ fn polished_section_count(sections: &[AssistedDescriptionProposalSection]) -> us
                 && !section.proposed_content.trim().is_empty()
         })
         .count()
+}
+
+fn is_rejected_proposal_section(reviewer_comment: Option<&str>) -> bool {
+    reviewer_comment
+        .map(str::trim)
+        .is_some_and(|comment| comment.to_lowercase().starts_with("rejected "))
 }
 
 fn normalize_optional_text(value: Option<&str>) -> Option<String> {
@@ -4265,6 +4301,20 @@ mod tests {
         assert_eq!(log[2].status, AssistedDescriptionProposalStatus::Accepted);
         assert_eq!(log[2].provider.as_deref(), Some("OpenAI"));
         assert_eq!(log[2].model.as_deref(), Some("gpt-4.1"));
+
+        repository
+            .transition(
+                &proposal.id,
+                AssistedDescriptionProposalStatus::Accepted,
+                Some("Accepted after review."),
+                true,
+            )
+            .expect("duplicate transition is ignored in log")
+            .expect("proposal exists");
+        let deduped_log = repository
+            .list_log_for_task(&task.id)
+            .expect("proposal log lists after duplicate transition");
+        assert_eq!(deduped_log.len(), 3);
     }
 
     #[test]
@@ -4321,6 +4371,90 @@ mod tests {
             problem.reviewer_comment.as_deref(),
             Some("Leave this section empty.")
         );
+    }
+
+    #[test]
+    fn accepting_remaining_proposal_sections_keeps_rejected_sections_out_of_description() {
+        let connection = open_in_memory_database().expect("database opens");
+        let tray = TrayRepository::new(&connection)
+            .create(NewTray {
+                name: "Partial proposal tray".to_string(),
+            })
+            .expect("tray creates");
+        let task = TaskRepository::new(&connection)
+            .create(NewTask {
+                tray_id: tray.id,
+                project: "STT".to_string(),
+                area: "3D".to_string(),
+                title: "Maquinas expendedoras".to_string(),
+                priority: "Medium".to_string(),
+                issue_type: "Story".to_string(),
+                content_language: "Spanish".to_string(),
+            })
+            .expect("task creates");
+        let repository = AssistedDescriptionProposalRepository::new(&connection);
+        let proposal = repository
+            .create(NewAssistedDescriptionProposal {
+                task_id: task.id.clone(),
+                title: Some("Mixed proposal".to_string()),
+                summary: None,
+                provider: None,
+                model: None,
+                user_comment: None,
+                sections: vec![
+                    proposal_section("user_story", "Historia aceptada."),
+                    proposal_section("problem", "Contexto rechazado."),
+                ],
+            })
+            .expect("proposal creates");
+
+        repository
+            .update_section(
+                &proposal.id,
+                "problem",
+                None,
+                Some(DescriptionSectionStatus::Raw),
+                Some("Rejected Context."),
+                false,
+            )
+            .expect("section rejection persists")
+            .expect("proposal exists");
+        let accepted_remaining = repository
+            .transition(
+                &proposal.id,
+                AssistedDescriptionProposalStatus::Partial,
+                Some("Accepted remaining proposal sections."),
+                true,
+            )
+            .expect("remaining sections accept")
+            .expect("proposal exists");
+
+        assert_eq!(
+            accepted_remaining
+                .sections
+                .iter()
+                .find(|section| section.section_id == "user_story")
+                .expect("user story exists")
+                .status,
+            DescriptionSectionStatus::Polished
+        );
+        assert_eq!(
+            accepted_remaining
+                .sections
+                .iter()
+                .find(|section| section.section_id == "problem")
+                .expect("problem exists")
+                .status,
+            DescriptionSectionStatus::Raw
+        );
+
+        let task = TaskRepository::new(&connection)
+            .find_by_id(&task.id)
+            .expect("task reloads")
+            .expect("task exists");
+        let description = task.description.expect("description applied");
+        assert!(description.contains("Historia aceptada."));
+        assert!(!description.contains("Contexto rechazado."));
     }
 
     #[test]

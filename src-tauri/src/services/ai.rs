@@ -59,48 +59,31 @@ impl AppServices {
                 .catalog_delivery_format_options_for_area(&task.area)
                 .map_err(|error| format!("Could not load catalog delivery formats: {error}"))?;
 
-            if let Some(delivery_format) = delivery_format {
-                category_repository
-                    .catalog_template_context_for_confirmed_delivery_format(
-                        &task.area,
-                        delivery_format,
-                    )
-                    .map_err(|error| format!("Could not load catalog template context: {error}"))?
-                    .or_else(|| {
-                        area_catalog::catalog_context_for_confirmed_delivery_format(
-                            &task.area,
-                            delivery_format,
-                        )
-                        .ok()
-                    })
-            } else if synced_options.len() > 1 {
+            let Some(delivery_format) = delivery_format else {
                 return Err(
                     "Choose a delivery format before generating a description proposal."
                         .to_string(),
                 );
-            } else if let Some(single_format) = synced_options.first() {
+            };
+
+            if !synced_options.is_empty() {
                 category_repository
-                    .catalog_template_context_for_confirmed_delivery_format(
-                        &task.area,
-                        single_format,
-                    )
+                    .catalog_template_context_for_confirmed_delivery_format(&task.area, delivery_format)
                     .map_err(|error| format!("Could not load catalog template context: {error}"))?
             } else {
                 let fallback_options =
                     area_catalog::catalog_delivery_format_options_for_area(&task.area);
-                if fallback_options.len() > 1 {
+                if fallback_options.is_empty() {
                     return Err(
-                        "Choose a delivery format before generating a description proposal."
+                        "Choose an official catalog area before generating a description proposal."
                             .to_string(),
                     );
                 }
-                fallback_options.first().and_then(|single_format| {
-                    area_catalog::catalog_context_for_confirmed_delivery_format(
-                        &task.area,
-                        single_format,
-                    )
-                    .ok()
-                })
+                area_catalog::catalog_context_for_confirmed_delivery_format(
+                    &task.area,
+                    delivery_format,
+                )
+                .ok()
             }
         };
 

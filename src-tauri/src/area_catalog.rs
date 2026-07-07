@@ -628,17 +628,6 @@ pub fn catalog_delivery_format_gate_for_area(
         }
     };
     let options = catalog_delivery_format_options_for_area(&area_display_name);
-    if options.len() == 1 {
-        return DeliveryFormatGateResult {
-            kind: "auto".to_string(),
-            area_display_name,
-            format: options.first().cloned(),
-            suggested_format: None,
-            options,
-            message: None,
-        };
-    }
-
     DeliveryFormatGateResult {
         kind: "needs_confirmation".to_string(),
         area_display_name,
@@ -718,6 +707,9 @@ fn catalog_context_for_resolved_area_with_format(
         format!("- Official area display name: {area_display_name}"),
         format!("- Jira label: {jira_label}"),
         format!("- Delivery format: {delivery_format}"),
+        "- Synced delivery template: unavailable in fallback catalog context.".to_string(),
+        "- Minimum deliverable guidance: unavailable; do not invent area-specific requirements.".to_string(),
+        "- Review checklist guidance: unavailable; keep checklist items minimal and based only on task context.".to_string(),
         format!(
             "- Issue type derivation: {}",
             derive_issue_type_from_area(area_display_name)
@@ -982,7 +974,8 @@ fn normalize_catalog_char(ch: char) -> char {
 mod tests {
     use super::{
         catalog_context_for_area, catalog_context_for_confirmed_delivery_format,
-        catalog_delivery_format_options_for_area, derive_issue_type_from_area,
+        catalog_delivery_format_gate_for_area, catalog_delivery_format_options_for_area,
+        derive_issue_type_from_area,
         extract_exportable_catalog_json_from_notion_blocks, notion_page_id_from_input,
         official_area_options, parse_exportable_catalog_json, resolve_catalog_area,
         CatalogAreaResolution, OfficialAreaOption, OFFICIAL_AREAS,
@@ -1028,6 +1021,13 @@ mod tests {
 
     #[test]
     fn requires_confirmed_delivery_format_for_multi_format_fallback_area() {
+        let single_format_gate = catalog_delivery_format_gate_for_area("Programación", "");
+        assert_eq!(single_format_gate.kind, "needs_confirmation");
+        assert_eq!(
+            single_format_gate.options,
+            vec!["Feature de Programación".to_string()]
+        );
+
         let options = catalog_delivery_format_options_for_area("Arquitectura");
 
         assert_eq!(
