@@ -11,6 +11,10 @@ export function getModalMouseNavigationIntent(button: number, navigation: ModalM
   return null;
 }
 
+export function isMouseNavigationButton(button: number): boolean {
+  return button === 3 || button === 4;
+}
+
 export function shouldHandleEnterAsWizardAdvance(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return true;
   if (target instanceof HTMLTextAreaElement) return false;
@@ -19,7 +23,6 @@ export function shouldHandleEnterAsWizardAdvance(target: EventTarget | null): bo
   return true;
 }
 
-export function isEventInsideTopmostOverlaySurface(event: MouseEvent): boolean {
-  const surface = appOverlayStack.getTopmostOverlay()?.getSurfaceElement?.();
-  return Boolean(surface && event.target instanceof Node && surface.contains(event.target));
+export function hasOpenAppOverlay(): boolean {
+  return appOverlayStack.size() > 0;
 }

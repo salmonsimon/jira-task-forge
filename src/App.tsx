@@ -14,7 +14,7 @@ import { TaskFocusWindow } from "./features/task-detail";
 import { TraysView, useTrayWorkspace } from "./features/trays";
 import { mockAppDataAdapter } from "./lib/adapters";
 import { appOverlayLayers, useAppOverlay } from "./lib/app-overlays";
-import { isEventInsideTopmostOverlaySurface } from "./lib/modal-navigation";
+import { hasOpenAppOverlay, isMouseNavigationButton } from "./lib/modal-navigation";
 import {
   choosePersistedTaskAttachmentFiles,
   createPersistedCategory,
@@ -1499,7 +1499,7 @@ export default function App() {
 
   useEffect(() => {
     function handleSecondaryMouseNavigation(event: MouseEvent) {
-      if (isEventInsideTopmostOverlaySurface(event)) return;
+      if (isMouseNavigationButton(event.button) && hasOpenAppOverlay()) return;
 
       if (event.button === 3) {
         if (openPanel === "detail") {

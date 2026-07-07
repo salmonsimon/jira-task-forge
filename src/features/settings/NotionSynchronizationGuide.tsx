@@ -3,7 +3,7 @@ import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, FeedbackNote, LoadingOrb, PanelHeader } from "../../components/ui";
 import { appOverlayLayers, useAppOverlay } from "../../lib/app-overlays";
-import { getModalMouseNavigationIntent, shouldHandleEnterAsWizardAdvance } from "../../lib/modal-navigation";
+import { getModalMouseNavigationIntent, isMouseNavigationButton, shouldHandleEnterAsWizardAdvance } from "../../lib/modal-navigation";
 import type { AppSettings, NotionCatalogConnectionTestResult } from "../../lib/types";
 
 const notionDeveloperPortalUrl = "https://app.notion.com/developers/connections";
@@ -196,9 +196,15 @@ export function NotionSynchronizationGuide({
       className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(9,30,66,0.54)] px-4"
       {...overlay.backdropProps}
       onMouseDown={(event) => {
+        if (isMouseNavigationButton(event.button)) {
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
         if (event.target !== event.currentTarget) return;
         onClose();
       }}
+      onMouseUp={handleModalMouseUp}
     >
       <section
         ref={surfaceRef}

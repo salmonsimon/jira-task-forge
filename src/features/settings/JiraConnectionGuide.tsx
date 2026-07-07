@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, FeedbackNote, LoadingOrb, PanelHeader } from "../../components/ui";
 import { appOverlayLayers, useAppOverlay } from "../../lib/app-overlays";
 import { validateJiraSiteUrlDraft } from "../../lib/domain";
-import { getModalMouseNavigationIntent, shouldHandleEnterAsWizardAdvance } from "../../lib/modal-navigation";
+import { getModalMouseNavigationIntent, isMouseNavigationButton, shouldHandleEnterAsWizardAdvance } from "../../lib/modal-navigation";
 import type { AppSettings, JiraConnectionTestResult, JiraProjectOption } from "../../lib/types";
 
 type GuideStep = "site" | "account" | "token" | "verify" | "project" | "review";
@@ -261,6 +261,7 @@ export function JiraConnectionGuide({
         if (event.defaultPrevented || event.target !== event.currentTarget) return;
         onClose();
       }}
+      onMouseUp={handleModalMouseUp}
     >
       <section
         ref={surfaceRef}
@@ -641,7 +642,7 @@ function closeProjectSelectOnBlur(event: FocusEvent<HTMLDivElement>, onOpenChang
 }
 
 function preventMouseNavigation(event: MouseEvent<HTMLElement>) {
-  if (event.button !== 3 && event.button !== 4) return;
+  if (!isMouseNavigationButton(event.button)) return;
   event.preventDefault();
   event.stopPropagation();
 }

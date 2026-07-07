@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { getModalMouseNavigationIntent, shouldHandleEnterAsWizardAdvance } from "./modal-navigation";
+import { getModalMouseNavigationIntent, isMouseNavigationButton, shouldHandleEnterAsWizardAdvance } from "./modal-navigation";
 
 describe("modal navigation helpers", () => {
   it("maps mouse side buttons only when the active modal can move in that direction", () => {
@@ -8,6 +8,14 @@ describe("modal navigation helpers", () => {
     expect(getModalMouseNavigationIntent(3, { canGoBack: false, canGoForward: true })).toBeNull();
     expect(getModalMouseNavigationIntent(4, { canGoBack: true, canGoForward: false })).toBeNull();
     expect(getModalMouseNavigationIntent(0, { canGoBack: true, canGoForward: true })).toBeNull();
+  });
+
+  it("identifies browser back and forward mouse buttons", () => {
+    expect(isMouseNavigationButton(3)).toBe(true);
+    expect(isMouseNavigationButton(4)).toBe(true);
+    expect(isMouseNavigationButton(0)).toBe(false);
+    expect(isMouseNavigationButton(1)).toBe(false);
+    expect(isMouseNavigationButton(2)).toBe(false);
   });
 
   it("keeps Enter navigation out of real textareas and buttons", () => {
