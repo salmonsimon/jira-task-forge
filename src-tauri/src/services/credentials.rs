@@ -7,7 +7,86 @@ pub(in crate::services) const AI_API_KEY_ACCOUNT: &str = "api-key";
 pub(in crate::services) const NOTION_CREDENTIAL_SERVICE: &str = "jira-task-forge:notion";
 pub(in crate::services) const NOTION_INTEGRATION_TOKEN_ACCOUNT: &str = "integration-token";
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(in crate::services) struct IntegrationCredentialDescriptor {
+    pub label: &'static str,
+    pub service: &'static str,
+    pub account: &'static str,
+    pub windows_target: &'static str,
+}
+
+pub(in crate::services) fn integration_credential_descriptors(
+) -> &'static [IntegrationCredentialDescriptor] {
+    &[
+        IntegrationCredentialDescriptor {
+            label: "Jira API token",
+            service: JIRA_CREDENTIAL_SERVICE,
+            account: JIRA_API_TOKEN_ACCOUNT,
+            windows_target: "api-token.jira-task-forge:jira",
+        },
+        IntegrationCredentialDescriptor {
+            label: "OpenAI API key",
+            service: "jira-task-forge:openai",
+            account: AI_API_KEY_ACCOUNT,
+            windows_target: "api-key.jira-task-forge:openai",
+        },
+        IntegrationCredentialDescriptor {
+            label: "Claude API key",
+            service: "jira-task-forge:claude",
+            account: AI_API_KEY_ACCOUNT,
+            windows_target: "api-key.jira-task-forge:claude",
+        },
+        IntegrationCredentialDescriptor {
+            label: "Gemini API key",
+            service: "jira-task-forge:gemini",
+            account: AI_API_KEY_ACCOUNT,
+            windows_target: "api-key.jira-task-forge:gemini",
+        },
+        IntegrationCredentialDescriptor {
+            label: "Notion integration token",
+            service: NOTION_CREDENTIAL_SERVICE,
+            account: NOTION_INTEGRATION_TOKEN_ACCOUNT,
+            windows_target: "integration-token.jira-task-forge:notion",
+        },
+    ]
+}
+
+pub(in crate::services) fn windows_credential_manager_target(
+    service: &str,
+    account: &str,
+) -> String {
+    format!("{account}.{service}")
+}
+
 impl AppServices {
+    pub fn delete_all_integration_credentials(&self) -> Result<(), String> {
+        let mut failures = Vec::new();
+
+        for descriptor in integration_credential_descriptors() {
+            let entry =
+                keyring::Entry::new(descriptor.service, descriptor.account).map_err(|error| {
+                    format!(
+                        "Could not open OS credential store for {}: {error}",
+                        descriptor.label
+                    )
+                })?;
+
+            match entry.delete_credential() {
+                Ok(()) | Err(keyring::Error::NoEntry) => {}
+                Err(error) => failures.push(format!("{}: {error}", descriptor.label)),
+            }
+        }
+
+        if failures.is_empty() {
+            Ok(())
+        } else {
+            Err(format!(
+                "Could not remove all integration credentials: {}",
+                failures.join("; ")
+            ))
+        }
+    }
+
     pub fn has_jira_api_token(&self) -> Result<bool, keyring::Error> {
         let entry = keyring::Entry::new(JIRA_CREDENTIAL_SERVICE, JIRA_API_TOKEN_ACCOUNT)?;
         match entry.get_password() {
@@ -129,6 +208,47 @@ impl AppServices {
                 Err("Save a Notion integration token before syncing the catalog.".to_string())
             }
             Err(error) => Err(format!("Could not read Notion token: {error}")),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        integration_credential_descriptors, windows_credential_manager_target, AI_API_KEY_ACCOUNT,
+        JIRA_API_TOKEN_ACCOUNT, JIRA_CREDENTIAL_SERVICE, NOTION_CREDENTIAL_SERVICE,
+        NOTION_INTEGRATION_TOKEN_ACCOUNT,
+    };
+
+    #[test]
+    fn windows_credential_manager_targets_match_keyring_convention() {
+        assert_eq!(
+            windows_credential_manager_target(JIRA_CREDENTIAL_SERVICE, JIRA_API_TOKEN_ACCOUNT),
+            "api-token.jira-task-forge:jira"
+        );
+        assert_eq!(
+            windows_credential_manager_target("jira-task-forge:openai", AI_API_KEY_ACCOUNT),
+            "api-key.jira-task-forge:openai"
+        );
+        assert_eq!(
+            windows_credential_manager_target(
+                NOTION_CREDENTIAL_SERVICE,
+                NOTION_INTEGRATION_TOKEN_ACCOUNT
+            ),
+            "integration-token.jira-task-forge:notion"
+        );
+    }
+
+    #[test]
+    fn release_uninstall_hook_covers_every_integration_credential() {
+        let hook = include_str!("../../nsis/credential-cleanup.nsh");
+        for descriptor in integration_credential_descriptors() {
+            assert!(
+                hook.contains(descriptor.windows_target),
+                "NSIS uninstall hook must remove {} credential target {}",
+                descriptor.label,
+                descriptor.windows_target
+            );
         }
     }
 }

@@ -45,6 +45,11 @@
       "icons/Square284x284Logo.png",
       "icons/Square310x310Logo.png",
       "icons/StoreLogo.png"
-    ]
+    ],
+    "windows": {
+      "nsis": {
+        "installerHooks": "nsis/credential-cleanup.nsh"
+      }
+    }
   }
 }

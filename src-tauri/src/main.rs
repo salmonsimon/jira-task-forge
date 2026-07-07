@@ -35,7 +35,13 @@ pub fn run() {
             let connection = db::open_app_database(&app_data_dir)
                 .map_err(|error| format!("failed to open app database: {error}"))?;
 
-            app.manage(AppServices::new_with_app_data_dir(connection, app_data_dir));
+            let services = AppServices::new_with_app_data_dir(connection, app_data_dir);
+            if let Err(error) = services.purge_credentials_after_app_data_reset() {
+                eprintln!(
+                    "failed to purge stale integration credentials after app data reset: {error}"
+                );
+            }
+            app.manage(services);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

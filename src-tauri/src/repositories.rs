@@ -103,6 +103,16 @@ impl<'connection> SettingsRepository<'connection> {
         serde_json::from_str(&value_json).map_err(|error| DbError::InvalidData(error.to_string()))
     }
 
+    pub fn app_settings_row_exists(&self) -> DbResult<bool> {
+        self.connection
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM settings WHERE key = ?1)",
+                [APP_SETTINGS_KEY],
+                |row| row.get(0),
+            )
+            .map_err(Into::into)
+    }
+
     pub fn update_app_settings(&self, mut settings: AppSettings) -> DbResult<AppSettings> {
         let current_settings = self.get_app_settings()?;
         if settings.jira_site_url != current_settings.jira_site_url {
@@ -4376,6 +4386,10 @@ mod tests {
         let connection = open_in_memory_database().expect("database opens");
         let repository = SettingsRepository::new(&connection);
 
+        assert!(!repository
+            .app_settings_row_exists()
+            .expect("settings row check runs"));
+
         let defaults = repository
             .get_app_settings()
             .expect("default settings load");
@@ -4403,6 +4417,9 @@ mod tests {
             repository.get_app_settings().expect("settings reload"),
             updated
         );
+        assert!(repository
+            .app_settings_row_exists()
+            .expect("settings row check runs"));
     }
 
     #[test]
