@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AssistedDescriptionProposal, NewAssistedDescriptionProposal } from "../types";
 import {
   createPersistedAssistedDescriptionProposal,
+  testPersistedNotionCatalogConnection,
   testPersistedJiraApiToken,
   transitionPersistedAssistedDescriptionProposal,
   updatePersistedAssistedDescriptionProposalSection
@@ -96,6 +97,27 @@ describe("Tauri persistence assisted description proposals", () => {
       token: "token-123",
       siteUrl: "https://example.atlassian.net",
       accountEmail: "saimon@example.com"
+    });
+  });
+
+  it("tests a draft Notion token without invoking the saved-token connection command", async () => {
+    const result = { ok: true, message: "Connected", title: "JTF Sync Catalog", extractedBlockCount: 12 };
+    invokeMock.mockResolvedValueOnce(result);
+
+    await expect(testPersistedNotionCatalogConnection("https://app.notion.com/page-id", "ntn_draft")).resolves.toEqual(result);
+    expect(invokeMock).toHaveBeenCalledWith("test_notion_catalog_connection_with_token", {
+      pageUrlOrId: "https://app.notion.com/page-id",
+      token: "ntn_draft"
+    });
+  });
+
+  it("uses the saved Notion token command when no draft token is provided", async () => {
+    const result = { ok: true, message: "Connected", title: "JTF Sync Catalog", extractedBlockCount: 12 };
+    invokeMock.mockResolvedValueOnce(result);
+
+    await expect(testPersistedNotionCatalogConnection("https://app.notion.com/page-id")).resolves.toEqual(result);
+    expect(invokeMock).toHaveBeenCalledWith("test_notion_catalog_connection", {
+      pageUrlOrId: "https://app.notion.com/page-id"
     });
   });
 });

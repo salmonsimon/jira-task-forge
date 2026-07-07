@@ -175,8 +175,12 @@ export async function applyPersistedProjectSyncDecisions(request: ProjectSyncApp
 }
 
 export async function testPersistedNotionCatalogConnection(
-  pageUrlOrId: string
+  pageUrlOrId: string,
+  token?: string
 ): Promise<NotionCatalogConnectionTestResult> {
+  if (token?.trim()) {
+    return invoke<NotionCatalogConnectionTestResult>("test_notion_catalog_connection_with_token", { pageUrlOrId, token });
+  }
   return invoke<NotionCatalogConnectionTestResult>("test_notion_catalog_connection", { pageUrlOrId });
 }
 
