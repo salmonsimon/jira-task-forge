@@ -124,6 +124,7 @@ import type {
   LocalTask,
   MainTab,
   Panel,
+  ProjectSyncDiscoveryRequest,
   SyncLogEntry,
   Tray
 } from "./lib/types";
@@ -619,7 +620,7 @@ export default function App() {
     return null;
   }
 
-  async function discoverProjectSync() {
+  async function discoverProjectSync(request?: ProjectSyncDiscoveryRequest) {
     if (!usesTauriPersistence) {
       return {
         jiraProjectKey: appSettings.jiraCreationProjectKey || "JTFTEST",
@@ -637,7 +638,7 @@ export default function App() {
       };
     }
 
-    return discoverPersistedProjectSyncCandidates();
+    return discoverPersistedProjectSyncCandidates(request);
   }
 
   async function applyProjectSync(request: Parameters<typeof applyPersistedProjectSyncDecisions>[0]) {

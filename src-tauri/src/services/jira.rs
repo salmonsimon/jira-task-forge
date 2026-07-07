@@ -177,7 +177,7 @@ impl AppServices {
         }))
     }
 
-    fn jira_client_from_raw_parts(
+    pub(in crate::services) fn jira_client_from_raw_parts(
         &self,
         site_url: &str,
         account_email: &str,
@@ -192,7 +192,7 @@ impl AppServices {
         self.jira_client_from_parts(site_url, account_email.to_string(), api_token)
     }
 
-    fn jira_api_token(&self) -> Result<String, String> {
+    pub(in crate::services) fn jira_api_token(&self) -> Result<String, String> {
         let entry = keyring::Entry::new(JIRA_CREDENTIAL_SERVICE, JIRA_API_TOKEN_ACCOUNT)
             .map_err(|error| format!("Could not open OS credential store: {error}"))?;
         match entry.get_password() {

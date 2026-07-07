@@ -249,6 +249,12 @@ export type ProjectSyncReview = {
   notes: string[];
 };
 
+export type ProjectSyncDiscoveryRequest = {
+  jiraSiteUrl: string;
+  jiraAccountEmail: string;
+  jiraCreationProjectKey: string;
+};
+
 export type ProjectSyncApplyRequest = {
   activeProjectNames: string[];
   ignoredProjectNames: string[];

@@ -2,7 +2,7 @@ import { Bot, Check, Download, KeyRound, Settings, UploadCloud } from "lucide-re
 import { useEffect, useRef, useState } from "react";
 import { Button, DetailBlock, DrawerShell, FeedbackNote, PanelHeader, SegmentedControl } from "../../components/ui";
 import { appOverlayLayers, useAppOverlay } from "../../lib/app-overlays";
-import type { AppSettings, CredentialConnectionTestResult, JiraConnectionTestResult, JiraProjectOption, NotionCatalogConnectionTestResult, ProjectSyncApplyRequest, ProjectSyncReview, ThemeMode } from "../../lib/types";
+import type { AppSettings, CredentialConnectionTestResult, JiraConnectionTestResult, JiraProjectOption, NotionCatalogConnectionTestResult, ProjectSyncApplyRequest, ProjectSyncDiscoveryRequest, ProjectSyncReview, ThemeMode } from "../../lib/types";
 import { AiProviderSetupGuide, defaultAiProviderModels } from "./AiProviderSetupGuide";
 import { JiraConnectionGuide } from "./JiraConnectionGuide";
 import notionMark from "../../assets/notion-mark.png";
@@ -58,7 +58,7 @@ export function SettingsPanel({
   onListAiProviderModels: (aiProvider: AppSettings["aiProvider"], apiKey?: string) => Promise<string[]>;
   onTestJiraApiTokenQuiet: (token: string, siteUrl: string, accountEmail: string) => Promise<JiraConnectionTestResult>;
   onTestJiraConnectionSettings: (siteUrl: string, accountEmail: string) => Promise<JiraConnectionTestResult>;
-  onDiscoverProjectSync?: () => Promise<ProjectSyncReview>;
+  onDiscoverProjectSync?: (request?: ProjectSyncDiscoveryRequest) => Promise<ProjectSyncReview>;
   onApplyProjectSync?: (request: ProjectSyncApplyRequest) => Promise<void>;
   hasNotionIntegrationToken: () => Promise<boolean>;
   onSaveNotionIntegrationToken: (token: string) => Promise<void>;

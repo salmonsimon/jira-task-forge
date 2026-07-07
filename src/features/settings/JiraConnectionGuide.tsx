@@ -5,7 +5,7 @@ import { Button, FeedbackNote, LoadingOrb, PanelHeader, ToggleSwitch } from "../
 import { appOverlayLayers, useAppOverlay } from "../../lib/app-overlays";
 import { validateJiraSiteUrlDraft } from "../../lib/domain";
 import { getModalMouseNavigationIntent, isMouseNavigationButton, shouldHandleEnterAsWizardAdvance } from "../../lib/modal-navigation";
-import type { AppSettings, JiraConnectionTestResult, JiraProjectOption, ProjectSyncApplyRequest, ProjectSyncCandidate, ProjectSyncReview } from "../../lib/types";
+import type { AppSettings, JiraConnectionTestResult, JiraProjectOption, ProjectSyncApplyRequest, ProjectSyncCandidate, ProjectSyncDiscoveryRequest, ProjectSyncReview } from "../../lib/types";
 import { mergeProjectSyncCandidates, ProjectSyncDecisionTable } from "../categories/ProjectSyncDecisionTable";
 
 type GuideStep = "site" | "account" | "token" | "verify" | "project" | "project-sync" | "review";
@@ -31,6 +31,18 @@ export const jiraConnectionGuideCopy = {
   verifyTokenReady: "Verify uses the credential saved by the Token step.",
   verifyTokenMissing: "Complete the Token step first to save a credential. Verify does not test site and email by themselves."
 };
+
+export function buildProjectSyncDiscoveryRequest(
+  jiraSiteUrl: string,
+  jiraAccountEmail: string,
+  jiraCreationProjectKey: string
+): ProjectSyncDiscoveryRequest {
+  return {
+    jiraSiteUrl,
+    jiraAccountEmail: jiraAccountEmail.trim(),
+    jiraCreationProjectKey: jiraCreationProjectKey.trim().toUpperCase()
+  };
+}
 
 export function canContinueJiraConnectionGuideStep({
   step,
@@ -85,7 +97,7 @@ export function JiraConnectionGuide({
   onTestConnection: (siteUrl: string, accountEmail: string) => Promise<JiraConnectionTestResult>;
   onTestJiraApiToken: (token: string, siteUrl: string, accountEmail: string) => Promise<JiraConnectionTestResult>;
   onListProjects: (siteUrl: string, accountEmail: string) => Promise<JiraProjectOption[]>;
-  onDiscoverProjectSync?: () => Promise<ProjectSyncReview>;
+  onDiscoverProjectSync?: (request?: ProjectSyncDiscoveryRequest) => Promise<ProjectSyncReview>;
   onApplyProjectSync?: (request: ProjectSyncApplyRequest) => Promise<void>;
   onOpenJiraApiTokens: () => void;
   initialStep?: GuideStep;
@@ -221,7 +233,9 @@ export function JiraConnectionGuide({
     setProjectSyncReviewState("loading");
     setProjectSyncReviewMessage(null);
     try {
-      const review = await onDiscoverProjectSync();
+      const review = await onDiscoverProjectSync({
+        ...buildProjectSyncDiscoveryRequest(siteUrlValidation.value, accountEmail, projectKey)
+      });
       setProjectSyncReview(review);
       setProjectSyncActiveNames(new Set(review.defaultActiveNames));
       setProjectSyncArchivedNames(new Set(review.sections.archived.map((candidate) => candidate.name)));
