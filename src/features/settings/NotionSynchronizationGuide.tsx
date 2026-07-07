@@ -1,8 +1,9 @@
-import { Check, CheckCircle2, ChevronDown, ChevronLeft, ExternalLink, KeyRound, RefreshCw, Trash2 } from "lucide-react";
-import type { ReactNode } from "react";
+import { Check, ChevronDown, ChevronLeft, ExternalLink, KeyRound, RefreshCw, Trash2 } from "lucide-react";
+import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, FeedbackNote, LoadingOrb, PanelHeader } from "../../components/ui";
 import { appOverlayLayers, useAppOverlay } from "../../lib/app-overlays";
+import { getModalMouseNavigationIntent, isMouseNavigationButton, shouldHandleEnterAsWizardAdvance } from "../../lib/modal-navigation";
 import type { AppSettings, NotionCatalogConnectionTestResult } from "../../lib/types";
 
 const notionDeveloperPortalUrl = "https://app.notion.com/developers/connections";
@@ -21,6 +22,10 @@ export const catalogModeOptions: Array<{ label: string; value: AppSettings["cata
   { label: "Sync from Notion page", value: "notion" },
   { label: "Manual catalog", value: "manual" }
 ];
+
+export function canSaveNotionSynchronization(mode: AppSettings["catalogSourceMode"], testResult: NotionCatalogConnectionTestResult | null): boolean {
+  return mode === "manual" || Boolean(testResult?.ok);
+}
 
 export function NotionSynchronizationGuide({
   settings,
@@ -61,6 +66,7 @@ export function NotionSynchronizationGuide({
     (step === "source" && (mode === "manual" || Boolean(sourceUrl.trim()))) ||
     (step === "token" && (hasToken || Boolean(tokenDraft.trim()) || mode !== "notion")) ||
     step === "review";
+  const canSaveSynchronization = canSaveNotionSynchronization(mode, testResult);
   const sourceLabel = useMemo(
     () => catalogModeOptions.find((option) => option.value === mode)?.label ?? "Unknown",
     [mode]
@@ -130,10 +136,10 @@ export function NotionSynchronizationGuide({
       if (tokenDraft.trim()) {
         await saveTokenDraft();
       }
-      await onChangeCatalogSettings({ catalogSourceMode: mode, catalogSourceUrl: mode === "manual" ? "" : sourceUrl.trim() });
       if (mode === "notion") {
         setTestResult(await onTestNotionCatalogConnection(sourceUrl.trim()));
       } else {
+        await onChangeCatalogSettings({ catalogSourceMode: mode, catalogSourceUrl: "" });
         setTestResult({
           ok: true,
           message: "Manual catalog mode is configured.",
@@ -147,8 +153,42 @@ export function NotionSynchronizationGuide({
   }
 
   async function saveAndClose() {
+    if (!canSaveSynchronization) return;
     await onChangeCatalogSettings({ catalogSourceMode: mode, catalogSourceUrl: mode === "manual" ? "" : sourceUrl.trim() });
     onClose();
+  }
+
+  function handleWizardEnter(event: ReactKeyboardEvent<HTMLElement>) {
+    if (event.key !== "Enter" || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+    if (!shouldHandleEnterAsWizardAdvance(event.target)) return;
+    if (step === "review") {
+      if (!canContinue || isTesting || !canSaveSynchronization) return;
+      event.preventDefault();
+      void saveAndClose();
+      return;
+    }
+    if (!canContinue) return;
+    event.preventDefault();
+    moveNext();
+  }
+
+  function handleModalMouseUp(event: ReactMouseEvent<HTMLElement>) {
+    const intent = getModalMouseNavigationIntent(event.button, {
+      canGoBack: currentStepIndex > 0,
+      canGoForward: step === "review" ? canContinue && !isTesting && canSaveSynchronization : canContinue
+    });
+    if (!intent) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (intent === "back") {
+      moveBack();
+      return;
+    }
+    if (step === "review") {
+      void saveAndClose();
+      return;
+    }
+    moveNext();
   }
 
   return (
@@ -156,15 +196,23 @@ export function NotionSynchronizationGuide({
       className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(9,30,66,0.54)] px-4"
       {...overlay.backdropProps}
       onMouseDown={(event) => {
+        if (isMouseNavigationButton(event.button)) {
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
         if (event.target !== event.currentTarget) return;
         onClose();
       }}
+      onMouseUp={handleModalMouseUp}
     >
       <section
         ref={surfaceRef}
         className="flex max-h-[86vh] w-full max-w-[760px] flex-col overflow-hidden rounded border border-[#c1c7d0] bg-white shadow-2xl"
         {...overlay.surfaceProps}
+        onKeyDown={handleWizardEnter}
         onMouseDown={(event) => event.stopPropagation()}
+        onMouseUp={handleModalMouseUp}
       >
         <PanelHeader title="Set Catalog Source" subtitle="Choose Manual catalog for local Areas or connect the JTF Sync Catalog page for official area sync." onClose={onClose} />
         <div className="border-b border-[#dfe1e6] bg-[#f7f8fa] px-5 py-3">
@@ -289,7 +337,7 @@ export function NotionSynchronizationGuide({
                 >
                   {isTesting ? "Testing..." : "Test source"}
                 </Button>
-                <Button className="settings-button-primary" disabled={isTesting || (mode !== "manual" && !sourceUrl.trim())} icon={<CheckCircle2 size={14} />} onClick={saveAndClose}>
+                <Button className="settings-button-primary" disabled={isTesting || !canSaveSynchronization} icon={<Check size={14} />} onClick={saveAndClose}>
                   Save synchronization
                 </Button>
               </div>
@@ -307,7 +355,7 @@ export function NotionSynchronizationGuide({
             Back
           </Button>
           {step === "review" ? (
-            <Button className="settings-button-primary" disabled={!canContinue || isTesting} icon={<Check size={14} />} onClick={saveAndClose}>
+            <Button className="settings-button-primary" disabled={!canContinue || isTesting || !canSaveSynchronization} icon={<Check size={14} />} onClick={saveAndClose}>
               Done
             </Button>
           ) : step === "source" && mode === "manual" ? (

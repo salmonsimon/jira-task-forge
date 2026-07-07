@@ -974,11 +974,22 @@ fn returns_early_jira_errors_before_keyring_or_network_work() {
         "Jira account email is required."
     );
 
-    let draft_token_result = services.test_jira_connection_with_api_token("   ");
+    let draft_token_result = services.test_jira_connection_with_api_token("   ", None, None);
     assert!(!draft_token_result.ok);
     assert_eq!(
         draft_token_result.message,
         "Jira API token cannot be empty."
+    );
+
+    let draft_email_result = services.test_jira_connection_with_api_token(
+        "token-123",
+        Some("https://salmonsimondts.atlassian.net"),
+        Some("  "),
+    );
+    assert!(!draft_email_result.ok);
+    assert_eq!(
+        draft_email_result.message,
+        "Jira account email is required."
     );
 
     services

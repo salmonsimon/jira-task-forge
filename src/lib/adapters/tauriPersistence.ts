@@ -265,8 +265,12 @@ export async function testPersistedJiraConnection(): Promise<JiraConnectionTestR
   return invoke<JiraConnectionTestResult>("test_jira_connection");
 }
 
-export async function testPersistedJiraApiToken(token: string): Promise<JiraConnectionTestResult> {
-  return invoke<JiraConnectionTestResult>("test_jira_api_token", { token });
+export async function testPersistedJiraApiToken(
+  token: string,
+  siteUrl?: string,
+  accountEmail?: string
+): Promise<JiraConnectionTestResult> {
+  return invoke<JiraConnectionTestResult>("test_jira_api_token", { token, siteUrl, accountEmail });
 }
 
 export async function testPersistedJiraConnectionSettings(

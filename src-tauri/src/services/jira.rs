@@ -16,13 +16,18 @@ impl AppServices {
         self.test_jira_client(client)
     }
 
-    pub fn test_jira_connection_with_api_token(&self, token: &str) -> JiraConnectionTestResult {
+    pub fn test_jira_connection_with_api_token(
+        &self,
+        token: &str,
+        site_url: Option<&str>,
+        account_email: Option<&str>,
+    ) -> JiraConnectionTestResult {
         let token = token.trim();
         if token.is_empty() {
             return failed_result("Jira API token cannot be empty.");
         }
 
-        let client = match self.jira_client_with_api_token(token) {
+        let client = match self.jira_client_with_api_token(token, site_url, account_email) {
             Ok(client) => client,
             Err(message) => return failed_result(message),
         };
@@ -126,7 +131,16 @@ impl AppServices {
         self.jira_client_from_parts(site_url, account_email, &api_token)
     }
 
-    fn jira_client_with_api_token(&self, api_token: &str) -> Result<JiraClient, String> {
+    fn jira_client_with_api_token(
+        &self,
+        api_token: &str,
+        site_url: Option<&str>,
+        account_email: Option<&str>,
+    ) -> Result<JiraClient, String> {
+        if let (Some(site_url), Some(account_email)) = (site_url, account_email) {
+            return self.jira_client_from_raw_parts(site_url, account_email, api_token);
+        }
+
         let (site_url, account_email) = self.jira_connection_settings()?;
         self.jira_client_from_parts(site_url, account_email, api_token)
     }

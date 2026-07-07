@@ -19,10 +19,16 @@ pub async fn test_jira_connection(
 pub async fn test_jira_api_token(
     services: State<'_, AppServices>,
     token: String,
+    site_url: Option<String>,
+    account_email: Option<String>,
 ) -> Result<JiraConnectionTestResult, String> {
     let services = services.inner().clone();
     run_blocking_result("Jira connection worker", move || {
-        Ok(services.test_jira_connection_with_api_token(&token))
+        Ok(services.test_jira_connection_with_api_token(
+            &token,
+            site_url.as_deref(),
+            account_email.as_deref(),
+        ))
     })
     .await
 }

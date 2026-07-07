@@ -54,7 +54,7 @@ export function SettingsPanel({
   onTestAiProviderConnection: () => Promise<CredentialConnectionTestResult>;
   onTestAiProviderApiKey: (apiKey: string) => Promise<CredentialConnectionTestResult>;
   onListAiProviderModels: (aiProvider: AppSettings["aiProvider"], apiKey?: string) => Promise<string[]>;
-  onTestJiraApiTokenQuiet: (token: string) => Promise<JiraConnectionTestResult>;
+  onTestJiraApiTokenQuiet: (token: string, siteUrl: string, accountEmail: string) => Promise<JiraConnectionTestResult>;
   onTestJiraConnectionSettings: (siteUrl: string, accountEmail: string) => Promise<JiraConnectionTestResult>;
   hasNotionIntegrationToken: () => Promise<boolean>;
   onSaveNotionIntegrationToken: (token: string) => Promise<void>;

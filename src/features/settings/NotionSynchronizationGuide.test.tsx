@@ -1,7 +1,12 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { AppSettings } from "../../lib/types";
-import { catalogModeOptions, notionCatalogSourceRequirementsUrl, NotionSynchronizationGuide } from "./NotionSynchronizationGuide";
+import {
+  canSaveNotionSynchronization,
+  catalogModeOptions,
+  notionCatalogSourceRequirementsUrl,
+  NotionSynchronizationGuide
+} from "./NotionSynchronizationGuide";
 
 const settings: AppSettings = {
   themeMode: "light",
@@ -107,5 +112,12 @@ describe("NotionSynchronizationGuide", () => {
   it("does not offer the legacy public exportable source mode", () => {
     expect(catalogModeOptions.map((option) => option.label)).toEqual(["Sync from Notion page", "Manual catalog"]);
     expect(catalogModeOptions.map((option) => option.value)).not.toContain("public-exportable");
+  });
+
+  it("requires a successful Notion connection test before saving Notion synchronization", () => {
+    expect(canSaveNotionSynchronization("manual", null)).toBe(true);
+    expect(canSaveNotionSynchronization("notion", null)).toBe(false);
+    expect(canSaveNotionSynchronization("notion", { ok: false, message: "Failed", title: null, extractedBlockCount: 0 })).toBe(false);
+    expect(canSaveNotionSynchronization("notion", { ok: true, message: "Connected", title: "JTF Sync Catalog", extractedBlockCount: 12 })).toBe(true);
   });
 });

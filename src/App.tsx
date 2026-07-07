@@ -14,6 +14,7 @@ import { TaskFocusWindow } from "./features/task-detail";
 import { TraysView, useTrayWorkspace } from "./features/trays";
 import { mockAppDataAdapter } from "./lib/adapters";
 import { appOverlayLayers, useAppOverlay } from "./lib/app-overlays";
+import { hasOpenAppOverlay, isMouseNavigationButton } from "./lib/modal-navigation";
 import {
   choosePersistedTaskAttachmentFiles,
   createPersistedCategory,
@@ -211,7 +212,7 @@ export default function App() {
   const [jiraCreateError, setJiraCreateError] = useState<string | null>(null);
   const [jiraCreateProgress, setJiraCreateProgress] = useState<JiraCreateProgress | null>(null);
   const trayWorkspace = useTrayWorkspace({
-    initialTrays: appData.listTrays(),
+    initialTrays: [],
     usesTauriPersistence
   });
   const {
@@ -272,6 +273,7 @@ export default function App() {
       .catch(() => {
         if (!isCurrent) return;
         setUsesTauriPersistence(false);
+        trayWorkspace.replaceTrays(appData.listTrays());
       });
 
     return () => {
@@ -917,7 +919,7 @@ export default function App() {
     await delay(500);
 
     try {
-      const result = await testPersistedJiraApiToken(token);
+      const result = await testPersistedJiraApiToken(token, appSettings.jiraSiteUrl, appSettings.jiraAccountEmail);
       showJiraConnectionNotice(result);
       return result;
     } catch (error) {
@@ -933,7 +935,11 @@ export default function App() {
     }
   }
 
-  async function testJiraApiTokenQuiet(token: string): Promise<JiraConnectionTestResult> {
+  async function testJiraApiTokenQuiet(
+    token: string,
+    siteUrl = appSettings.jiraSiteUrl,
+    accountEmail = appSettings.jiraAccountEmail
+  ): Promise<JiraConnectionTestResult> {
     flushSync(() => {
       setIsTestingJiraConnection(true);
       setJiraCredentialMessage(null);
@@ -951,7 +957,7 @@ export default function App() {
           accountEmail: appSettings.jiraAccountEmail
         };
       }
-      return await testPersistedJiraApiToken(token);
+      return await testPersistedJiraApiToken(token, siteUrl, accountEmail);
     } catch (error) {
       return {
         ok: false,
@@ -1493,6 +1499,8 @@ export default function App() {
 
   useEffect(() => {
     function handleSecondaryMouseNavigation(event: MouseEvent) {
+      if (isMouseNavigationButton(event.button) && hasOpenAppOverlay()) return;
+
       if (event.button === 3) {
         if (openPanel === "detail") {
           setOpenPanel(null);

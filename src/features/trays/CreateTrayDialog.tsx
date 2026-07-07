@@ -1,8 +1,9 @@
 import { Bot, Check, ChevronLeft, Sparkles } from "lucide-react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode, type RefObject } from "react";
 import { Button, FeedbackNote, LoadingOrb, PanelHeader } from "../../components/ui";
 import { appOverlayLayers, useAppOverlay } from "../../lib/app-overlays";
 import { normalizeEpicScope, suggestTransversalEpicScope, TBD_EPIC_SCOPE } from "../../lib/domain";
+import { getModalMouseNavigationIntent, isMouseNavigationButton, shouldHandleEnterAsWizardAdvance } from "../../lib/modal-navigation";
 
 type CreateTrayStep = "tray" | "transversal";
 
@@ -27,6 +28,7 @@ export function CreateTrayDialog({
   onSuggestTransversalScope?: (epicScope: string) => Promise<string>;
 }) {
   const surfaceRef = useRef<HTMLElement | null>(null);
+  const epicScopeInputRef = useRef<HTMLInputElement | null>(null);
   const [step, setStep] = useState<CreateTrayStep>("tray");
   const [trayName, setTrayName] = useState("");
   const [epicScopeDraft, setEpicScopeDraft] = useState("");
@@ -85,6 +87,46 @@ export function CreateTrayDialog({
     setStep("transversal");
   }
 
+  function handleTrayNameKeyDown(event: ReactKeyboardEvent<HTMLInputElement>) {
+    if (event.key !== "Enter" || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+    event.preventDefault();
+    epicScopeInputRef.current?.focus();
+  }
+
+  function handleWizardEnter(event: ReactKeyboardEvent<HTMLElement>) {
+    if (event.key !== "Enter" || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+    if (!shouldHandleEnterAsWizardAdvance(event.target)) return;
+    if (event.defaultPrevented) return;
+    if (step === "tray") {
+      if (!canContinueFromTray) return;
+      event.preventDefault();
+      continueFromTray();
+      return;
+    }
+    if (!canCreateFromTransversal || isCreating) return;
+    event.preventDefault();
+    void createTray();
+  }
+
+  function handleModalMouseUp(event: ReactMouseEvent<HTMLElement>) {
+    const intent = getModalMouseNavigationIntent(event.button, {
+      canGoBack: step !== "tray" && !isCreating,
+      canGoForward: step === "tray" ? canContinueFromTray && !isCreating : canCreateFromTransversal && !isCreating
+    });
+    if (!intent) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (intent === "back") {
+      setStep("tray");
+      return;
+    }
+    if (step === "tray") {
+      continueFromTray();
+      return;
+    }
+    void createTray();
+  }
+
   async function createTray() {
     if (!normalizedScope || !canCreateFromTransversal) return;
     setIsCreating(true);
@@ -105,15 +147,23 @@ export function CreateTrayDialog({
       className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(9,30,66,0.54)] px-4"
       {...overlay.backdropProps}
       onMouseDown={(event) => {
+        if (isMouseNavigationButton(event.button)) {
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
         if (event.target !== event.currentTarget) return;
         onClose();
       }}
+      onMouseUp={handleModalMouseUp}
     >
       <section
         ref={surfaceRef}
         className="flex max-h-[86vh] w-full max-w-[720px] flex-col overflow-hidden rounded border border-[#c1c7d0] bg-white shadow-2xl"
         {...overlay.surfaceProps}
+        onKeyDown={handleWizardEnter}
         onMouseDown={(event) => event.stopPropagation()}
+        onMouseUp={handleModalMouseUp}
       >
         <PanelHeader title="Create Tray" subtitle="Set the tray name and Epic Scope before capture starts." onClose={onClose} />
         <div className="border-b border-[#dfe1e6] bg-[#f7f8fa] px-5 py-3">
@@ -143,8 +193,8 @@ export function CreateTrayDialog({
         <div className="min-h-[320px] flex-1 overflow-y-auto p-6">
           {step === "tray" ? (
             <GuideSection title="Tray scope" description="This scope is used in Jira epic targets for every non-Transversal project group.">
-              <GuideInput label="Tray name" placeholder="Demo prep" value={trayName} onChange={setTrayName} />
-              <GuideInput label="Epic Scope" placeholder="Enter Epic Scope" value={epicScopeDraft} onChange={setEpicScopeDraft} />
+              <GuideInput label="Tray name" placeholder="Demo prep" value={trayName} onChange={setTrayName} onKeyDown={handleTrayNameKeyDown} />
+              <GuideInput inputRef={epicScopeInputRef} label="Epic Scope" placeholder="Enter Epic Scope" value={epicScopeDraft} onChange={setEpicScopeDraft} />
               <div className="mt-4 rounded border border-[#dfe1e6] bg-[#f7f8fa] p-4 text-sm text-[#172b4d]">
                 <div className="font-semibold">Jira epic target preview</div>
                 <div className="mt-2 font-mono text-xs text-[#42526e]">[Project] [Area] {normalizedScope ?? "Scope"}</div>
@@ -216,12 +266,16 @@ function GuideInput({
   label,
   placeholder,
   value,
-  onChange
+  onChange,
+  onKeyDown,
+  inputRef
 }: {
   label: string;
   placeholder: string;
   value: string;
   onChange: (value: string) => void;
+  onKeyDown?: (event: ReactKeyboardEvent<HTMLInputElement>) => void;
+  inputRef?: RefObject<HTMLInputElement | null>;
 }) {
   return (
     <label className="mb-3 block">
@@ -229,9 +283,11 @@ function GuideInput({
       <input
         className="h-9 w-full rounded border border-[#c1c7d0] bg-white px-2 text-sm outline-none focus:border-[#4c9aff] focus:ring-2 focus:ring-[#deebff]"
         placeholder={placeholder}
+        ref={inputRef}
         type="text"
         value={value}
         onChange={(event) => onChange(event.target.value)}
+        onKeyDown={onKeyDown}
       />
     </label>
   );

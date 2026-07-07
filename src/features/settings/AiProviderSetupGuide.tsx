@@ -1,8 +1,9 @@
 import { Check, ChevronDown, ChevronLeft, ExternalLink, KeyRound, Trash2 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from "react";
 import { Button, FeedbackNote, LoadingOrb, PanelHeader } from "../../components/ui";
 import { appOverlayLayers, useAppOverlay } from "../../lib/app-overlays";
 import { getCredentialDraftControls, type CredentialDraftTestStatus } from "../../lib/domain";
+import { getModalMouseNavigationIntent, isMouseNavigationButton, shouldHandleEnterAsWizardAdvance } from "../../lib/modal-navigation";
 import type { AiProvider, AppSettings, CredentialConnectionTestResult } from "../../lib/types";
 
 type AiProviderSetupStep = "provider" | "key" | "model";
@@ -196,20 +197,66 @@ export function AiProviderSetupGuide({
     setConnectionTestFeedback(null);
   }
 
+  function handleWizardEnter(event: ReactKeyboardEvent<HTMLElement>) {
+    if (event.key !== "Enter" || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+    if (!shouldHandleEnterAsWizardAdvance(event.target)) return;
+    event.preventDefault();
+    if (step === "provider") {
+      void continueFromProvider();
+      return;
+    }
+    if (step === "key") {
+      void openModelStep();
+      return;
+    }
+    onClose();
+  }
+
+  function handleModalMouseUp(event: ReactMouseEvent<HTMLElement>) {
+    const intent = getModalMouseNavigationIntent(event.button, {
+      canGoBack: currentStepIndex > 0,
+      canGoForward: true
+    });
+    if (!intent) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (intent === "back") {
+      moveBack();
+      return;
+    }
+    if (step === "provider") {
+      void continueFromProvider();
+      return;
+    }
+    if (step === "key") {
+      void openModelStep();
+      return;
+    }
+    onClose();
+  }
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(9,30,66,0.54)] px-4"
       {...overlay.backdropProps}
       onMouseDown={(event) => {
+        if (isMouseNavigationButton(event.button)) {
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
         if (event.target !== event.currentTarget) return;
         onClose();
       }}
+      onMouseUp={handleModalMouseUp}
     >
       <section
         ref={surfaceRef}
         className="flex max-h-[86vh] w-full max-w-[720px] flex-col overflow-hidden rounded border border-[#c1c7d0] bg-white shadow-2xl"
         {...overlay.surfaceProps}
+        onKeyDown={handleWizardEnter}
         onMouseDown={(event) => event.stopPropagation()}
+        onMouseUp={handleModalMouseUp}
       >
         <PanelHeader title="Set AI Provider" subtitle="Choose a provider, save a tested API key, then select the model." onClose={onClose} />
         <div className="border-b border-[#dfe1e6] bg-[#f7f8fa] px-5 py-3">

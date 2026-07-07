@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AssistedDescriptionProposal, NewAssistedDescriptionProposal } from "../types";
 import {
   createPersistedAssistedDescriptionProposal,
+  testPersistedJiraApiToken,
   transitionPersistedAssistedDescriptionProposal,
   updatePersistedAssistedDescriptionProposalSection
 } from "./tauriPersistence";
@@ -83,6 +84,18 @@ describe("Tauri persistence assisted description proposals", () => {
       status: "Accepted",
       reviewerComment: undefined,
       applyToTaskDescription: true
+    });
+  });
+
+  it("passes draft Jira site and account email when testing a new token", async () => {
+    const result = { ok: true, message: "Connected", accountDisplayName: "Saimon", accountEmail: "saimon@example.com" };
+    invokeMock.mockResolvedValueOnce(result);
+
+    await expect(testPersistedJiraApiToken("token-123", "https://example.atlassian.net", "saimon@example.com")).resolves.toEqual(result);
+    expect(invokeMock).toHaveBeenCalledWith("test_jira_api_token", {
+      token: "token-123",
+      siteUrl: "https://example.atlassian.net",
+      accountEmail: "saimon@example.com"
     });
   });
 });
