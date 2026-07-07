@@ -1,4 +1,7 @@
+import { deriveIssueTypeFromArea } from "../../lib/domain";
 import type { LocalTask, Tray } from "../../lib/types";
+
+export type TaskDetailsUpdateInput = Partial<Pick<LocalTask, "area" | "issueType" | "priority" | "project" | "title">>;
 
 export type TrayWorkspaceSelection = {
   selectedTrayId: string | null;
@@ -39,6 +42,26 @@ export function findTaskTray(trays: Tray[], taskId: string | null): Tray | null 
 
 export function findTask(trays: Tray[], taskId: string | null): LocalTask | null {
   return findTaskTray(trays, taskId)?.tasks.find((task) => task.id === taskId) ?? null;
+}
+
+export function buildTaskDetailsUpdate(task: LocalTask, taskInput: TaskDetailsUpdateInput): LocalTask | null {
+  const nextTitle = taskInput.title !== undefined ? taskInput.title.trim() : task.title;
+  if (!nextTitle) return null;
+
+  const nextArea = taskInput.area ?? task.area;
+  const areaChanged = taskInput.area !== undefined && taskInput.area !== task.area;
+  const shouldDeriveIssueType = taskInput.area !== undefined && taskInput.issueType === undefined;
+
+  return {
+    ...task,
+    project: taskInput.project ?? task.project,
+    area: nextArea,
+    title: nextTitle,
+    priority: taskInput.priority ?? task.priority,
+    issueType: shouldDeriveIssueType ? deriveIssueTypeFromArea(nextArea) : (taskInput.issueType ?? task.issueType),
+    description: areaChanged ? undefined : task.description,
+    descriptionStatus: areaChanged ? "Missing" : task.descriptionStatus
+  };
 }
 
 function pickExistingTrayId(trays: Tray[], primaryId: string | null | undefined, fallbackId?: string | null): string | null {

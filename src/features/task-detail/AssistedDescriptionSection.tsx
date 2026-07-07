@@ -48,6 +48,8 @@ import { TaskFocusSection } from "./TaskFocusSection";
 
 export const assistedDescriptionEditorSelector = "[data-description-editor]";
 
+type DescriptionPromptStep = "context" | "delivery_format";
+
 export function AssistedDescriptionSection({
   task,
   readOnly,
@@ -110,6 +112,7 @@ export function AssistedDescriptionSection({
   const [descriptionMessage, setDescriptionMessage] = useState<string | null>(null);
   const [deliveryFormatGate, setDeliveryFormatGate] = useState<CatalogDeliveryFormatGate | null>(null);
   const [selectedDeliveryFormat, setSelectedDeliveryFormat] = useState("");
+  const [descriptionPromptStep, setDescriptionPromptStep] = useState<DescriptionPromptStep>("context");
   const [clarificationQuestions, setClarificationQuestions] = useState<string[]>([]);
   const [promptOpen, setPromptOpen] = useState(false);
   const [promptSectionIds, setPromptSectionIds] = useState<AssistedDescriptionSectionId[]>(allSectionIds);
@@ -136,6 +139,7 @@ export function AssistedDescriptionSection({
     setDescriptionMessage(null);
     setDeliveryFormatGate(null);
     setSelectedDeliveryFormat("");
+    setDescriptionPromptStep("context");
     setClarificationQuestions([]);
     setPromptOpen(false);
     setPromptSectionIds(allSectionIds);
@@ -186,6 +190,7 @@ export function AssistedDescriptionSection({
     setDescriptionMessage(null);
     setDeliveryFormatGate(null);
     setSelectedDeliveryFormat("");
+    setDescriptionPromptStep("context");
     setClarificationQuestions([]);
     setPromptSectionIds(allSectionIds);
     setPromptOpen(false);
@@ -197,14 +202,15 @@ export function AssistedDescriptionSection({
     setDescriptionMessage(null);
     setDeliveryFormatGate(null);
     setSelectedDeliveryFormat("");
+    setDescriptionPromptStep("context");
     setClarificationQuestions([]);
     setPromptOpen(true);
   }
 
-  async function generateProposal(sectionIds: AssistedDescriptionSectionId[] = allSectionIds, changeRequest = descriptionContext) {
+  async function resolveDeliveryFormatForPrompt(sectionIds: AssistedDescriptionSectionId[] = allSectionIds, changeRequest = descriptionContext) {
     if (readOnly || isGeneratingDescription) return false;
 
-    setDescriptionMessage("Generating proposal...");
+    setDescriptionMessage("Checking delivery format...");
     setClarificationQuestions([]);
     setReviewMessage(null);
 
@@ -219,24 +225,67 @@ export function AssistedDescriptionSection({
         setPromptOpen(true);
         return false;
       }
-      if (deliveryFormatResolution.kind === "needs_confirmation" && !selectedDeliveryFormat) {
+      if (deliveryFormatResolution.kind === "needs_confirmation") {
         setDeliveryFormatGate(deliveryFormatResolution);
-        setSelectedDeliveryFormat(deliveryFormatResolution.suggestedFormat ?? deliveryFormatResolution.options[0] ?? "");
-        setDescriptionMessage("Confirm the delivery format before generating the description proposal.");
+        setSelectedDeliveryFormat(deliveryFormatResolution.suggestedFormat ?? "");
+        setDescriptionPromptStep("delivery_format");
+        setDescriptionMessage(
+          deliveryFormatResolution.suggestedFormat
+            ? "Review the inferred delivery format before generating the description proposal."
+            : "Could not infer a delivery format from the provided context. Choose one before generating the description proposal."
+        );
         setProposalPanelOpen(true);
         setPromptOpen(true);
         return false;
       }
-      const deliveryFormat =
-        deliveryFormatResolution.kind === "auto"
-          ? deliveryFormatResolution.format
-          : selectedDeliveryFormat;
-      if (!deliveryFormatResolution.options.includes(deliveryFormat)) {
-        setDescriptionMessage("Choose a valid catalog delivery format before generating the description proposal.");
-        setProposalPanelOpen(true);
-        setPromptOpen(true);
-        return false;
-      }
+
+      return await generateProposalWithDeliveryFormat(sectionIds, changeRequest, deliveryFormatResolution, deliveryFormatResolution.format);
+    } catch (error) {
+      setDescriptionMessage(error instanceof Error ? error.message : "Could not generate a description proposal.");
+      setProposalPanelOpen(true);
+      setPromptOpen(true);
+      return false;
+    }
+  }
+
+  async function generateConfirmedDeliveryFormatProposal(sectionIds: AssistedDescriptionSectionId[] = allSectionIds, changeRequest = descriptionContext) {
+    if (readOnly || isGeneratingDescription) return false;
+
+    if (!deliveryFormatGate || deliveryFormatGate.kind !== "needs_confirmation") {
+      setDescriptionMessage("Confirm the delivery format before generating the description proposal.");
+      setProposalPanelOpen(true);
+      setPromptOpen(true);
+      return false;
+    }
+
+    if (!selectedDeliveryFormat || !deliveryFormatGate.options.includes(selectedDeliveryFormat)) {
+      setDescriptionMessage("Choose a valid catalog delivery format before generating the description proposal.");
+      setProposalPanelOpen(true);
+      setPromptOpen(true);
+      return false;
+    }
+
+    return await generateProposalWithDeliveryFormat(sectionIds, changeRequest, deliveryFormatGate, selectedDeliveryFormat);
+  }
+
+  async function generateProposalWithDeliveryFormat(
+    sectionIds: AssistedDescriptionSectionId[],
+    changeRequest: string,
+    deliveryFormatResolution: CatalogDeliveryFormatGate,
+    deliveryFormat: string
+  ) {
+    if (!deliveryFormatResolution.options.includes(deliveryFormat)) {
+      setDescriptionMessage("Choose a valid catalog delivery format before generating the description proposal.");
+      setProposalPanelOpen(true);
+      setPromptOpen(true);
+      return false;
+    }
+
+    setDescriptionMessage("Generating proposal...");
+    setClarificationQuestions([]);
+    setReviewMessage(null);
+
+    try {
 
       const draft = await onGenerateDescription(
         task.id,
@@ -281,6 +330,7 @@ export function AssistedDescriptionSection({
       setDescriptionMessage(null);
       setDeliveryFormatGate(null);
       setSelectedDeliveryFormat("");
+      setDescriptionPromptStep("context");
       setClarificationQuestions([]);
       setPromptOpen(false);
       setPromptSectionIds(allSectionIds);
@@ -595,7 +645,7 @@ export function AssistedDescriptionSection({
     if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
       event.preventDefault();
       event.stopPropagation();
-      void generateProposal(promptSectionIds);
+      void resolveDeliveryFormatForPrompt(promptSectionIds);
       return;
     }
 
@@ -672,14 +722,30 @@ export function AssistedDescriptionSection({
           deliveryFormatGate={deliveryFormatGate}
           isGeneratingDescription={isGeneratingDescription}
           onCancel={clearDescriptionPrompt}
-          onChange={setDescriptionContext}
+          onChange={(nextContext) => {
+            setDescriptionContext(nextContext);
+            setDeliveryFormatGate(null);
+            setSelectedDeliveryFormat("");
+            setDescriptionMessage(null);
+          }}
           onConfigureAiProvider={onConfigureAiProvider}
+          onEditContext={() => {
+            setDeliveryFormatGate(null);
+            setSelectedDeliveryFormat("");
+            setDescriptionMessage(null);
+            setDescriptionPromptStep("context");
+          }}
           onSelectDeliveryFormat={setSelectedDeliveryFormat}
           onGenerate={() => {
-            void generateProposal(promptSectionIds);
+            if (descriptionPromptStep === "delivery_format") {
+              void generateConfirmedDeliveryFormatProposal(promptSectionIds);
+              return;
+            }
+            void resolveDeliveryFormatForPrompt(promptSectionIds);
           }}
           onKeyDown={handleDescriptionContextKeyDown}
           selectedDeliveryFormat={selectedDeliveryFormat}
+          step={descriptionPromptStep}
         />
       ) : null}
 
@@ -1124,10 +1190,12 @@ export function DescriptionPromptModal({
   onCancel,
   onChange,
   onConfigureAiProvider,
+  onEditContext,
   onGenerate,
   onKeyDown,
   onSelectDeliveryFormat,
-  selectedDeliveryFormat
+  selectedDeliveryFormat,
+  step = "context"
 }: {
   clarificationQuestions: string[];
   descriptionContext: string;
@@ -1137,10 +1205,12 @@ export function DescriptionPromptModal({
   onCancel: () => void;
   onChange: (value: string) => void;
   onConfigureAiProvider?: () => void;
+  onEditContext?: () => void;
   onGenerate: () => void;
   onKeyDown: (event: ReactKeyboardEvent<HTMLTextAreaElement>) => void;
   onSelectDeliveryFormat?: (value: string) => void;
   selectedDeliveryFormat?: string;
+  step?: DescriptionPromptStep;
 }) {
   const overlay = useAppOverlay({
     layer: appOverlayLayers.nestedModal,
@@ -1152,6 +1222,9 @@ export function DescriptionPromptModal({
   });
   const canConfigureAiProvider = Boolean(onConfigureAiProvider && descriptionMessage && isAiProviderSetupMessage(descriptionMessage));
   const aiProviderSetupActionLabel = descriptionMessage ? getAiProviderSetupActionLabel(descriptionMessage) : "Configure OpenAI";
+  const isDeliveryFormatStep = step === "delivery_format";
+  const showUninferredDeliveryFormatWarning =
+    isDeliveryFormatStep && deliveryFormatGate?.kind === "needs_confirmation" && !deliveryFormatGate.suggestedFormat;
 
   return (
     <TaskDetailNestedModalShell
@@ -1171,13 +1244,18 @@ export function DescriptionPromptModal({
           <Button disabled={isGeneratingDescription} variant="darkSecondary" onClick={onCancel}>
             Cancel
           </Button>
+          {isDeliveryFormatStep ? (
+            <Button disabled={isGeneratingDescription} variant="darkSecondary" onClick={onEditContext}>
+              Back
+            </Button>
+          ) : null}
           <Button
             disabled={isGeneratingDescription}
             icon={isGeneratingDescription ? <Loader2 className="animate-spin" size={14} /> : <Sparkles size={14} />}
             variant="darkPrimary"
             onClick={onGenerate}
           >
-            {isGeneratingDescription ? "Generating" : "Generate proposal"}
+            {isGeneratingDescription ? "Generating" : isDeliveryFormatStep ? "Generate proposal" : "Continue"}
           </Button>
         </>
       }
@@ -1187,22 +1265,31 @@ export function DescriptionPromptModal({
         if (!isGeneratingDescription) onCancel();
       }}
       overlay={overlay}
-      subtitle="You can leave the request empty."
-      title="Description proposal"
+      subtitle={isDeliveryFormatStep ? "Confirm the catalog format before proposal generation." : "You can leave the request empty."}
+      title={isDeliveryFormatStep ? "Confirm delivery format" : "Description context"}
     >
 
         <div className="space-y-3 px-5 py-4">
-          <textarea
-            autoFocus
-            className="min-h-[150px] w-full resize-y rounded border border-[#454852] bg-[#1f2126] p-3 text-sm leading-relaxed text-[#dfe1e6] outline-none placeholder:text-[#7f858f] focus:border-[#85b8ff]"
-            disabled={isGeneratingDescription}
-            onChange={(event) => onChange(event.target.value)}
-            onKeyDown={onKeyDown}
-            placeholder="Optional context to guide the proposal..."
-            value={descriptionContext}
-          />
+          {isDeliveryFormatStep ? (
+            <div className="rounded border border-[#454852] bg-[#1f2126] p-3 text-sm leading-relaxed text-[#dfe1e6]">
+              <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-[#9aa0aa]">Context used for inference</div>
+              <p className="whitespace-pre-wrap text-[#dfe1e6]">
+                {descriptionContext.trim() || "No additional context provided."}
+              </p>
+            </div>
+          ) : (
+            <textarea
+              autoFocus
+              className="min-h-[150px] w-full resize-y rounded border border-[#454852] bg-[#1f2126] p-3 text-sm leading-relaxed text-[#dfe1e6] outline-none placeholder:text-[#7f858f] focus:border-[#85b8ff]"
+              disabled={isGeneratingDescription}
+              onChange={(event) => onChange(event.target.value)}
+              onKeyDown={onKeyDown}
+              placeholder="Optional context to guide the proposal..."
+              value={descriptionContext}
+            />
+          )}
           {descriptionMessage ? (
-            <FeedbackNote surface="dark" variant="info">
+            <FeedbackNote surface="dark" variant={showUninferredDeliveryFormatWarning ? "warning" : "info"}>
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <span>{descriptionMessage}</span>
                 {canConfigureAiProvider ? (
@@ -1219,7 +1306,12 @@ export function DescriptionPromptModal({
               </div>
             </FeedbackNote>
           ) : null}
-          {deliveryFormatGate?.kind === "needs_confirmation" ? (
+          {showUninferredDeliveryFormatWarning && !descriptionMessage ? (
+            <FeedbackNote surface="dark" variant="warning">
+              Could not infer a delivery format from the provided context.
+            </FeedbackNote>
+          ) : null}
+          {isDeliveryFormatStep && deliveryFormatGate?.kind === "needs_confirmation" ? (
             <div className="rounded border border-[#454852] bg-[#22252a] p-3">
               <label className="flex flex-col gap-2 text-xs font-semibold uppercase tracking-wide text-[#9aa0aa]">
                 Delivery format
@@ -1227,8 +1319,11 @@ export function DescriptionPromptModal({
                   className="rounded border border-[#454852] bg-[#1f2126] px-3 py-2 text-sm normal-case text-[#dfe1e6] outline-none focus:border-[#85b8ff]"
                   disabled={isGeneratingDescription}
                   onChange={(event) => onSelectDeliveryFormat?.(event.target.value)}
-                  value={selectedDeliveryFormat ?? deliveryFormatGate.suggestedFormat ?? deliveryFormatGate.options[0] ?? ""}
+                  value={selectedDeliveryFormat ?? ""}
                 >
+                  <option value="" disabled>
+                    Choose delivery format
+                  </option>
                   {deliveryFormatGate.options.map((format) => (
                     <option key={format} value={format}>
                       {format}
