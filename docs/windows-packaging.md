@@ -69,5 +69,30 @@ After building the installer on Windows:
 4. Open Settings and confirm connection state is shown without exposing Jira or AI secrets.
 5. Open Categories and the Notion catalog source setup entry point.
 6. Open Trays, create or select a Preparation Tray, and navigate local tray/task flows without using `npm run tauri dev`.
+7. Save a fake or dedicated test Jira API token, uninstall the app, reinstall
+   it, and confirm Settings does not show a reusable saved Jira credential until
+   a token is saved again. Repeat for any AI provider or Notion token included
+   in the release smoke account.
 
 Use JTFTEST for any optional Jira write smoke. DTS remains read-only reference data.
+
+## Credential Cleanup On Uninstall
+
+The NSIS package uses `src-tauri/nsis/credential-cleanup.nsh` as an uninstall
+hook. Before the uninstaller removes app files, it asks Windows Credential
+Manager to delete the app-owned generic credential targets used by the Rust
+`keyring` crate:
+
+- `api-token.jira-task-forge:jira`
+- `api-key.jira-task-forge:openai`
+- `api-key.jira-task-forge:claude`
+- `api-key.jira-task-forge:gemini`
+- `integration-token.jira-task-forge:notion`
+
+The hook deletes by target name only. It does not enumerate, read, print, or
+export credential values.
+
+Opening the app with fresh or manually reset local app data does not delete
+credential-store entries by itself. Credential cleanup is tied to the packaged
+Windows uninstall path so it runs during an explicit uninstall instead of an
+ordinary app launch.
