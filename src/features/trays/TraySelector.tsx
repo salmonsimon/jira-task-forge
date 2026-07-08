@@ -10,6 +10,8 @@ export function TraySelector({
   onOpenTray,
   onCreateTray,
   onSuggestTransversalScope,
+  onConfigureAiProvider,
+  isAiProviderConfigured,
   onRenameTray,
   onArchiveTray,
   onRestoreTray,
@@ -21,6 +23,8 @@ export function TraySelector({
   onOpenTray: (tray: Tray) => void;
   onCreateTray: (input: CreateTrayInput) => void | Promise<void>;
   onSuggestTransversalScope?: (epicScope: string) => Promise<string>;
+  onConfigureAiProvider?: () => void;
+  isAiProviderConfigured?: boolean;
   onRenameTray: (trayId: string, name: string) => void;
   onArchiveTray: (trayId: string) => void;
   onRestoreTray: (trayId: string) => void;
@@ -154,6 +158,8 @@ export function TraySelector({
           onClose={() => setIsCreateDialogOpen(false)}
           onCreateTray={onCreateTray}
           onSuggestTransversalScope={onSuggestTransversalScope}
+          onConfigureAiProvider={onConfigureAiProvider}
+          isAiProviderConfigured={isAiProviderConfigured}
         />
       ) : null}
     </section>

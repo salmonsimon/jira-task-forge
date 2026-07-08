@@ -1577,6 +1577,8 @@ export default function App() {
               onOpenTray={openTray}
               onCreateTray={trayWorkspace.createTray}
               onSuggestTransversalScope={suggestTrayTransversalEpicScope}
+              onConfigureAiProvider={() => setIsAiProviderSetupOpen(true)}
+              isAiProviderConfigured={!usesTauriPersistence || (appSettings.aiProvider !== "None" && hasAiProviderApiKey)}
               onRenameTray={trayWorkspace.renameTray}
               onArchiveTray={trayWorkspace.archiveTray}
               onRestoreTray={trayWorkspace.restoreTray}
