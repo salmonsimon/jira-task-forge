@@ -186,29 +186,18 @@ impl AppServices {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        integration_credential_descriptors, windows_credential_manager_target, AI_API_KEY_ACCOUNT,
-        JIRA_API_TOKEN_ACCOUNT, JIRA_CREDENTIAL_SERVICE, NOTION_CREDENTIAL_SERVICE,
-        NOTION_INTEGRATION_TOKEN_ACCOUNT,
-    };
+    use super::{integration_credential_descriptors, windows_credential_manager_target};
 
     #[test]
     fn windows_credential_manager_targets_match_keyring_convention() {
-        assert_eq!(
-            windows_credential_manager_target(JIRA_CREDENTIAL_SERVICE, JIRA_API_TOKEN_ACCOUNT),
-            "api-token.jira-task-forge:jira"
-        );
-        assert_eq!(
-            windows_credential_manager_target("jira-task-forge:openai", AI_API_KEY_ACCOUNT),
-            "api-key.jira-task-forge:openai"
-        );
-        assert_eq!(
-            windows_credential_manager_target(
-                NOTION_CREDENTIAL_SERVICE,
-                NOTION_INTEGRATION_TOKEN_ACCOUNT
-            ),
-            "integration-token.jira-task-forge:notion"
-        );
+        for descriptor in integration_credential_descriptors() {
+            assert_eq!(
+                windows_credential_manager_target(descriptor.service, descriptor.account),
+                descriptor.windows_target,
+                "{} Windows target must match the keyring crate convention",
+                descriptor.label
+            );
+        }
     }
 
     #[test]
@@ -222,5 +211,39 @@ mod tests {
                 descriptor.windows_target
             );
         }
+    }
+
+    #[test]
+    fn release_uninstall_hook_deletes_only_named_targets_without_listing_or_reading_secrets() {
+        let hook = include_str!("../../nsis/credential-cleanup.nsh");
+
+        assert!(hook.contains("cmdkey.exe"));
+        assert!(hook.contains("/delete:"));
+        assert!(
+            !hook.contains("/list"),
+            "NSIS hook must not enumerate Credential Manager entries"
+        );
+        assert!(
+            !hook.contains("CredRead"),
+            "NSIS hook must not read Credential Manager values"
+        );
+        assert!(
+            !hook.contains("get_password"),
+            "NSIS hook must not read keyring values"
+        );
+    }
+
+    #[test]
+    fn desktop_startup_does_not_attach_automatic_credential_cleanup() {
+        let desktop_entrypoint = include_str!("../main.rs");
+
+        assert!(
+            !desktop_entrypoint.contains("purge_credentials_after_app_data_reset"),
+            "desktop startup must not delete credentials just because app data is fresh or reset"
+        );
+        assert!(
+            !desktop_entrypoint.contains("delete_all_integration_credentials"),
+            "bulk credential cleanup must stay tied to uninstall, not ordinary app launch"
+        );
     }
 }
