@@ -17,6 +17,7 @@ import { appOverlayLayers, useAppOverlay } from "./lib/app-overlays";
 import { hasOpenAppOverlay, isMouseNavigationButton } from "./lib/modal-navigation";
 import {
   choosePersistedTaskAttachmentFiles,
+  completePersistedNotionOAuthConnection,
   createPersistedCategory,
   createPersistedJiraParentIssues,
   createPersistedJqlFavorite,
@@ -52,12 +53,11 @@ import {
   openPersistedAtlassianApiTokensPage,
   openPersistedJiraIssueUrl,
   openPersistedNotionCatalogSourceRequirementsPage,
-  openPersistedNotionDevelopersPage,
   runPersistedJqlQuery,
   saveCsvFile,
   savePersistedAiProviderApiKey,
   savePersistedJiraApiToken,
-  savePersistedNotionIntegrationToken,
+  startPersistedNotionOAuthConnection,
   resolvePersistedDeliveryFormatGate,
   syncPersistedAreaCatalog,
   syncPersistedAreaCatalogFromNotion,
@@ -710,21 +710,6 @@ export default function App() {
         setAiCredentialMessage(
           `Could not open ${appSettings.aiProvider} automatically. Open ${url} in your browser.`
         );
-      }
-    }
-
-    window.open(url, "_blank", "noopener,noreferrer");
-  }
-
-  async function openNotionDevelopersPage() {
-    const url = "https://app.notion.com/developers/connections";
-
-    if (usesTauriPersistence) {
-      try {
-        await openPersistedNotionDevelopersPage();
-        return;
-      } catch {
-        console.warn(`Could not open Notion automatically. Open ${url} in your browser.`);
       }
     }
 
@@ -1707,8 +1692,24 @@ export default function App() {
             onDiscoverProjectSync={discoverProjectSync}
             onApplyProjectSync={applyProjectSync}
             hasNotionIntegrationToken={usesTauriPersistence ? hasPersistedNotionIntegrationToken : async () => false}
-            onSaveNotionIntegrationToken={usesTauriPersistence ? savePersistedNotionIntegrationToken : async () => undefined}
             onDeleteNotionIntegrationToken={usesTauriPersistence ? deletePersistedNotionIntegrationToken : async () => undefined}
+            onStartNotionOAuthConnection={
+              usesTauriPersistence
+                ? startPersistedNotionOAuthConnection
+                : async () => {
+                    throw new Error("Notion OAuth is available in the Tauri app.");
+                  }
+            }
+            onCompleteNotionOAuthConnection={
+              usesTauriPersistence
+                ? completePersistedNotionOAuthConnection
+                : async () => ({
+                    ok: false,
+                    message: "Notion OAuth is available in the Tauri app.",
+                    title: null,
+                    extractedBlockCount: 0
+                  })
+            }
             onTestNotionCatalogConnection={
               usesTauriPersistence
                 ? testPersistedNotionCatalogConnection
@@ -1722,7 +1723,6 @@ export default function App() {
             onListJiraProjectsForConnection={listJiraProjectsForConnection}
             onOpenJiraApiTokens={openJiraApiTokensPage}
             onOpenCatalogSourceRequirements={openCatalogSourceRequirementsPage}
-            onOpenNotionDevelopers={openNotionDevelopersPage}
             onOpenAiProviderApiKeys={openAiProviderApiKeysPage}
             onExportBackup={exportBackup}
             onImportBackup={importBackup}

@@ -1,6 +1,8 @@
 use tauri::State;
 
 use super::worker::run_blocking_result;
+use crate::area_catalog::NotionCatalogConnectionTestResult;
+use crate::notion_oauth::NotionOAuthStartResult;
 use crate::services::AppServices;
 
 #[tauri::command]
@@ -138,6 +140,31 @@ pub async fn delete_notion_integration_token(
     let services = services.inner().clone();
     run_blocking_result("Credential worker", move || {
         services.delete_notion_integration_token()
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn start_notion_oauth_connection(
+    services: State<'_, AppServices>,
+) -> Result<NotionOAuthStartResult, String> {
+    let services = services.inner().clone();
+    run_blocking_result("Credential worker", move || {
+        services.start_notion_oauth_connection()
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn complete_notion_oauth_connection(
+    services: State<'_, AppServices>,
+    authorization_code: String,
+    state: String,
+    page_url_or_id: String,
+) -> Result<NotionCatalogConnectionTestResult, String> {
+    let services = services.inner().clone();
+    run_blocking_result("Credential worker", move || {
+        services.complete_notion_oauth_connection(&authorization_code, &state, &page_url_or_id)
     })
     .await
 }

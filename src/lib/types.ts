@@ -227,6 +227,11 @@ export type AppSettings = {
   projectSyncEnabled?: boolean;
 };
 
+export type NotionOAuthStartResult = {
+  authorizationUrl: string;
+  state: string;
+};
+
 export type ProjectSyncCandidate = {
   name: string;
   normalizedName: string;

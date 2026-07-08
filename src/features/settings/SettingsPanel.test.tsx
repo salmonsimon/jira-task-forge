@@ -37,13 +37,13 @@ describe("SettingsPanel", () => {
         onTestJiraApiTokenQuiet={async () => ({ ok: true, message: "Connected", accountDisplayName: null, accountEmail: null })}
         onTestJiraConnectionSettings={async () => ({ ok: true, message: "Connected", accountDisplayName: null, accountEmail: null })}
         hasNotionIntegrationToken={async () => true}
-        onSaveNotionIntegrationToken={async () => undefined}
         onDeleteNotionIntegrationToken={async () => undefined}
+        onStartNotionOAuthConnection={async () => ({ authorizationUrl: "https://api.notion.com/v1/oauth/authorize?state=state-123", state: "state-123" })}
+        onCompleteNotionOAuthConnection={async () => ({ ok: true, message: "Connected", title: "JTF Sync Catalog", extractedBlockCount: 1 })}
         onTestNotionCatalogConnection={async () => ({ ok: true, message: "Connected", title: "JTF Sync Catalog", extractedBlockCount: 1 })}
         onListJiraProjectsForConnection={async () => []}
         onOpenJiraApiTokens={() => undefined}
         onOpenCatalogSourceRequirements={() => undefined}
-        onOpenNotionDevelopers={() => undefined}
         onOpenAiProviderApiKeys={() => undefined}
         onExportBackup={() => undefined}
         onImportBackup={() => undefined}
@@ -79,13 +79,13 @@ describe("SettingsPanel", () => {
         onTestJiraApiTokenQuiet={async () => ({ ok: true, message: "Connected", accountDisplayName: null, accountEmail: null })}
         onTestJiraConnectionSettings={async () => ({ ok: true, message: "Connected", accountDisplayName: null, accountEmail: null })}
         hasNotionIntegrationToken={async () => true}
-        onSaveNotionIntegrationToken={async () => undefined}
         onDeleteNotionIntegrationToken={async () => undefined}
+        onStartNotionOAuthConnection={async () => ({ authorizationUrl: "https://api.notion.com/v1/oauth/authorize?state=state-123", state: "state-123" })}
+        onCompleteNotionOAuthConnection={async () => ({ ok: true, message: "Connected", title: "JTF Sync Catalog", extractedBlockCount: 1 })}
         onTestNotionCatalogConnection={async () => ({ ok: true, message: "Connected", title: "JTF Sync Catalog", extractedBlockCount: 1 })}
         onListJiraProjectsForConnection={async () => []}
         onOpenJiraApiTokens={() => undefined}
         onOpenCatalogSourceRequirements={() => undefined}
-        onOpenNotionDevelopers={() => undefined}
         onOpenAiProviderApiKeys={() => undefined}
         onExportBackup={() => undefined}
         onImportBackup={() => undefined}
@@ -97,7 +97,7 @@ describe("SettingsPanel", () => {
     expect(html).toContain("Set Catalog Source");
     expect(html).toContain("Catalog source");
     expect(html).toContain("Catalog mode");
-    expect(html).not.toContain("Notion integration token");
+    expect(html).not.toContain("Paste Notion integration token");
     expect(html.match(/>Setup<\/button>/g)).toHaveLength(3);
   });
 
@@ -121,13 +121,13 @@ describe("SettingsPanel", () => {
         onTestJiraApiTokenQuiet={async () => ({ ok: true, message: "Connected", accountDisplayName: null, accountEmail: null })}
         onTestJiraConnectionSettings={async () => ({ ok: true, message: "Connected", accountDisplayName: null, accountEmail: null })}
         hasNotionIntegrationToken={async () => true}
-        onSaveNotionIntegrationToken={async () => undefined}
         onDeleteNotionIntegrationToken={async () => undefined}
+        onStartNotionOAuthConnection={async () => ({ authorizationUrl: "https://api.notion.com/v1/oauth/authorize?state=state-123", state: "state-123" })}
+        onCompleteNotionOAuthConnection={async () => ({ ok: true, message: "Connected", title: "JTF Sync Catalog", extractedBlockCount: 1 })}
         onTestNotionCatalogConnection={async () => ({ ok: true, message: "Connected", title: "JTF Sync Catalog", extractedBlockCount: 1 })}
         onListJiraProjectsForConnection={async () => []}
         onOpenJiraApiTokens={() => undefined}
         onOpenCatalogSourceRequirements={() => undefined}
-        onOpenNotionDevelopers={() => undefined}
         onOpenAiProviderApiKeys={() => undefined}
         onExportBackup={() => undefined}
         onImportBackup={() => undefined}
@@ -161,13 +161,13 @@ describe("SettingsPanel", () => {
         onTestJiraApiTokenQuiet={async () => ({ ok: true, message: "Connected", accountDisplayName: null, accountEmail: null })}
         onTestJiraConnectionSettings={async () => ({ ok: true, message: "Connected", accountDisplayName: null, accountEmail: null })}
         hasNotionIntegrationToken={async () => true}
-        onSaveNotionIntegrationToken={async () => undefined}
         onDeleteNotionIntegrationToken={async () => undefined}
+        onStartNotionOAuthConnection={async () => ({ authorizationUrl: "https://api.notion.com/v1/oauth/authorize?state=state-123", state: "state-123" })}
+        onCompleteNotionOAuthConnection={async () => ({ ok: true, message: "Connected", title: "JTF Sync Catalog", extractedBlockCount: 1 })}
         onTestNotionCatalogConnection={async () => ({ ok: true, message: "Connected", title: "JTF Sync Catalog", extractedBlockCount: 1 })}
         onListJiraProjectsForConnection={async () => []}
         onOpenJiraApiTokens={() => undefined}
         onOpenCatalogSourceRequirements={() => undefined}
-        onOpenNotionDevelopers={() => undefined}
         onOpenAiProviderApiKeys={() => undefined}
         onExportBackup={() => undefined}
         onImportBackup={() => undefined}

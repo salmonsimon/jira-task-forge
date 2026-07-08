@@ -40,9 +40,12 @@ This document captures the product scope decisions from the grill session. UI co
   Personal v1, but implementation work for OAuth, public installer/update flows,
   distribution docs, and full onboarding belongs to the later Distributable v1
   milestone unless explicitly pulled forward.
-- Personal v1 uses bring-your-own-key credentials: Jira API tokens and AI
-  provider API keys stored in the OS credential store. OAuth is a later V2 /
-  distributable research topic, not a Personal v1 blocker.
+- Personal v1 uses bring-your-own-key credentials for Jira API tokens and AI
+  provider API keys stored in the OS credential store. Notion catalog sync is
+  the exception pulled forward for distribution readiness: it should use a
+  public connection OAuth flow with the client secret protected outside the
+  desktop app. Broader Jira OAuth and AI provider OAuth remain later V2 /
+  distributable research topics, not Personal v1 blockers.
 - V2 should research Jira OAuth 2.0 and AI provider authentication options. If
   OAuth is practical, prefer it for distribution. If not, keep BYOK with stronger
   onboarding, documentation, redaction, and local secret-handling practices.

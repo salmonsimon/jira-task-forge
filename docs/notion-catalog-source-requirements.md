@@ -6,6 +6,11 @@ https://app.notion.com/p/395c335aece48144b2dbe2cc2e0de298
 This reference explains how to configure or recreate the catalog source used by
 `Set Catalog Source` when the mode is `Sync from Notion page`.
 
+Authorization is handled through the Notion public connection OAuth contract in
+[`notion-oauth-public-connection.md`](notion-oauth-public-connection.md). The
+catalog source still needs the machine-readable JSON contract below after the
+OAuth connection grants page access.
+
 Saimon's current `JTF Sync Catalog` page is the Personal v1 example source. The
 portable contract is the machine-readable JSON block inside that source, not the
 surrounding Notion layout. If the source later moves to Obsidian, Markdown,

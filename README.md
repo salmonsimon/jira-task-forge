@@ -11,7 +11,8 @@ CSV export, JSON backup/restore without secrets, Jira API token storage through
 the OS credential store, Jira connection testing, read-only JQL search with
 favorites/recent history, AI-assisted JQL drafting through the Tauri backend,
 sync audit activity, Jira-admin-import-friendly CSV export, official
-area catalog sync from Notion with OS credential-store token handling, task
+area catalog sync from Notion with public OAuth connection token handling in the
+OS credential store, task
 detail sub-tasks, local issue relationship drafts, attachment metadata and
 managed-file ingestion, assisted description sections/proposals, and a guarded
 `Create in Jira` flow that creates required epics, parent Story/Bug issues,
@@ -46,6 +47,11 @@ Running the native app requires Rust/Cargo in the WSL development environment.
 npm install
 npm run tauri dev
 ```
+
+For Notion public OAuth catalog sync, the desktop app uses the configured HTTPS
+OAuth backend. The product default is `https://notion-oauth.salmonsimon.com`;
+local localhost testing is an explicit development override. See
+[`docs/notion-oauth-public-connection.md`](docs/notion-oauth-public-connection.md).
 
 ## Build Frontend
 

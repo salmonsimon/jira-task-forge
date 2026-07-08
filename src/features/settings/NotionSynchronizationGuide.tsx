@@ -1,21 +1,20 @@
-import { Check, ChevronDown, ChevronLeft, ExternalLink, KeyRound, RefreshCw, Trash2 } from "lucide-react";
+import { Check, ChevronDown, ChevronLeft, ExternalLink, Link, RefreshCw, Trash2 } from "lucide-react";
 import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, FeedbackNote, LoadingOrb, PanelHeader } from "../../components/ui";
 import { appOverlayLayers, useAppOverlay } from "../../lib/app-overlays";
 import { getModalMouseNavigationIntent, isMouseNavigationButton, shouldHandleEnterAsWizardAdvance } from "../../lib/modal-navigation";
-import type { AppSettings, NotionCatalogConnectionTestResult } from "../../lib/types";
+import type { AppSettings, NotionCatalogConnectionTestResult, NotionOAuthStartResult } from "../../lib/types";
 
-const notionDeveloperPortalUrl = "https://app.notion.com/developers/connections";
 export const defaultNotionCatalogUrl = "https://app.notion.com/p/capacitacion-interna-dts/JTF-Sync-Catalog-387c335aece481c292baf6991a86a5c3";
 export const notionCatalogSourceRequirementsUrl = "https://app.notion.com/p/395c335aece48144b2dbe2cc2e0de298";
 
-type NotionStep = "source" | "token" | "review";
-type NotionTokenDraftTestStatus = "idle" | "success" | "error";
+type NotionStep = "source" | "connect" | "review";
+type NotionOAuthStatus = "idle" | "started" | "success" | "error";
 
 const notionSteps: Array<{ id: NotionStep; label: string }> = [
   { id: "source", label: "Source" },
-  { id: "token", label: "Token" },
+  { id: "connect", label: "Connect" },
   { id: "review", label: "Review" }
 ];
 
@@ -28,20 +27,26 @@ export function canSaveNotionSynchronization(mode: AppSettings["catalogSourceMod
   return mode === "manual" || Boolean(testResult?.ok);
 }
 
-export function canSaveNotionTokenDraft(tokenDraft: string, tokenDraftTestStatus: NotionTokenDraftTestStatus, isSavingToken: boolean): boolean {
-  return Boolean(tokenDraft.trim()) && tokenDraftTestStatus === "success" && !isSavingToken;
+export function canCompleteNotionOAuth(
+  mode: AppSettings["catalogSourceMode"],
+  authorizationCode: string,
+  pendingState: string | null,
+  sourceUrl: string,
+  isCompleting: boolean
+): boolean {
+  if (isCompleting || mode !== "notion") return false;
+  return Boolean(authorizationCode.trim() && pendingState?.trim() && sourceUrl.trim());
 }
 
 export function canTestNotionCatalogSource(
   mode: AppSettings["catalogSourceMode"],
   sourceUrl: string,
   hasToken: boolean,
-  tokenDraft: string,
   isTesting: boolean
 ): boolean {
   if (isTesting) return false;
   if (mode !== "notion") return true;
-  return Boolean(sourceUrl.trim()) && (hasToken || Boolean(tokenDraft.trim()));
+  return Boolean(sourceUrl.trim()) && hasToken;
 }
 
 export function NotionSynchronizationGuide({
@@ -51,8 +56,8 @@ export function NotionSynchronizationGuide({
   onClose,
   onDeleteNotionIntegrationToken,
   onOpenCatalogSourceRequirements,
-  onOpenNotionDevelopers,
-  onSaveNotionIntegrationToken,
+  onStartNotionOAuthConnection,
+  onCompleteNotionOAuthConnection,
   onTestNotionCatalogConnection
 }: {
   settings: AppSettings;
@@ -61,8 +66,8 @@ export function NotionSynchronizationGuide({
   onClose: () => void;
   onDeleteNotionIntegrationToken: () => Promise<void>;
   onOpenCatalogSourceRequirements: () => void;
-  onOpenNotionDevelopers: () => void;
-  onSaveNotionIntegrationToken: (token: string) => Promise<void>;
+  onStartNotionOAuthConnection: () => Promise<NotionOAuthStartResult>;
+  onCompleteNotionOAuthConnection: (authorizationCode: string, state: string, pageUrlOrId: string) => Promise<NotionCatalogConnectionTestResult>;
   onTestNotionCatalogConnection: (pageUrlOrId: string, token?: string) => Promise<NotionCatalogConnectionTestResult>;
 }) {
   const surfaceRef = useRef<HTMLElement | null>(null);
@@ -71,22 +76,24 @@ export function NotionSynchronizationGuide({
     settings.catalogSourceMode === "public-exportable" ? "notion" : settings.catalogSourceMode
   );
   const [sourceUrl, setSourceUrl] = useState(settings.catalogSourceUrl || defaultNotionCatalogUrl);
-  const [tokenDraft, setTokenDraft] = useState("");
   const [hasToken, setHasToken] = useState(false);
-  const [tokenMessage, setTokenMessage] = useState<string | null>(null);
-  const [tokenDraftTestStatus, setTokenDraftTestStatus] = useState<NotionTokenDraftTestStatus>("idle");
+  const [oauthCode, setOauthCode] = useState("");
+  const [oauthMessage, setOauthMessage] = useState<string | null>(null);
+  const [oauthStatus, setOauthStatus] = useState<NotionOAuthStatus>("idle");
+  const [pendingOAuthState, setPendingOAuthState] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<NotionCatalogConnectionTestResult | null>(null);
-  const [isSavingToken, setIsSavingToken] = useState(false);
+  const [isStartingOAuth, setIsStartingOAuth] = useState(false);
+  const [isCompletingOAuth, setIsCompletingOAuth] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const visibleSteps = mode === "manual" ? notionSteps.filter((candidate) => candidate.id === "source") : notionSteps;
   const currentStepIndex = visibleSteps.findIndex((candidate) => candidate.id === step);
   const canContinue =
-    (step === "source" && (mode === "manual" || Boolean(sourceUrl.trim()))) ||
-    (step === "token" && (hasToken || mode !== "notion")) ||
+    step === "source" ||
+    (step === "connect" && (hasToken || oauthStatus === "success" || mode !== "notion")) ||
     step === "review";
   const canSaveSynchronization = canSaveNotionSynchronization(mode, testResult) && (mode !== "notion" || hasToken);
-  const canSaveTokenDraft = canSaveNotionTokenDraft(tokenDraft, tokenDraftTestStatus, isSavingToken);
-  const canTestSource = canTestNotionCatalogSource(mode, sourceUrl, hasToken, tokenDraft, isTesting);
+  const canCompleteOAuth = canCompleteNotionOAuth(mode, oauthCode, pendingOAuthState, sourceUrl, isCompletingOAuth);
+  const canTestSource = canTestNotionCatalogSource(mode, sourceUrl, hasToken, isTesting);
   const sourceLabel = useMemo(
     () => catalogModeOptions.find((option) => option.value === mode)?.label ?? "Unknown",
     [mode]
@@ -126,27 +133,53 @@ export function NotionSynchronizationGuide({
     if (previousStep) setStep(previousStep);
   }
 
-  async function saveTokenDraft() {
-    const token = tokenDraft.trim();
-    if (!token || tokenDraftTestStatus !== "success") return;
-    setIsSavingToken(true);
+  async function startOAuth() {
+    if (mode !== "notion") return;
+    setIsStartingOAuth(true);
+    setOauthMessage(null);
+    setOauthStatus("idle");
     try {
-      await onSaveNotionIntegrationToken(token);
-      setHasToken(true);
-      setTokenDraft("");
-      setTokenMessage("Notion token saved in the OS credential store.");
-      setTokenDraftTestStatus("idle");
+      const result = await onStartNotionOAuthConnection();
+      setPendingOAuthState(result.state);
+      setOauthStatus("started");
+      setOauthMessage("Notion authorization opened. After approval, paste the callback code here to finish connecting.");
+      window.open(result.authorizationUrl, "_blank", "noopener,noreferrer");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setOauthStatus("error");
+      setOauthMessage(message || "Could not start Notion OAuth.");
     } finally {
-      setIsSavingToken(false);
+      setIsStartingOAuth(false);
+    }
+  }
+
+  async function completeOAuth() {
+    if (!canCompleteOAuth || !pendingOAuthState) return;
+    setIsCompletingOAuth(true);
+    setOauthMessage(null);
+    setTestResult(null);
+    try {
+      const result = await onCompleteNotionOAuthConnection(oauthCode.trim(), pendingOAuthState, sourceUrl.trim());
+      setTestResult(result);
+      setHasToken(true);
+      setOauthCode("");
+      setOauthStatus("success");
+      setOauthMessage("Notion connected and the selected catalog page passed validation.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setOauthStatus("error");
+      setOauthMessage(message || "Notion OAuth failed. No unusable credential was saved.");
+    } finally {
+      setIsCompletingOAuth(false);
     }
   }
 
   async function removeToken() {
     await onDeleteNotionIntegrationToken();
     setHasToken(false);
-    setTokenDraft("");
-    setTokenDraftTestStatus("idle");
-    setTokenMessage("Notion token removed.");
+    setOauthCode("");
+    setOauthStatus("idle");
+    setOauthMessage("Notion connection removed.");
     setTestResult(null);
   }
 
@@ -154,15 +187,11 @@ export function NotionSynchronizationGuide({
     if (!canTestSource) return;
     setIsTesting(true);
     setTestResult(null);
-    setTokenMessage(null);
+    setOauthMessage(null);
     try {
       if (mode === "notion") {
-        const result = await onTestNotionCatalogConnection(sourceUrl.trim(), tokenDraft.trim() || undefined);
+        const result = await onTestNotionCatalogConnection(sourceUrl.trim());
         setTestResult(result);
-        if (tokenDraft.trim()) {
-          setTokenDraftTestStatus(result.ok ? "success" : "error");
-          setTokenMessage(result.ok ? "This token passed Test source and can be saved." : "Test source failed. The draft token was not saved.");
-        }
       } else {
         await onChangeCatalogSettings({ catalogSourceMode: mode, catalogSourceUrl: "" });
         setTestResult({
@@ -180,10 +209,6 @@ export function NotionSynchronizationGuide({
         title: null,
         extractedBlockCount: 0
       });
-      if (tokenDraft.trim()) {
-        setTokenDraftTestStatus("error");
-        setTokenMessage("Test source failed. The draft token was not saved.");
-      }
     } finally {
       setIsTesting(false);
     }
@@ -277,94 +302,88 @@ export function NotionSynchronizationGuide({
             <GuideSection title="Catalog source" description="Choose whether Areas are managed locally or synced from the Notion catalog. Manual catalog saves immediately and skips external setup.">
               <SourceModeSelect label="Catalog mode" value={mode} options={catalogModeOptions} onChange={setMode} />
               {mode !== "manual" ? (
-                <>
-                  <GuideInput
-                    label="Notion page URL or ID"
-                    placeholder={defaultNotionCatalogUrl}
-                    value={sourceUrl}
-                    onChange={(value) => {
-                      setSourceUrl(value);
-                      setTestResult(null);
-                      setTokenDraftTestStatus("idle");
-                      setTokenMessage(null);
-                    }}
-                  />
-                  <Button
-                    className="settings-button-secondary"
-                    icon={<ExternalLink size={13} />}
-                    title={notionCatalogSourceRequirementsUrl}
-                    variant="secondary"
-                    onClick={onOpenCatalogSourceRequirements}
-                  >
-                    View source requirements
-                  </Button>
-                </>
+                <FeedbackNote variant="info">Continue to connect Notion, then select and validate the catalog page before saving.</FeedbackNote>
               ) : (
                 <FeedbackNote variant="warning">Manual catalog keeps Areas editable in Categories. No Notion token, page URL, or connection test is needed.</FeedbackNote>
               )}
             </GuideSection>
           ) : null}
-          {step === "token" ? (
-            <GuideSection title="Notion integration token" description="Create or copy the internal integration secret, test it against the selected page, then save it. The token stays in the OS credential store.">
+          {step === "connect" ? (
+            <GuideSection title="Connect Notion" description="Authorize the Jira Task Forge public connection in Notion. No Notion developer setup, integration secret, or manual page connection is required for app users.">
               <div className="mb-5 rounded border border-[#dfe1e6] bg-[#f7f8fa] p-4">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div className="min-w-0">
-                    <div className="text-sm font-semibold text-[#172b4d]">{hasToken ? "Credential saved" : "No credential saved"}</div>
-                    <p className="text-xs leading-relaxed text-[#6b778c]">The Notion page must also be shared with the Jira Task Forge connection.</p>
+                    <div className="text-sm font-semibold text-[#172b4d]">{hasToken ? "Notion connected" : "Notion not connected"}</div>
+                    <p className="text-xs leading-relaxed text-[#6b778c]">
+                      The access token is saved in the OS credential store only after the selected page passes validation.
+                    </p>
                   </div>
                   <Button
-                    className="settings-button-secondary w-full justify-center sm:w-auto sm:shrink-0"
-                    icon={<ExternalLink size={13} />}
-                    title={notionDeveloperPortalUrl}
+                    className="settings-button-primary w-full justify-center sm:w-auto sm:shrink-0"
+                    disabled={isStartingOAuth}
+                    icon={isStartingOAuth ? <LoadingOrb size="xs" /> : <ExternalLink size={13} />}
                     variant="secondary"
-                    onClick={onOpenNotionDevelopers}
+                    onClick={startOAuth}
                   >
-                    Manage token
+                    {isStartingOAuth ? "Opening..." : "Connect Notion"}
                   </Button>
                 </div>
               </div>
               <GuideInput
-                label="New integration token"
-                placeholder={hasToken ? "Enter a new token to replace it" : "Paste Notion integration token"}
-                secret
-                value={tokenDraft}
+                label="OAuth callback code"
+                placeholder="Paste the code returned by the Notion callback"
+                value={oauthCode}
                 onChange={(value) => {
-                  setTokenDraft(value);
-                  setTokenMessage(null);
-                  setTokenDraftTestStatus("idle");
+                  setOauthCode(value);
+                  setOauthMessage(null);
+                  setOauthStatus(pendingOAuthState ? "started" : "idle");
                   setTestResult(null);
                 }}
               />
+              <GuideInput
+                label="Selected catalog page URL or ID"
+                placeholder={defaultNotionCatalogUrl}
+                value={sourceUrl}
+                onChange={(value) => {
+                  setSourceUrl(value);
+                  setTestResult(null);
+                  setOauthStatus(pendingOAuthState ? "started" : hasToken ? "success" : "idle");
+                  setOauthMessage(null);
+                }}
+              />
+              <Button
+                className="settings-button-secondary"
+                icon={<ExternalLink size={13} />}
+                title={notionCatalogSourceRequirementsUrl}
+                variant="secondary"
+                onClick={onOpenCatalogSourceRequirements}
+              >
+                View source requirements
+              </Button>
+              <FeedbackNote className="mt-2" variant="warning">
+                Jira Task Forge owns the public connection. Notion will ask which pages to share, then the backend exchanges the code and the app validates this page before saving the token.
+              </FeedbackNote>
               <div className="mt-5 flex flex-wrap gap-2">
                 <Button
                   className="settings-button-test"
-                  disabled={!canTestSource || !tokenDraft.trim()}
-                  icon={isTesting ? <LoadingOrb size="xs" /> : <RefreshCw size={14} />}
+                  disabled={!canCompleteOAuth}
+                  icon={isCompletingOAuth ? <LoadingOrb size="xs" /> : <Link size={14} />}
                   variant="secondary"
-                  onClick={testSource}
+                  onClick={completeOAuth}
                 >
-                  {isTesting ? "Testing..." : "Test source"}
-                </Button>
-                <Button
-                  className="settings-button-primary"
-                  disabled={!canSaveTokenDraft}
-                  icon={isSavingToken ? <LoadingOrb size="xs" /> : <KeyRound size={14} />}
-                  variant="secondary"
-                  onClick={saveTokenDraft}
-                >
-                  {isSavingToken ? "Saving..." : "Save token"}
+                  {isCompletingOAuth ? "Connecting..." : "Finish connection"}
                 </Button>
                 <Button
                   className="settings-button-danger"
-                  disabled={!hasToken || isSavingToken}
+                  disabled={!hasToken || isCompletingOAuth}
                   icon={<Trash2 size={14} />}
                   variant="secondary"
                   onClick={removeToken}
                 >
-                  Remove token
+                  Remove connection
                 </Button>
               </div>
-              {tokenMessage ? <FeedbackNote className="mt-4" variant="success">{tokenMessage}</FeedbackNote> : null}
+              {oauthMessage ? <FeedbackNote className="mt-4" variant={oauthStatus === "error" ? "error" : "success"}>{oauthMessage}</FeedbackNote> : null}
             </GuideSection>
           ) : null}
           {step === "review" ? (
@@ -373,7 +392,7 @@ export function NotionSynchronizationGuide({
                 rows={[
                   ["Catalog mode", sourceLabel],
                   ["Source", mode === "manual" ? "Manual fallback" : sourceUrl.trim() || "Missing"],
-                  ["Integration token", mode === "notion" ? (hasToken ? "Saved" : "Missing") : "Not required"]
+                  ["Notion connection", mode === "notion" ? (hasToken ? "Connected" : "Missing") : "Not required"]
                 ]}
               />
               <div className="mt-5 flex flex-wrap gap-2">

@@ -2,7 +2,7 @@ import { Bot, Check, Download, KeyRound, Settings, UploadCloud } from "lucide-re
 import { useEffect, useRef, useState } from "react";
 import { Button, DetailBlock, DrawerShell, FeedbackNote, PanelHeader, SegmentedControl } from "../../components/ui";
 import { appOverlayLayers, useAppOverlay } from "../../lib/app-overlays";
-import type { AppSettings, CredentialConnectionTestResult, JiraConnectionTestResult, JiraProjectOption, NotionCatalogConnectionTestResult, ProjectSyncApplyRequest, ProjectSyncReview, ThemeMode } from "../../lib/types";
+import type { AppSettings, CredentialConnectionTestResult, JiraConnectionTestResult, JiraProjectOption, NotionCatalogConnectionTestResult, NotionOAuthStartResult, ProjectSyncApplyRequest, ProjectSyncReview, ThemeMode } from "../../lib/types";
 import { AiProviderSetupGuide, defaultAiProviderModels } from "./AiProviderSetupGuide";
 import { JiraConnectionGuide } from "./JiraConnectionGuide";
 import notionMark from "../../assets/notion-mark.png";
@@ -28,13 +28,13 @@ export function SettingsPanel({
   onDiscoverProjectSync,
   onApplyProjectSync,
   hasNotionIntegrationToken,
-  onSaveNotionIntegrationToken,
   onDeleteNotionIntegrationToken,
+  onStartNotionOAuthConnection,
+  onCompleteNotionOAuthConnection,
   onTestNotionCatalogConnection,
   onListJiraProjectsForConnection,
   onOpenJiraApiTokens,
   onOpenCatalogSourceRequirements,
-  onOpenNotionDevelopers,
   onOpenAiProviderApiKeys,
   onExportBackup,
   onImportBackup,
@@ -61,13 +61,13 @@ export function SettingsPanel({
   onDiscoverProjectSync?: () => Promise<ProjectSyncReview>;
   onApplyProjectSync?: (request: ProjectSyncApplyRequest) => Promise<void>;
   hasNotionIntegrationToken: () => Promise<boolean>;
-  onSaveNotionIntegrationToken: (token: string) => Promise<void>;
   onDeleteNotionIntegrationToken: () => Promise<void>;
+  onStartNotionOAuthConnection: () => Promise<NotionOAuthStartResult>;
+  onCompleteNotionOAuthConnection: (authorizationCode: string, state: string, pageUrlOrId: string) => Promise<NotionCatalogConnectionTestResult>;
   onTestNotionCatalogConnection: (pageUrlOrId: string, token?: string) => Promise<NotionCatalogConnectionTestResult>;
   onListJiraProjectsForConnection: (siteUrl: string, accountEmail: string) => Promise<JiraProjectOption[]>;
   onOpenJiraApiTokens: () => void;
   onOpenCatalogSourceRequirements: () => void;
-  onOpenNotionDevelopers: () => void;
   onOpenAiProviderApiKeys: () => void;
   onExportBackup: () => void;
   onImportBackup: () => void;
@@ -184,10 +184,11 @@ export function SettingsPanel({
             setHasNotionToken(false);
           }}
           onOpenCatalogSourceRequirements={onOpenCatalogSourceRequirements}
-          onOpenNotionDevelopers={onOpenNotionDevelopers}
-          onSaveNotionIntegrationToken={async (token) => {
-            await onSaveNotionIntegrationToken(token);
+          onStartNotionOAuthConnection={onStartNotionOAuthConnection}
+          onCompleteNotionOAuthConnection={async (authorizationCode, state, pageUrlOrId) => {
+            const result = await onCompleteNotionOAuthConnection(authorizationCode, state, pageUrlOrId);
             setHasNotionToken(true);
+            return result;
           }}
           onTestNotionCatalogConnection={onTestNotionCatalogConnection}
         />
@@ -316,12 +317,12 @@ export function SettingsPanel({
               rows={[
                 ["Catalog mode", catalogSourceModeLabel(settings.catalogSourceMode)],
                 ["Source", settings.catalogSourceMode === "manual" ? "Manual fallback" : settings.catalogSourceUrl || defaultNotionCatalogUrl],
-                ["Integration token", settings.catalogSourceMode === "notion" ? (hasNotionToken ? "Saved" : "Missing") : "Not required"]
+                ["Notion connection", settings.catalogSourceMode === "notion" ? (hasNotionToken ? "Connected" : "Missing") : "Not required"]
               ]}
             />
           </div>
           <p className="mt-2 text-xs leading-relaxed text-[#6b778c]">
-            Notion tokens follow the same secret boundary as Jira credentials and are never included in backups.
+            Notion OAuth tokens follow the same secret boundary as Jira credentials and are never included in backups.
           </p>
         </div>
 

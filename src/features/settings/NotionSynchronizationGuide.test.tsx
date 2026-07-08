@@ -2,8 +2,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { AppSettings } from "../../lib/types";
 import {
-  canSaveNotionTokenDraft,
   canSaveNotionSynchronization,
+  canCompleteNotionOAuth,
   canTestNotionCatalogSource,
   catalogModeOptions,
   notionCatalogSourceRequirementsUrl,
@@ -24,7 +24,7 @@ const settings: AppSettings = {
 };
 
 describe("NotionSynchronizationGuide", () => {
-  it("starts with catalog source selection before token setup", () => {
+  it("starts with catalog source selection before Notion connection setup", () => {
     const html = renderToStaticMarkup(
       <NotionSynchronizationGuide
         settings={settings}
@@ -33,8 +33,13 @@ describe("NotionSynchronizationGuide", () => {
         onClose={() => undefined}
         onDeleteNotionIntegrationToken={async () => undefined}
         onOpenCatalogSourceRequirements={() => undefined}
-        onOpenNotionDevelopers={() => undefined}
-        onSaveNotionIntegrationToken={async () => undefined}
+        onStartNotionOAuthConnection={async () => ({ authorizationUrl: "https://api.notion.com/v1/oauth/authorize?state=state-123", state: "state-123" })}
+        onCompleteNotionOAuthConnection={async () => ({
+          ok: true,
+          message: "Connected",
+          title: "JTF Sync Catalog",
+          extractedBlockCount: 1
+        })}
         onTestNotionCatalogConnection={async () => ({
           ok: true,
           message: "Connected",
@@ -47,12 +52,10 @@ describe("NotionSynchronizationGuide", () => {
     expect(html).toContain("Set Catalog Source");
     expect(html).toContain("Catalog source");
     expect(html).toContain("Catalog mode");
-    expect(html).toContain("Notion page URL or ID");
-    expect(html).toContain("View source requirements");
-    expect(html).toContain(`title="${notionCatalogSourceRequirementsUrl}"`);
-    expect(html).not.toContain(`href="${notionCatalogSourceRequirementsUrl}"`);
+    expect(html).toContain("Continue to connect Notion, then select and validate the catalog page before saving.");
+    expect(html).not.toContain("Notion page URL or ID");
     expect(html).not.toContain("New integration token");
-    expect(html.indexOf("1. Source")).toBeLessThan(html.indexOf("2. Token"));
+    expect(html.indexOf("1. Source")).toBeLessThan(html.indexOf("2. Connect"));
   });
 
   it("does not expose Notion token management before the source decision", () => {
@@ -64,8 +67,13 @@ describe("NotionSynchronizationGuide", () => {
         onClose={() => undefined}
         onDeleteNotionIntegrationToken={async () => undefined}
         onOpenCatalogSourceRequirements={() => undefined}
-        onOpenNotionDevelopers={() => undefined}
-        onSaveNotionIntegrationToken={async () => undefined}
+        onStartNotionOAuthConnection={async () => ({ authorizationUrl: "https://api.notion.com/v1/oauth/authorize?state=state-123", state: "state-123" })}
+        onCompleteNotionOAuthConnection={async () => ({
+          ok: true,
+          message: "Connected",
+          title: "JTF Sync Catalog",
+          extractedBlockCount: 1
+        })}
         onTestNotionCatalogConnection={async () => ({
           ok: true,
           message: "Connected",
@@ -88,8 +96,13 @@ describe("NotionSynchronizationGuide", () => {
         onClose={() => undefined}
         onDeleteNotionIntegrationToken={async () => undefined}
         onOpenCatalogSourceRequirements={() => undefined}
-        onOpenNotionDevelopers={() => undefined}
-        onSaveNotionIntegrationToken={async () => undefined}
+        onStartNotionOAuthConnection={async () => ({ authorizationUrl: "https://api.notion.com/v1/oauth/authorize?state=state-123", state: "state-123" })}
+        onCompleteNotionOAuthConnection={async () => ({
+          ok: true,
+          message: "Connected",
+          title: "JTF Sync Catalog",
+          extractedBlockCount: 1
+        })}
         onTestNotionCatalogConnection={async () => ({
           ok: true,
           message: "Connected",
@@ -103,7 +116,7 @@ describe("NotionSynchronizationGuide", () => {
     expect(html).toContain("No Notion token, page URL, or connection test is needed");
     expect(html).toContain("Use manual catalog");
     expect(html).toContain("grid-cols-1");
-    expect(html).not.toContain("2. Token");
+    expect(html).not.toContain("2. Connect");
     expect(html).not.toContain("3. Review");
     expect(html).not.toContain("Notion page URL or ID");
     expect(html).not.toContain("View source requirements");
@@ -123,20 +136,49 @@ describe("NotionSynchronizationGuide", () => {
     expect(canSaveNotionSynchronization("notion", { ok: true, message: "Connected", title: "JTF Sync Catalog", extractedBlockCount: 12 })).toBe(true);
   });
 
-  it("keeps a new Notion token unsavable until its draft connection test succeeds", () => {
-    expect(canSaveNotionTokenDraft("", "idle", false)).toBe(false);
-    expect(canSaveNotionTokenDraft("ntn_draft", "idle", false)).toBe(false);
-    expect(canSaveNotionTokenDraft("ntn_draft", "error", false)).toBe(false);
-    expect(canSaveNotionTokenDraft("ntn_draft", "success", true)).toBe(false);
-    expect(canSaveNotionTokenDraft("ntn_draft", "success", false)).toBe(true);
+  it("keeps Notion OAuth completion blocked until code, state, and selected page are present", () => {
+    expect(canCompleteNotionOAuth("manual", "code", "state", settings.catalogSourceUrl, false)).toBe(false);
+    expect(canCompleteNotionOAuth("notion", "", "state", settings.catalogSourceUrl, false)).toBe(false);
+    expect(canCompleteNotionOAuth("notion", "code", null, settings.catalogSourceUrl, false)).toBe(false);
+    expect(canCompleteNotionOAuth("notion", "code", "state", "", false)).toBe(false);
+    expect(canCompleteNotionOAuth("notion", "code", "state", settings.catalogSourceUrl, true)).toBe(false);
+    expect(canCompleteNotionOAuth("notion", "code", "state", settings.catalogSourceUrl, false)).toBe(true);
   });
 
-  it("disables Notion source testing until the page and either a saved or draft token are available", () => {
-    expect(canTestNotionCatalogSource("notion", "", false, "", false)).toBe(false);
-    expect(canTestNotionCatalogSource("notion", settings.catalogSourceUrl, false, "", false)).toBe(false);
-    expect(canTestNotionCatalogSource("notion", settings.catalogSourceUrl, false, "ntn_draft", false)).toBe(true);
-    expect(canTestNotionCatalogSource("notion", settings.catalogSourceUrl, true, "", false)).toBe(true);
-    expect(canTestNotionCatalogSource("notion", settings.catalogSourceUrl, true, "", true)).toBe(false);
-    expect(canTestNotionCatalogSource("manual", "", false, "", false)).toBe(true);
+  it("disables Notion source testing until the page and a saved OAuth token are available", () => {
+    expect(canTestNotionCatalogSource("notion", "", false, false)).toBe(false);
+    expect(canTestNotionCatalogSource("notion", settings.catalogSourceUrl, false, false)).toBe(false);
+    expect(canTestNotionCatalogSource("notion", settings.catalogSourceUrl, true, false)).toBe(true);
+    expect(canTestNotionCatalogSource("notion", settings.catalogSourceUrl, true, true)).toBe(false);
+    expect(canTestNotionCatalogSource("manual", "", false, false)).toBe(true);
+  });
+
+  it("allows Notion OAuth to start before a catalog page URL is entered", () => {
+    const html = renderToStaticMarkup(
+      <NotionSynchronizationGuide
+        settings={{ ...settings, catalogSourceUrl: "" }}
+        hasNotionIntegrationToken={async () => false}
+        onChangeCatalogSettings={async () => true}
+        onClose={() => undefined}
+        onDeleteNotionIntegrationToken={async () => undefined}
+        onOpenCatalogSourceRequirements={() => undefined}
+        onStartNotionOAuthConnection={async () => ({ authorizationUrl: "https://api.notion.com/v1/oauth/authorize?state=state-123", state: "state-123" })}
+        onCompleteNotionOAuthConnection={async () => ({
+          ok: true,
+          message: "Connected",
+          title: "JTF Sync Catalog",
+          extractedBlockCount: 1
+        })}
+        onTestNotionCatalogConnection={async () => ({
+          ok: true,
+          message: "Connected",
+          title: "JTF Sync Catalog",
+          extractedBlockCount: 1
+        })}
+      />
+    );
+
+    expect(html).toContain("Continue");
+    expect(html).not.toContain("Complete the Token step first");
   });
 });

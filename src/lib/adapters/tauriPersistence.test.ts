@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AssistedDescriptionProposal, NewAssistedDescriptionProposal } from "../types";
 import {
   createPersistedAssistedDescriptionProposal,
+  completePersistedNotionOAuthConnection,
+  startPersistedNotionOAuthConnection,
   testPersistedNotionCatalogConnection,
   testPersistedJiraApiToken,
   transitionPersistedAssistedDescriptionProposal,
@@ -117,6 +119,31 @@ describe("Tauri persistence assisted description proposals", () => {
 
     await expect(testPersistedNotionCatalogConnection("https://app.notion.com/page-id")).resolves.toEqual(result);
     expect(invokeMock).toHaveBeenCalledWith("test_notion_catalog_connection", {
+      pageUrlOrId: "https://app.notion.com/page-id"
+    });
+  });
+
+  it("starts Notion OAuth without passing desktop secrets", async () => {
+    const result = {
+      authorizationUrl: "https://api.notion.com/v1/oauth/authorize?client_id=public-client&state=state-123",
+      state: "state-123"
+    };
+    invokeMock.mockResolvedValueOnce(result);
+
+    await expect(startPersistedNotionOAuthConnection()).resolves.toEqual(result);
+    expect(invokeMock).toHaveBeenCalledWith("start_notion_oauth_connection");
+  });
+
+  it("completes Notion OAuth through the backend exchange before testing the selected page", async () => {
+    const result = { ok: true, message: "Connected", title: "JTF Sync Catalog", extractedBlockCount: 12 };
+    invokeMock.mockResolvedValueOnce(result);
+
+    await expect(
+      completePersistedNotionOAuthConnection("oauth-code", "state-123", "https://app.notion.com/page-id")
+    ).resolves.toEqual(result);
+    expect(invokeMock).toHaveBeenCalledWith("complete_notion_oauth_connection", {
+      authorizationCode: "oauth-code",
+      state: "state-123",
       pageUrlOrId: "https://app.notion.com/page-id"
     });
   });

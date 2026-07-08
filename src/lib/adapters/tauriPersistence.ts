@@ -21,6 +21,7 @@ import type {
   LocalIssueRelationship,
   NewAssistedDescriptionProposal,
   NotionCatalogConnectionTestResult,
+  NotionOAuthStartResult,
   ProjectSyncApplyRequest,
   ProjectSyncReview,
   SyncLogEntry,
@@ -262,6 +263,22 @@ export async function savePersistedNotionIntegrationToken(token: string): Promis
 
 export async function deletePersistedNotionIntegrationToken(): Promise<void> {
   await invoke("delete_notion_integration_token");
+}
+
+export async function startPersistedNotionOAuthConnection(): Promise<NotionOAuthStartResult> {
+  return invoke<NotionOAuthStartResult>("start_notion_oauth_connection");
+}
+
+export async function completePersistedNotionOAuthConnection(
+  authorizationCode: string,
+  state: string,
+  pageUrlOrId: string
+): Promise<NotionCatalogConnectionTestResult> {
+  return invoke<NotionCatalogConnectionTestResult>("complete_notion_oauth_connection", {
+    authorizationCode,
+    state,
+    pageUrlOrId
+  });
 }
 
 export async function testPersistedOpenAiConnection(): Promise<string> {

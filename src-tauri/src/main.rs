@@ -7,6 +7,7 @@ mod epic_scope;
 mod integrations;
 mod jira_sync;
 mod models;
+mod notion_oauth;
 mod project_sync;
 mod redaction;
 mod repositories;
@@ -77,6 +78,8 @@ pub fn run() {
             commands::credentials::has_notion_integration_token,
             commands::credentials::save_notion_integration_token,
             commands::credentials::delete_notion_integration_token,
+            commands::credentials::start_notion_oauth_connection,
+            commands::credentials::complete_notion_oauth_connection,
             commands::ai::test_openai_connection,
             commands::ai::test_ai_provider_connection,
             commands::ai::test_openai_api_key,
