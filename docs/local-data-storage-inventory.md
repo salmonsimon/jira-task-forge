@@ -44,9 +44,9 @@ stored through the operating system credential store via the Rust/Tauri backend.
 After restoring a backup, reconnect Jira and AI providers from Settings.
 Packaged Windows uninstalls remove the app-owned Jira, AI provider, and Notion
 credential-store entries by their deterministic Windows Credential Manager
-target names. A fresh app-data reset also triggers backend cleanup of those
-same app-owned credentials on next launch, before the default settings can
-silently treat old credentials as reusable.
+target names. Opening the app with fresh or manually reset local app data does
+not delete credential-store entries by itself; reconnect integrations from
+Settings when intentionally reusing or replacing credentials.
 
 ### Backups and exports
 
@@ -168,8 +168,8 @@ Do not manually delete these while work is active:
 - operating system credential-store entries unless intentionally resetting Jira
   or AI connection state.
 
-For packaged release smoke, prefer the reviewed uninstall/reset behavior over
-manual Credential Manager cleanup. Use fake or dedicated test credentials when
+For packaged release smoke, prefer the reviewed uninstall behavior over manual
+Credential Manager cleanup. Use fake or dedicated test credentials when
 validating the uninstall path.
 
 The following cleanup ideas remain future HITL work and should not be

@@ -92,7 +92,7 @@ Manager to delete the app-owned generic credential targets used by the Rust
 The hook deletes by target name only. It does not enumerate, read, print, or
 export credential values.
 
-The backend also purges these same integration credentials when the app starts
-with fresh or reset local app data and no persisted settings row. This prevents
-a clean reinstall or app-data reset from silently reusing an old credential that
-outlived the local settings database.
+Opening the app with fresh or manually reset local app data does not delete
+credential-store entries by itself. Credential cleanup is tied to the packaged
+Windows uninstall path so it runs during an explicit uninstall instead of an
+ordinary app launch.

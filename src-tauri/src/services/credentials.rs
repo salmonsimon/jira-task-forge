@@ -59,34 +59,6 @@ pub(in crate::services) fn windows_credential_manager_target(
 }
 
 impl AppServices {
-    pub fn delete_all_integration_credentials(&self) -> Result<(), String> {
-        let mut failures = Vec::new();
-
-        for descriptor in integration_credential_descriptors() {
-            let entry =
-                keyring::Entry::new(descriptor.service, descriptor.account).map_err(|error| {
-                    format!(
-                        "Could not open OS credential store for {}: {error}",
-                        descriptor.label
-                    )
-                })?;
-
-            match entry.delete_credential() {
-                Ok(()) | Err(keyring::Error::NoEntry) => {}
-                Err(error) => failures.push(format!("{}: {error}", descriptor.label)),
-            }
-        }
-
-        if failures.is_empty() {
-            Ok(())
-        } else {
-            Err(format!(
-                "Could not remove all integration credentials: {}",
-                failures.join("; ")
-            ))
-        }
-    }
-
     pub fn has_jira_api_token(&self) -> Result<bool, keyring::Error> {
         let entry = keyring::Entry::new(JIRA_CREDENTIAL_SERVICE, JIRA_API_TOKEN_ACCOUNT)?;
         match entry.get_password() {
