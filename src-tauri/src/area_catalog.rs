@@ -103,7 +103,6 @@ pub struct SyncedDeliveryFormat {
 #[serde(rename_all = "camelCase")]
 pub struct SyncedAreaFormatRule {
     pub area_display_name: String,
-    #[serde(rename = "order", alias = "priority")]
     pub order: i64,
     pub condition: String,
     pub delivery_format: String,
@@ -1212,8 +1211,8 @@ mod tests {
     }
 
     #[test]
-    fn accepts_legacy_priority_as_area_format_rule_order() {
-        let result = parse_exportable_catalog_json(
+    fn rejects_legacy_priority_for_area_format_rule_order() {
+        let error = parse_exportable_catalog_json(
             "https://example.test/jtf-sync-catalog.json",
             r#"{
               "areas": [
@@ -1259,10 +1258,9 @@ mod tests {
               ]
             }"#,
         )
-        .expect("legacy catalog should parse");
+        .expect_err("legacy priority should not parse");
 
-        assert!(result.ok);
-        assert_eq!(result.area_format_rules[0].order, 3);
+        assert!(error.contains("missing field `order`"));
     }
 
     #[test]
