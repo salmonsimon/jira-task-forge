@@ -57,8 +57,10 @@ it("shows externally managed areas as refreshable instead of manually creatable"
   );
 
   expect(html).toContain(">Sync<");
-  expect(html).toContain("title=\"Update official area catalog\"");
-  expect(html.match(/>New</g)).toHaveLength(1);
+  expect(html).toContain("Area sync enabled");
+  expect(html).toContain("title=\"Sync Areas from Notion catalog\"");
+  expect(html).toContain("title=\"Switch Areas to manual mode before adding\"");
+  expect(html.match(/>New</g)).toHaveLength(2);
   expect(html).not.toContain("Rename Bug");
   expect(html).not.toContain("Delete Bug");
 });
@@ -121,6 +123,9 @@ it("renders manual catalog areas as editable local categories", () => {
   expect(html).toContain('aria-pressed="true"');
   expect(html).toContain("app-toggle-track-on");
   expect(html).toContain("title=\"Sync Projects from Jira epics\"");
+  expect(html).toContain("Manual Areas mode");
+  expect(html).toContain("title=\"Enable area sync before syncing\"");
+  expect(html).toContain("title=\"New Area\"");
   expect(html.match(/>New</g)).toHaveLength(2);
   expect(html).toContain("Rename Bug");
   expect(html).toContain("Delete Bug");
@@ -143,7 +148,54 @@ it("keeps Notion catalog areas synchronized instead of manually editable", () =>
   );
 
   expect(html).toContain(">Sync<");
-  expect(html).toContain("title=\"Update official area catalog\"");
+  expect(html).toContain("Area sync enabled");
+  expect(html).toContain("title=\"Sync Areas from Notion catalog\"");
   expect(html).not.toContain("Rename Bug");
   expect(html).not.toContain("Delete Bug");
+});
+
+it("explains empty synced Areas and offers sync/manual choices", () => {
+  const html = renderToStaticMarkup(
+    <CategoriesPanel
+      projects={[project]}
+      areas={[]}
+      catalogSourceMode="notion"
+      catalogSourceUrl="https://app.notion.com/p/example"
+      onCreateCategory={() => undefined}
+      onDeleteCategory={() => undefined}
+      onUpdateCategory={() => undefined}
+      onSyncAreaCatalog={async () => null}
+      onConfigureCatalogSource={() => undefined}
+      onClose={() => undefined}
+    />
+  );
+
+  expect(html).toContain("No Areas set yet.");
+  expect(html).toContain("Sync from the Notion catalog, or switch to manual mode to add Areas.");
+  expect(html).toContain("Area sync enabled");
+  expect(html).toContain("title=\"Sync Areas from Notion catalog\"");
+  expect(html).toContain("title=\"Switch Areas to manual mode before adding\"");
+});
+
+it("explains empty manual Areas and disables sync until sync mode is enabled", () => {
+  const html = renderToStaticMarkup(
+    <CategoriesPanel
+      projects={[project]}
+      areas={[]}
+      catalogSourceMode="manual"
+      catalogSourceUrl=""
+      onCreateCategory={() => undefined}
+      onDeleteCategory={() => undefined}
+      onUpdateCategory={() => undefined}
+      onSyncAreaCatalog={async () => null}
+      onConfigureCatalogSource={() => undefined}
+      onClose={() => undefined}
+    />
+  );
+
+  expect(html).toContain("No Areas set yet.");
+  expect(html).toContain("Use New to add Areas, or enable sync to load options from the Notion catalog.");
+  expect(html).toContain("Manual Areas mode");
+  expect(html).toContain("title=\"Enable area sync before syncing\"");
+  expect(html).toContain("title=\"New Area\"");
 });

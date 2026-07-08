@@ -1677,6 +1677,9 @@ export default function App() {
             onToggleProjectSync={(enabled) => {
               void updateAppSettings({ projectSyncEnabled: enabled });
             }}
+            onToggleAreaSync={(enabled) => {
+              void updateAppSettings({ catalogSourceMode: enabled ? "notion" : "manual" });
+            }}
             onDiscoverProjectSync={discoverProjectSync}
             onApplyProjectSync={applyProjectSync}
             onConfigureJira={() => {

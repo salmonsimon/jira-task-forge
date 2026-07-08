@@ -18,6 +18,7 @@ export function CategoriesPanel({
   onUpdateCategory,
   onDeleteCategory,
   onSyncAreaCatalog,
+  onToggleAreaSync,
   onToggleProjectSync,
   onDiscoverProjectSync,
   onApplyProjectSync,
@@ -35,6 +36,7 @@ export function CategoriesPanel({
   onUpdateCategory: (categoryId: string, patch: Partial<Pick<Category, "hidden" | "name">>) => void | Promise<void>;
   onDeleteCategory: (categoryId: string) => void | Promise<void>;
   onSyncAreaCatalog: (sourceUrl?: string) => Promise<CatalogSyncResult | null>;
+  onToggleAreaSync?: (enabled: boolean) => void | Promise<void>;
   onToggleProjectSync?: (enabled: boolean) => void | Promise<void>;
   onDiscoverProjectSync?: () => Promise<ProjectSyncReview>;
   onApplyProjectSync?: (request: ProjectSyncApplyRequest) => Promise<void>;
@@ -90,6 +92,7 @@ export function CategoriesPanel({
           onUpdateCategory={onUpdateCategory}
           onDeleteCategory={onDeleteCategory}
           onSyncAreaCatalog={onSyncAreaCatalog}
+          onToggleAreaSync={onToggleAreaSync}
           onConfigureCatalogSource={onConfigureCatalogSource}
           onSyncResult={setCatalogNotice}
         />
@@ -120,6 +123,7 @@ function CategoryList({
   onUpdateCategory,
   onDeleteCategory,
   onSyncAreaCatalog,
+  onToggleAreaSync,
   onToggleProjectSync,
   onDiscoverProjectSync,
   onProjectSyncReview,
@@ -143,6 +147,7 @@ function CategoryList({
   onUpdateCategory: (categoryId: string, patch: Partial<Pick<Category, "hidden" | "name">>) => void | Promise<void>;
   onDeleteCategory: (categoryId: string) => void | Promise<void>;
   onSyncAreaCatalog?: (sourceUrl?: string) => Promise<CatalogSyncResult | null>;
+  onToggleAreaSync?: (enabled: boolean) => void | Promise<void>;
   onToggleProjectSync?: (enabled: boolean) => void | Promise<void>;
   onDiscoverProjectSync?: () => Promise<ProjectSyncReview>;
   onProjectSyncReview?: (review: ProjectSyncReview) => void;
@@ -154,6 +159,7 @@ function CategoryList({
   const [isAdding, setIsAdding] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [newName, setNewName] = useState("");
+  const isAreaSyncEnabled = categoryType === "area" && isCatalogManaged;
 
   async function createCategory() {
     const nextName = newName.trim();
@@ -243,20 +249,35 @@ function CategoryList({
               New
             </Button>
           </div>
-        ) : isCatalogManaged ? (
-          <Button
-            variant="ghost"
-            icon={<RefreshCw size={13} className={isSyncing ? "animate-spin" : undefined} />}
-            disabled={isSyncing}
-            onClick={() => void syncCatalog()}
-            title="Update official area catalog"
-          >
-            {isSyncing ? "Syncing..." : "Sync"}
-          </Button>
         ) : (
-          <Button variant="ghost" icon={<Plus size={13} />} onClick={() => setIsAdding(true)}>
-            New
-          </Button>
+          <div className="flex shrink-0 items-center gap-2">
+            <ToggleSwitch
+              checked={isAreaSyncEnabled}
+              checkedIcon={<RefreshCw size={13} strokeWidth={2.6} />}
+              hideLabel
+              label={isAreaSyncEnabled ? "Area sync enabled" : "Manual Areas mode"}
+              onChange={(checked) => void onToggleAreaSync?.(checked)}
+              uncheckedIcon={<Pencil size={13} strokeWidth={2.6} />}
+            />
+            <Button
+              variant="ghost"
+              icon={<RefreshCw size={13} className={isSyncing ? "animate-spin" : undefined} />}
+              disabled={isSyncing || !isAreaSyncEnabled}
+              onClick={() => void syncCatalog()}
+              title={isAreaSyncEnabled ? "Sync Areas from Notion catalog" : "Enable area sync before syncing"}
+            >
+              {isSyncing ? "Syncing..." : "Sync"}
+            </Button>
+            <Button
+              variant="ghost"
+              icon={<Plus size={13} />}
+              disabled={isAreaSyncEnabled}
+              onClick={() => setIsAdding(true)}
+              title={isAreaSyncEnabled ? "Switch Areas to manual mode before adding" : "New Area"}
+            >
+              New
+            </Button>
+          </div>
         )}
       </div>
       <div className="overflow-hidden rounded border border-[#dfe1e6]">
@@ -307,7 +328,36 @@ function CategoryList({
             onUpdateCategory={onUpdateCategory}
           />
         ))}
+        {!categories.length ? (
+          <EmptyCategoryState
+            categoryType={categoryType}
+            isSyncEnabled={categoryType === "project" ? Boolean(useProjectSync) : isAreaSyncEnabled}
+          />
+        ) : null}
       </div>
+    </div>
+  );
+}
+
+function EmptyCategoryState({
+  categoryType,
+  isSyncEnabled
+}: {
+  categoryType: "project" | "area";
+  isSyncEnabled: boolean;
+}) {
+  const label = categoryType === "project" ? "Projects" : "Areas";
+  const syncSource = categoryType === "project" ? "Jira epics" : "the Notion catalog";
+  const manualTarget = categoryType === "project" ? "a Project" : "Areas";
+
+  return (
+    <div className="px-3 py-4 text-sm leading-relaxed text-[#6b778c]">
+      <div className="font-medium text-[#42526e]">No {label} set yet.</div>
+      <p className="mt-1">
+        {isSyncEnabled
+          ? `Sync from ${syncSource}, or switch to manual mode to add ${manualTarget}.`
+          : `Use New to add ${manualTarget}, or enable sync to load options from ${syncSource}.`}
+      </p>
     </div>
   );
 }
