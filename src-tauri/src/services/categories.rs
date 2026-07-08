@@ -100,7 +100,7 @@ impl AppServices {
         CategoryRepository::new(&connection).apply_project_sync_decisions(&scope, request)
     }
 
-    fn current_project_sync_scope(&self) -> DbResult<ProjectSyncScope> {
+    pub(in crate::services) fn current_project_sync_scope(&self) -> DbResult<ProjectSyncScope> {
         let settings = self.get_app_settings()?;
         self.project_sync_scope_from_parts(
             &settings.jira_site_url,

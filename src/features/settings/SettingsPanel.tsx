@@ -8,6 +8,13 @@ import { JiraConnectionGuide } from "./JiraConnectionGuide";
 import notionMark from "../../assets/notion-mark.png";
 import { defaultNotionCatalogUrl, NotionSynchronizationGuide } from "./NotionSynchronizationGuide";
 
+export function shouldSyncAreaCatalogAfterCatalogSettingsSave(
+  saved: boolean,
+  patch: Partial<AppSettings>
+): patch is Partial<AppSettings> & { catalogSourceMode: Exclude<AppSettings["catalogSourceMode"], "manual"> } {
+  return Boolean(saved && patch.catalogSourceMode && patch.catalogSourceMode !== "manual");
+}
+
 export function SettingsPanel({
   settings,
   hasJiraApiToken,
@@ -181,7 +188,7 @@ export function SettingsPanel({
           hasNotionIntegrationToken={hasNotionIntegrationToken}
           onChangeCatalogSettings={async (patch) => {
             const saved = await onChange(patch);
-            if (saved && patch.catalogSourceMode && patch.catalogSourceMode !== "manual") {
+            if (shouldSyncAreaCatalogAfterCatalogSettingsSave(saved, patch)) {
               await onSyncAreaCatalog(patch.catalogSourceUrl, patch.catalogSourceMode);
             }
             return saved;

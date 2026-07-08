@@ -23,9 +23,7 @@ use crate::project_sync::{
 use crate::sync_audit::SyncAuditDetail;
 
 const APP_SETTINGS_KEY: &str = "app_settings";
-const DEFAULT_PROJECT_CATEGORIES: &[(&str, bool)] = &[
-    ("Transversal", false),
-];
+const DEFAULT_PROJECT_CATEGORIES: &[(&str, bool)] = &[("Transversal", false)];
 const DEFAULT_JQL_FAVORITES: &[(&str, &str)] = &[
     (
         "Urgent open bugs",
@@ -370,17 +368,17 @@ impl<'connection> CategoryRepository<'connection> {
             )?;
         }
 
-        for name in archived_names {
+        for name in &archived_names {
             if normalize_project_name(&name) == normalize_project_name(TRANSVERSAL_PROJECT_NAME) {
                 continue;
             }
             self.upsert_project_sync_category(
                 scope,
-                &name,
+                name,
                 "archived",
                 true,
                 candidate_by_normalized
-                    .get(&normalize_project_name(&name))
+                    .get(&normalize_project_name(name))
                     .copied(),
             )?;
         }
@@ -407,6 +405,49 @@ impl<'connection> CategoryRepository<'connection> {
                 ",
                 (utc_now_string()?.as_str(), normalize_name(&name).as_str()),
             )?;
+        }
+
+        let retained_project_names = active_names
+            .iter()
+            .chain(archived_names.iter())
+            .map(|name| normalize_project_name(name))
+            .collect::<std::collections::HashSet<_>>();
+        for category in self.list_for_project_sync_scope(Some("project"), Some(scope))? {
+            if category.source != "jira" {
+                continue;
+            }
+            let normalized_name = normalize_project_name(&category.name);
+            if normalized_name == normalize_project_name(TRANSVERSAL_PROJECT_NAME)
+                || retained_project_names.contains(&normalized_name)
+            {
+                continue;
+            }
+            self.connection.execute(
+                "
+                UPDATE categories
+                SET ignored = 1, updated_at = ?1
+                WHERE id = ?2
+                ",
+                (utc_now_string()?.as_str(), category.id.as_str()),
+            )?;
+        }
+
+        self.list_for_project_sync_scope(Some("project"), Some(scope))
+    }
+
+    pub fn promote_local_projects_to_jira_scope(
+        &self,
+        scope: &ProjectSyncScope,
+        project_names: &[String],
+    ) -> DbResult<Vec<Category>> {
+        for project_name in project_names {
+            let name = normalize_display_name(project_name)?;
+            let normalized_name = normalize_name(&name);
+            if normalized_name.is_empty() {
+                continue;
+            }
+
+            self.upsert_project_sync_category(scope, &name, "active", false, None)?;
         }
 
         self.list_for_project_sync_scope(Some("project"), Some(scope))
@@ -1010,7 +1051,6 @@ impl<'connection> CategoryRepository<'connection> {
 
         Ok(())
     }
-
 }
 
 impl<'connection> JqlFavoriteRepository<'connection> {
@@ -3268,9 +3308,9 @@ mod tests {
                 && category.name == "Programación"
                 && category.source == "local"
         }));
-        assert!(areas.iter().any(|category| {
-            category.name == "Programación" && category.source == "catalog"
-        }));
+        assert!(areas
+            .iter()
+            .any(|category| { category.name == "Programación" && category.source == "catalog" }));
     }
 
     #[test]
@@ -3310,6 +3350,66 @@ mod tests {
         assert!(decisions
             .iter()
             .any(|decision| decision.name == "PilotLab" && decision.status == "ignored"));
+    }
+
+    #[test]
+    fn jira_creation_promotion_marks_local_project_as_synced() {
+        let connection = open_in_memory_database().expect("database opens");
+        let repository = CategoryRepository::new(&connection);
+        let scope = ProjectSyncScope {
+            jira_site_url: "https://example.atlassian.net".to_string(),
+            jira_account_email: "maker@example.com".to_string(),
+            jira_project_key: "JTFTEST".to_string(),
+        };
+
+        repository
+            .create("project", "Prototype")
+            .expect("manual project creates");
+
+        let scoped_projects = repository
+            .promote_local_projects_to_jira_scope(&scope, &["Prototype".to_string()])
+            .expect("local project promotes");
+
+        assert!(scoped_projects.iter().any(|category| {
+            category.name == "Prototype" && category.source == "jira" && !category.hidden
+        }));
+
+        let all_projects = repository.list(Some("project")).expect("projects list");
+        assert!(!all_projects
+            .iter()
+            .any(|category| category.name == "Prototype" && category.source == "local"));
+    }
+
+    #[test]
+    fn project_sync_hides_jira_projects_that_disappear_from_discovery() {
+        let connection = open_in_memory_database().expect("database opens");
+        let repository = CategoryRepository::new(&connection);
+        let scope = ProjectSyncScope {
+            jira_site_url: "https://example.atlassian.net".to_string(),
+            jira_account_email: "maker@example.com".to_string(),
+            jira_project_key: "JTFTEST".to_string(),
+        };
+
+        repository
+            .promote_local_projects_to_jira_scope(&scope, &["Prototype".to_string()])
+            .expect("local project promotes");
+
+        let synced = repository
+            .apply_project_sync_decisions(
+                &scope,
+                ProjectSyncApplyRequest {
+                    active_project_names: vec!["Transversal".to_string()],
+                    archived_project_names: vec![],
+                    ignored_project_names: vec![],
+                    candidates: vec![],
+                },
+            )
+            .expect("project sync decisions apply");
+
+        assert!(synced
+            .iter()
+            .any(|category| category.name == "Transversal" && category.source == "jira"));
+        assert!(!synced.iter().any(|category| category.name == "Prototype"));
     }
 
     #[test]
