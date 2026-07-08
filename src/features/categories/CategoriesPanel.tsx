@@ -1,4 +1,4 @@
-import { AlertTriangle, Check, CheckCircle2, Eye, EyeOff, Pencil, Plus, RefreshCw, Tags, Trash2, X } from "lucide-react";
+import { AlertTriangle, Check, CheckCircle2, Pencil, Plus, RefreshCw, Tags, Trash2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button, DrawerShell, FeedbackNote, PanelHeader, ToggleSwitch } from "../../components/ui";
 import { appOverlayLayers, useAppOverlay } from "../../lib/app-overlays";
@@ -606,7 +606,7 @@ function CategoryRow({
   return (
     <div className="group flex min-w-0 items-center justify-between gap-2 border-b border-[#ebecf0] px-3 py-2 last:border-b-0">
       <div className={cn("flex min-w-0 flex-1 items-center gap-2 text-sm", category.hidden && "text-[#6b778c]")}>
-        {category.hidden ? <EyeOff size={14} className="shrink-0 text-[#6b778c]" /> : <Tags size={14} className="shrink-0 text-[#6b778c]" />}
+        <Tags size={14} className="shrink-0 text-[#6b778c]" />
         {isEditing ? (
           <input
             autoFocus
@@ -623,8 +623,7 @@ function CategoryRow({
           <span className="truncate">{category.name}</span>
         )}
       </div>
-      <div className="flex shrink-0 items-center gap-1">
-        <span className="mr-1 text-xs text-[#6b778c]">{category.hidden ? "Hidden" : category.source}</span>
+      <div className="ml-auto flex shrink-0 items-center justify-end gap-1">
         {isEditing ? (
           <>
             <button
@@ -648,7 +647,7 @@ function CategoryRow({
           <>
             {!isCatalogManaged && !isReadOnlyProject ? (
               <button
-                className="inline-flex h-7 w-7 items-center justify-center rounded text-[#42526e] opacity-0 transition hover:bg-[#ebecf0] group-hover:opacity-100 focus:opacity-100"
+                className="inline-flex h-7 w-7 items-center justify-center rounded text-[#9fadbc] transition hover:bg-[#253047] hover:text-[#dfe1e6]"
                 onClick={() => setIsEditing(true)}
                 title={`Rename ${category.name}`}
                 type="button"
@@ -656,18 +655,9 @@ function CategoryRow({
                 <Pencil size={14} />
               </button>
             ) : null}
-            <button
-              className="inline-flex h-7 w-7 items-center justify-center rounded text-[#42526e] transition hover:bg-[#ebecf0]"
-              onClick={() => void onUpdateCategory(category.id, { hidden: !category.hidden })}
-              title={category.hidden ? `Show ${category.name}` : `Hide ${category.name}`}
-              disabled={isReadOnlyProject}
-              type="button"
-            >
-              {category.hidden ? <Eye size={14} /> : <EyeOff size={14} />}
-            </button>
             {!isCatalogManaged && !isReadOnlyProject ? (
               <button
-                className="inline-flex h-7 w-7 items-center justify-center rounded text-[#42526e] opacity-0 transition hover:bg-[#ffebe6] hover:text-[#bf2600] group-hover:opacity-100 focus:opacity-100"
+                className="inline-flex h-7 w-7 items-center justify-center rounded text-[#9fadbc] transition hover:bg-[#42221f] hover:text-[#ffbdad]"
                 onClick={() => void onDeleteCategory(category.id)}
                 title={`Delete ${category.name}`}
                 type="button"
@@ -675,6 +665,7 @@ function CategoryRow({
                 <Trash2 size={14} />
               </button>
             ) : null}
+            <span className="ml-2 min-w-10 text-right text-xs text-[#6b778c]">{category.source}</span>
           </>
         )}
       </div>

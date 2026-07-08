@@ -4,8 +4,10 @@ import type { AppSettings } from "../../lib/types";
 import {
   canSaveNotionSynchronization,
   catalogModeOptions,
+  createNotionCatalogConnectionTestErrorResult,
   notionCatalogSourceRequirementsUrl,
-  NotionSynchronizationGuide
+  NotionSynchronizationGuide,
+  runNotionCatalogSourceTest
 } from "./NotionSynchronizationGuide";
 
 const settings: AppSettings = {
@@ -119,5 +121,30 @@ describe("NotionSynchronizationGuide", () => {
     expect(canSaveNotionSynchronization("notion", null)).toBe(false);
     expect(canSaveNotionSynchronization("notion", { ok: false, message: "Failed", title: null, extractedBlockCount: 0 })).toBe(false);
     expect(canSaveNotionSynchronization("notion", { ok: true, message: "Connected", title: "JTF Sync Catalog", extractedBlockCount: 12 })).toBe(true);
+  });
+
+  it("turns rejected Notion source tests into visible failed results", async () => {
+    await expect(
+      runNotionCatalogSourceTest({
+        mode: "notion",
+        sourceUrl: settings.catalogSourceUrl,
+        onChangeCatalogSettings: async () => true,
+        onTestNotionCatalogConnection: async () => {
+          throw new Error("Notion page is not shared with this integration.");
+        }
+      })
+    ).resolves.toEqual({
+      ok: false,
+      message: "Notion page is not shared with this integration.",
+      title: null,
+      extractedBlockCount: 0
+    });
+
+    expect(createNotionCatalogConnectionTestErrorResult(new Error("Notion page is not shared with this integration."))).toEqual({
+      ok: false,
+      message: "Notion page is not shared with this integration.",
+      title: null,
+      extractedBlockCount: 0
+    });
   });
 });

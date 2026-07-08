@@ -27,6 +27,53 @@ export function canSaveNotionSynchronization(mode: AppSettings["catalogSourceMod
   return mode === "manual" || Boolean(testResult?.ok);
 }
 
+export function createNotionCatalogConnectionTestErrorResult(error: unknown): NotionCatalogConnectionTestResult {
+  if (error instanceof Error && error.message.trim()) {
+    return { ok: false, message: error.message, title: null, extractedBlockCount: 0 };
+  }
+  if (typeof error === "string" && error.trim()) {
+    return { ok: false, message: error, title: null, extractedBlockCount: 0 };
+  }
+  return { ok: false, message: "Notion catalog connection test failed.", title: null, extractedBlockCount: 0 };
+}
+
+export async function testNotionCatalogSource({
+  mode,
+  sourceUrl,
+  onChangeCatalogSettings,
+  onTestNotionCatalogConnection
+}: {
+  mode: AppSettings["catalogSourceMode"];
+  sourceUrl: string;
+  onChangeCatalogSettings: (settings: Partial<AppSettings>) => Promise<boolean>;
+  onTestNotionCatalogConnection: (pageUrlOrId: string) => Promise<NotionCatalogConnectionTestResult>;
+}): Promise<NotionCatalogConnectionTestResult> {
+  if (mode === "notion") {
+    return onTestNotionCatalogConnection(sourceUrl.trim());
+  }
+
+  await onChangeCatalogSettings({ catalogSourceMode: mode, catalogSourceUrl: "" });
+  return {
+    ok: true,
+    message: "Manual catalog mode is configured.",
+    title: null,
+    extractedBlockCount: 0
+  };
+}
+
+export async function runNotionCatalogSourceTest(options: {
+  mode: AppSettings["catalogSourceMode"];
+  sourceUrl: string;
+  onChangeCatalogSettings: (settings: Partial<AppSettings>) => Promise<boolean>;
+  onTestNotionCatalogConnection: (pageUrlOrId: string) => Promise<NotionCatalogConnectionTestResult>;
+}): Promise<NotionCatalogConnectionTestResult> {
+  try {
+    return await testNotionCatalogSource(options);
+  } catch (error) {
+    return createNotionCatalogConnectionTestErrorResult(error);
+  }
+}
+
 export function NotionSynchronizationGuide({
   settings,
   hasNotionIntegrationToken,
@@ -136,17 +183,16 @@ export function NotionSynchronizationGuide({
       if (tokenDraft.trim()) {
         await saveTokenDraft();
       }
-      if (mode === "notion") {
-        setTestResult(await onTestNotionCatalogConnection(sourceUrl.trim()));
-      } else {
-        await onChangeCatalogSettings({ catalogSourceMode: mode, catalogSourceUrl: "" });
-        setTestResult({
-          ok: true,
-          message: "Manual catalog mode is configured.",
-          title: null,
-          extractedBlockCount: 0
-        });
-      }
+      setTestResult(
+        await runNotionCatalogSourceTest({
+          mode,
+          sourceUrl,
+          onChangeCatalogSettings,
+          onTestNotionCatalogConnection
+        })
+      );
+    } catch (error) {
+      setTestResult(createNotionCatalogConnectionTestErrorResult(error));
     } finally {
       setIsTesting(false);
     }

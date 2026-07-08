@@ -152,8 +152,32 @@ it("keeps Transversal visible and read-only even in manual Projects mode", () =>
   expect(html).toContain("Manual Projects mode");
   expect(html).not.toContain("Rename Transversal");
   expect(html).not.toContain("Delete Transversal");
-  expect(html).toContain("disabled=\"\"");
-  expect(html).toContain("title=\"Hide Transversal\"");
+  expect(html).not.toContain("Hide Transversal");
+  expect(html).toContain("text-right text-xs text-[#6b778c]\">local</span>");
+});
+
+it("places edit and delete actions before the right-aligned source label", () => {
+  const html = renderToStaticMarkup(
+    <CategoriesPanel
+      projects={[{ id: "project-manual", categoryType: "project", name: "Manual Project", source: "local" }]}
+      areas={[]}
+      catalogSourceMode="manual"
+      catalogSourceUrl=""
+      projectSyncEnabled={false}
+      onCreateCategory={() => undefined}
+      onDeleteCategory={() => undefined}
+      onUpdateCategory={() => undefined}
+      onSyncAreaCatalog={async () => null}
+      onConfigureCatalogSource={() => undefined}
+      onClose={() => undefined}
+    />
+  );
+
+  expect(html).not.toContain("Hide Manual Project");
+  expect(html).toContain("Rename Manual Project");
+  expect(html).toContain("Delete Manual Project");
+  expect(html.indexOf("Rename Manual Project")).toBeLessThan(html.indexOf(">local</span>"));
+  expect(html.indexOf("Delete Manual Project")).toBeLessThan(html.indexOf(">local</span>"));
 });
 
 it("keeps Notion catalog areas synchronized instead of manually editable", () => {
