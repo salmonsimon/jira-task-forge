@@ -1,0 +1,13 @@
+node_modules/
+dist/
+coverage/
+src-tauri/target/
+src-tauri/gen/
+src-tauri/jira-task-forge-backup-*.json
+src-tauri/*.csv
+jira-task-forge-backup-*.json
+*.local
+.git/
+.vercel/
+.vscode/
+.idea/
