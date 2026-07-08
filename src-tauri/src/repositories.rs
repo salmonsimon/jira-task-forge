@@ -2,9 +2,7 @@ use rusqlite::{params, Connection, OptionalExtension};
 use serde_json::Value;
 use uuid::Uuid;
 
-use crate::area_catalog::{
-    SyncedAreaFormatRule, SyncedCatalogArea, SyncedDeliveryFormat, OFFICIAL_AREAS,
-};
+use crate::area_catalog::{SyncedAreaFormatRule, SyncedCatalogArea, SyncedDeliveryFormat};
 use crate::attachment_storage::validate_managed_relative_path;
 use crate::db::{utc_now_string, DbError, DbResult};
 use crate::epic_scope::normalize_epic_scope;
@@ -17,8 +15,8 @@ use crate::models::{
     SyncAuditEvent, TaskAttachment, Tray, TrayState,
 };
 use crate::project_sync::{
-    normalize_project_name, unique_project_names, ProjectSyncApplyRequest, ProjectSyncDecision,
-    ProjectSyncCandidate, TRANSVERSAL_PROJECT_NAME,
+    normalize_project_name, unique_project_names, ProjectSyncApplyRequest, ProjectSyncCandidate,
+    ProjectSyncDecision, TRANSVERSAL_PROJECT_NAME,
 };
 use crate::sync_audit::SyncAuditDetail;
 
@@ -258,8 +256,8 @@ impl<'connection> CategoryRepository<'connection> {
         let decisions = statement
             .query_map([], |row| {
                 let keys_json: String = row.get("jira_issue_keys_json")?;
-                let jira_issue_keys = serde_json::from_str::<Vec<String>>(&keys_json)
-                    .unwrap_or_else(|_| Vec::new());
+                let jira_issue_keys =
+                    serde_json::from_str::<Vec<String>>(&keys_json).unwrap_or_else(|_| Vec::new());
                 Ok(ProjectSyncDecision {
                     name: row.get("display_name")?,
                     normalized_name: row.get("normalized_name")?,
@@ -286,10 +284,9 @@ impl<'connection> CategoryRepository<'connection> {
             .collect::<std::collections::HashMap<_, _>>();
 
         let mut active_names = active_names;
-        if !active_names
-            .iter()
-            .any(|name| normalize_project_name(name) == normalize_project_name(TRANSVERSAL_PROJECT_NAME))
-        {
+        if !active_names.iter().any(|name| {
+            normalize_project_name(name) == normalize_project_name(TRANSVERSAL_PROJECT_NAME)
+        }) {
             active_names.insert(0, TRANSVERSAL_PROJECT_NAME.to_string());
         }
 
@@ -298,7 +295,9 @@ impl<'connection> CategoryRepository<'connection> {
                 name,
                 "active",
                 false,
-                candidate_by_normalized.get(&normalize_project_name(name)).copied(),
+                candidate_by_normalized
+                    .get(&normalize_project_name(name))
+                    .copied(),
             )?;
         }
 
@@ -310,7 +309,9 @@ impl<'connection> CategoryRepository<'connection> {
                 &name,
                 "archived",
                 true,
-                candidate_by_normalized.get(&normalize_project_name(&name)).copied(),
+                candidate_by_normalized
+                    .get(&normalize_project_name(&name))
+                    .copied(),
             )?;
         }
 
@@ -416,23 +417,7 @@ impl<'connection> CategoryRepository<'connection> {
     }
 
     pub fn sync_area_catalog(&self) -> DbResult<Vec<Category>> {
-        let areas = OFFICIAL_AREAS
-            .iter()
-            .map(|area| SyncedCatalogArea {
-                area_display_name: area.area_display_name.to_string(),
-                jira_label: area.jira_label.to_string(),
-                enabled_in_jtf: true,
-                issue_type: "Story".to_string(),
-                default_delivery_format: area.delivery_format.to_string(),
-                safe_aliases: area
-                    .aliases
-                    .iter()
-                    .map(|alias| (*alias).to_string())
-                    .collect(),
-                notes: String::new(),
-            })
-            .collect::<Vec<_>>();
-        self.sync_area_catalog_entries(&areas)
+        self.list(Some("area"))
     }
 
     pub fn sync_area_catalog_entries(
@@ -549,7 +534,7 @@ impl<'connection> CategoryRepository<'connection> {
                     id.as_str(),
                     rule.area_display_name.as_str(),
                     normalize_name(&rule.area_display_name).as_str(),
-                    rule.priority,
+                    rule.order,
                     rule.condition.as_str(),
                     normalize_name(&rule.condition).as_str(),
                     rule.delivery_format.as_str(),
@@ -620,6 +605,16 @@ impl<'connection> CategoryRepository<'connection> {
         area: &str,
         delivery_format: &str,
     ) -> DbResult<Option<String>> {
+        Ok(self
+            .catalog_template_for_confirmed_delivery_format(area, delivery_format)?
+            .map(|template| template.prompt_context))
+    }
+
+    pub fn catalog_template_for_confirmed_delivery_format(
+        &self,
+        area: &str,
+        delivery_format: &str,
+    ) -> DbResult<Option<SyncedCatalogTemplateContext>> {
         let normalized_area = normalize_name(area);
         let area_detail = self
             .connection
@@ -654,7 +649,7 @@ impl<'connection> CategoryRepository<'connection> {
             )));
         }
 
-        self.catalog_template_context_for_format(
+        self.catalog_template_for_format(
             &area_display_name,
             &jira_label,
             &issue_type,
@@ -679,11 +674,10 @@ impl<'connection> CategoryRepository<'connection> {
                 |row| row.get::<_, String>("default_delivery_format"),
             )
             .optional()?;
-        if let Some(default_delivery_format) = default_delivery_format {
-            push_unique_format(&mut formats, default_delivery_format);
-        } else {
+        let Some(default_delivery_format) = default_delivery_format else {
             return Ok(formats);
-        }
+        };
+        push_unique_format(&mut formats, default_delivery_format);
 
         let mut statement = self.connection.prepare(
             "
@@ -713,6 +707,25 @@ impl<'connection> CategoryRepository<'connection> {
         delivery_format: &str,
         notes: &str,
     ) -> DbResult<Option<String>> {
+        Ok(self
+            .catalog_template_for_format(
+                area_display_name,
+                jira_label,
+                issue_type,
+                delivery_format,
+                notes,
+            )?
+            .map(|template| template.prompt_context))
+    }
+
+    fn catalog_template_for_format(
+        &self,
+        area_display_name: &str,
+        jira_label: &str,
+        issue_type: &str,
+        delivery_format: &str,
+        notes: &str,
+    ) -> DbResult<Option<SyncedCatalogTemplateContext>> {
         let normalized_format = normalize_name(delivery_format);
         let format_detail = self
             .connection
@@ -766,19 +779,23 @@ impl<'connection> CategoryRepository<'connection> {
             notes.trim().to_string()
         };
 
-        Ok(Some(format_catalog_template_context(
-            CatalogTemplateContextParts {
-                area_display_name,
-                jira_label,
-                issue_type,
-                format_name: &format_name,
-                format_issue_type: &format_issue_type,
-                headings: &headings,
-                minimum_deliverable: &minimum_deliverable,
-                checklist: &checklist,
-                notes: &notes,
-            },
-        )))
+        let prompt_context = format_catalog_template_context(CatalogTemplateContextParts {
+            area_display_name,
+            jira_label,
+            issue_type,
+            format_name: &format_name,
+            format_issue_type: &format_issue_type,
+            headings: &headings,
+            minimum_deliverable: &minimum_deliverable,
+            checklist: &checklist,
+            notes: &notes,
+        });
+
+        Ok(Some(SyncedCatalogTemplateContext {
+            prompt_context,
+            minimum_deliverable,
+            review_checklist,
+        }))
     }
 
     fn delivery_format_for_catalog_area(
@@ -841,7 +858,6 @@ impl<'connection> CategoryRepository<'connection> {
 
     fn ensure_defaults_seeded(&self) -> DbResult<()> {
         self.seed_category_type_if_empty("project", DEFAULT_PROJECT_CATEGORIES)?;
-        self.seed_catalog_area_categories_if_empty()?;
         Ok(())
     }
 
@@ -876,39 +892,6 @@ impl<'connection> CategoryRepository<'connection> {
                     *name,
                     normalized_name.as_str(),
                     bool_to_db(*hidden),
-                    now.as_str(),
-                ),
-            )?;
-        }
-
-        Ok(())
-    }
-
-    fn seed_catalog_area_categories_if_empty(&self) -> DbResult<()> {
-        let count: i64 = self.connection.query_row(
-            "SELECT COUNT(*) FROM categories WHERE category_type = 'area'",
-            [],
-            |row| row.get(0),
-        )?;
-        if count > 0 {
-            return Ok(());
-        }
-
-        let now = utc_now_string()?;
-        for catalog_area in OFFICIAL_AREAS {
-            let id = Uuid::new_v4().to_string();
-            let normalized_name = normalize_name(catalog_area.area_display_name);
-            self.connection.execute(
-                "
-                INSERT OR IGNORE INTO categories (
-                    id, category_type, name, normalized_name, source, hidden, ignored, created_at, updated_at
-                )
-                VALUES (?1, 'area', ?2, ?3, 'catalog', 0, 0, ?4, ?4)
-                ",
-                (
-                    id.as_str(),
-                    catalog_area.area_display_name,
-                    normalized_name.as_str(),
                     now.as_str(),
                 ),
             )?;
@@ -2025,7 +2008,7 @@ impl<'connection> AssistedDescriptionProposalRepository<'connection> {
             if let Some(status) = status {
                 section.status = status;
             }
-            if proposed_content_changed {
+            if proposed_content_changed || reviewer_comment.is_some() {
                 section.reviewer_comment = reviewer_comment
                     .clone()
                     .or_else(|| section.reviewer_comment.clone());
@@ -2075,9 +2058,20 @@ impl<'connection> AssistedDescriptionProposalRepository<'connection> {
         };
 
         let now = utc_now_string()?;
-        if status == AssistedDescriptionProposalStatus::Accepted {
+        let accepted_remaining_sections = reviewer_comment.is_some_and(|comment| {
+            comment
+                .trim()
+                .eq_ignore_ascii_case("Accepted remaining proposal sections.")
+        });
+        if status == AssistedDescriptionProposalStatus::Accepted
+            || (status == AssistedDescriptionProposalStatus::Partial
+                && apply_to_task_description
+                && accepted_remaining_sections)
+        {
             for section in &mut proposal.sections {
-                if !section.proposed_content.trim().is_empty() {
+                if !section.proposed_content.trim().is_empty()
+                    && !is_rejected_proposal_section(section.reviewer_comment.as_deref())
+                {
                     section.status = DescriptionSectionStatus::Polished;
                     section.updated_at = Some(now.clone());
                 }
@@ -2198,6 +2192,28 @@ impl<'connection> AssistedDescriptionProposalRepository<'connection> {
         let detail_json = serde_json::to_string(&detail)
             .map_err(|error| DbError::InvalidData(error.to_string()))?;
         let user_comment = normalize_optional_text(user_comment);
+        let duplicate_count: i64 = self.connection.query_row(
+            "
+            SELECT COUNT(*)
+            FROM description_proposal_log_entries
+            WHERE proposal_id = ?1
+              AND event_type = ?2
+              AND status = ?3
+              AND COALESCE(user_comment, '') = COALESCE(?4, '')
+              AND detail_json = ?5
+            ",
+            params![
+                proposal.id.as_str(),
+                event_type,
+                proposal.status.as_db_value(),
+                user_comment.as_deref(),
+                detail_json.as_str()
+            ],
+            |row| row.get(0),
+        )?;
+        if duplicate_count > 0 {
+            return Ok(());
+        }
 
         self.connection.execute(
             "
@@ -2633,6 +2649,13 @@ struct CatalogTemplateContextParts<'a> {
     notes: &'a str,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SyncedCatalogTemplateContext {
+    pub prompt_context: String,
+    pub minimum_deliverable: String,
+    pub review_checklist: Vec<String>,
+}
+
 fn format_catalog_template_context(parts: CatalogTemplateContextParts<'_>) -> String {
     [
         "Synced Notion catalog template:".to_string(),
@@ -2746,6 +2769,12 @@ fn polished_section_count(sections: &[AssistedDescriptionProposalSection]) -> us
                 && !section.proposed_content.trim().is_empty()
         })
         .count()
+}
+
+fn is_rejected_proposal_section(reviewer_comment: Option<&str>) -> bool {
+    reviewer_comment
+        .map(str::trim)
+        .is_some_and(|comment| comment.to_lowercase().starts_with("rejected "))
 }
 
 fn normalize_optional_text(value: Option<&str>) -> Option<String> {
@@ -3012,7 +3041,7 @@ mod tests {
                 }],
                 &[SyncedAreaFormatRule {
                     area_display_name: "Programación".to_string(),
-                    priority: 1,
+                    order: 1,
                     condition: "fallback".to_string(),
                     delivery_format: "Feature de Programación".to_string(),
                     blocking: false,
@@ -3032,6 +3061,16 @@ mod tests {
         ));
         assert!(context.contains("- PR/MR creado."));
         assert!(context.contains("- Validación en runtime documentada."));
+    }
+
+    #[test]
+    fn does_not_seed_catalog_areas_before_a_catalog_sync() {
+        let connection = open_in_memory_database().expect("database opens");
+        let repository = CategoryRepository::new(&connection);
+
+        let areas = repository.list(Some("area")).expect("areas list");
+
+        assert!(areas.is_empty());
     }
 
     #[test]
@@ -3069,14 +3108,14 @@ mod tests {
                 &[
                     SyncedAreaFormatRule {
                         area_display_name: "Arquitectura".to_string(),
-                        priority: 1,
+                        order: 1,
                         condition: "fallback".to_string(),
                         delivery_format: "Arquitectura - Brief".to_string(),
                         blocking: false,
                     },
                     SyncedAreaFormatRule {
                         area_display_name: "Arquitectura".to_string(),
-                        priority: 2,
+                        order: 2,
                         condition: "fallback".to_string(),
                         delivery_format: "Arquitectura - Propuesta Final".to_string(),
                         blocking: false,
@@ -3106,6 +3145,97 @@ mod tests {
         assert!(error.to_string().contains(
             "Delivery format must be one of the catalog formats mapped to Arquitectura."
         ));
+    }
+
+    #[test]
+    fn synced_catalog_delivery_options_show_default_before_rule_alternatives() {
+        let connection = open_in_memory_database().expect("database opens");
+        let repository = CategoryRepository::new(&connection);
+
+        repository
+            .sync_area_catalog_contract(
+                &[
+                    SyncedCatalogArea {
+                        area_display_name: "3D".to_string(),
+                        jira_label: "3D".to_string(),
+                        enabled_in_jtf: true,
+                        issue_type: "Story".to_string(),
+                        default_delivery_format: "Arte Integrado".to_string(),
+                        safe_aliases: vec!["Modelos 3D".to_string()],
+                        notes: "".to_string(),
+                    },
+                    SyncedCatalogArea {
+                        area_display_name: "Bug".to_string(),
+                        jira_label: "Bug".to_string(),
+                        enabled_in_jtf: true,
+                        issue_type: "Bug".to_string(),
+                        default_delivery_format: "Bug".to_string(),
+                        safe_aliases: vec!["bug".to_string()],
+                        notes: "".to_string(),
+                    },
+                ],
+                &[
+                    SyncedDeliveryFormat {
+                        format_name: "Arte Integrado".to_string(),
+                        issue_type: "Story".to_string(),
+                        story_headings: vec!["Historia de usuario".to_string()],
+                        minimum_deliverable: "PR/MR con assets integrados.".to_string(),
+                        review_checklist: vec!["PR/MR creado.".to_string()],
+                    },
+                    SyncedDeliveryFormat {
+                        format_name: "Arte Empaquetado".to_string(),
+                        issue_type: "Story".to_string(),
+                        story_headings: vec!["Historia de usuario".to_string()],
+                        minimum_deliverable: "Zip disponible.".to_string(),
+                        review_checklist: vec!["Zip disponible.".to_string()],
+                    },
+                    SyncedDeliveryFormat {
+                        format_name: "Bug".to_string(),
+                        issue_type: "Bug".to_string(),
+                        story_headings: vec!["Problema".to_string()],
+                        minimum_deliverable: "Corrección verificable.".to_string(),
+                        review_checklist: vec!["Pasos claros.".to_string()],
+                    },
+                ],
+                &[
+                    SyncedAreaFormatRule {
+                        area_display_name: "3D".to_string(),
+                        order: 1,
+                        condition: "if delivered as a package for another person to integrate"
+                            .to_string(),
+                        delivery_format: "Arte Empaquetado".to_string(),
+                        blocking: false,
+                    },
+                    SyncedAreaFormatRule {
+                        area_display_name: "3D".to_string(),
+                        order: 2,
+                        condition: "fallback".to_string(),
+                        delivery_format: "Arte Integrado".to_string(),
+                        blocking: false,
+                    },
+                    SyncedAreaFormatRule {
+                        area_display_name: "Bug".to_string(),
+                        order: 1,
+                        condition: "always".to_string(),
+                        delivery_format: "Bug".to_string(),
+                        blocking: true,
+                    },
+                ],
+            )
+            .expect("catalog sync persists");
+
+        assert_eq!(
+            repository
+                .catalog_delivery_format_options_for_area("3D")
+                .expect("options load"),
+            vec!["Arte Integrado".to_string(), "Arte Empaquetado".to_string()]
+        );
+        assert_eq!(
+            repository
+                .catalog_delivery_format_options_for_area("Bug")
+                .expect("options load"),
+            vec!["Bug".to_string()]
+        );
     }
 
     #[test]
@@ -4265,6 +4395,20 @@ mod tests {
         assert_eq!(log[2].status, AssistedDescriptionProposalStatus::Accepted);
         assert_eq!(log[2].provider.as_deref(), Some("OpenAI"));
         assert_eq!(log[2].model.as_deref(), Some("gpt-4.1"));
+
+        repository
+            .transition(
+                &proposal.id,
+                AssistedDescriptionProposalStatus::Accepted,
+                Some("Accepted after review."),
+                true,
+            )
+            .expect("duplicate transition is ignored in log")
+            .expect("proposal exists");
+        let deduped_log = repository
+            .list_log_for_task(&task.id)
+            .expect("proposal log lists after duplicate transition");
+        assert_eq!(deduped_log.len(), 3);
     }
 
     #[test]
@@ -4321,6 +4465,90 @@ mod tests {
             problem.reviewer_comment.as_deref(),
             Some("Leave this section empty.")
         );
+    }
+
+    #[test]
+    fn accepting_remaining_proposal_sections_keeps_rejected_sections_out_of_description() {
+        let connection = open_in_memory_database().expect("database opens");
+        let tray = TrayRepository::new(&connection)
+            .create(NewTray {
+                name: "Partial proposal tray".to_string(),
+            })
+            .expect("tray creates");
+        let task = TaskRepository::new(&connection)
+            .create(NewTask {
+                tray_id: tray.id,
+                project: "STT".to_string(),
+                area: "3D".to_string(),
+                title: "Maquinas expendedoras".to_string(),
+                priority: "Medium".to_string(),
+                issue_type: "Story".to_string(),
+                content_language: "Spanish".to_string(),
+            })
+            .expect("task creates");
+        let repository = AssistedDescriptionProposalRepository::new(&connection);
+        let proposal = repository
+            .create(NewAssistedDescriptionProposal {
+                task_id: task.id.clone(),
+                title: Some("Mixed proposal".to_string()),
+                summary: None,
+                provider: None,
+                model: None,
+                user_comment: None,
+                sections: vec![
+                    proposal_section("user_story", "Historia aceptada."),
+                    proposal_section("problem", "Contexto rechazado."),
+                ],
+            })
+            .expect("proposal creates");
+
+        repository
+            .update_section(
+                &proposal.id,
+                "problem",
+                None,
+                Some(DescriptionSectionStatus::Raw),
+                Some("Rejected Context."),
+                false,
+            )
+            .expect("section rejection persists")
+            .expect("proposal exists");
+        let accepted_remaining = repository
+            .transition(
+                &proposal.id,
+                AssistedDescriptionProposalStatus::Partial,
+                Some("Accepted remaining proposal sections."),
+                true,
+            )
+            .expect("remaining sections accept")
+            .expect("proposal exists");
+
+        assert_eq!(
+            accepted_remaining
+                .sections
+                .iter()
+                .find(|section| section.section_id == "user_story")
+                .expect("user story exists")
+                .status,
+            DescriptionSectionStatus::Polished
+        );
+        assert_eq!(
+            accepted_remaining
+                .sections
+                .iter()
+                .find(|section| section.section_id == "problem")
+                .expect("problem exists")
+                .status,
+            DescriptionSectionStatus::Raw
+        );
+
+        let task = TaskRepository::new(&connection)
+            .find_by_id(&task.id)
+            .expect("task reloads")
+            .expect("task exists");
+        let description = task.description.expect("description applied");
+        assert!(description.contains("Historia aceptada."));
+        assert!(!description.contains("Contexto rechazado."));
     }
 
     #[test]

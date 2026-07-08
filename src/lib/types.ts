@@ -282,7 +282,7 @@ export type CatalogSyncResult = {
   }>;
   areaFormatRules: Array<{
     areaDisplayName: string;
-    priority: number;
+    order: number;
     condition: string;
     deliveryFormat: string;
     blocking: boolean;

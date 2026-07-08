@@ -1,8 +1,8 @@
 use super::AppServices;
 use crate::area_catalog::{
-    catalog_delivery_format_gate_for_area, sync_exportable_catalog_from_notion_page,
-    sync_exportable_catalog_from_url, test_notion_catalog_page, CatalogSyncResult,
-    DeliveryFormatGateResult, NotionCatalogConnectionTestResult,
+    sync_exportable_catalog_from_notion_page, sync_exportable_catalog_from_url,
+    test_notion_catalog_page, CatalogSyncResult, DeliveryFormatGateResult,
+    NotionCatalogConnectionTestResult,
 };
 use crate::db::DbResult;
 use crate::models::Category;
@@ -47,9 +47,14 @@ impl AppServices {
         let settings = self
             .get_app_settings()
             .map_err(|error| format!("Could not load Jira settings: {error}"))?;
-        let jira_project_key = settings.jira_creation_project_key.trim().to_ascii_uppercase();
+        let jira_project_key = settings
+            .jira_creation_project_key
+            .trim()
+            .to_ascii_uppercase();
         if jira_project_key.is_empty() {
-            return Err("Jira creation project key is required before syncing Projects.".to_string());
+            return Err(
+                "Jira creation project key is required before syncing Projects.".to_string(),
+            );
         }
 
         let jql = jira_epic_project_discovery_jql(&jira_project_key)?;
@@ -159,7 +164,7 @@ impl AppServices {
     pub fn resolve_delivery_format_gate(
         &self,
         area: &str,
-        description_or_deliverable: &str,
+        _description_or_deliverable: &str,
     ) -> Result<DeliveryFormatGateResult, String> {
         let options = {
             let connection = self.connection();
@@ -168,22 +173,15 @@ impl AppServices {
                 .map_err(|error| error.to_string())?
         };
         if options.is_empty() {
-            return Ok(catalog_delivery_format_gate_for_area(
-                area,
-                description_or_deliverable,
-            ));
-        }
-        if options.len() == 1 {
             return Ok(DeliveryFormatGateResult {
                 kind: "auto".to_string(),
                 area_display_name: area.trim().to_string(),
-                format: options.first().cloned(),
+                format: None,
                 suggested_format: None,
-                options,
+                options: Vec::new(),
                 message: None,
             });
         }
-
         Ok(DeliveryFormatGateResult {
             kind: "needs_confirmation".to_string(),
             area_display_name: area.trim().to_string(),

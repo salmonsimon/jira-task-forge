@@ -345,6 +345,10 @@ export function hasAcceptedAssistedDescriptionProposalSections(proposal: Assiste
   );
 }
 
+export function hasRejectedAssistedDescriptionProposalSections(proposal: AssistedDescriptionProposal): boolean {
+  return proposal.sections.some((section) => isRejectedAssistedDescriptionProposalSection(section.reviewerComment));
+}
+
 export function buildResolveAssistedDescriptionProposalItemPatch(
   state: AssistedDescriptionState,
   proposal: AssistedDescriptionProposal,
@@ -398,7 +402,7 @@ export function buildResolveAssistedDescriptionProposalPatch(
         nextState = applyAcceptedProposalItem(nextState, item);
       }
     }
-    nextStatus = "Accepted";
+    nextStatus = hasRejectedAssistedDescriptionProposalSections(proposal) ? "Partial" : "Accepted";
     const pendingSectionIds = new Set(
       getAssistedDescriptionProposalItems(proposal)
         .filter((item) => item.status === "pending")
@@ -497,10 +501,15 @@ function getAssistedDescriptionProposalItemStatus(
   proposalStatus: AssistedDescriptionProposalStatus,
   section: AssistedDescriptionProposalSection
 ): AssistedDescriptionProposalItemStatus {
+  if (isRejectedAssistedDescriptionProposalSection(section.reviewerComment)) return "rejected";
   if (section.status === "Polished") return "accepted";
   if (proposalStatus === "Rejected" || proposalStatus === "Partial") return "rejected";
   if (proposalStatus === "Accepted") return section.proposedContent.trim() ? "accepted" : "rejected";
   return "pending";
+}
+
+function isRejectedAssistedDescriptionProposalSection(reviewerComment?: string | null): boolean {
+  return /^Rejected\b/i.test(reviewerComment?.trim() ?? "");
 }
 
 function applyAcceptedProposalItem(
