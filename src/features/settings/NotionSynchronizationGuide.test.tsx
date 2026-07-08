@@ -52,7 +52,7 @@ describe("NotionSynchronizationGuide", () => {
     expect(html).toContain("Set Catalog Source");
     expect(html).toContain("Catalog source");
     expect(html).toContain("Catalog mode");
-    expect(html).toContain("Continue to connect Notion, then select and validate the catalog page before saving.");
+    expect(html).toContain("Continue to connect Notion, then select only the dedicated catalog page and validate it before saving.");
     expect(html).not.toContain("Notion page URL or ID");
     expect(html).not.toContain("New integration token");
     expect(html.indexOf("1. Source")).toBeLessThan(html.indexOf("2. Connect"));

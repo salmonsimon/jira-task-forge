@@ -302,7 +302,7 @@ export function NotionSynchronizationGuide({
             <GuideSection title="Catalog source" description="Choose whether Areas are managed locally or synced from the Notion catalog. Manual catalog saves immediately and skips external setup.">
               <SourceModeSelect label="Catalog mode" value={mode} options={catalogModeOptions} onChange={setMode} />
               {mode !== "manual" ? (
-                <FeedbackNote variant="info">Continue to connect Notion, then select and validate the catalog page before saving.</FeedbackNote>
+                <FeedbackNote variant="info">Continue to connect Notion, then select only the dedicated catalog page and validate it before saving.</FeedbackNote>
               ) : (
                 <FeedbackNote variant="warning">Manual catalog keeps Areas editable in Categories. No Notion token, page URL, or connection test is needed.</FeedbackNote>
               )}
@@ -361,7 +361,7 @@ export function NotionSynchronizationGuide({
                 View source requirements
               </Button>
               <FeedbackNote className="mt-2" variant="warning">
-                Jira Task Forge owns the public connection. Notion will ask which pages to share, then the backend exchanges the code and the app validates this page before saving the token.
+                Select only the dedicated catalog page in Notion. Selecting a parent page may also share its child pages; team catalogs may require Full access on that dedicated page.
               </FeedbackNote>
               <div className="mt-5 flex flex-wrap gap-2">
                 <Button

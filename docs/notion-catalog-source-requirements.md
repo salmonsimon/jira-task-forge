@@ -11,6 +11,23 @@ Authorization is handled through the Notion public connection OAuth contract in
 catalog source still needs the machine-readable JSON contract below after the
 OAuth connection grants page access.
 
+Notion source placement and sharing:
+
+- Prefer a dedicated root-level Notion page for the sync source, such as
+  `JTF Sync Catalog`, outside sensitive parent page trees.
+- Personal users can create their own page in their own Notion workspace and
+  copy the JSON contract into it.
+- Teams can share one catalog page, but every user who connects through OAuth
+  must have enough Notion access to select that page in the OAuth picker.
+  Notion's picker expects the user to be able to share the page with the
+  connection, so read-only access may be insufficient; use `Full access` on the
+  dedicated catalog page when a teammate needs to authorize it.
+- During OAuth, select only the dedicated catalog page. Selecting a broad parent
+  page can also share child pages with the connection.
+- Selecting the dedicated child catalog page should not grant the connection
+  access to its parent page, but keeping the sync source outside sensitive page
+  trees reduces accidental parent-page selection risk.
+
 Saimon's current `JTF Sync Catalog` page is the Personal v1 example source. The
 portable contract is the machine-readable JSON block inside that source, not the
 surrounding Notion layout. If the source later moves to Obsidian, Markdown,

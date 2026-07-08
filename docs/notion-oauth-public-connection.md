@@ -38,11 +38,27 @@ End-user flow:
 
 1. Click `Connect Notion` in Jira Task Forge.
 2. Authorize the Jira Task Forge public connection on Notion's page.
-3. Select the catalog page in Notion's page picker.
+3. Select only the dedicated catalog page in Notion's page picker.
 4. Paste the temporary callback code into Jira Task Forge.
 5. Confirm the catalog page URL or id.
 6. Jira Task Forge validates the selected page and stores the OAuth token set in
    the OS credential store.
+
+Catalog page access model:
+
+- The Jira Task Forge publisher configures the public connection once. End users
+  authorize their own Notion workspace and receive their own token.
+- External users create a catalog page in their own workspace by copying the
+  catalog source requirements and selecting that page during OAuth.
+- Team users can share one catalog page. They may need `Full access` on that
+  dedicated page for it to appear/select correctly in Notion's OAuth picker,
+  because the picker is granting the connection access to the page.
+- Do not select a broad parent page such as a project wiki root. Notion can grant
+  child-page access when a parent page is selected. Select the dedicated catalog
+  page itself.
+- Sharing a child catalog page does not require sharing its parent page, but a
+  root-level dedicated catalog page is safer because it avoids accidental parent
+  selection.
 
 Desktop runtime configuration:
 
