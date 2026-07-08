@@ -1,4 +1,4 @@
-import { exchangeAuthorizationCode, readConfig, requestBody, sendJson } from "./shared.js";
+import { exchangeAuthorizationCode, readConfig, requestBody, sendJson } from "../../../server/notion-oauth-shared.js";
 
 export default async function handler(request, response) {
   if (request.method !== "POST") return sendJson(response, 405, { error: "method_not_allowed" });

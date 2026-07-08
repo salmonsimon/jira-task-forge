@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { buildAuthorizationUrl, exchangeAuthorizationCode, readConfig } from "./shared.js";
+import { buildAuthorizationUrl, exchangeAuthorizationCode, readConfig } from "../server/notion-oauth-shared.js";
 
 const env = {
   JTF_NOTION_OAUTH_CLIENT_ID: "client_123",
