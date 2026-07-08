@@ -103,7 +103,8 @@ pub struct SyncedDeliveryFormat {
 #[serde(rename_all = "camelCase")]
 pub struct SyncedAreaFormatRule {
     pub area_display_name: String,
-    pub priority: i64,
+    #[serde(alias = "priority")]
+    pub order: i64,
     pub condition: String,
     pub delivery_format: String,
     pub blocking: bool,
@@ -237,29 +238,6 @@ const UI_CONDITIONAL_FORMATS: &[CatalogConditionalDeliveryFormat] = &[
     },
 ];
 
-const DOCUMENTATION_CONDITIONAL_FORMATS: &[CatalogConditionalDeliveryFormat] = &[
-    CatalogConditionalDeliveryFormat {
-        format: "Investigación",
-        matches: &["research", "investigacion"],
-    },
-    CatalogConditionalDeliveryFormat {
-        format: "Decisión de Diseño",
-        matches: &["design decision", "decision de diseno"],
-    },
-    CatalogConditionalDeliveryFormat {
-        format: "Arquitectura - Brief",
-        matches: &["architectural", "arquitectura", "arquitectonico"],
-    },
-    CatalogConditionalDeliveryFormat {
-        format: "Reunión Documentada",
-        matches: &["meeting", "reunion", "acuerdos"],
-    },
-    CatalogConditionalDeliveryFormat {
-        format: "Curso / Capacitación",
-        matches: &["training", "course", "curso", "capacitacion"],
-    },
-];
-
 const HOUSEKEEPING_CONDITIONAL_FORMATS: &[CatalogConditionalDeliveryFormat] = &[
     CatalogConditionalDeliveryFormat {
         format: "Integración",
@@ -345,7 +323,13 @@ pub const OFFICIAL_AREAS: &[CatalogArea] = &[
         "Feature de Programación",
         FEELING_CONDITIONAL_FORMATS,
     ),
-    area("Diseño", "Diseño", &["Diseno"], "Decisión de Diseño", &[]),
+    area(
+        "Decisión de Diseño",
+        "Decisión de Diseño",
+        &["Diseño", "Diseno", "Decision de Diseno"],
+        "Decisión de Diseño",
+        &[],
+    ),
     area("Concept", "Concept", &[], "Concept Art", &[]),
     area(
         "Localización",
@@ -395,13 +379,20 @@ pub const OFFICIAL_AREAS: &[CatalogArea] = &[
         "Documentación",
         &["Documentacion"],
         "Story base documental",
-        DOCUMENTATION_CONDITIONAL_FORMATS,
+        &[],
+    ),
+    area(
+        "Reunión Documentada",
+        "Reunión Documentada",
+        &["Reunion Documentada"],
+        "Reunión Documentada",
+        &[],
     ),
     area(
         "Capacitación",
         "Capacitación",
         &["Capacitacion"],
-        "Curso / Capacitación",
+        "Capacitación",
         &[],
     ),
     area(
@@ -1388,7 +1379,7 @@ mod tests {
               "areaFormatRules": [
                 {
                   "areaDisplayName": "Programación",
-                  "priority": 1,
+                  "order": 1,
                   "condition": "fallback",
                   "deliveryFormat": "Feature de Programación",
                   "blocking": false
@@ -1498,7 +1489,7 @@ mod tests {
               "areaFormatRules": [
                 {
                   "areaDisplayName": "Programación",
-                  "priority": 1,
+                  "order": 1,
                   "condition": "fallback",
                   "deliveryFormat": "Bug",
                   "blocking": false

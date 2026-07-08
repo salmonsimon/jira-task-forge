@@ -852,14 +852,14 @@ fn delivery_format_gate_requires_confirmation_when_synced_templates_exist() {
           "areaFormatRules": [
             {
               "areaDisplayName": "3D",
-              "priority": 1,
+              "order": 1,
               "condition": "if delivered as a package for another person to integrate",
               "deliveryFormat": "Arte Empaquetado",
               "blocking": false
             },
             {
               "areaDisplayName": "3D",
-              "priority": 2,
+              "order": 2,
               "condition": "fallback",
               "deliveryFormat": "Arte Integrado",
               "blocking": false

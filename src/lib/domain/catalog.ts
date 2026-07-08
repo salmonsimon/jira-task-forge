@@ -109,7 +109,7 @@ export const officialAreaCatalog = {
       { format: "Decisión de Diseño", match: ["criterio", "ux", "interaccion", "balance", "decision", "experiencia"] },
       { format: "Playtest Documentado", match: ["playtest", "usuarios", "stakeholders", "validar feeling", "validar sensacion"] }
     ]),
-    area("Diseño", "Diseño", ["Diseno"], "Decisión de Diseño"),
+    area("Decisión de Diseño", "Decisión de Diseño", ["Diseño", "Diseno", "Decision de Diseno"], "Decisión de Diseño"),
     area("Concept", "Concept", [], "Concept Art"),
     area("Localización", "Localización", ["Localizacion"], "Integración"),
     area("Polish", "Polish", ["Pulido"], "Feature de Programación", [
@@ -122,14 +122,9 @@ export const officialAreaCatalog = {
     area("QA", "QA", [], "QA"),
     area("Build", "Build", ["Build / Release"], "Build / Release"),
     area("Producción", "Producción", ["Produccion"], "Producción Audiovisual"),
-    area("Documentación", "Documentación", ["Documentacion"], "Story base documental", [
-      { format: "Investigación", match: ["research", "investigacion"] },
-      { format: "Decisión de Diseño", match: ["design decision", "decision de diseno"] },
-      { format: "Arquitectura - Brief", match: ["architectural", "arquitectura", "arquitectonico"] },
-      { format: "Reunión Documentada", match: ["meeting", "reunion", "acuerdos"] },
-      { format: "Curso / Capacitación", match: ["training", "course", "curso", "capacitacion"] }
-    ]),
-    area("Capacitación", "Capacitación", ["Capacitacion"], "Curso / Capacitación"),
+    area("Documentación", "Documentación", ["Documentacion"], "Story base documental"),
+    area("Reunión Documentada", "Reunión Documentada", ["Reunion Documentada"], "Reunión Documentada"),
+    area("Capacitación", "Capacitación", ["Capacitacion"], "Capacitación"),
     area("Housekeeping", "Housekeeping", [], "Feature de Programación", [
       { format: "Integración", match: ["asset integration", "integracion", "integrar"] },
       { format: "Arte Integrado", match: ["integrated art", "arte integrado", "assets de arte"] }

@@ -22,8 +22,8 @@ describe("official area catalog", () => {
     });
     expect(resolveCatalogArea("Diseno")).toMatchObject({
       kind: "normalized",
-      areaDisplayName: "Diseño",
-      jiraLabel: "Diseño"
+      areaDisplayName: "Decisión de Diseño",
+      jiraLabel: "Decisión de Diseño"
     });
   });
 
