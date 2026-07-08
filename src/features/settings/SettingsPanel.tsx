@@ -30,6 +30,7 @@ export function SettingsPanel({
   hasNotionIntegrationToken,
   onDeleteNotionIntegrationToken,
   onStartNotionOAuthConnection,
+  onOpenNotionOAuthAuthorizationUrl,
   onCompleteNotionOAuthConnection,
   onTestNotionCatalogConnection,
   onListJiraProjectsForConnection,
@@ -63,6 +64,7 @@ export function SettingsPanel({
   hasNotionIntegrationToken: () => Promise<boolean>;
   onDeleteNotionIntegrationToken: () => Promise<void>;
   onStartNotionOAuthConnection: () => Promise<NotionOAuthStartResult>;
+  onOpenNotionOAuthAuthorizationUrl: (url: string) => Promise<void> | void;
   onCompleteNotionOAuthConnection: (authorizationCode: string, state: string, pageUrlOrId: string) => Promise<NotionCatalogConnectionTestResult>;
   onTestNotionCatalogConnection: (pageUrlOrId: string, token?: string) => Promise<NotionCatalogConnectionTestResult>;
   onListJiraProjectsForConnection: (siteUrl: string, accountEmail: string) => Promise<JiraProjectOption[]>;
@@ -185,6 +187,7 @@ export function SettingsPanel({
           }}
           onOpenCatalogSourceRequirements={onOpenCatalogSourceRequirements}
           onStartNotionOAuthConnection={onStartNotionOAuthConnection}
+          onOpenNotionOAuthAuthorizationUrl={onOpenNotionOAuthAuthorizationUrl}
           onCompleteNotionOAuthConnection={async (authorizationCode, state, pageUrlOrId) => {
             const result = await onCompleteNotionOAuthConnection(authorizationCode, state, pageUrlOrId);
             setHasNotionToken(true);

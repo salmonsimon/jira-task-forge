@@ -4,6 +4,7 @@ import type { AssistedDescriptionProposal, NewAssistedDescriptionProposal } from
 import {
   createPersistedAssistedDescriptionProposal,
   completePersistedNotionOAuthConnection,
+  openPersistedNotionOAuthAuthorizationUrl,
   startPersistedNotionOAuthConnection,
   testPersistedNotionCatalogConnection,
   testPersistedJiraApiToken,
@@ -132,6 +133,17 @@ describe("Tauri persistence assisted description proposals", () => {
 
     await expect(startPersistedNotionOAuthConnection()).resolves.toEqual(result);
     expect(invokeMock).toHaveBeenCalledWith("start_notion_oauth_connection");
+  });
+
+  it("opens Notion OAuth authorization URLs through the native external-link command", async () => {
+    invokeMock.mockResolvedValueOnce(undefined);
+
+    await expect(
+      openPersistedNotionOAuthAuthorizationUrl("https://api.notion.com/v1/oauth/authorize?client_id=public-client&response_type=code&redirect_uri=https://example.test&state=state-123")
+    ).resolves.toBeUndefined();
+    expect(invokeMock).toHaveBeenCalledWith("open_notion_oauth_authorization_url", {
+      url: "https://api.notion.com/v1/oauth/authorize?client_id=public-client&response_type=code&redirect_uri=https://example.test&state=state-123"
+    });
   });
 
   it("completes Notion OAuth through the backend exchange before testing the selected page", async () => {

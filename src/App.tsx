@@ -53,6 +53,7 @@ import {
   openPersistedAtlassianApiTokensPage,
   openPersistedJiraIssueUrl,
   openPersistedNotionCatalogSourceRequirementsPage,
+  openPersistedNotionOAuthAuthorizationUrl,
   runPersistedJqlQuery,
   saveCsvFile,
   savePersistedAiProviderApiKey,
@@ -727,6 +728,15 @@ export default function App() {
     }
 
     window.open(notionCatalogSourceRequirementsUrl, "_blank", "noopener,noreferrer");
+  }
+
+  async function openNotionOAuthAuthorizationUrl(url: string) {
+    if (usesTauriPersistence) {
+      await openPersistedNotionOAuthAuthorizationUrl(url);
+      return;
+    }
+
+    window.open(url, "_blank", "noopener,noreferrer");
   }
 
   function showConnectionNotice(notice: Omit<ConnectionNotice, "id">) {
@@ -1700,6 +1710,7 @@ export default function App() {
                     throw new Error("Notion OAuth is available in the Tauri app.");
                   }
             }
+            onOpenNotionOAuthAuthorizationUrl={openNotionOAuthAuthorizationUrl}
             onCompleteNotionOAuthConnection={
               usesTauriPersistence
                 ? completePersistedNotionOAuthConnection

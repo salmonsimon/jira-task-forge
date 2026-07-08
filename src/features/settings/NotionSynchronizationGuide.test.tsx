@@ -34,6 +34,7 @@ describe("NotionSynchronizationGuide", () => {
         onDeleteNotionIntegrationToken={async () => undefined}
         onOpenCatalogSourceRequirements={() => undefined}
         onStartNotionOAuthConnection={async () => ({ authorizationUrl: "https://api.notion.com/v1/oauth/authorize?state=state-123", state: "state-123" })}
+        onOpenNotionOAuthAuthorizationUrl={async () => undefined}
         onCompleteNotionOAuthConnection={async () => ({
           ok: true,
           message: "Connected",
@@ -52,10 +53,12 @@ describe("NotionSynchronizationGuide", () => {
     expect(html).toContain("Set Catalog Source");
     expect(html).toContain("Catalog source");
     expect(html).toContain("Catalog mode");
-    expect(html).toContain("Continue to connect Notion, then select only the dedicated catalog page and validate it before saving.");
+    expect(html).toContain("Continue to connect Notion, then confirm the dedicated catalog page before saving.");
     expect(html).not.toContain("Notion page URL or ID");
     expect(html).not.toContain("New integration token");
     expect(html.indexOf("1. Source")).toBeLessThan(html.indexOf("2. Connect"));
+    expect(html.indexOf("2. Connect")).toBeLessThan(html.indexOf("3. Catalog page"));
+    expect(html.indexOf("3. Catalog page")).toBeLessThan(html.indexOf("4. Review"));
   });
 
   it("does not expose Notion token management before the source decision", () => {
@@ -68,6 +71,7 @@ describe("NotionSynchronizationGuide", () => {
         onDeleteNotionIntegrationToken={async () => undefined}
         onOpenCatalogSourceRequirements={() => undefined}
         onStartNotionOAuthConnection={async () => ({ authorizationUrl: "https://api.notion.com/v1/oauth/authorize?state=state-123", state: "state-123" })}
+        onOpenNotionOAuthAuthorizationUrl={async () => undefined}
         onCompleteNotionOAuthConnection={async () => ({
           ok: true,
           message: "Connected",
@@ -97,6 +101,7 @@ describe("NotionSynchronizationGuide", () => {
         onDeleteNotionIntegrationToken={async () => undefined}
         onOpenCatalogSourceRequirements={() => undefined}
         onStartNotionOAuthConnection={async () => ({ authorizationUrl: "https://api.notion.com/v1/oauth/authorize?state=state-123", state: "state-123" })}
+        onOpenNotionOAuthAuthorizationUrl={async () => undefined}
         onCompleteNotionOAuthConnection={async () => ({
           ok: true,
           message: "Connected",
@@ -118,6 +123,7 @@ describe("NotionSynchronizationGuide", () => {
     expect(html).toContain("grid-cols-1");
     expect(html).not.toContain("2. Connect");
     expect(html).not.toContain("3. Review");
+    expect(html).not.toContain("4. Review");
     expect(html).not.toContain("Notion page URL or ID");
     expect(html).not.toContain("View source requirements");
     expect(html).not.toContain("New integration token");
@@ -163,6 +169,7 @@ describe("NotionSynchronizationGuide", () => {
         onDeleteNotionIntegrationToken={async () => undefined}
         onOpenCatalogSourceRequirements={() => undefined}
         onStartNotionOAuthConnection={async () => ({ authorizationUrl: "https://api.notion.com/v1/oauth/authorize?state=state-123", state: "state-123" })}
+        onOpenNotionOAuthAuthorizationUrl={async () => undefined}
         onCompleteNotionOAuthConnection={async () => ({
           ok: true,
           message: "Connected",

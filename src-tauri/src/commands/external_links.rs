@@ -33,6 +33,12 @@ pub fn open_notion_catalog_source_requirements_page() -> Result<(), String> {
 }
 
 #[tauri::command]
+pub fn open_notion_oauth_authorization_url(url: String) -> Result<(), String> {
+    let url = validate_notion_oauth_authorization_url(&url)?;
+    open_external_url(&url)
+}
+
+#[tauri::command]
 pub fn open_jira_issue_url(url: String, services: State<'_, AppServices>) -> Result<(), String> {
     let settings = services
         .get_app_settings()
@@ -142,6 +148,46 @@ fn validate_jira_issue_url(url: &str, canonical_site_url: &str) -> Result<String
     Ok(format!("https://{host}/browse/{issue_key}"))
 }
 
+fn validate_notion_oauth_authorization_url(url: &str) -> Result<String, String> {
+    if url.is_empty() {
+        return Err("Notion authorization URL is required.".to_string());
+    }
+    if url
+        .chars()
+        .any(|character| character.is_whitespace() || character.is_control())
+    {
+        return Err(
+            "Notion authorization URL must not include whitespace or control characters."
+                .to_string(),
+        );
+    }
+    if !url.starts_with("https://api.notion.com/v1/oauth/authorize?") {
+        return Err(
+            "Notion authorization URL must use the Notion OAuth authorize endpoint.".to_string(),
+        );
+    }
+    let query = &url["https://api.notion.com/v1/oauth/authorize?".len()..];
+    if query.contains("client_secret=") || query.contains("access_token=") {
+        return Err(
+            "Notion authorization URL must not include secrets or access tokens.".to_string(),
+        );
+    }
+    for required_parameter in [
+        "client_id=",
+        "response_type=code",
+        "redirect_uri=",
+        "state=",
+    ] {
+        if !query.contains(required_parameter) {
+            return Err(
+                "Notion authorization URL is missing required OAuth parameters.".to_string(),
+            );
+        }
+    }
+
+    Ok(url.to_string())
+}
+
 fn site_host(canonical_site_url: &str) -> Result<String, String> {
     normalize_jira_site_url(canonical_site_url)
         .map(|site_url| site_url["https://".len()..].to_string())
@@ -149,7 +195,10 @@ fn site_host(canonical_site_url: &str) -> Result<String, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{ai_provider_api_keys_url, is_wsl, platform_open_command, validate_jira_issue_url};
+    use super::{
+        ai_provider_api_keys_url, is_wsl, platform_open_command, validate_jira_issue_url,
+        validate_notion_oauth_authorization_url,
+    };
 
     #[test]
     fn resolves_ai_provider_api_key_pages() {
@@ -278,6 +327,35 @@ mod tests {
             )
             .expect_err("nested path should fail"),
             "Jira issue URL must end with a Jira issue key."
+        );
+    }
+
+    #[test]
+    fn validates_notion_oauth_authorization_urls_before_opening() {
+        let valid_url = "https://api.notion.com/v1/oauth/authorize?client_id=client-123&response_type=code&owner=user&redirect_uri=https%3A%2F%2Fnotion-oauth.salmonsimon.com%2Fnotion%2Foauth%2Fcallback&state=jtf_123";
+
+        assert_eq!(
+            validate_notion_oauth_authorization_url(valid_url).expect("url validates"),
+            valid_url
+        );
+        assert_eq!(
+            validate_notion_oauth_authorization_url("https://example.test/oauth?client_id=client-123&response_type=code&redirect_uri=https://example.test&state=jtf_123")
+                .expect_err("non-notion host should fail"),
+            "Notion authorization URL must use the Notion OAuth authorize endpoint."
+        );
+        assert_eq!(
+            validate_notion_oauth_authorization_url(
+                "https://api.notion.com/v1/oauth/authorize?client_id=client-123&response_type=code&redirect_uri=https://example.test&state=jtf_123&client_secret=leak"
+            )
+            .expect_err("secret-bearing url should fail"),
+            "Notion authorization URL must not include secrets or access tokens."
+        );
+        assert_eq!(
+            validate_notion_oauth_authorization_url(
+                "https://api.notion.com/v1/oauth/authorize?client_id=client-123&redirect_uri=https://example.test&state=jtf_123"
+            )
+            .expect_err("missing response type should fail"),
+            "Notion authorization URL is missing required OAuth parameters."
         );
     }
 }

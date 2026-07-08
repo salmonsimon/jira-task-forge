@@ -39,6 +39,7 @@ describe("SettingsPanel", () => {
         hasNotionIntegrationToken={async () => true}
         onDeleteNotionIntegrationToken={async () => undefined}
         onStartNotionOAuthConnection={async () => ({ authorizationUrl: "https://api.notion.com/v1/oauth/authorize?state=state-123", state: "state-123" })}
+        onOpenNotionOAuthAuthorizationUrl={async () => undefined}
         onCompleteNotionOAuthConnection={async () => ({ ok: true, message: "Connected", title: "JTF Sync Catalog", extractedBlockCount: 1 })}
         onTestNotionCatalogConnection={async () => ({ ok: true, message: "Connected", title: "JTF Sync Catalog", extractedBlockCount: 1 })}
         onListJiraProjectsForConnection={async () => []}
@@ -81,6 +82,7 @@ describe("SettingsPanel", () => {
         hasNotionIntegrationToken={async () => true}
         onDeleteNotionIntegrationToken={async () => undefined}
         onStartNotionOAuthConnection={async () => ({ authorizationUrl: "https://api.notion.com/v1/oauth/authorize?state=state-123", state: "state-123" })}
+        onOpenNotionOAuthAuthorizationUrl={async () => undefined}
         onCompleteNotionOAuthConnection={async () => ({ ok: true, message: "Connected", title: "JTF Sync Catalog", extractedBlockCount: 1 })}
         onTestNotionCatalogConnection={async () => ({ ok: true, message: "Connected", title: "JTF Sync Catalog", extractedBlockCount: 1 })}
         onListJiraProjectsForConnection={async () => []}
@@ -123,6 +125,7 @@ describe("SettingsPanel", () => {
         hasNotionIntegrationToken={async () => true}
         onDeleteNotionIntegrationToken={async () => undefined}
         onStartNotionOAuthConnection={async () => ({ authorizationUrl: "https://api.notion.com/v1/oauth/authorize?state=state-123", state: "state-123" })}
+        onOpenNotionOAuthAuthorizationUrl={async () => undefined}
         onCompleteNotionOAuthConnection={async () => ({ ok: true, message: "Connected", title: "JTF Sync Catalog", extractedBlockCount: 1 })}
         onTestNotionCatalogConnection={async () => ({ ok: true, message: "Connected", title: "JTF Sync Catalog", extractedBlockCount: 1 })}
         onListJiraProjectsForConnection={async () => []}
@@ -163,6 +166,7 @@ describe("SettingsPanel", () => {
         hasNotionIntegrationToken={async () => true}
         onDeleteNotionIntegrationToken={async () => undefined}
         onStartNotionOAuthConnection={async () => ({ authorizationUrl: "https://api.notion.com/v1/oauth/authorize?state=state-123", state: "state-123" })}
+        onOpenNotionOAuthAuthorizationUrl={async () => undefined}
         onCompleteNotionOAuthConnection={async () => ({ ok: true, message: "Connected", title: "JTF Sync Catalog", extractedBlockCount: 1 })}
         onTestNotionCatalogConnection={async () => ({ ok: true, message: "Connected", title: "JTF Sync Catalog", extractedBlockCount: 1 })}
         onListJiraProjectsForConnection={async () => []}

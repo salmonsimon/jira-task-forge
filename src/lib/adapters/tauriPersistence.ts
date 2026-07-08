@@ -446,6 +446,10 @@ export async function openPersistedNotionCatalogSourceRequirementsPage(): Promis
   await invoke("open_notion_catalog_source_requirements_page");
 }
 
+export async function openPersistedNotionOAuthAuthorizationUrl(url: string): Promise<void> {
+  await invoke("open_notion_oauth_authorization_url", { url });
+}
+
 export async function openPersistedJiraIssueUrl(url: string): Promise<void> {
   await invoke("open_jira_issue_url", { url });
 }

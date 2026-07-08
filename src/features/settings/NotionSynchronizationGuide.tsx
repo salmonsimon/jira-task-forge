@@ -9,12 +9,13 @@ import type { AppSettings, NotionCatalogConnectionTestResult, NotionOAuthStartRe
 export const defaultNotionCatalogUrl = "https://app.notion.com/p/capacitacion-interna-dts/JTF-Sync-Catalog-387c335aece481c292baf6991a86a5c3";
 export const notionCatalogSourceRequirementsUrl = "https://app.notion.com/p/395c335aece48144b2dbe2cc2e0de298";
 
-type NotionStep = "source" | "connect" | "review";
+type NotionStep = "source" | "connect" | "catalog" | "review";
 type NotionOAuthStatus = "idle" | "started" | "success" | "error";
 
 const notionSteps: Array<{ id: NotionStep; label: string }> = [
   { id: "source", label: "Source" },
   { id: "connect", label: "Connect" },
+  { id: "catalog", label: "Catalog page" },
   { id: "review", label: "Review" }
 ];
 
@@ -57,6 +58,7 @@ export function NotionSynchronizationGuide({
   onDeleteNotionIntegrationToken,
   onOpenCatalogSourceRequirements,
   onStartNotionOAuthConnection,
+  onOpenNotionOAuthAuthorizationUrl,
   onCompleteNotionOAuthConnection,
   onTestNotionCatalogConnection
 }: {
@@ -67,6 +69,7 @@ export function NotionSynchronizationGuide({
   onDeleteNotionIntegrationToken: () => Promise<void>;
   onOpenCatalogSourceRequirements: () => void;
   onStartNotionOAuthConnection: () => Promise<NotionOAuthStartResult>;
+  onOpenNotionOAuthAuthorizationUrl: (url: string) => Promise<void> | void;
   onCompleteNotionOAuthConnection: (authorizationCode: string, state: string, pageUrlOrId: string) => Promise<NotionCatalogConnectionTestResult>;
   onTestNotionCatalogConnection: (pageUrlOrId: string, token?: string) => Promise<NotionCatalogConnectionTestResult>;
 }) {
@@ -78,6 +81,7 @@ export function NotionSynchronizationGuide({
   const [sourceUrl, setSourceUrl] = useState(settings.catalogSourceUrl || defaultNotionCatalogUrl);
   const [hasToken, setHasToken] = useState(false);
   const [oauthCode, setOauthCode] = useState("");
+  const [authorizationUrl, setAuthorizationUrl] = useState<string | null>(null);
   const [oauthMessage, setOauthMessage] = useState<string | null>(null);
   const [oauthStatus, setOauthStatus] = useState<NotionOAuthStatus>("idle");
   const [pendingOAuthState, setPendingOAuthState] = useState<string | null>(null);
@@ -89,7 +93,8 @@ export function NotionSynchronizationGuide({
   const currentStepIndex = visibleSteps.findIndex((candidate) => candidate.id === step);
   const canContinue =
     step === "source" ||
-    (step === "connect" && (hasToken || oauthStatus === "success" || mode !== "notion")) ||
+    (step === "connect" && (hasToken || oauthStatus === "success" || Boolean(pendingOAuthState && oauthCode.trim()) || mode !== "notion")) ||
+    (step === "catalog" && (hasToken || oauthStatus === "success" || mode !== "notion")) ||
     step === "review";
   const canSaveSynchronization = canSaveNotionSynchronization(mode, testResult) && (mode !== "notion" || hasToken);
   const canCompleteOAuth = canCompleteNotionOAuth(mode, oauthCode, pendingOAuthState, sourceUrl, isCompletingOAuth);
@@ -141,9 +146,10 @@ export function NotionSynchronizationGuide({
     try {
       const result = await onStartNotionOAuthConnection();
       setPendingOAuthState(result.state);
+      setAuthorizationUrl(result.authorizationUrl);
+      await onOpenNotionOAuthAuthorizationUrl(result.authorizationUrl);
       setOauthStatus("started");
       setOauthMessage("Notion authorization opened. After approval, paste the callback code here to finish connecting.");
-      window.open(result.authorizationUrl, "_blank", "noopener,noreferrer");
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       setOauthStatus("error");
@@ -178,6 +184,7 @@ export function NotionSynchronizationGuide({
     await onDeleteNotionIntegrationToken();
     setHasToken(false);
     setOauthCode("");
+    setAuthorizationUrl(null);
     setOauthStatus("idle");
     setOauthMessage("Notion connection removed.");
     setTestResult(null);
@@ -278,7 +285,7 @@ export function NotionSynchronizationGuide({
       >
         <PanelHeader title="Set Catalog Source" subtitle="Choose Manual catalog for local Areas or connect the JTF Sync Catalog page for official area sync." onClose={onClose} />
         <div className="border-b border-[#dfe1e6] bg-[#f7f8fa] px-5 py-3">
-          <div className={`grid gap-2 ${visibleSteps.length === 1 ? "grid-cols-1" : "grid-cols-3"}`}>
+          <div className={`grid gap-2 ${visibleSteps.length === 1 ? "grid-cols-1" : "grid-cols-4"}`}>
             {visibleSteps.map((candidate, index) => (
               <button
                 className={`h-8 rounded border px-2 text-xs font-medium ${
@@ -302,7 +309,7 @@ export function NotionSynchronizationGuide({
             <GuideSection title="Catalog source" description="Choose whether Areas are managed locally or synced from the Notion catalog. Manual catalog saves immediately and skips external setup.">
               <SourceModeSelect label="Catalog mode" value={mode} options={catalogModeOptions} onChange={setMode} />
               {mode !== "manual" ? (
-                <FeedbackNote variant="info">Continue to connect Notion, then select only the dedicated catalog page and validate it before saving.</FeedbackNote>
+                <FeedbackNote variant="info">Continue to connect Notion, then confirm the dedicated catalog page before saving.</FeedbackNote>
               ) : (
                 <FeedbackNote variant="warning">Manual catalog keeps Areas editable in Categories. No Notion token, page URL, or connection test is needed.</FeedbackNote>
               )}
@@ -340,6 +347,29 @@ export function NotionSynchronizationGuide({
                   setTestResult(null);
                 }}
               />
+              {authorizationUrl ? (
+                <div className="mt-4 rounded border border-[#dfe1e6] bg-[#f7f8fa] p-3">
+                  <div className="text-xs font-semibold text-[#172b4d]">Authorization link</div>
+                  <p className="mt-1 text-xs leading-relaxed text-[#6b778c]">If the browser did not open, copy this URL into your browser.</p>
+                  <code className="mt-2 block max-h-24 overflow-auto break-all rounded border border-[#dfe1e6] bg-white p-2 text-xs text-[#172b4d]">{authorizationUrl}</code>
+                </div>
+              ) : null}
+              <div className="mt-5 flex flex-wrap gap-2">
+                <Button
+                  className="settings-button-danger"
+                  disabled={!hasToken || isCompletingOAuth}
+                  icon={<Trash2 size={14} />}
+                  variant="secondary"
+                  onClick={removeToken}
+                >
+                  Remove connection
+                </Button>
+              </div>
+              {oauthMessage ? <FeedbackNote className="mt-4" variant={oauthStatus === "error" ? "error" : "success"}>{oauthMessage}</FeedbackNote> : null}
+            </GuideSection>
+          ) : null}
+          {step === "catalog" ? (
+            <GuideSection title="Catalog page" description="Paste the dedicated catalog page URL or ID that you selected in the Notion OAuth picker. The page must pass validation before the token is saved.">
               <GuideInput
                 label="Selected catalog page URL or ID"
                 placeholder={defaultNotionCatalogUrl}
@@ -372,15 +402,6 @@ export function NotionSynchronizationGuide({
                   onClick={completeOAuth}
                 >
                   {isCompletingOAuth ? "Connecting..." : "Finish connection"}
-                </Button>
-                <Button
-                  className="settings-button-danger"
-                  disabled={!hasToken || isCompletingOAuth}
-                  icon={<Trash2 size={14} />}
-                  variant="secondary"
-                  onClick={removeToken}
-                >
-                  Remove connection
                 </Button>
               </div>
               {oauthMessage ? <FeedbackNote className="mt-4" variant={oauthStatus === "error" ? "error" : "success"}>{oauthMessage}</FeedbackNote> : null}
