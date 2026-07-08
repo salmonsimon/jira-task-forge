@@ -2,6 +2,7 @@ import { AlertTriangle, Check, CheckCircle2, Eye, EyeOff, Pencil, Plus, RefreshC
 import { useEffect, useRef, useState } from "react";
 import { Button, DrawerShell, FeedbackNote, PanelHeader, ToggleSwitch } from "../../components/ui";
 import { appOverlayLayers, useAppOverlay } from "../../lib/app-overlays";
+import { isTransversalProject } from "../../lib/domain/categoryVisibility";
 import type { AppSettings, CatalogSyncResult, Category, ProjectSyncApplyRequest, ProjectSyncCandidate, ProjectSyncReview } from "../../lib/types";
 import { cn } from "../../lib/utils";
 import { mergeProjectSyncCandidates, ProjectSyncDecisionTable } from "./ProjectSyncDecisionTable";
@@ -583,6 +584,7 @@ function CategoryRow({
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [draftName, setDraftName] = useState(category.name);
+  const isReadOnlyProject = isTransversalProject(category);
 
   useEffect(() => {
     if (!isEditing) setDraftName(category.name);
@@ -644,7 +646,7 @@ function CategoryRow({
           </>
         ) : (
           <>
-            {!isCatalogManaged ? (
+            {!isCatalogManaged && !isReadOnlyProject ? (
               <button
                 className="inline-flex h-7 w-7 items-center justify-center rounded text-[#42526e] opacity-0 transition hover:bg-[#ebecf0] group-hover:opacity-100 focus:opacity-100"
                 onClick={() => setIsEditing(true)}
@@ -658,12 +660,12 @@ function CategoryRow({
               className="inline-flex h-7 w-7 items-center justify-center rounded text-[#42526e] transition hover:bg-[#ebecf0]"
               onClick={() => void onUpdateCategory(category.id, { hidden: !category.hidden })}
               title={category.hidden ? `Show ${category.name}` : `Hide ${category.name}`}
-              disabled={category.categoryType === "project" && category.name === "Transversal"}
+              disabled={isReadOnlyProject}
               type="button"
             >
               {category.hidden ? <Eye size={14} /> : <EyeOff size={14} />}
             </button>
-            {!isCatalogManaged ? (
+            {!isCatalogManaged && !isReadOnlyProject ? (
               <button
                 className="inline-flex h-7 w-7 items-center justify-center rounded text-[#42526e] opacity-0 transition hover:bg-[#ffebe6] hover:text-[#bf2600] group-hover:opacity-100 focus:opacity-100"
                 onClick={() => void onDeleteCategory(category.id)}

@@ -4,13 +4,21 @@ import { visibleAreasForMode, visibleProjectsForMode } from "./categoryVisibilit
 
 const localProject: Category = { id: "p-local", categoryType: "project", name: "Manual", source: "local" };
 const syncedProject: Category = { id: "p-jira", categoryType: "project", name: "Synced", source: "jira" };
+const transversalProject: Category = { id: "p-transversal", categoryType: "project", name: "Transversal", source: "jira" };
 const localArea: Category = { id: "a-local", categoryType: "area", name: "Manual Area", source: "local" };
 const syncedArea: Category = { id: "a-catalog", categoryType: "area", name: "Catalog Area", source: "catalog" };
 
 describe("category visibility by mode", () => {
-  it("keeps local Projects visible in sync mode and hides Jira Projects in manual mode", () => {
-    expect(visibleProjectsForMode([localProject, syncedProject], true)).toEqual([localProject, syncedProject]);
-    expect(visibleProjectsForMode([localProject, syncedProject], false)).toEqual([localProject]);
+  it("keeps local Projects visible in sync mode and hides non-Transversal Jira Projects in manual mode", () => {
+    expect(visibleProjectsForMode([localProject, syncedProject, transversalProject], true)).toEqual([
+      localProject,
+      syncedProject,
+      transversalProject
+    ]);
+    expect(visibleProjectsForMode([localProject, syncedProject, transversalProject], false)).toEqual([
+      localProject,
+      transversalProject
+    ]);
   });
 
   it("separates manual and synced Areas by catalog mode", () => {

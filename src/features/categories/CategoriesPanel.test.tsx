@@ -131,6 +131,31 @@ it("renders manual catalog areas as editable local categories", () => {
   expect(html).toContain("Delete Bug");
 });
 
+it("keeps Transversal visible and read-only even in manual Projects mode", () => {
+  const html = renderToStaticMarkup(
+    <CategoriesPanel
+      projects={[{ id: "project-transversal", categoryType: "project", name: "Transversal", source: "local" }]}
+      areas={[]}
+      catalogSourceMode="manual"
+      catalogSourceUrl=""
+      projectSyncEnabled={false}
+      onCreateCategory={() => undefined}
+      onDeleteCategory={() => undefined}
+      onUpdateCategory={() => undefined}
+      onSyncAreaCatalog={async () => null}
+      onConfigureCatalogSource={() => undefined}
+      onClose={() => undefined}
+    />
+  );
+
+  expect(html).toContain("Transversal");
+  expect(html).toContain("Manual Projects mode");
+  expect(html).not.toContain("Rename Transversal");
+  expect(html).not.toContain("Delete Transversal");
+  expect(html).toContain("disabled=\"\"");
+  expect(html).toContain("title=\"Hide Transversal\"");
+});
+
 it("keeps Notion catalog areas synchronized instead of manually editable", () => {
   const html = renderToStaticMarkup(
     <CategoriesPanel

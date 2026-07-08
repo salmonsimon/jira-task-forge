@@ -256,6 +256,9 @@ impl<'connection> CategoryRepository<'connection> {
         let Some(current) = self.find_by_id(id)? else {
             return Ok(None);
         };
+        if is_transversal_project_category(&current) {
+            return Ok(Some(current));
+        }
         let next_name = match name {
             Some(name) => normalize_display_name(name)?,
             None => current.name,
@@ -289,7 +292,10 @@ impl<'connection> CategoryRepository<'connection> {
     }
 
     pub fn delete(&self, id: &str) -> DbResult<bool> {
-        if self.find_by_id(id)?.is_none() {
+        let Some(current) = self.find_by_id(id)? else {
+            return Ok(false);
+        };
+        if is_transversal_project_category(&current) {
             return Ok(false);
         }
         let changed = self
@@ -2686,6 +2692,12 @@ fn validate_category_type(category_type: &str) -> DbResult<()> {
     }
 }
 
+fn is_transversal_project_category(category: &Category) -> bool {
+    category.category_type == "project"
+        && normalize_project_name(&category.name)
+            == normalize_project_name(TRANSVERSAL_PROJECT_NAME)
+}
+
 fn validate_issue_relationship_type(relationship_type: &str) -> DbResult<()> {
     match relationship_type {
         "blocks" | "blocked_by" => Ok(()),
@@ -3094,6 +3106,16 @@ mod tests {
         assert_eq!(projects[0].name, TRANSVERSAL_PROJECT_NAME);
         assert_eq!(projects[0].source, "jira");
         assert!(!projects[0].hidden);
+
+        let transversal = repository
+            .update(&projects[0].id, Some("Renamed"), Some(true))
+            .expect("transversal update is ignored")
+            .expect("transversal project exists");
+        assert_eq!(transversal.name, TRANSVERSAL_PROJECT_NAME);
+        assert!(!transversal.hidden);
+        assert!(!repository
+            .delete(&transversal.id)
+            .expect("transversal delete is ignored"));
 
         let areas = repository.list(Some("area")).expect("area categories list");
         assert!(areas.is_empty());
