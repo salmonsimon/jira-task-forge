@@ -24,11 +24,7 @@ use crate::sync_audit::SyncAuditDetail;
 
 const APP_SETTINGS_KEY: &str = "app_settings";
 const DEFAULT_PROJECT_CATEGORIES: &[(&str, bool)] = &[
-    ("STT", false),
-    ("PilotLab", false),
-    ("MR Studio", false),
     ("Transversal", false),
-    ("Legacy Sandbox", true),
 ];
 const DEFAULT_JQL_FAVORITES: &[(&str, &str)] = &[
     (
@@ -930,7 +926,6 @@ impl<'connection> CategoryRepository<'connection> {
 
     fn ensure_defaults_seeded(&self) -> DbResult<()> {
         self.seed_category_type_if_empty("project", DEFAULT_PROJECT_CATEGORIES)?;
-        self.seed_catalog_area_categories_if_empty()?;
         Ok(())
     }
 
@@ -973,38 +968,6 @@ impl<'connection> CategoryRepository<'connection> {
         Ok(())
     }
 
-    fn seed_catalog_area_categories_if_empty(&self) -> DbResult<()> {
-        let count: i64 = self.connection.query_row(
-            "SELECT COUNT(*) FROM categories WHERE category_type = 'area'",
-            [],
-            |row| row.get(0),
-        )?;
-        if count > 0 {
-            return Ok(());
-        }
-
-        let now = utc_now_string()?;
-        for catalog_area in OFFICIAL_AREAS {
-            let id = Uuid::new_v4().to_string();
-            let normalized_name = normalize_name(catalog_area.area_display_name);
-            self.connection.execute(
-                "
-                INSERT OR IGNORE INTO categories (
-                    id, category_type, name, normalized_name, source, hidden, ignored, created_at, updated_at
-                )
-                VALUES (?1, 'area', ?2, ?3, 'catalog', 0, 0, ?4, ?4)
-                ",
-                (
-                    id.as_str(),
-                    catalog_area.area_display_name,
-                    normalized_name.as_str(),
-                    now.as_str(),
-                ),
-            )?;
-        }
-
-        Ok(())
-    }
 }
 
 impl<'connection> JqlFavoriteRepository<'connection> {
@@ -3044,10 +3007,13 @@ mod tests {
         let projects = repository
             .list(Some("project"))
             .expect("project categories list");
-        assert!(projects.iter().any(|category| category.name == "STT"));
-        assert!(projects
-            .iter()
-            .any(|category| category.name == "Legacy Sandbox" && category.hidden));
+        assert_eq!(projects.len(), 1);
+        assert_eq!(projects[0].name, TRANSVERSAL_PROJECT_NAME);
+        assert_eq!(projects[0].source, "jira");
+        assert!(!projects[0].hidden);
+
+        let areas = repository.list(Some("area")).expect("area categories list");
+        assert!(areas.is_empty());
 
         let created = repository
             .create("project", "  Gameplay   UX  ")
@@ -3254,9 +3220,6 @@ mod tests {
             category.name == "Moon Lab" && category.source == "jira" && !category.hidden
         }));
         assert!(!synced.iter().any(|category| category.name == "PilotLab"));
-        assert!(synced.iter().any(|category| {
-            category.name == "Legacy Sandbox" && category.source == "jira" && category.hidden
-        }));
 
         let decisions = repository
             .list_project_sync_decisions(&scope)
