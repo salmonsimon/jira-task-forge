@@ -103,7 +103,8 @@ pub struct SyncedDeliveryFormat {
 #[serde(rename_all = "camelCase")]
 pub struct SyncedAreaFormatRule {
     pub area_display_name: String,
-    pub priority: i64,
+    #[serde(rename = "order", alias = "priority")]
+    pub order: i64,
     pub condition: String,
     pub delivery_format: String,
     pub blocking: bool,
@@ -1187,7 +1188,7 @@ mod tests {
               "areaFormatRules": [
                 {
                   "areaDisplayName": "Programación",
-                  "priority": 1,
+                  "order": 1,
                   "condition": "fallback",
                   "deliveryFormat": "Feature de Programación",
                   "blocking": false
@@ -1206,7 +1207,62 @@ mod tests {
             "PR/MR creado."
         );
         assert_eq!(result.area_format_rules.len(), 1);
+        assert_eq!(result.area_format_rules[0].order, 1);
         assert!(result.errors.is_empty());
+    }
+
+    #[test]
+    fn accepts_legacy_priority_as_area_format_rule_order() {
+        let result = parse_exportable_catalog_json(
+            "https://example.test/jtf-sync-catalog.json",
+            r#"{
+              "areas": [
+                {
+                  "areaDisplayName": "Bug",
+                  "jiraLabel": "Bug",
+                  "enabledInJTF": true,
+                  "issueType": "Bug",
+                  "defaultDeliveryFormat": "Bug"
+                },
+                {
+                  "areaDisplayName": "Programación",
+                  "jiraLabel": "Programación",
+                  "enabledInJTF": true,
+                  "issueType": "Story",
+                  "defaultDeliveryFormat": "Feature de Programación"
+                }
+              ],
+              "deliveryFormats": [
+                {
+                  "formatName": "Bug",
+                  "issueType": "Bug",
+                  "storyHeadings": ["Historia de usuario"],
+                  "minimumDeliverable": "Bug reproducible.",
+                  "reviewChecklist": ["Pasos de reproducción incluidos."]
+                },
+                {
+                  "formatName": "Feature de Programación",
+                  "issueType": "Story",
+                  "storyHeadings": ["Historia de usuario"],
+                  "minimumDeliverable": "PR/MR creado.",
+                  "reviewChecklist": ["PR/MR creado."]
+                }
+              ],
+              "areaFormatRules": [
+                {
+                  "areaDisplayName": "Programación",
+                  "priority": 3,
+                  "condition": "fallback",
+                  "deliveryFormat": "Feature de Programación",
+                  "blocking": false
+                }
+              ]
+            }"#,
+        )
+        .expect("legacy catalog should parse");
+
+        assert!(result.ok);
+        assert_eq!(result.area_format_rules[0].order, 3);
     }
 
     #[test]
