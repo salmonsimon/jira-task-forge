@@ -62,7 +62,7 @@ describe("official area catalog", () => {
       format: "Feature de Programación"
     });
     expect(getDeliveryFormatForArea("Arquitectura", "Preparar brief tecnico para UI")).toMatchObject({
-      kind: "conditional",
+      kind: "direct",
       areaDisplayName: "Arquitectura",
       format: "Arquitectura - Brief"
     });
@@ -73,26 +73,57 @@ describe("official area catalog", () => {
     });
   });
 
-  it("requires a delivery-format confirmation instead of silently falling back for multi-format areas", () => {
+  it("uses fallback catalog formats as auto context without requiring confirmation", () => {
     expect(getDeliveryFormatGateForArea("Programación")).toEqual({
-      kind: "needs_confirmation",
+      kind: "auto",
       areaDisplayName: "Programación",
-      suggestedFormat: null,
+      format: null,
       options: ["Feature de Programación"]
     });
 
     expect(getDeliveryFormatGateForArea("Arquitectura", "Preparar sistema de navegación")).toEqual({
-      kind: "needs_confirmation",
+      kind: "auto",
       areaDisplayName: "Arquitectura",
-      suggestedFormat: null,
-      options: ["Arquitectura - Brief", "Arquitectura - Propuesta Final"]
+      format: null,
+      options: ["Arquitectura - Propuesta Final", "Arquitectura - Brief"]
     });
 
     expect(getDeliveryFormatGateForArea("Arquitectura", "Preparar brief tecnico")).toEqual({
-      kind: "needs_confirmation",
+      kind: "auto",
       areaDisplayName: "Arquitectura",
-      suggestedFormat: "Arquitectura - Brief",
-      options: ["Arquitectura - Brief", "Arquitectura - Propuesta Final"]
+      format: null,
+      options: ["Arquitectura - Propuesta Final", "Arquitectura - Brief"]
+    });
+
+    expect(getDeliveryFormatGateForArea("Arquitectura", "Cerrar propuesta final")).toEqual({
+      kind: "auto",
+      areaDisplayName: "Arquitectura",
+      format: "Arquitectura - Propuesta Final",
+      options: ["Arquitectura - Propuesta Final", "Arquitectura - Brief"]
+    });
+  });
+
+  it("keeps Notion multi-format mappings for art, feeling, and UI fallback areas", () => {
+    expect(getDeliveryFormatGateForArea("3D")).toMatchObject({
+      kind: "auto",
+      areaDisplayName: "3D",
+      options: ["Arte Empaquetado", "Arte Integrado"]
+    });
+    expect(getDeliveryFormatGateForArea("3D", "Entregar zip para integración manual")).toMatchObject({
+      format: "Arte Empaquetado"
+    });
+
+    expect(getDeliveryFormatGateForArea("Feeling")).toMatchObject({
+      kind: "auto",
+      areaDisplayName: "Feeling",
+      options: ["Decisión de Diseño", "Playtest Documentado", "Feature de Programación"]
+    });
+    expect(getDeliveryFormatGateForArea("Feeling", "Validar feeling con usuarios")).toMatchObject({
+      format: "Playtest Documentado"
+    });
+
+    expect(getDeliveryFormatGateForArea("UI")).toMatchObject({
+      options: ["Feature de Programación", "Decisión de Diseño", "Integración"]
     });
   });
 
@@ -102,6 +133,13 @@ describe("official area catalog", () => {
     expect(deriveCatalogIssueType("Programación")).toBe("Story");
     expect(deriveCatalogIssueType("3D")).toBe("Story");
     expect(deriveCatalogIssueType("")).toBe("Story");
+
+    expect(getDeliveryFormatGateForArea("Bug")).toEqual({
+      kind: "auto",
+      areaDisplayName: "Bug",
+      format: null,
+      options: ["Bug"]
+    });
   });
 
   it("exposes only official final area and label options", () => {

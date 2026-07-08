@@ -1,9 +1,8 @@
 use super::credentials::AI_API_KEY_ACCOUNT;
 use super::AppServices;
-use crate::area_catalog;
 use crate::integrations::ai::{ai_model_or_default, AiClient, AiCredentials, AiProvider};
 use crate::models::{AssistedDescriptionDraft, EpicScopePluralSuggestion, JqlAiDraft};
-use crate::repositories::{CategoryRepository, TaskRepository};
+use crate::repositories::{CategoryRepository, SyncedCatalogTemplateContext, TaskRepository};
 
 impl AppServices {
     pub fn draft_jql_with_ai(&self, prompt: &str) -> Result<JqlAiDraft, String> {
@@ -49,6 +48,7 @@ impl AppServices {
         }
         .ok_or_else(|| "Task not found.".to_string())?;
 
+        let mut synced_catalog_template = None;
         let catalog_context = {
             let connection = self.connection();
             let category_repository = CategoryRepository::new(&connection);
@@ -59,40 +59,39 @@ impl AppServices {
                 .catalog_delivery_format_options_for_area(&task.area)
                 .map_err(|error| format!("Could not load catalog delivery formats: {error}"))?;
 
-            let Some(delivery_format) = delivery_format else {
-                return Err(
-                    "Choose a delivery format before generating a description proposal."
-                        .to_string(),
-                );
-            };
-
             if !synced_options.is_empty() {
-                category_repository
-                    .catalog_template_context_for_confirmed_delivery_format(&task.area, delivery_format)
-                    .map_err(|error| format!("Could not load catalog template context: {error}"))?
-            } else {
-                let fallback_options =
-                    area_catalog::catalog_delivery_format_options_for_area(&task.area);
-                if fallback_options.is_empty() {
+                let Some(delivery_format) = delivery_format else {
                     return Err(
-                        "Choose an official catalog area before generating a description proposal."
+                        "Choose a delivery format before generating a description proposal."
                             .to_string(),
                     );
-                }
-                area_catalog::catalog_context_for_confirmed_delivery_format(
-                    &task.area,
-                    delivery_format,
-                )
-                .ok()
+                };
+                let template = category_repository
+                    .catalog_template_for_confirmed_delivery_format(&task.area, delivery_format)
+                    .map_err(|error| format!("Could not load catalog template context: {error}"))?
+                    .ok_or_else(|| {
+                        "Choose a delivery format with a synced catalog template before generating a description proposal."
+                            .to_string()
+                    })?;
+                let prompt_context = template.prompt_context.clone();
+                synced_catalog_template = Some(template);
+                Some(prompt_context)
+            } else {
+                Some(unsynced_catalog_generation_context(&task.area))
             }
         };
 
-        client.draft_task_description(
+        let mut draft = client.draft_task_description(
             &model,
             &task,
             additional_context,
             catalog_context.as_deref(),
-        )
+            synced_catalog_template.is_none(),
+        )?;
+        if let Some(template) = synced_catalog_template.as_ref() {
+            append_synced_catalog_final_sections(&mut draft, template);
+        }
+        Ok(draft)
     }
 
     pub fn test_ai_provider_connection(&self) -> Result<String, String> {
@@ -193,5 +192,160 @@ impl AppServices {
         } else {
             Ok(provider.default_model().to_string())
         }
+    }
+}
+
+fn append_synced_catalog_final_sections(
+    draft: &mut AssistedDescriptionDraft,
+    template: &SyncedCatalogTemplateContext,
+) {
+    if draft.status != "drafted" {
+        return;
+    }
+    let Some(description) = draft.description.as_deref() else {
+        return;
+    };
+
+    let base_description = remove_synced_catalog_final_sections(description);
+    let checklist = if template.review_checklist.is_empty() {
+        "- None".to_string()
+    } else {
+        template
+            .review_checklist
+            .iter()
+            .map(|item| format!("- {}", item.trim()))
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+
+    draft.description = Some(
+        [
+            base_description.trim_end(),
+            "## Entregable mínimo",
+            template.minimum_deliverable.trim(),
+            "## Checklist antes de Review",
+            checklist.as_str(),
+        ]
+        .join("\n\n"),
+    );
+}
+
+fn unsynced_catalog_generation_context(area: &str) -> String {
+    format!(
+        "Unsynced catalog guidance:\n\
+- No synced Notion catalog template is available for this Local Task.\n\
+- Area is user-provided local input: {area}.\n\
+- Infer the most likely delivery format from the Area, title, existing description, and user context.\n\
+- Generate all requested Target Markdown sections, including Entregable mínimo and Checklist antes de Review, from that inferred context.\n\
+- Do not claim that any official synced Notion deliverable or checklist was available."
+    )
+}
+
+fn remove_synced_catalog_final_sections(description: &str) -> String {
+    let final_section_start = description
+        .lines()
+        .scan(0, |offset, line| {
+            let current_offset = *offset;
+            *offset += line.len() + 1;
+            Some((current_offset, line.trim()))
+        })
+        .find(|(_, line)| {
+            normalize_markdown_heading(line).is_some_and(|heading| {
+                heading == "entregable minimo" || heading == "checklist antes de review"
+            })
+        })
+        .map(|(offset, _)| offset);
+
+    match final_section_start {
+        Some(offset) => description[..offset].trim_end().to_string(),
+        None => description.trim().to_string(),
+    }
+}
+
+fn normalize_markdown_heading(line: &str) -> Option<String> {
+    let heading = line.strip_prefix("## ")?.trim();
+    if heading.is_empty() {
+        return None;
+    }
+    Some(
+        heading
+            .to_lowercase()
+            .replace('á', "a")
+            .replace('é', "e")
+            .replace('í', "i")
+            .replace('ó', "o")
+            .replace('ú', "u")
+            .replace('ü', "u")
+            .replace('ñ', "n")
+            .chars()
+            .map(|character| {
+                if character.is_ascii_alphanumeric() {
+                    character
+                } else {
+                    ' '
+                }
+            })
+            .collect::<String>()
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" "),
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{append_synced_catalog_final_sections, SyncedCatalogTemplateContext};
+    use crate::models::AssistedDescriptionDraft;
+
+    #[test]
+    fn appends_exact_synced_final_sections_to_generated_description() {
+        let mut draft = AssistedDescriptionDraft {
+            status: "drafted".to_string(),
+            description: Some(
+                "## Historia de usuario
+
+Como artista,
+quiero preparar el asset.
+
+## Contexto
+
+Usar formato Arte Empaquetado.
+
+## Alcance
+
+- Empaquetar archivos.
+
+## Criterios de aceptacion
+
+- El paquete se puede revisar.
+
+## Entregable mínimo
+
+Texto inventado por IA.
+
+## Checklist antes de Review
+
+- Checklist inventado."
+                    .to_string(),
+            ),
+            clarification_questions: Vec::new(),
+        };
+        let template = SyncedCatalogTemplateContext {
+            prompt_context: "Synced Notion catalog template".to_string(),
+            minimum_deliverable: "Zip o paquete disponible para integración manual.".to_string(),
+            review_checklist: vec![
+                "Zip o paquete disponible".to_string(),
+                "estructura acordada".to_string(),
+            ],
+        };
+
+        append_synced_catalog_final_sections(&mut draft, &template);
+
+        let description = draft.description.expect("description remains");
+        assert!(description.ends_with(
+            "## Entregable mínimo\n\nZip o paquete disponible para integración manual.\n\n## Checklist antes de Review\n\n- Zip o paquete disponible\n- estructura acordada"
+        ));
+        assert!(!description.contains("Texto inventado por IA"));
+        assert!(!description.contains("Checklist inventado"));
     }
 }

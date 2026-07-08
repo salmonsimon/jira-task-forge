@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CatalogArea {
@@ -122,20 +122,152 @@ pub enum CatalogAreaResolution {
     Blocked,
 }
 
-pub const CATALOG_SOURCE_URL: &str = "https://app.notion.com/p/387c335aece481c292baf6991a86a5c3";
-pub const CATALOG_SYNCED_AT: &str = "2026-07-03";
-pub const CATALOG_VERSION: &str = "2026.07.03-jtf-sync-catalog";
+pub const CATALOG_SOURCE_URL: &str = "https://app.notion.com/p/397c335aece481818013f3fe51cd2030";
+pub const CATALOG_SYNCED_AT: &str = "2026-07-06";
+pub const CATALOG_VERSION: &str = "2026.07.06-jtf-sync-catalog";
 pub const CATALOG_MAINTENANCE_NOTE: &str =
     "Fallback catalog for Jira Task Forge Issue #141. Public/exportable catalog sync is the preferred runtime source.";
 
-const ARCHITECTURE_CONDITIONAL_FORMATS: &[CatalogConditionalDeliveryFormat] = &[
+const ARCHITECTURE_CONDITIONAL_FORMATS: &[CatalogConditionalDeliveryFormat] =
+    &[CatalogConditionalDeliveryFormat {
+        format: "Arquitectura - Propuesta Final",
+        matches: &[
+            "propuesta final",
+            "decision final",
+            "solucion final",
+            "accepted brief",
+            "brief aceptado",
+        ],
+    }];
+
+const ART_PACKAGE_CONDITIONAL_FORMATS: &[CatalogConditionalDeliveryFormat] =
+    &[CatalogConditionalDeliveryFormat {
+        format: "Arte Empaquetado",
+        matches: &[
+            "package",
+            "paquete",
+            "zip",
+            "integracion manual",
+            "otra persona",
+            "another person",
+        ],
+    }];
+
+const FEELING_CONDITIONAL_FORMATS: &[CatalogConditionalDeliveryFormat] = &[
     CatalogConditionalDeliveryFormat {
-        format: "Arquitectura - Brief",
-        matches: &["brief", "requerimiento", "contexto inicial"],
+        format: "Decisión de Diseño",
+        matches: &[
+            "criterio",
+            "ux",
+            "interaccion",
+            "balance",
+            "decision",
+            "experiencia",
+        ],
     },
     CatalogConditionalDeliveryFormat {
-        format: "Arquitectura - Propuesta Final",
-        matches: &["propuesta final", "decision final", "cerrar propuesta"],
+        format: "Playtest Documentado",
+        matches: &[
+            "playtest",
+            "usuarios",
+            "stakeholders",
+            "validar feeling",
+            "validar sensacion",
+        ],
+    },
+];
+
+const POLISH_CONDITIONAL_FORMATS: &[CatalogConditionalDeliveryFormat] =
+    &[CatalogConditionalDeliveryFormat {
+        format: "Integración",
+        matches: &[
+            "integrar",
+            "integracion",
+            "assets preparados",
+            "adjustments",
+        ],
+    }];
+
+const HAPTICS_CONDITIONAL_FORMATS: &[CatalogConditionalDeliveryFormat] = &[
+    CatalogConditionalDeliveryFormat {
+        format: "Integración",
+        matches: &[
+            "integrar",
+            "integracion",
+            "defined haptics",
+            "haptics definidos",
+        ],
+    },
+    CatalogConditionalDeliveryFormat {
+        format: "QA",
+        matches: &[
+            "validar",
+            "build",
+            "device",
+            "dispositivo",
+            "integrated haptic",
+        ],
+    },
+];
+
+const UI_CONDITIONAL_FORMATS: &[CatalogConditionalDeliveryFormat] = &[
+    CatalogConditionalDeliveryFormat {
+        format: "Feature de Programación",
+        matches: &[
+            "widget behavior",
+            "comportamiento",
+            "logic",
+            "logica",
+            "interaction",
+            "interaccion",
+        ],
+    },
+    CatalogConditionalDeliveryFormat {
+        format: "Decisión de Diseño",
+        matches: &[
+            "experience",
+            "experiencia",
+            "flow",
+            "flujo",
+            "structure",
+            "estructura",
+            "visual criterion",
+            "criterio visual",
+        ],
+    },
+];
+
+const DOCUMENTATION_CONDITIONAL_FORMATS: &[CatalogConditionalDeliveryFormat] = &[
+    CatalogConditionalDeliveryFormat {
+        format: "Investigación",
+        matches: &["research", "investigacion"],
+    },
+    CatalogConditionalDeliveryFormat {
+        format: "Decisión de Diseño",
+        matches: &["design decision", "decision de diseno"],
+    },
+    CatalogConditionalDeliveryFormat {
+        format: "Arquitectura - Brief",
+        matches: &["architectural", "arquitectura", "arquitectonico"],
+    },
+    CatalogConditionalDeliveryFormat {
+        format: "Reunión Documentada",
+        matches: &["meeting", "reunion", "acuerdos"],
+    },
+    CatalogConditionalDeliveryFormat {
+        format: "Curso / Capacitación",
+        matches: &["training", "course", "curso", "capacitacion"],
+    },
+];
+
+const HOUSEKEEPING_CONDITIONAL_FORMATS: &[CatalogConditionalDeliveryFormat] = &[
+    CatalogConditionalDeliveryFormat {
+        format: "Integración",
+        matches: &["asset integration", "integracion", "integrar"],
+    },
+    CatalogConditionalDeliveryFormat {
+        format: "Arte Integrado",
+        matches: &["integrated art", "arte integrado", "assets de arte"],
     },
 ];
 
@@ -167,27 +299,52 @@ pub const OFFICIAL_AREAS: &[CatalogArea] = &[
         "3D",
         &["Modelos 3D", "Modelo 3D"],
         "Arte Integrado",
-        &[],
+        ART_PACKAGE_CONDITIONAL_FORMATS,
     ),
     area(
         "Animación",
         "Animación",
         &["Animacion"],
         "Arte Integrado",
-        &[],
+        ART_PACKAGE_CONDITIONAL_FORMATS,
     ),
-    area("Texturas", "Texturas", &[], "Arte Integrado", &[]),
+    area(
+        "Texturas",
+        "Texturas",
+        &[],
+        "Arte Integrado",
+        ART_PACKAGE_CONDITIONAL_FORMATS,
+    ),
     area(
         "Iluminación",
         "Iluminación",
         &["Iluminacion"],
         "Arte Integrado",
-        &[],
+        ART_PACKAGE_CONDITIONAL_FORMATS,
     ),
-    area("VFX", "VFX", &[], "Arte Integrado", &[]),
+    area(
+        "VFX",
+        "VFX",
+        &[],
+        "Arte Integrado",
+        ART_PACKAGE_CONDITIONAL_FORMATS,
+    ),
     area("SFX", "SFX", &[], "Integración", &[]),
-    area("UI", "UI", &[], "Integración", &[]),
-    area("Feeling", "Feeling", &[], "Feature de Programación", &[]),
+    area(
+        "Haptics",
+        "Haptics",
+        &[],
+        "Haptics",
+        HAPTICS_CONDITIONAL_FORMATS,
+    ),
+    area("UI", "UI", &[], "Integración", UI_CONDITIONAL_FORMATS),
+    area(
+        "Feeling",
+        "Feeling",
+        &[],
+        "Feature de Programación",
+        FEELING_CONDITIONAL_FORMATS,
+    ),
     area("Diseño", "Diseño", &["Diseno"], "Decisión de Diseño", &[]),
     area("Concept", "Concept", &[], "Concept Art", &[]),
     area(
@@ -202,7 +359,7 @@ pub const OFFICIAL_AREAS: &[CatalogArea] = &[
         "Polish",
         &["Pulido"],
         "Feature de Programación",
-        &[],
+        POLISH_CONDITIONAL_FORMATS,
     ),
     area(
         "Investigación",
@@ -238,7 +395,7 @@ pub const OFFICIAL_AREAS: &[CatalogArea] = &[
         "Documentación",
         &["Documentacion"],
         "Story base documental",
-        &[],
+        DOCUMENTATION_CONDITIONAL_FORMATS,
     ),
     area(
         "Capacitación",
@@ -252,7 +409,7 @@ pub const OFFICIAL_AREAS: &[CatalogArea] = &[
         "Housekeeping",
         &[],
         "Feature de Programación",
-        &[],
+        HOUSEKEEPING_CONDITIONAL_FORMATS,
     ),
     area(
         "Selección Recurso",
@@ -344,6 +501,27 @@ pub fn validate_exportable_catalog(
         .delivery_formats
         .iter()
         .map(|format| normalize_catalog_key(&format.format_name))
+        .collect();
+    let format_issue_types: HashMap<String, String> = catalog
+        .delivery_formats
+        .iter()
+        .map(|format| {
+            (
+                normalize_catalog_key(&format.format_name),
+                format.issue_type.trim().to_string(),
+            )
+        })
+        .collect();
+    let area_issue_types: HashMap<String, String> = catalog
+        .areas
+        .iter()
+        .filter(|area| area.enabled_in_jtf)
+        .map(|area| {
+            (
+                normalize_catalog_key(&area.area_display_name),
+                area.issue_type.trim().to_string(),
+            )
+        })
         .collect();
     let mut area_keys = HashSet::new();
     let mut label_keys = HashSet::new();
@@ -443,11 +621,26 @@ pub fn validate_exportable_catalog(
                 rule.area_display_name
             ));
         }
-        if !formats.contains(&normalize_catalog_key(&rule.delivery_format)) {
+        let normalized_rule_format = normalize_catalog_key(&rule.delivery_format);
+        if !formats.contains(&normalized_rule_format) {
             errors.push(format!(
                 "Rule for {} references unknown delivery format {}.",
                 rule.area_display_name, rule.delivery_format
             ));
+        }
+        if let (Some(area_issue_type), Some(format_issue_type)) = (
+            area_issue_types.get(&normalize_catalog_key(&rule.area_display_name)),
+            format_issue_types.get(&normalized_rule_format),
+        ) {
+            if area_issue_type != format_issue_type {
+                errors.push(format!(
+                    "Rule for {} maps {} issue type to {} delivery format {}.",
+                    rule.area_display_name,
+                    area_issue_type,
+                    format_issue_type,
+                    rule.delivery_format
+                ));
+            }
         }
         if !rule.blocking && rule.condition.trim().len() > 80 {
             warnings.push(format!(
@@ -595,10 +788,10 @@ pub fn catalog_delivery_format_options_for_area(area: &str) -> Vec<String> {
     };
 
     let mut formats = Vec::new();
-    push_unique_format(&mut formats, catalog_area.delivery_format);
     for conditional_format in catalog_area.conditional_delivery_formats {
         push_unique_format(&mut formats, conditional_format.format);
     }
+    push_unique_format(&mut formats, catalog_area.delivery_format);
     formats
 }
 
@@ -706,10 +899,11 @@ fn catalog_context_for_resolved_area_with_format(
         format!("- Maintenance note: {CATALOG_MAINTENANCE_NOTE}"),
         format!("- Official area display name: {area_display_name}"),
         format!("- Jira label: {jira_label}"),
-        format!("- Delivery format: {delivery_format}"),
+        format!("- Default fallback delivery format: {delivery_format}"),
+        "- Notion sync delivery templates: unavailable; infer the delivery format from Area, title, existing description, and user context.".to_string(),
         "- Synced delivery template: unavailable in fallback catalog context.".to_string(),
-        "- Minimum deliverable guidance: unavailable; do not invent area-specific requirements.".to_string(),
-        "- Review checklist guidance: unavailable; keep checklist items minimal and based only on task context.".to_string(),
+        "- Minimum deliverable guidance: generate a practical value based on the inferred delivery format and task context.".to_string(),
+        "- Review checklist guidance: generate practical checklist items based on the inferred delivery format and task context.".to_string(),
         format!(
             "- Issue type derivation: {}",
             derive_issue_type_from_area(area_display_name)
@@ -975,10 +1169,9 @@ mod tests {
     use super::{
         catalog_context_for_area, catalog_context_for_confirmed_delivery_format,
         catalog_delivery_format_gate_for_area, catalog_delivery_format_options_for_area,
-        derive_issue_type_from_area,
-        extract_exportable_catalog_json_from_notion_blocks, notion_page_id_from_input,
-        official_area_options, parse_exportable_catalog_json, resolve_catalog_area,
-        CatalogAreaResolution, OfficialAreaOption, OFFICIAL_AREAS,
+        derive_issue_type_from_area, extract_exportable_catalog_json_from_notion_blocks,
+        notion_page_id_from_input, official_area_options, parse_exportable_catalog_json,
+        resolve_catalog_area, CatalogAreaResolution, OfficialAreaOption, OFFICIAL_AREAS,
     };
     use serde_json::json;
 
@@ -1033,20 +1226,23 @@ mod tests {
         assert_eq!(
             options,
             vec![
-                "Arquitectura - Brief".to_string(),
-                "Arquitectura - Propuesta Final".to_string()
+                "Arquitectura - Propuesta Final".to_string(),
+                "Arquitectura - Brief".to_string()
             ]
         );
 
         let default_context = catalog_context_for_area("Arquitectura", "cerrar propuesta final");
-        assert!(default_context.contains("- Delivery format: Arquitectura - Brief"));
+        assert!(
+            default_context.contains("- Default fallback delivery format: Arquitectura - Brief")
+        );
 
         let confirmed_context = catalog_context_for_confirmed_delivery_format(
             "Arquitectura",
             "Arquitectura - Propuesta Final",
         )
         .expect("confirmed format is valid");
-        assert!(confirmed_context.contains("- Delivery format: Arquitectura - Propuesta Final"));
+        assert!(confirmed_context
+            .contains("- Default fallback delivery format: Arquitectura - Propuesta Final"));
 
         let error =
             catalog_context_for_confirmed_delivery_format("Arquitectura", "Formato inventado")
@@ -1057,12 +1253,56 @@ mod tests {
     }
 
     #[test]
+    fn fallback_catalog_keeps_notion_multi_format_area_mappings() {
+        assert_eq!(
+            catalog_delivery_format_options_for_area("3D"),
+            vec!["Arte Empaquetado".to_string(), "Arte Integrado".to_string()]
+        );
+        let packaged_gate = catalog_delivery_format_gate_for_area(
+            "3D",
+            "Entregar zip como paquete para integración manual",
+        );
+        assert_eq!(
+            packaged_gate.suggested_format,
+            Some("Arte Empaquetado".to_string())
+        );
+
+        assert_eq!(
+            catalog_delivery_format_options_for_area("Feeling"),
+            vec![
+                "Decisión de Diseño".to_string(),
+                "Playtest Documentado".to_string(),
+                "Feature de Programación".to_string()
+            ]
+        );
+        let playtest_gate =
+            catalog_delivery_format_gate_for_area("Feeling", "Validar feeling con usuarios");
+        assert_eq!(
+            playtest_gate.suggested_format,
+            Some("Playtest Documentado".to_string())
+        );
+
+        assert_eq!(
+            catalog_delivery_format_options_for_area("UI"),
+            vec![
+                "Feature de Programación".to_string(),
+                "Decisión de Diseño".to_string(),
+                "Integración".to_string()
+            ]
+        );
+    }
+
+    #[test]
     fn derives_bug_issue_type_only_from_bug_area() {
         assert_eq!(derive_issue_type_from_area("Bug"), "Bug");
         assert_eq!(derive_issue_type_from_area("  bug  "), "Bug");
         assert_eq!(derive_issue_type_from_area("Programacion"), "Story");
         assert_eq!(derive_issue_type_from_area("3D"), "Story");
         assert_eq!(derive_issue_type_from_area(""), "Story");
+        assert_eq!(
+            catalog_delivery_format_options_for_area("Bug"),
+            vec!["Bug".to_string()]
+        );
     }
 
     #[test]
@@ -1216,6 +1456,62 @@ mod tests {
         assert!(result
             .errors
             .contains(&"Bug must be the only enabled area deriving issueType Bug.".to_string()));
+    }
+
+    #[test]
+    fn rejects_area_format_rules_that_cross_story_and_bug_issue_types() {
+        let result = parse_exportable_catalog_json(
+            "https://example.test/jtf-sync-catalog.json",
+            r#"{
+              "areas": [
+                {
+                  "areaDisplayName": "Bug",
+                  "jiraLabel": "Bug",
+                  "enabledInJTF": true,
+                  "issueType": "Bug",
+                  "defaultDeliveryFormat": "Bug"
+                },
+                {
+                  "areaDisplayName": "Programación",
+                  "jiraLabel": "Programación",
+                  "enabledInJTF": true,
+                  "issueType": "Story",
+                  "defaultDeliveryFormat": "Feature de Programación"
+                }
+              ],
+              "deliveryFormats": [
+                {
+                  "formatName": "Bug",
+                  "issueType": "Bug",
+                  "storyHeadings": ["Problema"],
+                  "minimumDeliverable": "Bug reproducible.",
+                  "reviewChecklist": ["Pasos de reproducción incluidos."]
+                },
+                {
+                  "formatName": "Feature de Programación",
+                  "issueType": "Story",
+                  "storyHeadings": ["Historia de usuario"],
+                  "minimumDeliverable": "PR/MR creado.",
+                  "reviewChecklist": ["PR/MR creado."]
+                }
+              ],
+              "areaFormatRules": [
+                {
+                  "areaDisplayName": "Programación",
+                  "priority": 1,
+                  "condition": "fallback",
+                  "deliveryFormat": "Bug",
+                  "blocking": false
+                }
+              ]
+            }"#,
+        )
+        .expect("catalog should parse");
+
+        assert!(!result.ok);
+        assert!(result.errors.contains(
+            &"Rule for Programación maps Story issue type to Bug delivery format Bug.".to_string()
+        ));
     }
 
     #[test]

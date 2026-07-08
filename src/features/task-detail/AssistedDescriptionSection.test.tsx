@@ -161,7 +161,7 @@ describe("DescriptionPromptModal delivery-format gate", () => {
 });
 
 describe("dedupeProposalLogEntries", () => {
-  it("removes duplicate persisted proposal log entries deterministically", () => {
+  it("shows one visible proposal log entry per proposal", () => {
     const duplicate = {
       id: "log-1",
       taskId: "task-1",
@@ -189,11 +189,12 @@ describe("dedupeProposalLogEntries", () => {
         {
           ...duplicate,
           id: "log-3",
+          occurredAt: "2026-07-07T10:02:00Z",
           status: "Accepted",
           eventType: "description.proposal.status_changed",
           userComment: "Accepted remaining proposal sections."
         }
       ]).map((entry) => entry.id)
-    ).toEqual(["log-1", "log-3"]);
+    ).toEqual(["log-3"]);
   });
 });

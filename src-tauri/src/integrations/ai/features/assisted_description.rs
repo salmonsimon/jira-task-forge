@@ -2,7 +2,6 @@ use serde_json::{json, Value};
 
 use self::template_policy::{normalize_heading, TemplatePolicy};
 use super::{strip_json_fence, JsonFeatureRequest};
-use crate::area_catalog::{catalog_context_for_area, resolve_catalog_area, CatalogAreaResolution};
 use crate::integrations::ai::AiProvider;
 use crate::models::{AssistedDescriptionDraft, LocalTask};
 
@@ -13,7 +12,9 @@ const ASSISTED_DESCRIPTION_BASE_CONTEXT: &str =
 mod template_policy {
     pub(super) struct TemplatePolicy {
         required_headings: &'static [&'static str],
+        generated_headings: &'static [&'static str],
         template: &'static str,
+        generation_template: &'static str,
     }
 
     const STORY_REQUIRED_HEADINGS: &[&str] = &[
@@ -65,6 +66,28 @@ No incluye:
 
 - ...
 "#;
+    const STORY_ASSISTED_DESCRIPTION_GENERATION_TEMPLATE: &str = r#"## Historia de usuario
+
+Como [usuario/persona],
+quiero [necesidad],
+para que [beneficio].
+
+## Contexto
+
+[Contexto claro]
+
+## Alcance
+
+Incluye:
+- ...
+
+No incluye:
+- ...
+
+## Criterios de aceptacion
+
+- ...
+"#;
     const BUG_ASSISTED_DESCRIPTION_TEMPLATE: &str = r#"## Problema
 
 [Que falla.]
@@ -101,28 +124,72 @@ No incluye:
 
 - [Evidencia disponible para revisar.]
 "#;
+    const BUG_ASSISTED_DESCRIPTION_GENERATION_TEMPLATE: &str = r#"## Problema
+
+[Que falla.]
+
+## Contexto / impacto
+
+[A quien afecta y por que importa.]
+
+## Pasos para reproducir
+
+1. [Paso verificable.]
+
+## Resultado actual
+
+[Comportamiento observado.]
+
+## Resultado esperado
+
+[Comportamiento correcto.]
+
+## Evidencia
+
+- [Captura, video, log, PR, build, o referencia accesible.]
+
+## Criterios de aceptacion
+
+- [Resultado verificable.]
+"#;
 
     impl TemplatePolicy {
         pub(super) fn for_issue_type(issue_type: &str) -> Self {
             if is_bug_issue_type(issue_type) {
                 Self {
                     required_headings: BUG_REQUIRED_HEADINGS,
+                    generated_headings: &BUG_REQUIRED_HEADINGS[..BUG_REQUIRED_HEADINGS.len() - 2],
                     template: BUG_ASSISTED_DESCRIPTION_TEMPLATE,
+                    generation_template: BUG_ASSISTED_DESCRIPTION_GENERATION_TEMPLATE,
                 }
             } else {
                 Self {
                     required_headings: STORY_REQUIRED_HEADINGS,
+                    generated_headings: &STORY_REQUIRED_HEADINGS
+                        [..STORY_REQUIRED_HEADINGS.len() - 2],
                     template: STORY_ASSISTED_DESCRIPTION_TEMPLATE,
+                    generation_template: STORY_ASSISTED_DESCRIPTION_GENERATION_TEMPLATE,
                 }
             }
         }
 
-        pub(super) fn template(&self) -> &'static str {
-            self.template
+        pub(super) fn template(&self, include_final_sections: bool) -> &'static str {
+            if include_final_sections {
+                self.template
+            } else {
+                self.generation_template
+            }
         }
 
-        pub(super) fn required_headings(&self) -> &'static [&'static str] {
-            self.required_headings
+        pub(super) fn required_headings(
+            &self,
+            include_final_sections: bool,
+        ) -> &'static [&'static str] {
+            if include_final_sections {
+                self.required_headings
+            } else {
+                self.generated_headings
+            }
         }
 
         pub(super) fn final_headings(&self) -> [&'static str; 2] {
@@ -131,7 +198,7 @@ No incluye:
 
         pub(super) fn allows_heading(&self, heading: &str) -> bool {
             let normalized_heading = normalize_heading(heading);
-            self.required_headings()
+            self.required_headings
                 .iter()
                 .any(|required_heading| normalize_heading(required_heading) == normalized_heading)
         }
@@ -177,6 +244,7 @@ pub(crate) fn build_request(
     task: &LocalTask,
     additional_context: &str,
     catalog_template_context: Option<&str>,
+    ai_generates_final_sections: bool,
 ) -> Result<AssistedDescriptionRequest, String> {
     let additional_context = additional_context.trim();
     if task_description_needs_clarification(task, additional_context) {
@@ -185,8 +253,12 @@ pub(crate) fn build_request(
         ));
     }
 
-    let input =
-        task_description_generation_context(task, additional_context, catalog_template_context);
+    let input = task_description_generation_context(
+        task,
+        additional_context,
+        catalog_template_context,
+        ai_generates_final_sections,
+    );
     Ok(AssistedDescriptionRequest::Generate(JsonFeatureRequest {
         instructions: task_description_generation_instructions(),
         json_prompt: provider_task_description_json_prompt(&input),
@@ -201,6 +273,7 @@ pub(crate) fn parse_draft(
     provider: AiProvider,
     output_text: &str,
     issue_type: &str,
+    ai_generates_final_sections: bool,
 ) -> Result<AssistedDescriptionDraft, String> {
     let draft: AssistedDescriptionDraft = serde_json::from_str(&strip_json_fence(output_text))
         .map_err(|error| {
@@ -209,7 +282,7 @@ pub(crate) fn parse_draft(
                 provider.label()
             )
         })?;
-    validate_assisted_description_draft(draft, issue_type)
+    validate_assisted_description_draft(draft, issue_type, ai_generates_final_sections)
 }
 
 fn provider_task_description_json_prompt(input: &str) -> String {
@@ -249,12 +322,12 @@ Do not add headings or sections that are not present in the requested template. 
 Use the base context as user and project preference context, especially stack defaults. \
 Do not invent product behavior, implementation scope, or acceptance criteria. \
 Do not add validation, risk, rollback, observability, open-question, suggested-subtask, or subtasks sections. \
-When synced Notion catalog template context is present, treat its minimum deliverable and review checklist as mandatory requirements for the draft. The description must always end with the final sections ## Entregable mínimo and ## Checklist antes de Review, in that order. \
+When synced Notion catalog template context is present, use its minimum deliverable and review checklist only as grounding context for the narrative sections. Do not generate ## Entregable mínimo or ## Checklist antes de Review when the Target Markdown format omits them; the app will append the exact synced values after generation. \
 Catalog template headings are content requirements only; map them into the Target Markdown format and never replace the Target Markdown format headings. \
-When only fallback official catalog context is present, use its delivery format as classification only. Do not invent minimum-deliverable or review-checklist requirements from the area name, delivery format, UE5 defaults, or asset assumptions. \
+When only unsynced catalog guidance is present, Notion sync templates are unavailable; infer the most likely delivery format from the task Area, title, existing description, and user context, then generate all Target Markdown sections including ## Entregable mínimo and ## Checklist antes de Review from that inferred context. \
 Prefer drafting over asking for clarification when the title, area, and user context describe a concrete problem or desired outcome. \
 Do not ask about known defaults from the base context, such as the engine or primary stack. \
-When no synced catalog template guidance exists for a manual or custom Area, do not invent area-specific delivery requirements, review checklist items, or synced catalog context; ask concise clarification questions when user input is needed to make those sections honest. \
+When no synced catalog template guidance exists, do not claim official synced Notion deliverables or checklists were available; ask concise clarification questions only when user input is needed to make the requested sections honest. \
 If the title and context are too thin to fill any useful section, return status needs_clarification with up to three concise questions in the task language and description null. \
 If missing information would materially change scope or acceptance criteria, return status needs_clarification with targeted questions instead of inventing Jira content. \
 Keep the description compact and Jira-ready. Do not include markdown fences."
@@ -264,6 +337,7 @@ fn task_description_generation_context(
     task: &LocalTask,
     additional_context: &str,
     catalog_template_context: Option<&str>,
+    ai_generates_final_sections: bool,
 ) -> String {
     let existing_description = task
         .description
@@ -306,39 +380,31 @@ Target Markdown format:\n{template}",
         priority = task.priority,
         language = task.content_language,
         title = task.title,
-        template = policy.template()
+        template = policy.template(ai_generates_final_sections)
     )
 }
 
 fn missing_or_fallback_catalog_context(
     task: &LocalTask,
-    additional_context: &str,
-    existing_description: &str,
+    _additional_context: &str,
+    _existing_description: &str,
 ) -> String {
-    match resolve_catalog_area(&task.area) {
-        CatalogAreaResolution::Official { .. } | CatalogAreaResolution::Normalized { .. } => {
-            catalog_context_for_area(
-                &task.area,
-                &format!(
-                    "{}\n{}\n{}",
-                    task.title, additional_context, existing_description
-                ),
-            )
-        }
-        CatalogAreaResolution::Blocked => format!(
-            "Manual catalog guidance:\n\
+    format!(
+        "Unsynced catalog guidance:\n\
 - No synced Notion catalog template context was found for Area: {area}.\n\
 - Preserve the Target Markdown format exactly, including only the headings requested for this issue type.\n\
-- Do not pretend official catalog template requirements exist for this Area.\n\
+- Infer the most likely delivery format from Area, title, existing description, and user context.\n\
+- Generate Entregable mínimo and Checklist antes de Review from the inferred delivery format and task context.\n\
+- Do not pretend official synced Notion deliverable or checklist values exist for this Area.\n\
 - If the title and user context do not give enough information for the requested sections, return needs_clarification with targeted questions.",
-            area = task.area
-        ),
-    }
+        area = task.area
+    )
 }
 
 fn validate_assisted_description_draft(
     mut draft: AssistedDescriptionDraft,
     issue_type: &str,
+    ai_generates_final_sections: bool,
 ) -> Result<AssistedDescriptionDraft, String> {
     draft.status = draft.status.trim().to_string();
     draft.description = draft
@@ -359,9 +425,19 @@ fn validate_assisted_description_draft(
                 return Err("AI provider returned an empty assisted description.".to_string());
             };
             let policy = TemplatePolicy::for_issue_type(issue_type);
-            validate_required_description_sections(description, &policy)?;
-            validate_no_extra_description_sections(description, &policy)?;
-            validate_final_description_sections(description, &policy)?;
+            validate_required_description_sections(
+                description,
+                &policy,
+                ai_generates_final_sections,
+            )?;
+            validate_no_extra_description_sections(
+                description,
+                &policy,
+                ai_generates_final_sections,
+            )?;
+            if ai_generates_final_sections {
+                validate_final_description_sections(description, &policy)?;
+            }
             draft.clarification_questions.clear();
         }
         "needs_clarification" => {
@@ -386,6 +462,7 @@ fn validate_assisted_description_draft(
 fn validate_required_description_sections(
     description: &str,
     policy: &TemplatePolicy,
+    include_final_sections: bool,
 ) -> Result<(), String> {
     let headings = markdown_headings(description);
     let normalized_headings = headings
@@ -393,7 +470,7 @@ fn validate_required_description_sections(
         .map(|heading| normalize_heading(heading))
         .collect::<Vec<_>>();
     if let Some(missing_heading) = policy
-        .required_headings()
+        .required_headings(include_final_sections)
         .iter()
         .find(|heading| !normalized_headings.contains(&normalize_heading(heading)))
     {
@@ -407,6 +484,7 @@ fn validate_required_description_sections(
 fn validate_no_extra_description_sections(
     description: &str,
     policy: &TemplatePolicy,
+    _include_final_sections: bool,
 ) -> Result<(), String> {
     for heading in markdown_headings(description) {
         if !policy.allows_heading(&heading) {
@@ -546,7 +624,7 @@ mod tests {
     #[test]
     fn build_request_returns_clarification_before_provider_work() {
         let request =
-            build_request(&task_with_title("bug mesa"), "", None).expect("request builds");
+            build_request(&task_with_title("bug mesa"), "", None, true).expect("request builds");
 
         let AssistedDescriptionRequest::Clarification(draft) = request else {
             panic!("short task should ask for clarification");
@@ -563,6 +641,7 @@ mod tests {
             &task,
             "mesa aparece sin patas en runtime y afecta todas las escenas",
             None,
+            true,
         );
 
         assert!(context.contains("Unreal Engine 5"));
@@ -581,14 +660,16 @@ mod tests {
             &task,
             "La habilidad puede dispararse muchas veces seguidas.",
             None,
+            true,
         );
 
-        assert!(context.contains("Official catalog context:"));
-        assert!(context.contains("- Official area display name: Programación"));
-        assert!(context.contains("- Jira label: Programación"));
-        assert!(context.contains("- Delivery format: Feature de Programación"));
-        assert!(context.contains("- Issue type derivation: Story"));
-        assert!(context.contains("Use the official area display name in visible summaries"));
+        assert!(context.contains("Unsynced catalog guidance:"));
+        assert!(context.contains(
+            "No synced Notion catalog template context was found for Area: Programacion."
+        ));
+        assert!(context.contains("Infer the most likely delivery format"));
+        assert!(context.contains("Generate Entregable mínimo and Checklist antes de Review"));
+        assert!(!context.contains("Official catalog context:"));
     }
 
     #[test]
@@ -609,12 +690,15 @@ mod tests {
 - PR/MR creado.
 - Validado en runtime.",
             ),
+            false,
         );
 
         assert!(context.contains("Synced Notion catalog template:"));
         assert!(context.contains("Minimum deliverable: PR/MR listo"));
         assert!(context.contains("Review checklist:"));
         assert!(context.contains("Validado en runtime."));
+        assert!(!context.contains("## Entregable mínimo"));
+        assert!(!context.contains("## Checklist antes de Review"));
     }
 
     #[test]
@@ -628,14 +712,15 @@ mod tests {
             &task,
             "Explorar si el portal puede activar objetivos cercanos sin romper el flujo actual.",
             None,
+            true,
         );
 
-        assert!(context.contains("Manual catalog guidance:"));
+        assert!(context.contains("Unsynced catalog guidance:"));
         assert!(context.contains(
             "No synced Notion catalog template context was found for Area: Gameplay Experiments."
         ));
         assert!(context.contains(
-            "Do not pretend official catalog template requirements exist for this Area."
+            "Do not pretend official synced Notion deliverable or checklist values exist for this Area."
         ));
         assert!(context.contains("return needs_clarification with targeted questions"));
         assert!(!context.contains("Official catalog context:"));
@@ -653,6 +738,7 @@ mod tests {
             &task,
             "Explorar si el portal puede activar objetivos cercanos.",
             None,
+            true,
         );
 
         assert!(context.contains("## Historia de usuario"));
@@ -674,6 +760,7 @@ mod tests {
             &task,
             "El timer queda corriendo despues del estado Completed.",
             None,
+            true,
         );
 
         assert!(context.contains("## Problema"));
@@ -687,17 +774,20 @@ mod tests {
     }
 
     #[test]
-    fn task_description_context_separates_area_display_name_from_jira_label() {
+    fn task_description_context_preserves_local_area_when_unsynced() {
         let task = LocalTask {
             area: "Selección Recurso".to_string(),
             issue_type: "Story".to_string(),
             ..task_with_title("Elegir asset base")
         };
         let context =
-            task_description_generation_context(&task, "Seleccionar el recurso base.", None);
+            task_description_generation_context(&task, "Seleccionar el recurso base.", None, true);
 
-        assert!(context.contains("- Official area display name: Selección Recurso"));
-        assert!(context.contains("- Jira label: Selección-Recurso"));
+        assert!(context.contains("Unsynced catalog guidance:"));
+        assert!(context.contains("- Area: Selección Recurso"));
+        assert!(context.contains("Infer the most likely delivery format"));
+        assert!(!context.contains("Official area display name"));
+        assert!(!context.contains("Jira label"));
     }
 
     #[test]
@@ -706,6 +796,7 @@ mod tests {
             &task_with_title("Crear maquinas expendedoras para el anden del Metro"),
             "Validar escala y materiales en runtime.",
             None,
+            true,
         )
         .expect("request builds");
 
@@ -725,6 +816,7 @@ mod tests {
             AiProvider::Gemini,
             "```json\n{\"status\":\"needs_clarification\",\"description\":null,\"clarificationQuestions\":[\"Que falta?\"]}\n```",
             "Story",
+            true,
         )
         .expect("draft parses");
 
@@ -773,12 +865,101 @@ No incluye:
                 clarification_questions: vec!["  ".to_string(), "extra".to_string()],
             },
             "Story",
+            true,
         )
         .expect("description template validates");
 
         assert_eq!(draft.status, "drafted");
         assert!(draft.description.is_some());
         assert!(draft.clarification_questions.is_empty());
+    }
+
+    #[test]
+    fn validates_synced_template_generation_without_final_sections() {
+        let draft = validate_assisted_description_draft(
+            AssistedDescriptionDraft {
+                status: "drafted".to_string(),
+                description: Some(
+                    "## Historia de usuario
+
+Como artista,
+quiero preparar el asset,
+para integrarlo sin dudas.
+
+## Contexto
+
+Usar el area y delivery format confirmados.
+
+## Alcance
+
+Incluye:
+- Empaquetar archivos necesarios.
+
+## Criterios de aceptacion
+
+- El paquete se puede revisar."
+                        .to_string(),
+                ),
+                clarification_questions: Vec::new(),
+            },
+            "Story",
+            false,
+        )
+        .expect("synced generation validates without final sections");
+
+        assert_eq!(draft.status, "drafted");
+        assert!(!draft
+            .description
+            .as_deref()
+            .unwrap_or_default()
+            .contains("## Entregable mínimo"));
+    }
+
+    #[test]
+    fn tolerates_accidental_final_sections_when_backend_appends_synced_values() {
+        let draft = validate_assisted_description_draft(
+            AssistedDescriptionDraft {
+                status: "drafted".to_string(),
+                description: Some(
+                    "## Historia de usuario
+
+Como artista,
+quiero preparar el asset.
+
+## Contexto
+
+Usar el area y delivery format confirmados.
+
+## Alcance
+
+- Empaquetar archivos necesarios.
+
+## Criterios de aceptacion
+
+- El paquete se puede revisar.
+
+## Entregable mínimo
+
+Texto inventado.
+
+## Checklist antes de Review
+
+- Checklist inventado."
+                        .to_string(),
+                ),
+                clarification_questions: Vec::new(),
+            },
+            "Story",
+            false,
+        )
+        .expect("synced generation tolerates provider final sections before backend append");
+
+        assert_eq!(draft.status, "drafted");
+        assert!(draft
+            .description
+            .as_deref()
+            .unwrap_or_default()
+            .contains("Texto inventado"));
     }
 
     #[test]
@@ -827,6 +1008,7 @@ El timer se detiene.
                 clarification_questions: Vec::new(),
             },
             "Error",
+            true,
         )
         .expect("bug description template validates");
 
@@ -873,6 +1055,7 @@ Incluye:
                 clarification_questions: Vec::new(),
             },
             "Story",
+            true,
         )
         .expect_err("out-of-template heading should fail");
 
@@ -915,6 +1098,7 @@ Incluye:
                 clarification_questions: Vec::new(),
             },
             "Story",
+            true,
         )
         .expect_err("wrong final section order should fail");
 
@@ -934,6 +1118,7 @@ Incluye:
                 ],
             },
             "Story",
+            true,
         )
         .expect("clarification validates");
 

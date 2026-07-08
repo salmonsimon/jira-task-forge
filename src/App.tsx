@@ -357,7 +357,11 @@ export default function App() {
       listPersistedCategories(),
       listPersistedJqlFavorites()
     ]);
-    const nextCategories = persistedCategories.length ? persistedCategories : [...appData.listProjects(), ...appData.listAreas()];
+    const nextCategories = persistedCategories.length
+      ? persistedCategories
+      : usesTauriPersistence
+        ? appData.listProjects()
+        : [...appData.listProjects(), ...appData.listAreas()];
     const nextJqlFavorites = persistedJqlFavorites.length ? persistedJqlFavorites : appData.listJqlFavorites();
 
     trayWorkspace.replaceTrays(persistedTrays);

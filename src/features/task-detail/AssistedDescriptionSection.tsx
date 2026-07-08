@@ -240,18 +240,7 @@ export function AssistedDescriptionSection({
         return false;
       }
 
-      setDeliveryFormatGate({
-        kind: "needs_confirmation",
-        areaDisplayName: deliveryFormatResolution.areaDisplayName,
-        suggestedFormat: deliveryFormatResolution.format,
-        options: deliveryFormatResolution.options
-      });
-      setSelectedDeliveryFormat(deliveryFormatResolution.format);
-      setDescriptionPromptStep("delivery_format");
-      setDescriptionMessage("Review the catalog delivery format before generating the description proposal.");
-      setProposalPanelOpen(true);
-      setPromptOpen(true);
-      return false;
+      return await generateProposalWithOptionalDeliveryFormat(sectionIds, changeRequest, null);
     } catch (error) {
       setDescriptionMessage(error instanceof Error ? error.message : "Could not generate a description proposal.");
       setProposalPanelOpen(true);
@@ -277,10 +266,10 @@ export function AssistedDescriptionSection({
       return false;
     }
 
-    return await generateProposalWithDeliveryFormat(sectionIds, changeRequest, deliveryFormatGate, selectedDeliveryFormat);
+    return await generateProposalWithConfirmedDeliveryFormat(sectionIds, changeRequest, deliveryFormatGate, selectedDeliveryFormat);
   }
 
-  async function generateProposalWithDeliveryFormat(
+  async function generateProposalWithConfirmedDeliveryFormat(
     sectionIds: AssistedDescriptionSectionId[],
     changeRequest: string,
     deliveryFormatResolution: CatalogDeliveryFormatGate,
@@ -293,6 +282,14 @@ export function AssistedDescriptionSection({
       return false;
     }
 
+    return await generateProposalWithOptionalDeliveryFormat(sectionIds, changeRequest, deliveryFormat);
+  }
+
+  async function generateProposalWithOptionalDeliveryFormat(
+    sectionIds: AssistedDescriptionSectionId[],
+    changeRequest: string,
+    deliveryFormat: string | null
+  ) {
     setDescriptionMessage("Generating proposal...");
     setClarificationQuestions([]);
     setReviewMessage(null);
@@ -1133,35 +1130,21 @@ function ProposalLogList({ entries }: { entries: DescriptionProposalLogEntry[] }
 }
 
 export function dedupeProposalLogEntries(entries: DescriptionProposalLogEntry[]): DescriptionProposalLogEntry[] {
-  const seen = new Set<string>();
-  return entries.filter((entry) => {
-    const detailKey = stableProposalLogDetailKey(entry.detail);
-    const key = [
-      entry.proposalId,
-      entry.eventType,
-      entry.status,
-      entry.title,
-      entry.summary ?? "",
-      entry.userComment ?? "",
-      detailKey
-    ].join("\u001f");
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+  const entriesByProposal = new Map<string, DescriptionProposalLogEntry>();
+  for (const entry of entries) {
+    const key = entry.proposalId || entry.id;
+    const current = entriesByProposal.get(key);
+    if (!current || compareProposalLogEntries(entry, current) >= 0) {
+      entriesByProposal.set(key, entry);
+    }
+  }
+  return [...entriesByProposal.values()].sort(compareProposalLogEntries);
 }
 
-function stableProposalLogDetailKey(value: unknown): string {
-  if (Array.isArray(value)) {
-    return `[${value.map(stableProposalLogDetailKey).join(",")}]`;
-  }
-  if (value && typeof value === "object") {
-    return `{${Object.entries(value)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([key, nestedValue]) => `${key}:${stableProposalLogDetailKey(nestedValue)}`)
-      .join(",")}}`;
-  }
-  return String(value);
+function compareProposalLogEntries(left: DescriptionProposalLogEntry, right: DescriptionProposalLogEntry): number {
+  const occurredAtComparison = left.occurredAt.localeCompare(right.occurredAt);
+  if (occurredAtComparison !== 0) return occurredAtComparison;
+  return left.id.localeCompare(right.id);
 }
 
 type TaskDetailNestedModalShellProps = {

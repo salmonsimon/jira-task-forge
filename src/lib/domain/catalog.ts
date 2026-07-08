@@ -54,7 +54,7 @@ export type CatalogDeliveryFormatGate =
   | {
       kind: "auto";
       areaDisplayName: string;
-      format: string;
+      format: string | null;
       options: string[];
     }
   | {
@@ -75,11 +75,15 @@ export type CatalogOfficialAreaOption = {
   jiraLabel: string;
 };
 
+const artPackageFormats: CatalogConditionalDeliveryFormat[] = [
+  { format: "Arte Empaquetado", match: ["package", "paquete", "zip", "integracion manual", "otra persona", "another person"] }
+];
+
 export const officialAreaCatalog = {
   metadata: {
-    sourceUrl: "https://app.notion.com/p/387c335aece481c292baf6991a86a5c3",
-    syncedAt: "2026-07-03",
-    version: "2026.07.03-jtf-sync-catalog",
+    sourceUrl: "https://app.notion.com/p/397c335aece481818013f3fe51cd2030",
+    syncedAt: "2026-07-06",
+    version: "2026.07.06-jtf-sync-catalog",
     maintenanceNote: "Fallback catalog for Jira Task Forge Issue #141. Public/exportable catalog sync is the preferred runtime source."
   },
   areas: [
@@ -87,29 +91,49 @@ export const officialAreaCatalog = {
     area("Programación", "Programación", ["Programacion"], "Feature de Programación"),
     area("Integración", "Integración", ["Integracion"], "Integración"),
     area("Refactorización", "Refactorización", ["Refactorizacion"], "Feature de Programación"),
-    area("3D", "3D", ["Modelos 3D", "Modelo 3D"], "Arte Integrado"),
-    area("Animación", "Animación", ["Animacion"], "Arte Integrado"),
-    area("Texturas", "Texturas", [], "Arte Integrado"),
-    area("Iluminación", "Iluminación", ["Iluminacion"], "Arte Integrado"),
-    area("VFX", "VFX", [], "Arte Integrado"),
+    area("3D", "3D", ["Modelos 3D", "Modelo 3D"], "Arte Integrado", artPackageFormats),
+    area("Animación", "Animación", ["Animacion"], "Arte Integrado", artPackageFormats),
+    area("Texturas", "Texturas", [], "Arte Integrado", artPackageFormats),
+    area("Iluminación", "Iluminación", ["Iluminacion"], "Arte Integrado", artPackageFormats),
+    area("VFX", "VFX", [], "Arte Integrado", artPackageFormats),
     area("SFX", "SFX", [], "Integración"),
-    area("UI", "UI", [], "Integración"),
-    area("Feeling", "Feeling", [], "Feature de Programación"),
+    area("Haptics", "Haptics", [], "Haptics", [
+      { format: "Integración", match: ["integrar", "integracion", "defined haptics", "haptics definidos"] },
+      { format: "QA", match: ["validar", "build", "device", "dispositivo", "integrated haptic"] }
+    ]),
+    area("UI", "UI", [], "Integración", [
+      { format: "Feature de Programación", match: ["widget behavior", "comportamiento", "logic", "logica", "interaction", "interaccion"] },
+      { format: "Decisión de Diseño", match: ["experience", "experiencia", "flow", "flujo", "structure", "estructura", "visual criterion", "criterio visual"] }
+    ]),
+    area("Feeling", "Feeling", [], "Feature de Programación", [
+      { format: "Decisión de Diseño", match: ["criterio", "ux", "interaccion", "balance", "decision", "experiencia"] },
+      { format: "Playtest Documentado", match: ["playtest", "usuarios", "stakeholders", "validar feeling", "validar sensacion"] }
+    ]),
     area("Diseño", "Diseño", ["Diseno"], "Decisión de Diseño"),
     area("Concept", "Concept", [], "Concept Art"),
     area("Localización", "Localización", ["Localizacion"], "Integración"),
-    area("Polish", "Polish", ["Pulido"], "Feature de Programación"),
+    area("Polish", "Polish", ["Pulido"], "Feature de Programación", [
+      { format: "Integración", match: ["integrar", "integracion", "assets preparados", "adjustments"] }
+    ]),
     area("Investigación", "Investigación", ["Investigacion"], "Investigación"),
     area("Arquitectura", "Arquitectura", [], "Arquitectura - Brief", [
-      { format: "Arquitectura - Brief", match: ["brief", "requerimiento", "contexto inicial"] },
-      { format: "Arquitectura - Propuesta Final", match: ["propuesta final", "decision final", "cerrar propuesta"] }
+      { format: "Arquitectura - Propuesta Final", match: ["propuesta final", "decision final", "solucion final", "accepted brief", "brief aceptado"] }
     ]),
     area("QA", "QA", [], "QA"),
     area("Build", "Build", ["Build / Release"], "Build / Release"),
     area("Producción", "Producción", ["Produccion"], "Producción Audiovisual"),
-    area("Documentación", "Documentación", ["Documentacion"], "Story base documental"),
+    area("Documentación", "Documentación", ["Documentacion"], "Story base documental", [
+      { format: "Investigación", match: ["research", "investigacion"] },
+      { format: "Decisión de Diseño", match: ["design decision", "decision de diseno"] },
+      { format: "Arquitectura - Brief", match: ["architectural", "arquitectura", "arquitectonico"] },
+      { format: "Reunión Documentada", match: ["meeting", "reunion", "acuerdos"] },
+      { format: "Curso / Capacitación", match: ["training", "course", "curso", "capacitacion"] }
+    ]),
     area("Capacitación", "Capacitación", ["Capacitacion"], "Curso / Capacitación"),
-    area("Housekeeping", "Housekeeping", [], "Feature de Programación"),
+    area("Housekeeping", "Housekeeping", [], "Feature de Programación", [
+      { format: "Integración", match: ["asset integration", "integracion", "integrar"] },
+      { format: "Arte Integrado", match: ["integrated art", "arte integrado", "assets de arte"] }
+    ]),
     area("Selección Recurso", "Selección-Recurso", ["Seleccion Recurso"], "Selección Recurso")
   ]
 } as const satisfies OfficialAreaCatalog;
@@ -205,9 +229,9 @@ export function getDeliveryFormatGateForArea(areaInput: string, descriptionOrDel
 
   const options = getMappedDeliveryFormats(catalogArea);
   return {
-    kind: "needs_confirmation",
+    kind: "auto",
     areaDisplayName: catalogArea.areaDisplayName,
-    suggestedFormat: suggestDeliveryFormat(catalogArea, descriptionOrDeliverable),
+    format: suggestDeliveryFormat(catalogArea, descriptionOrDeliverable),
     options
   };
 }
@@ -257,8 +281,8 @@ function area(
 
 function getMappedDeliveryFormats(catalogArea: CatalogArea): string[] {
   const formats = [
-    catalogArea.deliveryFormat,
-    ...(catalogArea.conditionalDeliveryFormats?.map((conditionalFormat) => conditionalFormat.format) ?? [])
+    ...(catalogArea.conditionalDeliveryFormats?.map((conditionalFormat) => conditionalFormat.format) ?? []),
+    catalogArea.deliveryFormat
   ];
   return Array.from(new Set(formats.map((format) => format.trim()).filter(Boolean)));
 }

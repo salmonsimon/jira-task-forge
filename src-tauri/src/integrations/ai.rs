@@ -62,11 +62,13 @@ impl AiClient {
         task: &LocalTask,
         additional_context: Option<&str>,
         catalog_template_context: Option<&str>,
+        ai_generates_final_sections: bool,
     ) -> Result<AssistedDescriptionDraft, String> {
         let request = features::assisted_description::build_request(
             task,
             additional_context.unwrap_or_default(),
             catalog_template_context,
+            ai_generates_final_sections,
         )?;
         let request = match request {
             features::assisted_description::AssistedDescriptionRequest::Clarification(draft) => {
@@ -80,7 +82,12 @@ impl AiClient {
         let model = ai_model_or_default(self.provider, model);
         let output_text = self.transport.create_json(&model, &request)?;
 
-        features::assisted_description::parse_draft(self.provider, &output_text, &task.issue_type)
+        features::assisted_description::parse_draft(
+            self.provider,
+            &output_text,
+            &task.issue_type,
+            ai_generates_final_sections,
+        )
     }
 
     pub fn test_connection(&self, model: &str) -> Result<(), String> {
