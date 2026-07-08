@@ -11,6 +11,7 @@ export const defaultNotionCatalogUrl = "https://app.notion.com/p/capacitacion-in
 export const notionCatalogSourceRequirementsUrl = "https://app.notion.com/p/395c335aece48144b2dbe2cc2e0de298";
 
 type NotionStep = "source" | "token" | "review";
+type NotionTokenDraftTestStatus = "idle" | "success" | "error";
 
 const notionSteps: Array<{ id: NotionStep; label: string }> = [
   { id: "source", label: "Source" },
@@ -25,6 +26,22 @@ export const catalogModeOptions: Array<{ label: string; value: AppSettings["cata
 
 export function canSaveNotionSynchronization(mode: AppSettings["catalogSourceMode"], testResult: NotionCatalogConnectionTestResult | null): boolean {
   return mode === "manual" || Boolean(testResult?.ok);
+}
+
+export function canSaveNotionTokenDraft(tokenDraft: string, tokenDraftTestStatus: NotionTokenDraftTestStatus, isSavingToken: boolean): boolean {
+  return Boolean(tokenDraft.trim()) && tokenDraftTestStatus === "success" && !isSavingToken;
+}
+
+export function canTestNotionCatalogSource(
+  mode: AppSettings["catalogSourceMode"],
+  sourceUrl: string,
+  hasToken: boolean,
+  tokenDraft: string,
+  isTesting: boolean
+): boolean {
+  if (isTesting) return false;
+  if (mode !== "notion") return true;
+  return Boolean(sourceUrl.trim()) && (hasToken || Boolean(tokenDraft.trim()));
 }
 
 export function NotionSynchronizationGuide({
@@ -46,7 +63,7 @@ export function NotionSynchronizationGuide({
   onOpenCatalogSourceRequirements: () => void;
   onOpenNotionDevelopers: () => void;
   onSaveNotionIntegrationToken: (token: string) => Promise<void>;
-  onTestNotionCatalogConnection: (pageUrlOrId: string) => Promise<NotionCatalogConnectionTestResult>;
+  onTestNotionCatalogConnection: (pageUrlOrId: string, token?: string) => Promise<NotionCatalogConnectionTestResult>;
 }) {
   const surfaceRef = useRef<HTMLElement | null>(null);
   const [step, setStep] = useState<NotionStep>("source");
@@ -57,6 +74,7 @@ export function NotionSynchronizationGuide({
   const [tokenDraft, setTokenDraft] = useState("");
   const [hasToken, setHasToken] = useState(false);
   const [tokenMessage, setTokenMessage] = useState<string | null>(null);
+  const [tokenDraftTestStatus, setTokenDraftTestStatus] = useState<NotionTokenDraftTestStatus>("idle");
   const [testResult, setTestResult] = useState<NotionCatalogConnectionTestResult | null>(null);
   const [isSavingToken, setIsSavingToken] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
@@ -64,9 +82,11 @@ export function NotionSynchronizationGuide({
   const currentStepIndex = visibleSteps.findIndex((candidate) => candidate.id === step);
   const canContinue =
     (step === "source" && (mode === "manual" || Boolean(sourceUrl.trim()))) ||
-    (step === "token" && (hasToken || Boolean(tokenDraft.trim()) || mode !== "notion")) ||
+    (step === "token" && (hasToken || mode !== "notion")) ||
     step === "review";
-  const canSaveSynchronization = canSaveNotionSynchronization(mode, testResult);
+  const canSaveSynchronization = canSaveNotionSynchronization(mode, testResult) && (mode !== "notion" || hasToken);
+  const canSaveTokenDraft = canSaveNotionTokenDraft(tokenDraft, tokenDraftTestStatus, isSavingToken);
+  const canTestSource = canTestNotionCatalogSource(mode, sourceUrl, hasToken, tokenDraft, isTesting);
   const sourceLabel = useMemo(
     () => catalogModeOptions.find((option) => option.value === mode)?.label ?? "Unknown",
     [mode]
@@ -108,13 +128,14 @@ export function NotionSynchronizationGuide({
 
   async function saveTokenDraft() {
     const token = tokenDraft.trim();
-    if (!token) return;
+    if (!token || tokenDraftTestStatus !== "success") return;
     setIsSavingToken(true);
     try {
       await onSaveNotionIntegrationToken(token);
       setHasToken(true);
       setTokenDraft("");
       setTokenMessage("Notion token saved in the OS credential store.");
+      setTokenDraftTestStatus("idle");
     } finally {
       setIsSavingToken(false);
     }
@@ -124,20 +145,24 @@ export function NotionSynchronizationGuide({
     await onDeleteNotionIntegrationToken();
     setHasToken(false);
     setTokenDraft("");
+    setTokenDraftTestStatus("idle");
     setTokenMessage("Notion token removed.");
     setTestResult(null);
   }
 
   async function testSource() {
-    if (mode === "notion" && !sourceUrl.trim()) return;
+    if (!canTestSource) return;
     setIsTesting(true);
     setTestResult(null);
+    setTokenMessage(null);
     try {
-      if (tokenDraft.trim()) {
-        await saveTokenDraft();
-      }
       if (mode === "notion") {
-        setTestResult(await onTestNotionCatalogConnection(sourceUrl.trim()));
+        const result = await onTestNotionCatalogConnection(sourceUrl.trim(), tokenDraft.trim() || undefined);
+        setTestResult(result);
+        if (tokenDraft.trim()) {
+          setTokenDraftTestStatus(result.ok ? "success" : "error");
+          setTokenMessage(result.ok ? "This token passed Test source and can be saved." : "Test source failed. The draft token was not saved.");
+        }
       } else {
         await onChangeCatalogSettings({ catalogSourceMode: mode, catalogSourceUrl: "" });
         setTestResult({
@@ -146,6 +171,18 @@ export function NotionSynchronizationGuide({
           title: null,
           extractedBlockCount: 0
         });
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setTestResult({
+        ok: false,
+        message: message || "Notion catalog connection test failed.",
+        title: null,
+        extractedBlockCount: 0
+      });
+      if (tokenDraft.trim()) {
+        setTokenDraftTestStatus("error");
+        setTokenMessage("Test source failed. The draft token was not saved.");
       }
     } finally {
       setIsTesting(false);
@@ -248,6 +285,8 @@ export function NotionSynchronizationGuide({
                     onChange={(value) => {
                       setSourceUrl(value);
                       setTestResult(null);
+                      setTokenDraftTestStatus("idle");
+                      setTokenMessage(null);
                     }}
                   />
                   <Button
@@ -266,7 +305,7 @@ export function NotionSynchronizationGuide({
             </GuideSection>
           ) : null}
           {step === "token" ? (
-            <GuideSection title="Notion integration token" description="Create or copy the internal integration secret, then save it before testing the page. The token stays in the OS credential store.">
+            <GuideSection title="Notion integration token" description="Create or copy the internal integration secret, test it against the selected page, then save it. The token stays in the OS credential store.">
               <div className="mb-5 rounded border border-[#dfe1e6] bg-[#f7f8fa] p-4">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div className="min-w-0">
@@ -292,13 +331,23 @@ export function NotionSynchronizationGuide({
                 onChange={(value) => {
                   setTokenDraft(value);
                   setTokenMessage(null);
+                  setTokenDraftTestStatus("idle");
                   setTestResult(null);
                 }}
               />
               <div className="mt-5 flex flex-wrap gap-2">
                 <Button
+                  className="settings-button-test"
+                  disabled={!canTestSource || !tokenDraft.trim()}
+                  icon={isTesting ? <LoadingOrb size="xs" /> : <RefreshCw size={14} />}
+                  variant="secondary"
+                  onClick={testSource}
+                >
+                  {isTesting ? "Testing..." : "Test source"}
+                </Button>
+                <Button
                   className="settings-button-primary"
-                  disabled={!tokenDraft.trim() || isSavingToken}
+                  disabled={!canSaveTokenDraft}
                   icon={isSavingToken ? <LoadingOrb size="xs" /> : <KeyRound size={14} />}
                   variant="secondary"
                   onClick={saveTokenDraft}
@@ -324,13 +373,13 @@ export function NotionSynchronizationGuide({
                 rows={[
                   ["Catalog mode", sourceLabel],
                   ["Source", mode === "manual" ? "Manual fallback" : sourceUrl.trim() || "Missing"],
-                  ["Integration token", mode === "notion" ? (hasToken || tokenDraft.trim() ? "Saved or ready to save" : "Missing") : "Not required"]
+                  ["Integration token", mode === "notion" ? (hasToken ? "Saved" : "Missing") : "Not required"]
                 ]}
               />
               <div className="mt-5 flex flex-wrap gap-2">
                 <Button
                   className="settings-button-test"
-                  disabled={isTesting || (mode === "notion" && (!sourceUrl.trim() || (!hasToken && !tokenDraft.trim())))}
+                  disabled={!canTestSource || (mode === "notion" && !hasToken)}
                   icon={isTesting ? <LoadingOrb size="xs" /> : <RefreshCw size={14} />}
                   variant="secondary"
                   onClick={testSource}

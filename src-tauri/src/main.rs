@@ -56,6 +56,7 @@ pub fn run() {
             commands::categories::discover_project_sync_candidates,
             commands::categories::apply_project_sync_decisions,
             commands::categories::test_notion_catalog_connection,
+            commands::categories::test_notion_catalog_connection_with_token,
             commands::categories::resolve_delivery_format_gate,
             commands::categories::create_category,
             commands::categories::update_category,

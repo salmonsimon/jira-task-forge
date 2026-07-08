@@ -63,7 +63,7 @@ export function SettingsPanel({
   hasNotionIntegrationToken: () => Promise<boolean>;
   onSaveNotionIntegrationToken: (token: string) => Promise<void>;
   onDeleteNotionIntegrationToken: () => Promise<void>;
-  onTestNotionCatalogConnection: (pageUrlOrId: string) => Promise<NotionCatalogConnectionTestResult>;
+  onTestNotionCatalogConnection: (pageUrlOrId: string, token?: string) => Promise<NotionCatalogConnectionTestResult>;
   onListJiraProjectsForConnection: (siteUrl: string, accountEmail: string) => Promise<JiraProjectOption[]>;
   onOpenJiraApiTokens: () => void;
   onOpenCatalogSourceRequirements: () => void;

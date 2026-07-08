@@ -118,6 +118,14 @@ impl AppServices {
         test_notion_catalog_page(&token, page_url_or_id)
     }
 
+    pub fn test_notion_catalog_connection_with_token(
+        &self,
+        page_url_or_id: &str,
+        token: &str,
+    ) -> Result<NotionCatalogConnectionTestResult, String> {
+        test_notion_catalog_page(token, page_url_or_id)
+    }
+
     pub fn sync_area_catalog_from_notion(
         &self,
         page_url_or_id: &str,

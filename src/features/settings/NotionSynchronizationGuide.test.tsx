@@ -2,7 +2,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { AppSettings } from "../../lib/types";
 import {
+  canSaveNotionTokenDraft,
   canSaveNotionSynchronization,
+  canTestNotionCatalogSource,
   catalogModeOptions,
   notionCatalogSourceRequirementsUrl,
   NotionSynchronizationGuide
@@ -119,5 +121,22 @@ describe("NotionSynchronizationGuide", () => {
     expect(canSaveNotionSynchronization("notion", null)).toBe(false);
     expect(canSaveNotionSynchronization("notion", { ok: false, message: "Failed", title: null, extractedBlockCount: 0 })).toBe(false);
     expect(canSaveNotionSynchronization("notion", { ok: true, message: "Connected", title: "JTF Sync Catalog", extractedBlockCount: 12 })).toBe(true);
+  });
+
+  it("keeps a new Notion token unsavable until its draft connection test succeeds", () => {
+    expect(canSaveNotionTokenDraft("", "idle", false)).toBe(false);
+    expect(canSaveNotionTokenDraft("ntn_draft", "idle", false)).toBe(false);
+    expect(canSaveNotionTokenDraft("ntn_draft", "error", false)).toBe(false);
+    expect(canSaveNotionTokenDraft("ntn_draft", "success", true)).toBe(false);
+    expect(canSaveNotionTokenDraft("ntn_draft", "success", false)).toBe(true);
+  });
+
+  it("disables Notion source testing until the page and either a saved or draft token are available", () => {
+    expect(canTestNotionCatalogSource("notion", "", false, "", false)).toBe(false);
+    expect(canTestNotionCatalogSource("notion", settings.catalogSourceUrl, false, "", false)).toBe(false);
+    expect(canTestNotionCatalogSource("notion", settings.catalogSourceUrl, false, "ntn_draft", false)).toBe(true);
+    expect(canTestNotionCatalogSource("notion", settings.catalogSourceUrl, true, "", false)).toBe(true);
+    expect(canTestNotionCatalogSource("notion", settings.catalogSourceUrl, true, "", true)).toBe(false);
+    expect(canTestNotionCatalogSource("manual", "", false, "", false)).toBe(true);
   });
 });
