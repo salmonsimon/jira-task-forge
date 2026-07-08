@@ -5,7 +5,8 @@ import {
   TaskDetailNestedModalShell,
   dedupeProposalLogEntries,
   getAiProviderSetupActionLabel,
-  isAiProviderSetupMessage
+  isAiProviderSetupMessage,
+  resolveDeliveryFormatPromptAction
 } from "./AssistedDescriptionSection";
 
 const overlay = {
@@ -73,6 +74,47 @@ describe("DescriptionPromptModal AI setup warning", () => {
 });
 
 describe("DescriptionPromptModal delivery-format gate", () => {
+  it("skips delivery-format confirmation when catalog gate is auto", () => {
+    expect(
+      resolveDeliveryFormatPromptAction({
+        kind: "auto",
+        areaDisplayName: "Manual Area",
+        format: null,
+        options: []
+      })
+    ).toEqual({ kind: "generate", deliveryFormat: null });
+  });
+
+  it("requires generic synced delivery-format confirmation before generation", () => {
+    const action = resolveDeliveryFormatPromptAction({
+      kind: "needs_confirmation",
+      areaDisplayName: "Synced Area",
+      suggestedFormat: null,
+      options: ["Formato A", "Formato B"]
+    });
+
+    expect(action).toEqual({
+      kind: "confirm",
+      selectedDeliveryFormat: "",
+      message: "Could not infer a delivery format from the provided context. Choose one before generating the description proposal."
+    });
+  });
+
+  it("preselects a synced suggested format without hardcoding catalog values", () => {
+    const action = resolveDeliveryFormatPromptAction({
+      kind: "needs_confirmation",
+      areaDisplayName: "Synced Area",
+      suggestedFormat: "Formato B",
+      options: ["Formato A", "Formato B"]
+    });
+
+    expect(action).toEqual({
+      kind: "confirm",
+      selectedDeliveryFormat: "Formato B",
+      message: "Review the inferred delivery format before generating the description proposal."
+    });
+  });
+
   it("keeps delivery-format confirmation out of the context step", () => {
     const html = renderToStaticMarkup(
       <DescriptionPromptModal
@@ -107,9 +149,9 @@ describe("DescriptionPromptModal delivery-format gate", () => {
         clarificationQuestions={[]}
         deliveryFormatGate={{
           kind: "needs_confirmation",
-          areaDisplayName: "Arquitectura",
-          suggestedFormat: "Arquitectura - Propuesta Final",
-          options: ["Arquitectura - Brief", "Arquitectura - Propuesta Final"]
+          areaDisplayName: "Synced Area",
+          suggestedFormat: "Formato B",
+          options: ["Formato A", "Formato B"]
         }}
         descriptionContext=""
         descriptionMessage="Confirm the delivery format before generating the description proposal."
@@ -119,14 +161,14 @@ describe("DescriptionPromptModal delivery-format gate", () => {
         onGenerate={() => undefined}
         onKeyDown={() => undefined}
         onSelectDeliveryFormat={() => undefined}
-        selectedDeliveryFormat="Arquitectura - Propuesta Final"
+        selectedDeliveryFormat="Formato B"
         step="delivery_format"
       />
     );
 
     expect(html).toContain("Confirm delivery format");
     expect(html).toContain("Delivery format");
-    expect(html).toContain("Arquitectura - Propuesta Final");
+    expect(html).toContain("Formato B");
     expect(html).not.toContain("Formato inventado");
     expect(html).not.toContain("<select");
   });

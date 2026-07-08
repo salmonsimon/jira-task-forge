@@ -50,6 +50,26 @@ import { TaskFocusSection } from "./TaskFocusSection";
 export const assistedDescriptionEditorSelector = "[data-description-editor]";
 
 type DescriptionPromptStep = "context" | "delivery_format";
+type DeliveryFormatPromptAction =
+  | { kind: "generate"; deliveryFormat: null }
+  | { kind: "confirm"; selectedDeliveryFormat: string; message: string }
+  | { kind: "blocked"; message: string };
+
+export function resolveDeliveryFormatPromptAction(gate: CatalogDeliveryFormatGate): DeliveryFormatPromptAction {
+  if (gate.kind === "unknown") {
+    return { kind: "blocked", message: gate.message };
+  }
+  if (gate.kind === "needs_confirmation") {
+    return {
+      kind: "confirm",
+      selectedDeliveryFormat: gate.suggestedFormat ?? "",
+      message: gate.suggestedFormat
+        ? "Review the inferred delivery format before generating the description proposal."
+        : "Could not infer a delivery format from the provided context. Choose one before generating the description proposal."
+    };
+  }
+  return { kind: "generate", deliveryFormat: null };
+}
 
 export function AssistedDescriptionSection({
   task,
@@ -220,27 +240,24 @@ export function AssistedDescriptionSection({
       const deliveryFormatResolution = onResolveDeliveryFormatGate
         ? await onResolveDeliveryFormatGate(task.area, deliveryFormatContext)
         : getDeliveryFormatGateForArea(task.area, deliveryFormatContext);
-      if (deliveryFormatResolution.kind === "unknown") {
-        setDescriptionMessage(deliveryFormatResolution.message);
+      const deliveryFormatAction = resolveDeliveryFormatPromptAction(deliveryFormatResolution);
+      if (deliveryFormatAction.kind === "blocked") {
+        setDescriptionMessage(deliveryFormatAction.message);
         setProposalPanelOpen(true);
         setPromptOpen(true);
         return false;
       }
-      if (deliveryFormatResolution.kind === "needs_confirmation") {
+      if (deliveryFormatAction.kind === "confirm") {
         setDeliveryFormatGate(deliveryFormatResolution);
-        setSelectedDeliveryFormat(deliveryFormatResolution.suggestedFormat ?? "");
+        setSelectedDeliveryFormat(deliveryFormatAction.selectedDeliveryFormat);
         setDescriptionPromptStep("delivery_format");
-        setDescriptionMessage(
-          deliveryFormatResolution.suggestedFormat
-            ? "Review the inferred delivery format before generating the description proposal."
-            : "Could not infer a delivery format from the provided context. Choose one before generating the description proposal."
-        );
+        setDescriptionMessage(deliveryFormatAction.message);
         setProposalPanelOpen(true);
         setPromptOpen(true);
         return false;
       }
 
-      return await generateProposalWithOptionalDeliveryFormat(sectionIds, changeRequest, null);
+      return await generateProposalWithOptionalDeliveryFormat(sectionIds, changeRequest, deliveryFormatAction.deliveryFormat);
     } catch (error) {
       setDescriptionMessage(error instanceof Error ? error.message : "Could not generate a description proposal.");
       setProposalPanelOpen(true);
