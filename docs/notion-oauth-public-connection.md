@@ -29,7 +29,9 @@ Publisher setup:
 3. Register this redirect URI:
    `https://notion-oauth.salmonsimon.com/notion/oauth/callback`.
 4. Deploy the Vercel API routes under `api/notion/oauth/` behind
-   `https://notion-oauth.salmonsimon.com`.
+   `https://notion-oauth.salmonsimon.com`. The committed `vercel.json` rewrites
+   public `/notion/oauth/...` paths to Vercel's `/api/notion/oauth/...`
+   function routes.
 5. Store the Notion connection client id and client secret as backend secrets.
 
 End-user flow:
@@ -70,6 +72,11 @@ Production backend target:
 
 - Deploy this repo to a dedicated Vercel project or deploy only the API routes
   under `api/notion/oauth/`.
+- Keep the committed `vercel.json` in the deployment so
+  `https://notion-oauth.salmonsimon.com/notion/oauth/start`,
+  `https://notion-oauth.salmonsimon.com/notion/oauth/exchange`, and
+  `https://notion-oauth.salmonsimon.com/notion/oauth/callback` reach the Vercel
+  functions in `api/notion/oauth/`.
 - Add `notion-oauth.salmonsimon.com` as a Vercel domain for that project.
 - In Wix DNS, create the subdomain record that Vercel requests for
   `notion-oauth.salmonsimon.com`.

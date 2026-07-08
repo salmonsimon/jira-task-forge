@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/notion/oauth/:path*",
+      "destination": "/api/notion/oauth/:path*"
+    }
+  ]
+}
