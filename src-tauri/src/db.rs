@@ -41,6 +41,10 @@ const MIGRATIONS: &[(&str, &str)] = &[
         "0009_project_sync_scope",
         include_str!("migrations/0009_project_sync_scope.sql"),
     ),
+    (
+        "0010_category_source_separation",
+        include_str!("migrations/0010_category_source_separation.sql"),
+    ),
 ];
 
 pub type DbResult<T> = Result<T, DbError>;

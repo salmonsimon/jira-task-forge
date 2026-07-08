@@ -31,6 +31,7 @@ export function SettingsPanel({
   onSaveNotionIntegrationToken,
   onDeleteNotionIntegrationToken,
   onTestNotionCatalogConnection,
+  onSyncAreaCatalog,
   onListJiraProjectsForConnection,
   onOpenJiraApiTokens,
   onOpenCatalogSourceRequirements,
@@ -64,6 +65,7 @@ export function SettingsPanel({
   onSaveNotionIntegrationToken: (token: string) => Promise<void>;
   onDeleteNotionIntegrationToken: () => Promise<void>;
   onTestNotionCatalogConnection: (pageUrlOrId: string) => Promise<NotionCatalogConnectionTestResult>;
+  onSyncAreaCatalog: (sourceUrl?: string, sourceMode?: AppSettings["catalogSourceMode"]) => Promise<unknown>;
   onListJiraProjectsForConnection: (siteUrl: string, accountEmail: string) => Promise<JiraProjectOption[]>;
   onOpenJiraApiTokens: () => void;
   onOpenCatalogSourceRequirements: () => void;
@@ -177,7 +179,13 @@ export function SettingsPanel({
         <NotionSynchronizationGuide
           settings={settings}
           hasNotionIntegrationToken={hasNotionIntegrationToken}
-          onChangeCatalogSettings={onChange}
+          onChangeCatalogSettings={async (patch) => {
+            const saved = await onChange(patch);
+            if (saved && patch.catalogSourceMode && patch.catalogSourceMode !== "manual") {
+              await onSyncAreaCatalog(patch.catalogSourceUrl, patch.catalogSourceMode);
+            }
+            return saved;
+          }}
           onClose={closeNotionSynchronizationGuide}
           onDeleteNotionIntegrationToken={async () => {
             await onDeleteNotionIntegrationToken();

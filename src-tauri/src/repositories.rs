@@ -426,12 +426,41 @@ impl<'connection> CategoryRepository<'connection> {
         let id = Uuid::new_v4().to_string();
         self.connection.execute(
             "
+            UPDATE categories
+            SET source = 'jira',
+                hidden = ?1,
+                ignored = 0,
+                project_sync_jira_site_url = ?2,
+                project_sync_jira_account_email = ?3,
+                project_sync_jira_project_key = ?4,
+                updated_at = ?5
+            WHERE category_type = 'project'
+              AND normalized_name = ?6
+              AND source = 'local'
+              AND NOT EXISTS (
+                SELECT 1 FROM categories existing
+                WHERE existing.category_type = 'project'
+                  AND existing.normalized_name = ?6
+                  AND existing.source = 'jira'
+              )
+            ",
+            (
+                bool_to_db(hidden),
+                scope.jira_site_url.as_str(),
+                scope.jira_account_email.as_str(),
+                scope.jira_project_key.as_str(),
+                now.as_str(),
+                normalized_name.as_str(),
+            ),
+        )?;
+        self.connection.execute(
+            "
             INSERT INTO categories (
                 id, category_type, name, normalized_name, source, hidden, ignored, created_at, updated_at,
                 project_sync_jira_site_url, project_sync_jira_account_email, project_sync_jira_project_key
             )
             VALUES (?1, 'project', ?2, ?3, 'jira', ?4, 0, ?5, ?5, ?6, ?7, ?8)
-            ON CONFLICT(category_type, normalized_name) DO UPDATE SET
+            ON CONFLICT(category_type, normalized_name, source) DO UPDATE SET
                 name = excluded.name,
                 source = 'jira',
                 hidden = excluded.hidden,
@@ -451,6 +480,16 @@ impl<'connection> CategoryRepository<'connection> {
                 scope.jira_account_email.as_str(),
                 scope.jira_project_key.as_str(),
             ),
+        )?;
+        self.connection.execute(
+            "
+            UPDATE categories
+            SET ignored = 1, updated_at = ?1
+            WHERE category_type = 'project'
+              AND normalized_name = ?2
+              AND source = 'local'
+            ",
+            (now.as_str(), normalized_name.as_str()),
         )?;
         self.remember_project_sync_decision(
             scope,
@@ -538,7 +577,7 @@ impl<'connection> CategoryRepository<'connection> {
             "
             UPDATE categories
             SET ignored = 1, updated_at = ?1
-            WHERE category_type = 'area'
+            WHERE category_type = 'area' AND source = 'catalog'
             ",
             [now.as_str()],
         )?;
@@ -560,7 +599,7 @@ impl<'connection> CategoryRepository<'connection> {
                     id, category_type, name, normalized_name, source, hidden, ignored, created_at, updated_at
                 )
                 VALUES (?1, 'area', ?2, ?3, 'catalog', 0, 0, ?4, ?4)
-                ON CONFLICT(category_type, normalized_name) DO UPDATE SET
+                ON CONFLICT(category_type, normalized_name, source) DO UPDATE SET
                     name = excluded.name,
                     source = 'catalog',
                     hidden = 0,
@@ -647,12 +686,16 @@ impl<'connection> CategoryRepository<'connection> {
         self.connection.execute(
             "
             DELETE FROM categories
-            WHERE category_type = 'area' AND ignored = 1
+            WHERE category_type = 'area' AND source = 'catalog' AND ignored = 1
             ",
             [],
         )?;
 
-        self.list(Some("area"))
+        Ok(self
+            .list(Some("area"))?
+            .into_iter()
+            .filter(|category| category.source == "catalog")
+            .collect())
     }
 
     pub fn catalog_template_context_for_area(
@@ -3196,6 +3239,41 @@ mod tests {
     }
 
     #[test]
+    fn keeps_manual_and_synced_area_categories_separate() {
+        let connection = open_in_memory_database().expect("database opens");
+        let repository = CategoryRepository::new(&connection);
+
+        let manual_area = repository
+            .create("area", "Programación")
+            .expect("manual area creates");
+
+        let synced_areas = repository
+            .sync_area_catalog_entries(&[SyncedCatalogArea {
+                area_display_name: "Programación".to_string(),
+                jira_label: "Programación".to_string(),
+                enabled_in_jtf: true,
+                issue_type: "Story".to_string(),
+                default_delivery_format: "Feature de Programación".to_string(),
+                safe_aliases: vec![],
+                notes: String::new(),
+            }])
+            .expect("catalog area syncs");
+
+        assert_eq!(synced_areas.len(), 1);
+        assert_eq!(synced_areas[0].source, "catalog");
+
+        let areas = repository.list(Some("area")).expect("area categories list");
+        assert!(areas.iter().any(|category| {
+            category.id == manual_area.id
+                && category.name == "Programación"
+                && category.source == "local"
+        }));
+        assert!(areas.iter().any(|category| {
+            category.name == "Programación" && category.source == "catalog"
+        }));
+    }
+
+    #[test]
     fn project_sync_promotes_local_projects_and_remembers_ignored_candidates() {
         let connection = open_in_memory_database().expect("database opens");
         let repository = CategoryRepository::new(&connection);
@@ -3220,6 +3298,11 @@ mod tests {
             category.name == "Moon Lab" && category.source == "jira" && !category.hidden
         }));
         assert!(!synced.iter().any(|category| category.name == "PilotLab"));
+
+        let all_projects = repository.list(Some("project")).expect("projects list");
+        assert!(!all_projects
+            .iter()
+            .any(|category| category.name == "Moon Lab" && category.source == "local"));
 
         let decisions = repository
             .list_project_sync_decisions(&scope)
@@ -3334,14 +3417,25 @@ mod tests {
     }
 
     #[test]
-    fn catalog_sync_deletes_manual_and_stale_areas_not_in_synced_catalog() {
+    fn catalog_sync_preserves_manual_areas_and_deletes_stale_catalog_areas() {
         let connection = open_in_memory_database().expect("database opens");
         let repository = CategoryRepository::new(&connection);
-        let manual_area_name = "__manual_area_should_be_pruned__";
+        let manual_area_name = "__manual_area_should_survive_sync__";
 
         repository
             .create("area", manual_area_name)
             .expect("manual area creates");
+        repository
+            .sync_area_catalog_entries(&[SyncedCatalogArea {
+                area_display_name: "Bug".to_string(),
+                jira_label: "Bug".to_string(),
+                enabled_in_jtf: true,
+                issue_type: "Bug".to_string(),
+                default_delivery_format: "Bug".to_string(),
+                safe_aliases: vec![],
+                notes: String::new(),
+            }])
+            .expect("initial catalog sync succeeds");
         assert!(repository
             .list(Some("area"))
             .expect("area categories list")
@@ -3367,9 +3461,9 @@ mod tests {
         assert!(areas
             .iter()
             .any(|category| category.name == "Programación" && category.source == "catalog"));
-        assert!(!areas
+        assert!(areas
             .iter()
-            .any(|category| category.name == manual_area_name));
+            .any(|category| category.name == manual_area_name && category.source == "local"));
         assert!(!areas.iter().any(|category| category.name == "Bug"));
     }
 

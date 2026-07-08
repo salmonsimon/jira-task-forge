@@ -40,6 +40,7 @@ describe("SettingsPanel", () => {
         onSaveNotionIntegrationToken={async () => undefined}
         onDeleteNotionIntegrationToken={async () => undefined}
         onTestNotionCatalogConnection={async () => ({ ok: true, message: "Connected", title: "JTF Sync Catalog", extractedBlockCount: 1 })}
+        onSyncAreaCatalog={async () => null}
         onListJiraProjectsForConnection={async () => []}
         onOpenJiraApiTokens={() => undefined}
         onOpenCatalogSourceRequirements={() => undefined}
@@ -82,6 +83,7 @@ describe("SettingsPanel", () => {
         onSaveNotionIntegrationToken={async () => undefined}
         onDeleteNotionIntegrationToken={async () => undefined}
         onTestNotionCatalogConnection={async () => ({ ok: true, message: "Connected", title: "JTF Sync Catalog", extractedBlockCount: 1 })}
+        onSyncAreaCatalog={async () => null}
         onListJiraProjectsForConnection={async () => []}
         onOpenJiraApiTokens={() => undefined}
         onOpenCatalogSourceRequirements={() => undefined}
@@ -124,6 +126,7 @@ describe("SettingsPanel", () => {
         onSaveNotionIntegrationToken={async () => undefined}
         onDeleteNotionIntegrationToken={async () => undefined}
         onTestNotionCatalogConnection={async () => ({ ok: true, message: "Connected", title: "JTF Sync Catalog", extractedBlockCount: 1 })}
+        onSyncAreaCatalog={async () => null}
         onListJiraProjectsForConnection={async () => []}
         onOpenJiraApiTokens={() => undefined}
         onOpenCatalogSourceRequirements={() => undefined}
@@ -164,6 +167,7 @@ describe("SettingsPanel", () => {
         onSaveNotionIntegrationToken={async () => undefined}
         onDeleteNotionIntegrationToken={async () => undefined}
         onTestNotionCatalogConnection={async () => ({ ok: true, message: "Connected", title: "JTF Sync Catalog", extractedBlockCount: 1 })}
+        onSyncAreaCatalog={async () => null}
         onListJiraProjectsForConnection={async () => []}
         onOpenJiraApiTokens={() => undefined}
         onOpenCatalogSourceRequirements={() => undefined}

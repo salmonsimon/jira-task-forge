@@ -104,6 +104,7 @@ import {
   createEmptyAssistedDescriptionSections,
   serializeAssistedDescriptionSections
 } from "./lib/domain/assistedDescription";
+import { visibleAreasForMode, visibleProjectsForMode } from "./lib/domain/categoryVisibility";
 import type {
   AppSettings,
   AttachmentPurpose,
@@ -242,11 +243,19 @@ export default function App() {
 
   const projectCategories = useMemo(() => categories.filter((category) => category.categoryType === "project"), [categories]);
   const areaCategories = useMemo(() => categories.filter((category) => category.categoryType === "area"), [categories]);
-  const projectOptions = useMemo(
-    () => orderProjectNames(projectCategories.filter((project) => !project.hidden).map((project) => project.name)),
-    [projectCategories]
+  const visibleProjectCategories = useMemo(
+    () => visibleProjectsForMode(projectCategories, appSettings.projectSyncEnabled !== false),
+    [appSettings.projectSyncEnabled, projectCategories]
   );
-  const areaOptions = useMemo(() => areaCategories.filter((area) => !area.hidden).map((area) => area.name), [areaCategories]);
+  const visibleAreaCategories = useMemo(
+    () => visibleAreasForMode(areaCategories, appSettings.catalogSourceMode),
+    [appSettings.catalogSourceMode, areaCategories]
+  );
+  const projectOptions = useMemo(
+    () => orderProjectNames(visibleProjectCategories.filter((project) => !project.hidden).map((project) => project.name)),
+    [visibleProjectCategories]
+  );
+  const areaOptions = useMemo(() => visibleAreaCategories.filter((area) => !area.hidden).map((area) => area.name), [visibleAreaCategories]);
 
   useEffect(() => {
     let isCurrent = true;
@@ -582,19 +591,22 @@ export default function App() {
     setCategories((currentCategories) => currentCategories.filter((category) => category.id !== categoryId));
   }
 
-  async function syncAreaCatalog(sourceUrl?: string): Promise<CatalogSyncResult | null> {
+  async function syncAreaCatalog(
+    sourceUrl?: string,
+    sourceMode: AppSettings["catalogSourceMode"] = appSettings.catalogSourceMode
+  ): Promise<CatalogSyncResult | null> {
     const requestedSourceUrl = sourceUrl?.trim() || appSettings.catalogSourceUrl.trim();
-    const shouldUseExternalSource = Boolean(sourceUrl?.trim()) || appSettings.catalogSourceMode !== "manual";
+    const shouldUseExternalSource = Boolean(sourceUrl?.trim()) || sourceMode !== "manual";
 
     if (usesTauriPersistence && requestedSourceUrl && shouldUseExternalSource) {
       const result =
-        appSettings.catalogSourceMode === "notion"
+        sourceMode === "notion"
           ? await syncPersistedAreaCatalogFromNotion(requestedSourceUrl)
           : await syncPersistedAreaCatalogFromSource(requestedSourceUrl);
       if (!result.ok) return result;
 
       setCategories((currentCategories) => [
-        ...currentCategories.filter((category) => category.categoryType !== "area"),
+        ...currentCategories.filter((category) => category.categoryType !== "area" || category.source !== "catalog"),
         ...result.areas.map((area) => ({
           id: `catalog-${area.areaDisplayName}`,
           categoryType: "area" as const,
@@ -603,8 +615,8 @@ export default function App() {
         }))
       ]);
       await updateAppSettings({
-        catalogSourceMode: appSettings.catalogSourceMode,
-        catalogSourceUrl: appSettings.catalogSourceMode === "notion" ? requestedSourceUrl : result.sourceUrl
+        catalogSourceMode: sourceMode,
+        catalogSourceUrl: sourceMode === "notion" ? requestedSourceUrl : result.sourceUrl
       });
       return result;
     }
@@ -614,8 +626,8 @@ export default function App() {
       : appData.listAreas().map((area) => ({ ...area, source: "catalog" as const }));
 
     setCategories((currentCategories) => [
-      ...currentCategories.filter((category) => category.categoryType !== "area"),
-      ...syncedAreas
+      ...currentCategories.filter((category) => category.categoryType !== "area" || category.source !== "catalog"),
+      ...syncedAreas.filter((area) => area.source === "catalog")
     ]);
     return null;
   }
@@ -1664,8 +1676,8 @@ export default function App() {
         ) : null}
         {openPanel === "categories" ? (
           <CategoriesPanel
-            projects={projectCategories}
-            areas={areaCategories}
+            projects={visibleProjectCategories}
+            areas={visibleAreaCategories}
             catalogSourceMode={appSettings.catalogSourceMode}
             catalogSourceUrl={appSettings.catalogSourceUrl}
             projectSyncEnabled={appSettings.projectSyncEnabled !== false}
@@ -1723,6 +1735,7 @@ export default function App() {
                     extractedBlockCount: 0
                   })
             }
+            onSyncAreaCatalog={syncAreaCatalog}
             onListJiraProjectsForConnection={listJiraProjectsForConnection}
             onOpenJiraApiTokens={openJiraApiTokensPage}
             onOpenCatalogSourceRequirements={openCatalogSourceRequirementsPage}
