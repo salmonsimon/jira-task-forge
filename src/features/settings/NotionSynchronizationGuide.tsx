@@ -49,6 +49,19 @@ export function canTestNotionCatalogSource(
   return Boolean(sourceUrl.trim()) && hasToken;
 }
 
+export async function verifyNotionTokenBeforeSynchronization(
+  mode: AppSettings["catalogSourceMode"],
+  hasNotionIntegrationToken: () => Promise<boolean>
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  if (mode !== "notion") return { ok: true };
+  const tokenAvailable = await hasNotionIntegrationToken();
+  if (tokenAvailable) return { ok: true };
+  return {
+    ok: false,
+    message: "Reconnect Notion before saving synchronization. The saved connection is not available yet."
+  };
+}
+
 export function NotionSynchronizationGuide({
   settings,
   hasNotionIntegrationToken,
@@ -231,6 +244,14 @@ export function NotionSynchronizationGuide({
     setSaveStatus("saving");
     setSaveMessage(mode === "manual" ? "Saving manual catalog mode..." : "Saving synchronization and refreshing Areas...");
     try {
+      const tokenCheck = await verifyNotionTokenBeforeSynchronization(mode, hasNotionIntegrationToken);
+      if (!tokenCheck.ok) {
+        setHasToken(false);
+        setSaveStatus("error");
+        setSaveMessage(tokenCheck.message);
+        return;
+      }
+      if (mode === "notion") setHasToken(true);
       const saved = await onChangeCatalogSettings({ catalogSourceMode: mode, catalogSourceUrl: mode === "manual" ? "" : sourceUrl.trim() });
       if (saved) {
         onClose();

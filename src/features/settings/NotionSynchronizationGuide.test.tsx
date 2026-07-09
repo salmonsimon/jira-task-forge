@@ -7,7 +7,8 @@ import {
   canTestNotionCatalogSource,
   catalogModeOptions,
   notionCatalogSourceRequirementsUrl,
-  NotionSynchronizationGuide
+  NotionSynchronizationGuide,
+  verifyNotionTokenBeforeSynchronization
 } from "./NotionSynchronizationGuide";
 
 const settings: AppSettings = {
@@ -213,6 +214,26 @@ describe("NotionSynchronizationGuide", () => {
     expect(canTestNotionCatalogSource("notion", settings.catalogSourceUrl, true, false)).toBe(true);
     expect(canTestNotionCatalogSource("notion", settings.catalogSourceUrl, true, true)).toBe(false);
     expect(canTestNotionCatalogSource("manual", "", false, false)).toBe(true);
+  });
+
+  it("rechecks the saved Notion token before final synchronization save", async () => {
+    await expect(verifyNotionTokenBeforeSynchronization("notion", async () => true)).resolves.toEqual({ ok: true });
+    await expect(verifyNotionTokenBeforeSynchronization("notion", async () => false)).resolves.toEqual({
+      ok: false,
+      message: "Reconnect Notion before saving synchronization. The saved connection is not available yet."
+    });
+  });
+
+  it("does not require a Notion token recheck for manual catalog saves", async () => {
+    let checked = false;
+
+    await expect(
+      verifyNotionTokenBeforeSynchronization("manual", async () => {
+        checked = true;
+        return false;
+      })
+    ).resolves.toEqual({ ok: true });
+    expect(checked).toBe(false);
   });
 
   it("allows Notion OAuth to start before a catalog page URL is entered", () => {
