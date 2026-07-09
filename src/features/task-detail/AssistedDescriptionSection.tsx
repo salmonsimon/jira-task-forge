@@ -55,13 +55,20 @@ type DeliveryFormatPromptAction =
   | { kind: "confirm"; selectedDeliveryFormat: string; message: string }
   | { kind: "blocked"; message: string };
 
-export function resolveDeliveryFormatPromptAction(gate: CatalogDeliveryFormatGate): DeliveryFormatPromptAction {
+export function resolveDeliveryFormatPromptAction(
+  gate: CatalogDeliveryFormatGate,
+  options: { autoSelectFirstConfirmationOption?: boolean } = {}
+): DeliveryFormatPromptAction {
   if (gate.kind === "unknown") {
     return { kind: "blocked", message: gate.message };
   }
   if (gate.kind === "needs_confirmation") {
     if (gate.options.length === 1) {
       return { kind: "generate", deliveryFormat: gate.options[0] };
+    }
+    if (options.autoSelectFirstConfirmationOption && gate.options.length) {
+      const suggestedFormatIsValid = Boolean(gate.suggestedFormat && gate.options.includes(gate.suggestedFormat));
+      return { kind: "generate", deliveryFormat: suggestedFormatIsValid ? gate.suggestedFormat : gate.options[0] };
     }
     return {
       kind: "confirm",
@@ -257,6 +264,7 @@ export function AssistedDescriptionSection({
   }
 
   async function openDescriptionPrompt(sectionIds: AssistedDescriptionSectionId[] = allSectionIds, initialContext = "") {
+    const isPartialSectionRequest = sectionIds.length !== allSectionIds.length;
     setPromptSectionIds(sectionIds);
     setDescriptionContext(initialContext);
     setDescriptionMessage(null);
@@ -270,7 +278,9 @@ export function AssistedDescriptionSection({
       const deliveryFormatResolution = onResolveDeliveryFormatGate
         ? await onResolveDeliveryFormatGate(task.area, deliveryFormatContext)
         : getDeliveryFormatGateForArea(task.area, deliveryFormatContext);
-      const deliveryFormatAction = resolveDeliveryFormatPromptAction(deliveryFormatResolution);
+      const deliveryFormatAction = resolveDeliveryFormatPromptAction(deliveryFormatResolution, {
+        autoSelectFirstConfirmationOption: isPartialSectionRequest
+      });
       if (deliveryFormatAction.kind === "blocked") {
         setDescriptionMessage(deliveryFormatAction.message);
         setDescriptionPromptStep("context");
@@ -403,7 +413,7 @@ export function AssistedDescriptionSection({
         return true;
       }
 
-      const revisionDeliveryFormat = await resolveDeliveryFormatForRevision(changeRequest);
+      const revisionDeliveryFormat = await resolveDeliveryFormatForRevision(changeRequest, sectionIds);
       const draft = await onGenerateDescription(
         task.id,
         buildAssistedDescriptionGenerationContext({ changeRequest, issueType: task.issueType, sectionIds }),
@@ -454,13 +464,18 @@ export function AssistedDescriptionSection({
     }
   }
 
-  async function resolveDeliveryFormatForRevision(changeRequest: string): Promise<string | null> {
+  async function resolveDeliveryFormatForRevision(
+    changeRequest: string,
+    sectionIds: AssistedDescriptionSectionId[]
+  ): Promise<string | null> {
     if (lastConfirmedDeliveryFormat) return lastConfirmedDeliveryFormat;
     const deliveryFormatContext = `${task.title}\n${changeRequest}\n${task.description ?? ""}`;
     const deliveryFormatResolution = onResolveDeliveryFormatGate
       ? await onResolveDeliveryFormatGate(task.area, deliveryFormatContext)
       : getDeliveryFormatGateForArea(task.area, deliveryFormatContext);
-    const action = resolveDeliveryFormatPromptAction(deliveryFormatResolution);
+    const action = resolveDeliveryFormatPromptAction(deliveryFormatResolution, {
+      autoSelectFirstConfirmationOption: sectionIds.length !== allSectionIds.length
+    });
     if (action.kind === "blocked") throw new Error(action.message);
     if (action.kind === "confirm") {
       throw new Error("This proposal needs a delivery format selected before requesting AI changes.");

@@ -101,6 +101,34 @@ describe("DescriptionPromptModal delivery-format gate", () => {
     });
   });
 
+  it("auto-selects the first mapped format for individual section proposals", () => {
+    const action = resolveDeliveryFormatPromptAction(
+      {
+        kind: "needs_confirmation",
+        areaDisplayName: "3D",
+        suggestedFormat: null,
+        options: ["Arte Integrado", "Arte Empaquetado"]
+      },
+      { autoSelectFirstConfirmationOption: true }
+    );
+
+    expect(action).toEqual({ kind: "generate", deliveryFormat: "Arte Integrado" });
+  });
+
+  it("prefers a valid suggested format for individual section proposals", () => {
+    const action = resolveDeliveryFormatPromptAction(
+      {
+        kind: "needs_confirmation",
+        areaDisplayName: "3D",
+        suggestedFormat: "Arte Empaquetado",
+        options: ["Arte Integrado", "Arte Empaquetado"]
+      },
+      { autoSelectFirstConfirmationOption: true }
+    );
+
+    expect(action).toEqual({ kind: "generate", deliveryFormat: "Arte Empaquetado" });
+  });
+
   it("auto-generates when the synced catalog has exactly one delivery format option", () => {
     expect(
       resolveDeliveryFormatPromptAction({
