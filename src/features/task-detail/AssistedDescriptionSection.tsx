@@ -1542,7 +1542,7 @@ function DeliveryFormatDropdown({
 
       {listbox.isOpen ? (
         <div
-          className="app-select-menu app-select-menu-fade absolute left-0 top-[calc(100%+4px)] z-[500] max-h-44 w-full overflow-y-auto overscroll-contain rounded border border-[#5c606a] bg-[#2b2d31] py-1 text-sm text-[#f4f5f7] shadow-xl"
+          className="app-select-menu-dark app-select-menu-fade absolute left-0 top-[calc(100%+4px)] z-[500] max-h-44 w-full overflow-y-auto overscroll-contain rounded border border-[#5c606a] bg-[#2b2d31] py-1 text-sm text-[#f4f5f7] shadow-xl"
           {...listbox.listboxProps}
         >
           {options.map((format) => {
@@ -1551,7 +1551,7 @@ function DeliveryFormatDropdown({
             return (
               <button
                 className={cn(
-                  "flex h-8 w-full min-w-0 items-center justify-between gap-2 px-3 text-left hover:bg-[#1d355c]",
+                  "app-select-option-dark flex h-8 w-full min-w-0 items-center justify-between gap-2 px-3 text-left hover:bg-[#1d355c]",
                   isSelected ? "bg-[#0c66e4] text-white" : "text-[#dfe1e6]"
                 )}
                 key={format}
