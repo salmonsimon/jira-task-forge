@@ -6,8 +6,10 @@ import {
   canSaveNotionSynchronization,
   canTestNotionCatalogSource,
   catalogModeOptions,
+  createNotionCatalogConnectionTestErrorResult,
   notionCatalogSourceRequirementsUrl,
-  NotionSynchronizationGuide
+  NotionSynchronizationGuide,
+  runNotionCatalogSourceTest,
 } from "./NotionSynchronizationGuide";
 
 const settings: AppSettings = {
@@ -20,7 +22,8 @@ const settings: AppSettings = {
   aiModel: "",
   defaultContentLanguage: "Spanish",
   catalogSourceMode: "notion",
-  catalogSourceUrl: "https://app.notion.com/p/capacitacion-interna-dts/JTF-Sync-Catalog-387c335aece481c292baf6991a86a5c3"
+  catalogSourceUrl:
+    "https://app.notion.com/p/capacitacion-interna-dts/JTF-Sync-Catalog-387c335aece481c292baf6991a86a5c3",
 };
 
 describe("NotionSynchronizationGuide", () => {
@@ -39,9 +42,9 @@ describe("NotionSynchronizationGuide", () => {
           ok: true,
           message: "Connected",
           title: "JTF Sync Catalog",
-          extractedBlockCount: 1
+          extractedBlockCount: 1,
         })}
-      />
+      />,
     );
 
     expect(html).toContain("Set Catalog Source");
@@ -70,19 +73,23 @@ describe("NotionSynchronizationGuide", () => {
           ok: true,
           message: "Connected",
           title: "JTF Sync Catalog",
-          extractedBlockCount: 1
+          extractedBlockCount: 1,
         })}
-      />
+      />,
     );
 
     expect(html).not.toContain(">Manage token<");
-    expect(html).not.toContain("href=\"https://www.notion.so/developers\"");
+    expect(html).not.toContain('href="https://www.notion.so/developers"');
   });
 
   it("keeps manual catalog setup free of Notion token, URL, and test prompts", () => {
     const html = renderToStaticMarkup(
       <NotionSynchronizationGuide
-        settings={{ ...settings, catalogSourceMode: "manual", catalogSourceUrl: "" }}
+        settings={{
+          ...settings,
+          catalogSourceMode: "manual",
+          catalogSourceUrl: "",
+        }}
         hasNotionIntegrationToken={async () => false}
         onChangeCatalogSettings={async () => true}
         onClose={() => undefined}
@@ -94,13 +101,15 @@ describe("NotionSynchronizationGuide", () => {
           ok: true,
           message: "Connected",
           title: "JTF Sync Catalog",
-          extractedBlockCount: 1
+          extractedBlockCount: 1,
         })}
-      />
+      />,
     );
 
     expect(html).toContain("Manual catalog");
-    expect(html).toContain("No Notion token, page URL, or connection test is needed");
+    expect(html).toContain(
+      "No Notion token, page URL, or connection test is needed",
+    );
     expect(html).toContain("Use manual catalog");
     expect(html).toContain("grid-cols-1");
     expect(html).not.toContain("2. Token");
@@ -112,15 +121,63 @@ describe("NotionSynchronizationGuide", () => {
   });
 
   it("does not offer the legacy public exportable source mode", () => {
-    expect(catalogModeOptions.map((option) => option.label)).toEqual(["Sync from Notion page", "Manual catalog"]);
-    expect(catalogModeOptions.map((option) => option.value)).not.toContain("public-exportable");
+    expect(catalogModeOptions.map((option) => option.label)).toEqual([
+      "Sync from Notion page",
+      "Manual catalog",
+    ]);
+    expect(catalogModeOptions.map((option) => option.value)).not.toContain(
+      "public-exportable",
+    );
   });
 
   it("requires a successful Notion connection test before saving Notion synchronization", () => {
     expect(canSaveNotionSynchronization("manual", null)).toBe(true);
     expect(canSaveNotionSynchronization("notion", null)).toBe(false);
-    expect(canSaveNotionSynchronization("notion", { ok: false, message: "Failed", title: null, extractedBlockCount: 0 })).toBe(false);
-    expect(canSaveNotionSynchronization("notion", { ok: true, message: "Connected", title: "JTF Sync Catalog", extractedBlockCount: 12 })).toBe(true);
+    expect(
+      canSaveNotionSynchronization("notion", {
+        ok: false,
+        message: "Failed",
+        title: null,
+        extractedBlockCount: 0,
+      }),
+    ).toBe(false);
+    expect(
+      canSaveNotionSynchronization("notion", {
+        ok: true,
+        message: "Connected",
+        title: "JTF Sync Catalog",
+        extractedBlockCount: 12,
+      }),
+    ).toBe(true);
+  });
+
+  it("turns rejected Notion source tests into visible failed results", async () => {
+    await expect(
+      runNotionCatalogSourceTest({
+        mode: "notion",
+        sourceUrl: settings.catalogSourceUrl,
+        onChangeCatalogSettings: async () => true,
+        onTestNotionCatalogConnection: async () => {
+          throw new Error("Notion page is not shared with this integration.");
+        },
+      }),
+    ).resolves.toEqual({
+      ok: false,
+      message: "Notion page is not shared with this integration.",
+      title: null,
+      extractedBlockCount: 0,
+    });
+
+    expect(
+      createNotionCatalogConnectionTestErrorResult(
+        new Error("Notion page is not shared with this integration."),
+      ),
+    ).toEqual({
+      ok: false,
+      message: "Notion page is not shared with this integration.",
+      title: null,
+      extractedBlockCount: 0,
+    });
   });
 
   it("keeps a new Notion token unsavable until its draft connection test succeeds", () => {
@@ -132,11 +189,47 @@ describe("NotionSynchronizationGuide", () => {
   });
 
   it("disables Notion source testing until the page and either a saved or draft token are available", () => {
-    expect(canTestNotionCatalogSource("notion", "", false, "", false)).toBe(false);
-    expect(canTestNotionCatalogSource("notion", settings.catalogSourceUrl, false, "", false)).toBe(false);
-    expect(canTestNotionCatalogSource("notion", settings.catalogSourceUrl, false, "ntn_draft", false)).toBe(true);
-    expect(canTestNotionCatalogSource("notion", settings.catalogSourceUrl, true, "", false)).toBe(true);
-    expect(canTestNotionCatalogSource("notion", settings.catalogSourceUrl, true, "", true)).toBe(false);
-    expect(canTestNotionCatalogSource("manual", "", false, "", false)).toBe(true);
+    expect(canTestNotionCatalogSource("notion", "", false, "", false)).toBe(
+      false,
+    );
+    expect(
+      canTestNotionCatalogSource(
+        "notion",
+        settings.catalogSourceUrl,
+        false,
+        "",
+        false,
+      ),
+    ).toBe(false);
+    expect(
+      canTestNotionCatalogSource(
+        "notion",
+        settings.catalogSourceUrl,
+        false,
+        "ntn_draft",
+        false,
+      ),
+    ).toBe(true);
+    expect(
+      canTestNotionCatalogSource(
+        "notion",
+        settings.catalogSourceUrl,
+        true,
+        "",
+        false,
+      ),
+    ).toBe(true);
+    expect(
+      canTestNotionCatalogSource(
+        "notion",
+        settings.catalogSourceUrl,
+        true,
+        "",
+        true,
+      ),
+    ).toBe(false);
+    expect(canTestNotionCatalogSource("manual", "", false, "", false)).toBe(
+      true,
+    );
   });
 });

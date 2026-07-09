@@ -1,7 +1,8 @@
-import { AlertTriangle, Check, CheckCircle2, Eye, EyeOff, Pencil, Plus, RefreshCw, Tags, Trash2, X } from "lucide-react";
+import { AlertTriangle, Check, CheckCircle2, Pencil, Plus, RefreshCw, Tags, Trash2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button, DrawerShell, FeedbackNote, PanelHeader, ToggleSwitch } from "../../components/ui";
 import { appOverlayLayers, useAppOverlay } from "../../lib/app-overlays";
+import { isTransversalProject } from "../../lib/domain/categoryVisibility";
 import type { AppSettings, CatalogSyncResult, Category, ProjectSyncApplyRequest, ProjectSyncCandidate, ProjectSyncReview } from "../../lib/types";
 import { cn } from "../../lib/utils";
 import { mergeProjectSyncCandidates, ProjectSyncDecisionTable } from "./ProjectSyncDecisionTable";
@@ -18,6 +19,7 @@ export function CategoriesPanel({
   onUpdateCategory,
   onDeleteCategory,
   onSyncAreaCatalog,
+  onToggleAreaSync,
   onToggleProjectSync,
   onDiscoverProjectSync,
   onApplyProjectSync,
@@ -35,6 +37,7 @@ export function CategoriesPanel({
   onUpdateCategory: (categoryId: string, patch: Partial<Pick<Category, "hidden" | "name">>) => void | Promise<void>;
   onDeleteCategory: (categoryId: string) => void | Promise<void>;
   onSyncAreaCatalog: (sourceUrl?: string) => Promise<CatalogSyncResult | null>;
+  onToggleAreaSync?: (enabled: boolean) => void | Promise<void>;
   onToggleProjectSync?: (enabled: boolean) => void | Promise<void>;
   onDiscoverProjectSync?: () => Promise<ProjectSyncReview>;
   onApplyProjectSync?: (request: ProjectSyncApplyRequest) => Promise<void>;
@@ -90,6 +93,7 @@ export function CategoriesPanel({
           onUpdateCategory={onUpdateCategory}
           onDeleteCategory={onDeleteCategory}
           onSyncAreaCatalog={onSyncAreaCatalog}
+          onToggleAreaSync={onToggleAreaSync}
           onConfigureCatalogSource={onConfigureCatalogSource}
           onSyncResult={setCatalogNotice}
         />
@@ -120,6 +124,7 @@ function CategoryList({
   onUpdateCategory,
   onDeleteCategory,
   onSyncAreaCatalog,
+  onToggleAreaSync,
   onToggleProjectSync,
   onDiscoverProjectSync,
   onProjectSyncReview,
@@ -143,6 +148,7 @@ function CategoryList({
   onUpdateCategory: (categoryId: string, patch: Partial<Pick<Category, "hidden" | "name">>) => void | Promise<void>;
   onDeleteCategory: (categoryId: string) => void | Promise<void>;
   onSyncAreaCatalog?: (sourceUrl?: string) => Promise<CatalogSyncResult | null>;
+  onToggleAreaSync?: (enabled: boolean) => void | Promise<void>;
   onToggleProjectSync?: (enabled: boolean) => void | Promise<void>;
   onDiscoverProjectSync?: () => Promise<ProjectSyncReview>;
   onProjectSyncReview?: (review: ProjectSyncReview) => void;
@@ -154,6 +160,7 @@ function CategoryList({
   const [isAdding, setIsAdding] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [newName, setNewName] = useState("");
+  const isAreaSyncEnabled = categoryType === "area" && isCatalogManaged;
 
   async function createCategory() {
     const nextName = newName.trim();
@@ -243,20 +250,35 @@ function CategoryList({
               New
             </Button>
           </div>
-        ) : isCatalogManaged ? (
-          <Button
-            variant="ghost"
-            icon={<RefreshCw size={13} className={isSyncing ? "animate-spin" : undefined} />}
-            disabled={isSyncing}
-            onClick={() => void syncCatalog()}
-            title="Update official area catalog"
-          >
-            {isSyncing ? "Syncing..." : "Sync"}
-          </Button>
         ) : (
-          <Button variant="ghost" icon={<Plus size={13} />} onClick={() => setIsAdding(true)}>
-            New
-          </Button>
+          <div className="flex shrink-0 items-center gap-2">
+            <ToggleSwitch
+              checked={isAreaSyncEnabled}
+              checkedIcon={<RefreshCw size={13} strokeWidth={2.6} />}
+              hideLabel
+              label={isAreaSyncEnabled ? "Area sync enabled" : "Manual Areas mode"}
+              onChange={(checked) => void onToggleAreaSync?.(checked)}
+              uncheckedIcon={<Pencil size={13} strokeWidth={2.6} />}
+            />
+            <Button
+              variant="ghost"
+              icon={<RefreshCw size={13} className={isSyncing ? "animate-spin" : undefined} />}
+              disabled={isSyncing || !isAreaSyncEnabled}
+              onClick={() => void syncCatalog()}
+              title={isAreaSyncEnabled ? "Sync Areas from Notion catalog" : "Enable area sync before syncing"}
+            >
+              {isSyncing ? "Syncing..." : "Sync"}
+            </Button>
+            <Button
+              variant="ghost"
+              icon={<Plus size={13} />}
+              disabled={isAreaSyncEnabled}
+              onClick={() => setIsAdding(true)}
+              title={isAreaSyncEnabled ? "Switch Areas to manual mode before adding" : "New Area"}
+            >
+              New
+            </Button>
+          </div>
         )}
       </div>
       <div className="overflow-hidden rounded border border-[#dfe1e6]">
@@ -307,7 +329,36 @@ function CategoryList({
             onUpdateCategory={onUpdateCategory}
           />
         ))}
+        {!categories.length ? (
+          <EmptyCategoryState
+            categoryType={categoryType}
+            isSyncEnabled={categoryType === "project" ? Boolean(useProjectSync) : isAreaSyncEnabled}
+          />
+        ) : null}
       </div>
+    </div>
+  );
+}
+
+function EmptyCategoryState({
+  categoryType,
+  isSyncEnabled
+}: {
+  categoryType: "project" | "area";
+  isSyncEnabled: boolean;
+}) {
+  const label = categoryType === "project" ? "Projects" : "Areas";
+  const syncSource = categoryType === "project" ? "Jira epics" : "the Notion catalog";
+  const manualTarget = categoryType === "project" ? "a Project" : "Areas";
+
+  return (
+    <div className="px-3 py-4 text-sm leading-relaxed text-[#6b778c]">
+      <div className="font-medium text-[#42526e]">No {label} set yet.</div>
+      <p className="mt-1">
+        {isSyncEnabled
+          ? `Sync from ${syncSource}, or switch to manual mode to add ${manualTarget}.`
+          : `Use New to add ${manualTarget}, or enable sync to load options from ${syncSource}.`}
+      </p>
     </div>
   );
 }
@@ -533,6 +584,7 @@ function CategoryRow({
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [draftName, setDraftName] = useState(category.name);
+  const isReadOnlyProject = isTransversalProject(category);
 
   useEffect(() => {
     if (!isEditing) setDraftName(category.name);
@@ -554,7 +606,7 @@ function CategoryRow({
   return (
     <div className="group flex min-w-0 items-center justify-between gap-2 border-b border-[#ebecf0] px-3 py-2 last:border-b-0">
       <div className={cn("flex min-w-0 flex-1 items-center gap-2 text-sm", category.hidden && "text-[#6b778c]")}>
-        {category.hidden ? <EyeOff size={14} className="shrink-0 text-[#6b778c]" /> : <Tags size={14} className="shrink-0 text-[#6b778c]" />}
+        <Tags size={14} className="shrink-0 text-[#6b778c]" />
         {isEditing ? (
           <input
             autoFocus
@@ -571,8 +623,7 @@ function CategoryRow({
           <span className="truncate">{category.name}</span>
         )}
       </div>
-      <div className="flex shrink-0 items-center gap-1">
-        <span className="mr-1 text-xs text-[#6b778c]">{category.hidden ? "Hidden" : category.source}</span>
+      <div className="ml-auto flex shrink-0 items-center justify-end gap-1">
         {isEditing ? (
           <>
             <button
@@ -594,9 +645,9 @@ function CategoryRow({
           </>
         ) : (
           <>
-            {!isCatalogManaged ? (
+            {!isCatalogManaged && !isReadOnlyProject ? (
               <button
-                className="inline-flex h-7 w-7 items-center justify-center rounded text-[#42526e] opacity-0 transition hover:bg-[#ebecf0] group-hover:opacity-100 focus:opacity-100"
+                className="inline-flex h-7 w-7 items-center justify-center rounded text-[#9fadbc] transition hover:bg-[#253047] hover:text-[#dfe1e6]"
                 onClick={() => setIsEditing(true)}
                 title={`Rename ${category.name}`}
                 type="button"
@@ -604,18 +655,9 @@ function CategoryRow({
                 <Pencil size={14} />
               </button>
             ) : null}
-            <button
-              className="inline-flex h-7 w-7 items-center justify-center rounded text-[#42526e] transition hover:bg-[#ebecf0]"
-              onClick={() => void onUpdateCategory(category.id, { hidden: !category.hidden })}
-              title={category.hidden ? `Show ${category.name}` : `Hide ${category.name}`}
-              disabled={category.categoryType === "project" && category.name === "Transversal"}
-              type="button"
-            >
-              {category.hidden ? <Eye size={14} /> : <EyeOff size={14} />}
-            </button>
-            {!isCatalogManaged ? (
+            {!isCatalogManaged && !isReadOnlyProject ? (
               <button
-                className="inline-flex h-7 w-7 items-center justify-center rounded text-[#42526e] opacity-0 transition hover:bg-[#ffebe6] hover:text-[#bf2600] group-hover:opacity-100 focus:opacity-100"
+                className="inline-flex h-7 w-7 items-center justify-center rounded text-[#9fadbc] transition hover:bg-[#42221f] hover:text-[#ffbdad]"
                 onClick={() => void onDeleteCategory(category.id)}
                 title={`Delete ${category.name}`}
                 type="button"
@@ -623,6 +665,7 @@ function CategoryRow({
                 <Trash2 size={14} />
               </button>
             ) : null}
+            <span className="ml-2 min-w-10 text-right text-xs text-[#6b778c]">{category.source}</span>
           </>
         )}
       </div>

@@ -21,6 +21,21 @@ pub struct ProjectSyncDecision {
     pub jira_issue_keys: Vec<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectSyncScope {
+    pub jira_site_url: String,
+    pub jira_account_email: String,
+    pub jira_project_key: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectSyncDiscoveryRequest {
+    pub jira_site_url: String,
+    pub jira_account_email: String,
+    pub jira_creation_project_key: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectSyncCandidate {
@@ -96,7 +111,12 @@ pub fn extract_project_name_from_epic_summary(summary: &str) -> Option<String> {
     if rest.is_empty() {
         return None;
     }
-    if !(rest.starts_with('[') || rest.chars().next().is_some_and(|character| character.is_alphanumeric())) {
+    if !(rest.starts_with('[')
+        || rest
+            .chars()
+            .next()
+            .is_some_and(|character| character.is_alphanumeric()))
+    {
         return None;
     }
     Some(project.to_string())
@@ -127,20 +147,22 @@ pub fn build_project_sync_review(
         if normalized_name.is_empty() {
             continue;
         }
-        let entry = discovered.entry(normalized_name.clone()).or_insert_with(|| {
-            let local = local_by_normalized.get(&normalized_name);
-            let remembered = remembered_by_normalized.get(&normalized_name);
-            ProjectSyncCandidate {
-                name: local.map(|category| category.name.clone()).unwrap_or(name),
-                normalized_name: normalized_name.clone(),
-                jira_issue_keys: Vec::new(),
-                status: remembered
-                    .map(|decision| decision.status.clone())
-                    .unwrap_or_else(|| "new".to_string()),
-                already_local: local.is_some(),
-                will_promote_local: local.is_some_and(|category| category.source == "local"),
-            }
-        });
+        let entry = discovered
+            .entry(normalized_name.clone())
+            .or_insert_with(|| {
+                let local = local_by_normalized.get(&normalized_name);
+                let remembered = remembered_by_normalized.get(&normalized_name);
+                ProjectSyncCandidate {
+                    name: local.map(|category| category.name.clone()).unwrap_or(name),
+                    normalized_name: normalized_name.clone(),
+                    jira_issue_keys: Vec::new(),
+                    status: remembered
+                        .map(|decision| decision.status.clone())
+                        .unwrap_or_else(|| "new".to_string()),
+                    already_local: local.is_some(),
+                    will_promote_local: local.is_some_and(|category| category.source == "local"),
+                }
+            });
         entry.jira_issue_keys.push(epic.key.clone());
     }
 
@@ -149,7 +171,8 @@ pub fn build_project_sync_review(
         normalized_name: normalize_project_name(TRANSVERSAL_PROJECT_NAME),
         jira_issue_keys: Vec::new(),
         status: "active".to_string(),
-        already_local: local_by_normalized.contains_key(&normalize_project_name(TRANSVERSAL_PROJECT_NAME)),
+        already_local: local_by_normalized
+            .contains_key(&normalize_project_name(TRANSVERSAL_PROJECT_NAME)),
         will_promote_local: false,
     };
 
@@ -270,8 +293,14 @@ mod tests {
             extract_project_name_from_epic_summary("[MR Studio] VFX"),
             Some("MR Studio".to_string())
         );
-        assert_eq!(extract_project_name_from_epic_summary("PilotLab [Bug] Demo"), None);
-        assert_eq!(extract_project_name_from_epic_summary("[Bug] Fix timer"), None);
+        assert_eq!(
+            extract_project_name_from_epic_summary("PilotLab [Bug] Demo"),
+            None
+        );
+        assert_eq!(
+            extract_project_name_from_epic_summary("[Bug] Fix timer"),
+            None
+        );
     }
 
     #[test]

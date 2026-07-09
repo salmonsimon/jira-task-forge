@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { AppSettings } from "../../lib/types";
 import {
   JiraConnectionGuide,
+  buildProjectSyncDiscoveryRequest,
   canContinueJiraConnectionGuideStep,
   jiraConnectionGuideCopy,
   jiraConnectionGuideSteps
@@ -103,5 +104,19 @@ describe("JiraConnectionGuide", () => {
     expect(canContinueJiraConnectionGuideStep({ ...readyInput, step: "token", hasUnsavedTokenDraft: true })).toBe(false);
     expect(canContinueJiraConnectionGuideStep({ ...readyInput, step: "token", hasJiraApiToken: false })).toBe(false);
     expect(canContinueJiraConnectionGuideStep({ ...readyInput, step: "verify", hasJiraApiToken: false })).toBe(false);
+  });
+
+  it("builds Project sync discovery from the draft connection instead of stale saved settings", () => {
+    expect(
+      buildProjectSyncDiscoveryRequest(
+        "https://salmonsimondts.atlassian.net",
+        "  simon.bahamonde@gmail.com  ",
+        " jtftest "
+      )
+    ).toEqual({
+      jiraSiteUrl: "https://salmonsimondts.atlassian.net",
+      jiraAccountEmail: "simon.bahamonde@gmail.com",
+      jiraCreationProjectKey: "JTFTEST"
+    });
   });
 });

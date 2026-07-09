@@ -2,29 +2,10 @@ import { largeTraySmokeScenario } from "./fixtures/largeTraySmoke";
 import type { Category, JqlFavorite, JqlResult, Tray } from "./types";
 
 export const projects: Category[] = [
-  { categoryType: "project", id: "project-stt", name: "STT", source: "jira" },
-  { categoryType: "project", id: "project-pilotlab", name: "PilotLab", source: "jira" },
-  { categoryType: "project", id: "project-mr-studio", name: "MR Studio", source: "jira" },
-  { categoryType: "project", id: "project-transversal", name: "Transversal", source: "jira" },
-  { categoryType: "project", id: "project-legacy", name: "Legacy Sandbox", source: "jira", hidden: true }
+  { categoryType: "project", id: "project-transversal", name: "Transversal", source: "jira" }
 ];
 
-export const areas: Category[] = [
-  { categoryType: "area", id: "area-bug", name: "Bug", source: "catalog" },
-  { categoryType: "area", id: "area-3d", name: "3D", source: "catalog" },
-  { categoryType: "area", id: "area-polish", name: "Polish", source: "catalog" },
-  { categoryType: "area", id: "area-programacion", name: "Programación", source: "catalog" },
-  { categoryType: "area", id: "area-integracion", name: "Integración", source: "catalog" },
-  { categoryType: "area", id: "area-diseno", name: "Diseño", source: "catalog" },
-  { categoryType: "area", id: "area-animacion", name: "Animación", source: "catalog" },
-  { categoryType: "area", id: "area-iluminacion", name: "Iluminación", source: "catalog" },
-  { categoryType: "area", id: "area-texturas", name: "Texturas", source: "catalog" },
-  { categoryType: "area", id: "area-localizacion", name: "Localización", source: "catalog" },
-  { categoryType: "area", id: "area-refactorizacion", name: "Refactorización", source: "catalog" },
-  { categoryType: "area", id: "area-investigacion", name: "Investigación", source: "catalog" },
-  { categoryType: "area", id: "area-seleccion-recurso", name: "Selección Recurso", source: "catalog" },
-  { categoryType: "area", id: "area-arquitectura", name: "Arquitectura", source: "catalog" }
-];
+export const areas: Category[] = [];
 
 export const trays: Tray[] = [
   {

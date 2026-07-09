@@ -16,18 +16,12 @@ use crate::models::{
 };
 use crate::project_sync::{
     normalize_project_name, unique_project_names, ProjectSyncApplyRequest, ProjectSyncCandidate,
-    ProjectSyncDecision, TRANSVERSAL_PROJECT_NAME,
+    ProjectSyncDecision, ProjectSyncScope, TRANSVERSAL_PROJECT_NAME,
 };
 use crate::sync_audit::SyncAuditDetail;
 
 const APP_SETTINGS_KEY: &str = "app_settings";
-const DEFAULT_PROJECT_CATEGORIES: &[(&str, bool)] = &[
-    ("STT", false),
-    ("PilotLab", false),
-    ("MR Studio", false),
-    ("Transversal", false),
-    ("Legacy Sandbox", true),
-];
+const DEFAULT_PROJECT_CATEGORIES: &[(&str, bool)] = &[("Transversal", false)];
 const DEFAULT_JQL_FAVORITES: &[(&str, &str)] = &[
     (
         "Urgent open bugs",
@@ -166,6 +160,64 @@ impl<'connection> CategoryRepository<'connection> {
         Ok(categories)
     }
 
+    pub fn list_for_project_sync_scope(
+        &self,
+        category_type: Option<&str>,
+        scope: Option<&ProjectSyncScope>,
+    ) -> DbResult<Vec<Category>> {
+        let categories = self.list(category_type)?;
+        if category_type.is_some_and(|value| value != "project") {
+            return Ok(categories);
+        }
+
+        let Some(scope) = scope else {
+            return Ok(categories
+                .into_iter()
+                .filter(|category| {
+                    category.category_type != "project"
+                        || category.source != "jira"
+                        || normalize_project_name(&category.name)
+                            == normalize_project_name(TRANSVERSAL_PROJECT_NAME)
+                })
+                .collect());
+        };
+
+        let mut statement = self.connection.prepare(
+            "
+            SELECT id, category_type, name, source, hidden, ignored, created_at, updated_at
+            FROM categories
+            WHERE ignored = 0
+              AND (
+                category_type != 'project'
+                OR source != 'jira'
+                OR normalized_name = ?1
+                OR (
+                  project_sync_jira_site_url = ?2
+                  AND project_sync_jira_account_email = ?3
+                  AND project_sync_jira_project_key = ?4
+                )
+              )
+              AND (?5 IS NULL OR category_type = ?5)
+            ORDER BY category_type ASC, hidden ASC, name COLLATE NOCASE ASC
+            ",
+        )?;
+
+        let categories = statement
+            .query_map(
+                (
+                    normalize_project_name(TRANSVERSAL_PROJECT_NAME).as_str(),
+                    scope.jira_site_url.as_str(),
+                    scope.jira_account_email.as_str(),
+                    scope.jira_project_key.as_str(),
+                    category_type,
+                ),
+                map_category_row,
+            )?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(DbError::from)?;
+        Ok(categories)
+    }
+
     pub fn create(&self, category_type: &str, name: &str) -> DbResult<Category> {
         validate_category_type(category_type)?;
         let name = normalize_display_name(name)?;
@@ -202,6 +254,9 @@ impl<'connection> CategoryRepository<'connection> {
         let Some(current) = self.find_by_id(id)? else {
             return Ok(None);
         };
+        if is_transversal_project_category(&current) {
+            return Ok(Some(current));
+        }
         let next_name = match name {
             Some(name) => normalize_display_name(name)?,
             None => current.name,
@@ -235,7 +290,10 @@ impl<'connection> CategoryRepository<'connection> {
     }
 
     pub fn delete(&self, id: &str) -> DbResult<bool> {
-        if self.find_by_id(id)?.is_none() {
+        let Some(current) = self.find_by_id(id)? else {
+            return Ok(false);
+        };
+        if is_transversal_project_category(&current) {
             return Ok(false);
         }
         let changed = self
@@ -244,27 +302,38 @@ impl<'connection> CategoryRepository<'connection> {
         Ok(changed > 0)
     }
 
-    pub fn list_project_sync_decisions(&self) -> DbResult<Vec<ProjectSyncDecision>> {
+    pub fn list_project_sync_decisions(
+        &self,
+        scope: &ProjectSyncScope,
+    ) -> DbResult<Vec<ProjectSyncDecision>> {
         let mut statement = self.connection.prepare(
             "
             SELECT normalized_name, display_name, status, jira_issue_keys_json
-            FROM project_sync_decisions
+            FROM project_sync_scoped_decisions
+            WHERE jira_site_url = ?1 AND jira_account_email = ?2 AND jira_project_key = ?3
             ORDER BY display_name COLLATE NOCASE ASC
             ",
         )?;
 
         let decisions = statement
-            .query_map([], |row| {
-                let keys_json: String = row.get("jira_issue_keys_json")?;
-                let jira_issue_keys =
-                    serde_json::from_str::<Vec<String>>(&keys_json).unwrap_or_else(|_| Vec::new());
-                Ok(ProjectSyncDecision {
-                    name: row.get("display_name")?,
-                    normalized_name: row.get("normalized_name")?,
-                    status: row.get("status")?,
-                    jira_issue_keys,
-                })
-            })?
+            .query_map(
+                (
+                    scope.jira_site_url.as_str(),
+                    scope.jira_account_email.as_str(),
+                    scope.jira_project_key.as_str(),
+                ),
+                |row| {
+                    let keys_json: String = row.get("jira_issue_keys_json")?;
+                    let jira_issue_keys = serde_json::from_str::<Vec<String>>(&keys_json)
+                        .unwrap_or_else(|_| Vec::new());
+                    Ok(ProjectSyncDecision {
+                        name: row.get("display_name")?,
+                        normalized_name: row.get("normalized_name")?,
+                        status: row.get("status")?,
+                        jira_issue_keys,
+                    })
+                },
+            )?
             .collect::<Result<Vec<_>, _>>()?;
 
         Ok(decisions)
@@ -272,6 +341,7 @@ impl<'connection> CategoryRepository<'connection> {
 
     pub fn apply_project_sync_decisions(
         &self,
+        scope: &ProjectSyncScope,
         request: ProjectSyncApplyRequest,
     ) -> DbResult<Vec<Category>> {
         let active_names = unique_project_names(&request.active_project_names);
@@ -292,6 +362,7 @@ impl<'connection> CategoryRepository<'connection> {
 
         for name in &active_names {
             self.upsert_project_sync_category(
+                scope,
                 name,
                 "active",
                 false,
@@ -301,16 +372,17 @@ impl<'connection> CategoryRepository<'connection> {
             )?;
         }
 
-        for name in archived_names {
+        for name in &archived_names {
             if normalize_project_name(&name) == normalize_project_name(TRANSVERSAL_PROJECT_NAME) {
                 continue;
             }
             self.upsert_project_sync_category(
-                &name,
+                scope,
+                name,
                 "archived",
                 true,
                 candidate_by_normalized
-                    .get(&normalize_project_name(&name))
+                    .get(&normalize_project_name(name))
                     .copied(),
             )?;
         }
@@ -320,6 +392,7 @@ impl<'connection> CategoryRepository<'connection> {
                 continue;
             }
             self.remember_project_sync_decision(
+                scope,
                 &name,
                 "ignored",
                 candidate_by_normalized
@@ -338,11 +411,55 @@ impl<'connection> CategoryRepository<'connection> {
             )?;
         }
 
-        self.list(Some("project"))
+        let retained_project_names = active_names
+            .iter()
+            .chain(archived_names.iter())
+            .map(|name| normalize_project_name(name))
+            .collect::<std::collections::HashSet<_>>();
+        for category in self.list_for_project_sync_scope(Some("project"), Some(scope))? {
+            if category.source != "jira" {
+                continue;
+            }
+            let normalized_name = normalize_project_name(&category.name);
+            if normalized_name == normalize_project_name(TRANSVERSAL_PROJECT_NAME)
+                || retained_project_names.contains(&normalized_name)
+            {
+                continue;
+            }
+            self.connection.execute(
+                "
+                UPDATE categories
+                SET ignored = 1, updated_at = ?1
+                WHERE id = ?2
+                ",
+                (utc_now_string()?.as_str(), category.id.as_str()),
+            )?;
+        }
+
+        self.list_for_project_sync_scope(Some("project"), Some(scope))
+    }
+
+    pub fn promote_local_projects_to_jira_scope(
+        &self,
+        scope: &ProjectSyncScope,
+        project_names: &[String],
+    ) -> DbResult<Vec<Category>> {
+        for project_name in project_names {
+            let name = normalize_display_name(project_name)?;
+            let normalized_name = normalize_name(&name);
+            if normalized_name.is_empty() {
+                continue;
+            }
+
+            self.upsert_project_sync_category(scope, &name, "active", false, None)?;
+        }
+
+        self.list_for_project_sync_scope(Some("project"), Some(scope))
     }
 
     fn upsert_project_sync_category(
         &self,
+        scope: &ProjectSyncScope,
         name: &str,
         status: &str,
         hidden: bool,
@@ -354,15 +471,48 @@ impl<'connection> CategoryRepository<'connection> {
         let id = Uuid::new_v4().to_string();
         self.connection.execute(
             "
+            UPDATE categories
+            SET source = 'jira',
+                hidden = ?1,
+                ignored = 0,
+                project_sync_jira_site_url = ?2,
+                project_sync_jira_account_email = ?3,
+                project_sync_jira_project_key = ?4,
+                updated_at = ?5
+            WHERE category_type = 'project'
+              AND normalized_name = ?6
+              AND source = 'local'
+              AND NOT EXISTS (
+                SELECT 1 FROM categories existing
+                WHERE existing.category_type = 'project'
+                  AND existing.normalized_name = ?6
+                  AND existing.source = 'jira'
+              )
+            ",
+            (
+                bool_to_db(hidden),
+                scope.jira_site_url.as_str(),
+                scope.jira_account_email.as_str(),
+                scope.jira_project_key.as_str(),
+                now.as_str(),
+                normalized_name.as_str(),
+            ),
+        )?;
+        self.connection.execute(
+            "
             INSERT INTO categories (
-                id, category_type, name, normalized_name, source, hidden, ignored, created_at, updated_at
+                id, category_type, name, normalized_name, source, hidden, ignored, created_at, updated_at,
+                project_sync_jira_site_url, project_sync_jira_account_email, project_sync_jira_project_key
             )
-            VALUES (?1, 'project', ?2, ?3, 'jira', ?4, 0, ?5, ?5)
-            ON CONFLICT(category_type, normalized_name) DO UPDATE SET
+            VALUES (?1, 'project', ?2, ?3, 'jira', ?4, 0, ?5, ?5, ?6, ?7, ?8)
+            ON CONFLICT(category_type, normalized_name, source) DO UPDATE SET
                 name = excluded.name,
                 source = 'jira',
                 hidden = excluded.hidden,
                 ignored = 0,
+                project_sync_jira_site_url = excluded.project_sync_jira_site_url,
+                project_sync_jira_account_email = excluded.project_sync_jira_account_email,
+                project_sync_jira_project_key = excluded.project_sync_jira_project_key,
                 updated_at = excluded.updated_at
             ",
             (
@@ -371,9 +521,23 @@ impl<'connection> CategoryRepository<'connection> {
                 normalized_name.as_str(),
                 bool_to_db(hidden),
                 now.as_str(),
+                scope.jira_site_url.as_str(),
+                scope.jira_account_email.as_str(),
+                scope.jira_project_key.as_str(),
             ),
         )?;
+        self.connection.execute(
+            "
+            UPDATE categories
+            SET ignored = 1, updated_at = ?1
+            WHERE category_type = 'project'
+              AND normalized_name = ?2
+              AND source = 'local'
+            ",
+            (now.as_str(), normalized_name.as_str()),
+        )?;
         self.remember_project_sync_decision(
+            scope,
             &name,
             status,
             candidate
@@ -384,6 +548,7 @@ impl<'connection> CategoryRepository<'connection> {
 
     fn remember_project_sync_decision(
         &self,
+        scope: &ProjectSyncScope,
         name: &str,
         status: &str,
         jira_issue_keys: &[String],
@@ -395,17 +560,20 @@ impl<'connection> CategoryRepository<'connection> {
         let now = utc_now_string()?;
         self.connection.execute(
             "
-            INSERT INTO project_sync_decisions (
-                normalized_name, display_name, status, jira_issue_keys_json, updated_at
+            INSERT INTO project_sync_scoped_decisions (
+                jira_site_url, jira_account_email, jira_project_key, normalized_name, display_name, status, jira_issue_keys_json, updated_at
             )
-            VALUES (?1, ?2, ?3, ?4, ?5)
-            ON CONFLICT(normalized_name) DO UPDATE SET
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+            ON CONFLICT(jira_site_url, jira_account_email, jira_project_key, normalized_name) DO UPDATE SET
                 display_name = excluded.display_name,
                 status = excluded.status,
                 jira_issue_keys_json = excluded.jira_issue_keys_json,
                 updated_at = excluded.updated_at
             ",
             (
+                scope.jira_site_url.as_str(),
+                scope.jira_account_email.as_str(),
+                scope.jira_project_key.as_str(),
                 normalized_name.as_str(),
                 display_name.as_str(),
                 status,
@@ -438,7 +606,7 @@ impl<'connection> CategoryRepository<'connection> {
             "
             UPDATE categories
             SET ignored = 1, updated_at = ?1
-            WHERE category_type = 'area'
+            WHERE category_type = 'area' AND source = 'catalog'
             ",
             [now.as_str()],
         )?;
@@ -460,7 +628,7 @@ impl<'connection> CategoryRepository<'connection> {
                     id, category_type, name, normalized_name, source, hidden, ignored, created_at, updated_at
                 )
                 VALUES (?1, 'area', ?2, ?3, 'catalog', 0, 0, ?4, ?4)
-                ON CONFLICT(category_type, normalized_name) DO UPDATE SET
+                ON CONFLICT(category_type, normalized_name, source) DO UPDATE SET
                     name = excluded.name,
                     source = 'catalog',
                     hidden = 0,
@@ -547,12 +715,16 @@ impl<'connection> CategoryRepository<'connection> {
         self.connection.execute(
             "
             DELETE FROM categories
-            WHERE category_type = 'area' AND ignored = 1
+            WHERE category_type = 'area' AND source = 'catalog' AND ignored = 1
             ",
             [],
         )?;
 
-        self.list(Some("area"))
+        Ok(self
+            .list(Some("area"))?
+            .into_iter()
+            .filter(|category| category.source == "catalog")
+            .collect())
     }
 
     pub fn catalog_template_context_for_area(
@@ -2567,6 +2739,12 @@ fn validate_category_type(category_type: &str) -> DbResult<()> {
     }
 }
 
+fn is_transversal_project_category(category: &Category) -> bool {
+    category.category_type == "project"
+        && normalize_project_name(&category.name)
+            == normalize_project_name(TRANSVERSAL_PROJECT_NAME)
+}
+
 fn validate_issue_relationship_type(relationship_type: &str) -> DbResult<()> {
     match relationship_type {
         "blocks" | "blocked_by" => Ok(()),
@@ -2984,10 +3162,23 @@ mod tests {
         let projects = repository
             .list(Some("project"))
             .expect("project categories list");
-        assert!(projects.iter().any(|category| category.name == "STT"));
-        assert!(projects
-            .iter()
-            .any(|category| category.name == "Legacy Sandbox" && category.hidden));
+        assert_eq!(projects.len(), 1);
+        assert_eq!(projects[0].name, TRANSVERSAL_PROJECT_NAME);
+        assert_eq!(projects[0].source, "jira");
+        assert!(!projects[0].hidden);
+
+        let transversal = repository
+            .update(&projects[0].id, Some("Renamed"), Some(true))
+            .expect("transversal update is ignored")
+            .expect("transversal project exists");
+        assert_eq!(transversal.name, TRANSVERSAL_PROJECT_NAME);
+        assert!(!transversal.hidden);
+        assert!(!repository
+            .delete(&transversal.id)
+            .expect("transversal delete is ignored"));
+
+        let areas = repository.list(Some("area")).expect("area categories list");
+        assert!(areas.is_empty());
 
         let created = repository
             .create("project", "  Gameplay   UX  ")
@@ -3271,46 +3462,56 @@ mod tests {
     }
 
     #[test]
+    fn keeps_manual_and_synced_area_categories_separate() {
+        let connection = open_in_memory_database().expect("database opens");
+        let repository = CategoryRepository::new(&connection);
+
+        let manual_area = repository
+            .create("area", "Programación")
+            .expect("manual area creates");
+
+        let synced_areas = repository
+            .sync_area_catalog_entries(&[SyncedCatalogArea {
+                area_display_name: "Programación".to_string(),
+                jira_label: "Programación".to_string(),
+                enabled_in_jtf: true,
+                issue_type: "Story".to_string(),
+                default_delivery_format: "Feature de Programación".to_string(),
+                safe_aliases: vec![],
+                notes: String::new(),
+            }])
+            .expect("catalog area syncs");
+
+        assert_eq!(synced_areas.len(), 1);
+        assert_eq!(synced_areas[0].source, "catalog");
+
+        let areas = repository.list(Some("area")).expect("area categories list");
+        assert!(areas.iter().any(|category| {
+            category.id == manual_area.id
+                && category.name == "Programación"
+                && category.source == "local"
+        }));
+        assert!(areas
+            .iter()
+            .any(|category| { category.name == "Programación" && category.source == "catalog" }));
+    }
+
+    #[test]
     fn project_sync_promotes_local_projects_and_remembers_ignored_candidates() {
         let connection = open_in_memory_database().expect("database opens");
         let repository = CategoryRepository::new(&connection);
+        let scope = ProjectSyncScope {
+            jira_site_url: "https://example.atlassian.net".to_string(),
+            jira_account_email: "saimon@example.com".to_string(),
+            jira_project_key: "JTFTEST".to_string(),
+        };
 
         repository
             .create("project", "Moon Lab")
             .expect("local project creates");
 
         let synced = repository
-            .apply_project_sync_decisions(ProjectSyncApplyRequest {
-                active_project_names: vec!["Moon Lab".to_string()],
-                ignored_project_names: vec!["PilotLab".to_string()],
-                archived_project_names: vec!["Legacy Sandbox".to_string()],
-                candidates: vec![
-                    ProjectSyncCandidate {
-                        name: "Moon Lab".to_string(),
-                        normalized_name: "moon-lab".to_string(),
-                        jira_issue_keys: vec!["JTFTEST-10".to_string()],
-                        status: "new".to_string(),
-                        already_local: true,
-                        will_promote_local: true,
-                    },
-                    ProjectSyncCandidate {
-                        name: "PilotLab".to_string(),
-                        normalized_name: "pilotlab".to_string(),
-                        jira_issue_keys: vec!["JTFTEST-11".to_string()],
-                        status: "new".to_string(),
-                        already_local: false,
-                        will_promote_local: false,
-                    },
-                    ProjectSyncCandidate {
-                        name: "Legacy Sandbox".to_string(),
-                        normalized_name: "legacy-sandbox".to_string(),
-                        jira_issue_keys: vec!["JTFTEST-12".to_string()],
-                        status: "new".to_string(),
-                        already_local: true,
-                        will_promote_local: false,
-                    },
-                ],
-            })
+            .apply_project_sync_decisions(&scope, moon_lab_sync_request())
             .expect("project sync decisions apply");
 
         assert!(synced.iter().any(|category| {
@@ -3320,12 +3521,14 @@ mod tests {
             category.name == "Moon Lab" && category.source == "jira" && !category.hidden
         }));
         assert!(!synced.iter().any(|category| category.name == "PilotLab"));
-        assert!(synced.iter().any(|category| {
-            category.name == "Legacy Sandbox" && category.source == "jira" && category.hidden
-        }));
+
+        let all_projects = repository.list(Some("project")).expect("projects list");
+        assert!(!all_projects
+            .iter()
+            .any(|category| category.name == "Moon Lab" && category.source == "local"));
 
         let decisions = repository
-            .list_project_sync_decisions()
+            .list_project_sync_decisions(&scope)
             .expect("project sync decisions list");
         assert!(decisions
             .iter()
@@ -3333,14 +3536,189 @@ mod tests {
     }
 
     #[test]
-    fn catalog_sync_deletes_manual_and_stale_areas_not_in_synced_catalog() {
+    fn jira_creation_promotion_marks_local_project_as_synced() {
         let connection = open_in_memory_database().expect("database opens");
         let repository = CategoryRepository::new(&connection);
-        let manual_area_name = "__manual_area_should_be_pruned__";
+        let scope = ProjectSyncScope {
+            jira_site_url: "https://example.atlassian.net".to_string(),
+            jira_account_email: "maker@example.com".to_string(),
+            jira_project_key: "JTFTEST".to_string(),
+        };
+
+        repository
+            .create("project", "Prototype")
+            .expect("manual project creates");
+
+        let scoped_projects = repository
+            .promote_local_projects_to_jira_scope(&scope, &["Prototype".to_string()])
+            .expect("local project promotes");
+
+        assert!(scoped_projects.iter().any(|category| {
+            category.name == "Prototype" && category.source == "jira" && !category.hidden
+        }));
+
+        let all_projects = repository.list(Some("project")).expect("projects list");
+        assert!(!all_projects
+            .iter()
+            .any(|category| category.name == "Prototype" && category.source == "local"));
+    }
+
+    #[test]
+    fn project_sync_hides_jira_projects_that_disappear_from_discovery() {
+        let connection = open_in_memory_database().expect("database opens");
+        let repository = CategoryRepository::new(&connection);
+        let scope = ProjectSyncScope {
+            jira_site_url: "https://example.atlassian.net".to_string(),
+            jira_account_email: "maker@example.com".to_string(),
+            jira_project_key: "JTFTEST".to_string(),
+        };
+
+        repository
+            .promote_local_projects_to_jira_scope(&scope, &["Prototype".to_string()])
+            .expect("local project promotes");
+
+        let synced = repository
+            .apply_project_sync_decisions(
+                &scope,
+                ProjectSyncApplyRequest {
+                    active_project_names: vec!["Transversal".to_string()],
+                    archived_project_names: vec![],
+                    ignored_project_names: vec![],
+                    candidates: vec![],
+                },
+            )
+            .expect("project sync decisions apply");
+
+        assert!(synced
+            .iter()
+            .any(|category| category.name == "Transversal" && category.source == "jira"));
+        assert!(!synced.iter().any(|category| category.name == "Prototype"));
+    }
+
+    #[test]
+    fn project_sync_scope_hides_stale_jira_projects_after_project_key_changes() {
+        let connection = open_in_memory_database().expect("database opens");
+        let repository = CategoryRepository::new(&connection);
+        let jtftest_scope = ProjectSyncScope {
+            jira_site_url: "https://example.atlassian.net".to_string(),
+            jira_account_email: "saimon@example.com".to_string(),
+            jira_project_key: "JTFTEST".to_string(),
+        };
+        let dts_scope = ProjectSyncScope {
+            jira_site_url: "https://example.atlassian.net".to_string(),
+            jira_account_email: "saimon@example.com".to_string(),
+            jira_project_key: "DTS".to_string(),
+        };
+
+        repository
+            .apply_project_sync_decisions(&jtftest_scope, moon_lab_sync_request())
+            .expect("project sync decisions apply");
+
+        let same_scope = repository
+            .list_for_project_sync_scope(Some("project"), Some(&jtftest_scope))
+            .expect("same scope projects list");
+        assert!(same_scope
+            .iter()
+            .any(|category| category.name == "Moon Lab"));
+
+        let changed_scope = repository
+            .list_for_project_sync_scope(Some("project"), Some(&dts_scope))
+            .expect("changed scope projects list");
+        assert!(changed_scope
+            .iter()
+            .any(|category| category.name == TRANSVERSAL_PROJECT_NAME));
+        assert!(!changed_scope
+            .iter()
+            .any(|category| category.name == "Moon Lab"));
+        assert!(!changed_scope
+            .iter()
+            .any(|category| category.name == "Legacy Sandbox"));
+    }
+
+    #[test]
+    fn project_sync_scope_does_not_reuse_decisions_for_another_connection() {
+        let connection = open_in_memory_database().expect("database opens");
+        let repository = CategoryRepository::new(&connection);
+        let original_scope = ProjectSyncScope {
+            jira_site_url: "https://example.atlassian.net".to_string(),
+            jira_account_email: "saimon@example.com".to_string(),
+            jira_project_key: "JTFTEST".to_string(),
+        };
+        let changed_email_scope = ProjectSyncScope {
+            jira_site_url: "https://example.atlassian.net".to_string(),
+            jira_account_email: "other@example.com".to_string(),
+            jira_project_key: "JTFTEST".to_string(),
+        };
+
+        repository
+            .apply_project_sync_decisions(&original_scope, moon_lab_sync_request())
+            .expect("project sync decisions apply");
+
+        assert!(repository
+            .list_project_sync_decisions(&original_scope)
+            .expect("original decisions list")
+            .iter()
+            .any(|decision| decision.name == "PilotLab"));
+        assert!(repository
+            .list_project_sync_decisions(&changed_email_scope)
+            .expect("changed decisions list")
+            .is_empty());
+    }
+
+    fn moon_lab_sync_request() -> ProjectSyncApplyRequest {
+        ProjectSyncApplyRequest {
+            active_project_names: vec!["Moon Lab".to_string()],
+            ignored_project_names: vec!["PilotLab".to_string()],
+            archived_project_names: vec!["Legacy Sandbox".to_string()],
+            candidates: vec![
+                ProjectSyncCandidate {
+                    name: "Moon Lab".to_string(),
+                    normalized_name: "moon-lab".to_string(),
+                    jira_issue_keys: vec!["JTFTEST-10".to_string()],
+                    status: "new".to_string(),
+                    already_local: true,
+                    will_promote_local: true,
+                },
+                ProjectSyncCandidate {
+                    name: "PilotLab".to_string(),
+                    normalized_name: "pilotlab".to_string(),
+                    jira_issue_keys: vec!["JTFTEST-11".to_string()],
+                    status: "new".to_string(),
+                    already_local: false,
+                    will_promote_local: false,
+                },
+                ProjectSyncCandidate {
+                    name: "Legacy Sandbox".to_string(),
+                    normalized_name: "legacy-sandbox".to_string(),
+                    jira_issue_keys: vec!["JTFTEST-12".to_string()],
+                    status: "new".to_string(),
+                    already_local: true,
+                    will_promote_local: false,
+                },
+            ],
+        }
+    }
+
+    #[test]
+    fn catalog_sync_preserves_manual_areas_and_deletes_stale_catalog_areas() {
+        let connection = open_in_memory_database().expect("database opens");
+        let repository = CategoryRepository::new(&connection);
+        let manual_area_name = "__manual_area_should_survive_sync__";
 
         repository
             .create("area", manual_area_name)
             .expect("manual area creates");
+        repository
+            .sync_area_catalog_entries(&[SyncedCatalogArea {
+                area_display_name: "Bug".to_string(),
+                jira_label: "Bug".to_string(),
+                enabled_in_jtf: true,
+                issue_type: "Bug".to_string(),
+                default_delivery_format: "Bug".to_string(),
+                safe_aliases: vec![],
+                notes: String::new(),
+            }])
+            .expect("initial catalog sync succeeds");
         assert!(repository
             .list(Some("area"))
             .expect("area categories list")
@@ -3366,9 +3744,9 @@ mod tests {
         assert!(areas
             .iter()
             .any(|category| category.name == "Programación" && category.source == "catalog"));
-        assert!(!areas
+        assert!(areas
             .iter()
-            .any(|category| category.name == manual_area_name));
+            .any(|category| category.name == manual_area_name && category.source == "local"));
         assert!(!areas.iter().any(|category| category.name == "Bug"));
     }
 

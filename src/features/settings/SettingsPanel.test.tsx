@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { AppSettings } from "../../lib/types";
-import { SettingsPanel } from "./SettingsPanel";
+import { SettingsPanel, shouldSyncAreaCatalogAfterCatalogSettingsSave } from "./SettingsPanel";
 
 const settings: AppSettings = {
   themeMode: "light",
@@ -17,6 +17,28 @@ const settings: AppSettings = {
 };
 
 describe("SettingsPanel", () => {
+  it("syncs Areas after a successful Notion catalog settings save", () => {
+    expect(
+      shouldSyncAreaCatalogAfterCatalogSettingsSave(true, {
+        catalogSourceMode: "notion",
+        catalogSourceUrl: "https://app.notion.com/catalog"
+      })
+    ).toBe(true);
+    expect(
+      shouldSyncAreaCatalogAfterCatalogSettingsSave(true, {
+        catalogSourceMode: "public-exportable",
+        catalogSourceUrl: "https://example.com/catalog.json"
+      })
+    ).toBe(true);
+    expect(shouldSyncAreaCatalogAfterCatalogSettingsSave(true, { catalogSourceMode: "manual" })).toBe(false);
+    expect(
+      shouldSyncAreaCatalogAfterCatalogSettingsSave(false, {
+        catalogSourceMode: "notion",
+        catalogSourceUrl: "https://app.notion.com/catalog"
+      })
+    ).toBe(false);
+  });
+
   it("keeps Jira and Notion setup actions compact and uses the Notion mark asset", () => {
     const html = renderToStaticMarkup(
       <SettingsPanel
@@ -40,6 +62,7 @@ describe("SettingsPanel", () => {
         onSaveNotionIntegrationToken={async () => undefined}
         onDeleteNotionIntegrationToken={async () => undefined}
         onTestNotionCatalogConnection={async () => ({ ok: true, message: "Connected", title: "JTF Sync Catalog", extractedBlockCount: 1 })}
+        onSyncAreaCatalog={async () => null}
         onListJiraProjectsForConnection={async () => []}
         onOpenJiraApiTokens={() => undefined}
         onOpenCatalogSourceRequirements={() => undefined}
@@ -82,6 +105,7 @@ describe("SettingsPanel", () => {
         onSaveNotionIntegrationToken={async () => undefined}
         onDeleteNotionIntegrationToken={async () => undefined}
         onTestNotionCatalogConnection={async () => ({ ok: true, message: "Connected", title: "JTF Sync Catalog", extractedBlockCount: 1 })}
+        onSyncAreaCatalog={async () => null}
         onListJiraProjectsForConnection={async () => []}
         onOpenJiraApiTokens={() => undefined}
         onOpenCatalogSourceRequirements={() => undefined}
@@ -124,6 +148,7 @@ describe("SettingsPanel", () => {
         onSaveNotionIntegrationToken={async () => undefined}
         onDeleteNotionIntegrationToken={async () => undefined}
         onTestNotionCatalogConnection={async () => ({ ok: true, message: "Connected", title: "JTF Sync Catalog", extractedBlockCount: 1 })}
+        onSyncAreaCatalog={async () => null}
         onListJiraProjectsForConnection={async () => []}
         onOpenJiraApiTokens={() => undefined}
         onOpenCatalogSourceRequirements={() => undefined}
@@ -164,6 +189,7 @@ describe("SettingsPanel", () => {
         onSaveNotionIntegrationToken={async () => undefined}
         onDeleteNotionIntegrationToken={async () => undefined}
         onTestNotionCatalogConnection={async () => ({ ok: true, message: "Connected", title: "JTF Sync Catalog", extractedBlockCount: 1 })}
+        onSyncAreaCatalog={async () => null}
         onListJiraProjectsForConnection={async () => []}
         onOpenJiraApiTokens={() => undefined}
         onOpenCatalogSourceRequirements={() => undefined}

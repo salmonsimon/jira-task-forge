@@ -103,7 +103,6 @@ pub struct SyncedDeliveryFormat {
 #[serde(rename_all = "camelCase")]
 pub struct SyncedAreaFormatRule {
     pub area_display_name: String,
-    #[serde(alias = "priority")]
     pub order: i64,
     pub condition: String,
     pub delivery_format: String,
@@ -961,17 +960,56 @@ fn fetch_notion_page(notion_token: &str, page_id: &str) -> Result<Value, String>
 }
 
 fn fetch_notion_page_blocks(notion_token: &str, page_id: &str) -> Result<Vec<Value>, String> {
+    fetch_notion_block_tree(page_id, 0, &|url| notion_get(notion_token, url))
+}
+
+fn fetch_notion_block_tree<F>(
+    block_id: &str,
+    depth: usize,
+    notion_get: &F,
+) -> Result<Vec<Value>, String>
+where
+    F: Fn(&str) -> Result<Value, String>,
+{
+    if depth > 8 {
+        return Err("Notion catalog page is nested too deeply to scan.".to_string());
+    }
+
+    let mut blocks = fetch_notion_block_children(block_id, notion_get)?;
+    let parent_blocks = blocks.clone();
+    for block in parent_blocks {
+        if !block
+            .get("has_children")
+            .and_then(Value::as_bool)
+            .unwrap_or(false)
+        {
+            continue;
+        }
+        let Some(child_block_id) = block.get("id").and_then(Value::as_str) else {
+            continue;
+        };
+        let children = fetch_notion_block_tree(child_block_id, depth + 1, notion_get)?;
+        blocks.extend(children);
+    }
+
+    Ok(blocks)
+}
+
+fn fetch_notion_block_children<F>(block_id: &str, notion_get: &F) -> Result<Vec<Value>, String>
+where
+    F: Fn(&str) -> Result<Value, String>,
+{
     let mut blocks = Vec::new();
     let mut next_cursor: Option<String> = None;
 
     loop {
         let url = match &next_cursor {
             Some(cursor) => format!(
-                "https://api.notion.com/v1/blocks/{page_id}/children?page_size=100&start_cursor={cursor}"
+                "https://api.notion.com/v1/blocks/{block_id}/children?page_size=100&start_cursor={cursor}"
             ),
-            None => format!("https://api.notion.com/v1/blocks/{page_id}/children?page_size=100"),
+            None => format!("https://api.notion.com/v1/blocks/{block_id}/children?page_size=100"),
         };
-        let response = notion_get(notion_token, &url)?;
+        let response = notion_get(&url)?;
         if let Some(results) = response.get("results").and_then(Value::as_array) {
             blocks.extend(results.iter().cloned());
         }
@@ -1161,8 +1199,9 @@ mod tests {
         catalog_context_for_area, catalog_context_for_confirmed_delivery_format,
         catalog_delivery_format_gate_for_area, catalog_delivery_format_options_for_area,
         derive_issue_type_from_area, extract_exportable_catalog_json_from_notion_blocks,
-        notion_page_id_from_input, official_area_options, parse_exportable_catalog_json,
-        resolve_catalog_area, CatalogAreaResolution, OfficialAreaOption, OFFICIAL_AREAS,
+        fetch_notion_block_tree, notion_page_id_from_input, official_area_options,
+        parse_exportable_catalog_json, resolve_catalog_area, CatalogAreaResolution,
+        OfficialAreaOption, OFFICIAL_AREAS,
     };
     use serde_json::json;
 
@@ -1398,7 +1437,61 @@ mod tests {
             "PR/MR creado."
         );
         assert_eq!(result.area_format_rules.len(), 1);
+        assert_eq!(result.area_format_rules[0].order, 1);
         assert!(result.errors.is_empty());
+    }
+
+    #[test]
+    fn rejects_legacy_priority_for_area_format_rule_order() {
+        let error = parse_exportable_catalog_json(
+            "https://example.test/jtf-sync-catalog.json",
+            r#"{
+              "areas": [
+                {
+                  "areaDisplayName": "Bug",
+                  "jiraLabel": "Bug",
+                  "enabledInJTF": true,
+                  "issueType": "Bug",
+                  "defaultDeliveryFormat": "Bug"
+                },
+                {
+                  "areaDisplayName": "Programación",
+                  "jiraLabel": "Programación",
+                  "enabledInJTF": true,
+                  "issueType": "Story",
+                  "defaultDeliveryFormat": "Feature de Programación"
+                }
+              ],
+              "deliveryFormats": [
+                {
+                  "formatName": "Bug",
+                  "issueType": "Bug",
+                  "storyHeadings": ["Historia de usuario"],
+                  "minimumDeliverable": "Bug reproducible.",
+                  "reviewChecklist": ["Pasos de reproducción incluidos."]
+                },
+                {
+                  "formatName": "Feature de Programación",
+                  "issueType": "Story",
+                  "storyHeadings": ["Historia de usuario"],
+                  "minimumDeliverable": "PR/MR creado.",
+                  "reviewChecklist": ["PR/MR creado."]
+                }
+              ],
+              "areaFormatRules": [
+                {
+                  "areaDisplayName": "Programación",
+                  "priority": 3,
+                  "condition": "fallback",
+                  "deliveryFormat": "Feature de Programación",
+                  "blocking": false
+                }
+              ]
+            }"#,
+        )
+        .expect_err("legacy priority should not parse");
+
+        assert!(error.contains("missing field `order`"));
     }
 
     #[test]
@@ -1517,6 +1610,47 @@ mod tests {
             }
         })];
 
+        assert_eq!(
+            extract_exportable_catalog_json_from_notion_blocks(&blocks).expect("json extracts"),
+            "{\"areas\":[],\"deliveryFormats\":[],\"areaFormatRules\":[]}"
+        );
+    }
+
+    #[test]
+    fn fetches_nested_notion_blocks_before_extracting_catalog_json() {
+        let blocks = fetch_notion_block_tree("page-root", 0, &|url| match url {
+            "https://api.notion.com/v1/blocks/page-root/children?page_size=100" => Ok(json!({
+                "has_more": false,
+                "results": [
+                    {
+                        "id": "container-block",
+                        "type": "toggle",
+                        "has_children": true,
+                        "toggle": {}
+                    }
+                ]
+            })),
+            "https://api.notion.com/v1/blocks/container-block/children?page_size=100" => Ok(json!({
+                "has_more": false,
+                "results": [
+                    {
+                        "id": "catalog-json-block",
+                        "type": "code",
+                        "has_children": false,
+                        "code": {
+                            "language": "json",
+                            "rich_text": [
+                                { "plain_text": "{\"areas\":[],\"deliveryFormats\":[],\"areaFormatRules\":[]}" }
+                            ]
+                        }
+                    }
+                ]
+            })),
+            unexpected => Err(format!("unexpected url {unexpected}")),
+        })
+        .expect("nested blocks should fetch");
+
+        assert_eq!(blocks.len(), 2);
         assert_eq!(
             extract_exportable_catalog_json_from_notion_blocks(&blocks).expect("json extracts"),
             "{\"areas\":[],\"deliveryFormats\":[],\"areaFormatRules\":[]}"

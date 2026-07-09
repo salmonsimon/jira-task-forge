@@ -18,7 +18,8 @@ Minimum sync contract:
   `defaultDeliveryFormat`, and explicit `safeAliases`;
 - `deliveryFormats` with `formatName`, `issueType`, `storyHeadings`,
   `minimumDeliverable`, and `reviewChecklist`;
-- `areaFormatRules` for conditional delivery-format behavior;
+- `areaFormatRules` for conditional delivery-format behavior, using `order` to
+  sort or prioritize rule evaluation;
 - schema/version/freshness metadata where applicable;
 - human examples and notes that remain clearly separate from machine fields.
 
