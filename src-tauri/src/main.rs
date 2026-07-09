@@ -1,3 +1,5 @@
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 mod area_catalog;
 mod attachment_storage;
 mod backup;

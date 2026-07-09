@@ -167,20 +167,16 @@ Still pending:
   template-context, Jira payload, Epic Scope, overlay/listbox, setup, and
   attachment lifecycle changes. Use `JTFTEST` for writes and keep `DTS`
   read-only.
-- Issue #138: documentation alignment remains the current docs workstream until
-  product decisions, handoff, live QA, and format docs all reflect the new
-  workflow.
-- Issue #139: run JTFTEST live workflow QA for the landed Story/Bug templates
-  and Epic Scope workflow. This requires credentials in the runtime under test.
-- Issue #179 documents the minimum contract for the Notion catalog sync source
-  in [`docs/notion-catalog-source-requirements.md`](notion-catalog-source-requirements.md)
-  and the linked stable Notion reference, using the current Notion page as the
-  example while keeping the contract portable to Obsidian, Markdown, or another
-  structured source.
-- Issue #153 packages the Windows app and chooses/applies the final icon after
-  Issue #138, Issue #139, and Issue #179, so the team can run the app without
-  `npm run tauri dev` and still has a clear catalog-source maintenance
-  reference.
+- Issue #138 documentation alignment is closed.
+- Issue #139 JTFTEST live workflow QA is closed.
+- Issue #179 Notion catalog source reference is closed and documented in
+  [`docs/notion-catalog-source-requirements.md`](notion-catalog-source-requirements.md)
+  plus the linked stable Notion reference.
+- Issue #153 remains open for final Windows install smoke: the unsigned NSIS
+  installer can be built from WSL with `npm run package:windows:cross`; install
+  it on Windows, launch the packaged app, verify the approved icon in
+  installer/start/app surfaces, and smoke Settings, Categories/Notion setup,
+  and local Trays without `npm run tauri dev`.
 - Regularizacion is out of current JTF scope. Issue #135 is closed as not
   planned and should not block current roadmap, docs, or QA work.
 - Full native QA in an environment with the Linux system dependencies needed by
@@ -207,18 +203,12 @@ grill areas:
 
 Recommended stack to work next:
 
-- Finish Issue #138 docs alignment so future agents do not relaunch
-  already-merged workflow model work or follow stale `[{Project}] {Area}`
-  guidance.
-- Run Issue #139 JTFTEST live workflow QA against the landed Story/Bug template
-  and Epic Scope behavior, including credentialed Jira writes and local sync
-  audit verification.
-- Verify the Issue #179 Notion catalog source reference during packaging, so the
-  source can be maintained or ported without relying on memory of the current
-  page.
-- Run Issue #153 packaging/icon after Issue #138, Issue #139, and Issue #179 so
-  the Windows build reflects the reviewed workflow, QA evidence, and catalog
-  source maintenance docs.
+- Finish Issue #153 using [`docs/windows-packaging.md`](windows-packaging.md):
+  run `npm run package:windows:cross` when the installer needs to be rebuilt
+  from WSL, then install the generated NSIS `.exe` on Windows, launch the
+  packaged app, and record the install smoke result. Plain WSL
+  `npm run package:windows` is only a release preflight because it builds an ELF
+  Linux binary, not a Windows installer.
 
 ## Suggested Skills For Next Session
 

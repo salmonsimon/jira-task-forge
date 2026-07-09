@@ -278,20 +278,12 @@ Near-term decided follow-ups:
 
 Recommended next implementation:
 
-- Issue #138: complete the docs alignment pass so the handoff, roadmap,
-  product decisions, live QA expectations, and description-format docs point at
-  the current merged checkpoint and do not relaunch closed work.
-- Issue #139: run live JTFTEST workflow QA for the landed Story/Bug templates
-  and Epic Scope model. The QA cases require credentialed Jira writes in
-  `JTFTEST`, DTS read-only reference checks, payload verification, sync audit
-  verification, and evidence under `docs/live-qa-results/`.
-- Issue #179: verify the linked Notion catalog sync source reference before
-  packaging. The minimum contract now lives in
-  [`docs/notion-catalog-source-requirements.md`](notion-catalog-source-requirements.md)
-  and the stable Notion reference linked from that doc.
-- Issue #153: package the Windows app and choose/apply the final icon after
-  Issue #138, Issue #139, and Issue #179, so the shareable build reflects the
-  reviewed docs, live QA evidence, and catalog-source maintenance reference.
+- Issue #153: build the Windows app installer now that Issue #138, Issue #139,
+  Issue #179, and the final app icon are complete. The unsigned NSIS `.exe` can
+  be produced from WSL with `npm run package:windows:cross`; the remaining
+  acceptance work is to install it, launch the packaged app, verify the
+  approved icon in Windows surfaces, and smoke Settings, Categories/Notion
+  setup, and local Trays without `npm run tauri dev`.
 - Regularizacion is out of scope for now and is no longer a planned roadmap
   slice. Do not block any current issue, QA path, or documentation update on
   Regularizacion behavior.
@@ -610,29 +602,27 @@ Roadmap cleanup status after PR #175 and issue review:
   Bug Assisted Description prompt/validation behavior.
 - Issue #132 is no longer a roadmap blocker after PR #175 implemented Epic
   Scope modeling and Jira epic targets.
-- Issue #138 remains open until docs alignment is current enough to prevent
-  future agents from relaunching already-merged workflow model work.
-- Issue #139 remains open until the landed workflow receives credentialed
-  JTFTEST write QA evidence.
-- Issue #179 is open to review the linked Notion catalog sync source contract
-  before packaging, including what must be preserved if the source is moved to
-  Obsidian or another structured store.
+- Issue #138 is closed after documentation alignment.
+- Issue #139 is closed after credentialed JTFTEST write QA evidence.
+- Issue #179 is closed after adding the linked Notion catalog sync source
+  contract.
+- Issue #153 remains open for Windows install smoke after generating the
+  unsigned NSIS installer.
 
 Recommended AFK batches from the current open issues:
 
-Batch 1: validation and release preparation.
-Issues: Issue #139, Issue #179, and Issue #153.
-Scope: run live JTFTEST workflow QA for the landed Story/Bug template and Epic
-Scope behavior, review the Notion catalog source contract, then package the
-Windows app and apply the final icon after QA/docs are current. These are
-sequential, not parallel, because packaging should reflect the QA'd workflow and
-the documented sync-source maintenance path.
+Batch 1: final Windows install smoke.
+Issue: Issue #153.
+Scope: rebuild with `npm run package:windows:cross` if needed, install and
+launch Jira Task Forge from the generated NSIS `.exe`, verify the approved icon
+in installer/start/app surfaces, and smoke Settings, Categories/Notion setup,
+and local Trays without `npm run tauri dev`.
 
 Final packaging slice.
 Issue: Issue #153.
-Scope: choose/apply the final app icon and package a Windows-ready build after
-Issue #138 and Issue #139, so the app can be shared directly with the team
-without `npm run tauri dev`.
+Scope: package a Windows-ready build now that docs, live QA, Notion source
+reference, and the approved icon set have landed. Use
+`npm run package:windows:cross` from WSL for the unsigned NSIS installer.
 
 Already landed from the earlier batch plan:
 
@@ -645,41 +635,20 @@ Already landed from the earlier batch plan:
 
 Recommended next implementation slice:
 
-Branch family:
-
-- `codex/live-qa-139`
-
-Deliverables:
-
-- Issue #139: run live JTFTEST workflow QA and record evidence in
-  `docs/live-qa-results/`.
-
-Reason:
-
-- The workflow behavior needed by Issue #139 has landed. The remaining risk is
-  credentialed Jira write validation, local sync audit verification, and native
-  evidence capture.
-
-## Following Slice
-
-Recommended following implementation slice:
-
 Branch:
 
 - `codex/package-windows-153`
 
 Deliverables:
 
-- Issue #179: review the linked Notion catalog sync source contract before
-  packaging.
-- Issue #153: package the Windows app and apply the final icon after QA/docs and
-  catalog-source docs are current.
+- Issue #153: package the Windows app with `npm run package:windows:cross`,
+  install and launch it on Windows, verify the final icon, and record the smoke
+  result.
 
 Reason:
 
-- Packaging should reflect the workflow that was actually validated in
-  JTFTEST and should not ship without a clear maintenance reference for the
-  catalog sync source.
+- Packaging now reflects the workflow, docs, QA evidence, Notion source
+  reference, and approved icon set already merged to `main`.
 
 Separate hardening follow-up:
 
@@ -687,8 +656,6 @@ Separate hardening follow-up:
   overlay behavior, setup flows, and attachment lifecycle cleanup under regular
   native/live QA because they protect Jira write safety and local filesystem
   hygiene.
-- Package Windows app and final icon under Issue #153 after docs and JTFTEST QA
-  evidence are current.
 
 ## Security And Reliability Tests To Add
 
