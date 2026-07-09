@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   AssistedDescriptionSection,
   DescriptionPromptModal,
+  ProposalDiffItemRow,
   TaskDetailNestedModalShell,
   buildProposalTransitionRequest,
   dedupeProposalLogEntries,
@@ -277,6 +278,33 @@ describe("DescriptionPromptModal delivery-format gate", () => {
     expect(html).toContain("bg-[#3f3102]");
     expect(html).not.toContain("bg-[#102d50]");
   });
+
+  it("lets the delivery-format menu escape the prompt shell", () => {
+    const html = renderToStaticMarkup(
+      <DescriptionPromptModal
+        clarificationQuestions={[]}
+        descriptionContext=""
+        descriptionMessage="Choose the delivery format for this description proposal."
+        deliveryFormatGate={{
+          kind: "needs_confirmation",
+          areaDisplayName: "Decisión de Diseño",
+          suggestedFormat: null,
+          options: ["Decisión de Diseño", "Playtest Documentado", "Feature de Programación"]
+        }}
+        isGeneratingDescription={false}
+        onCancel={() => undefined}
+        onChange={() => undefined}
+        onGenerate={() => undefined}
+        onKeyDown={() => undefined}
+        onSelectDeliveryFormat={() => undefined}
+        selectedDeliveryFormat="Decisión de Diseño"
+        step="delivery_format"
+      />
+    );
+
+    expect(html).toContain("overflow-visible");
+    expect(html).toContain("Choose delivery format");
+  });
 });
 
 describe("proposal transition request", () => {
@@ -335,6 +363,38 @@ describe("AssistedDescriptionSection polished state", () => {
   });
 });
 
+describe("ProposalDiffItemRow", () => {
+  it("renders section-specific review feedback inside the proposal section row", () => {
+    const item = {
+      currentValue: "",
+      id: "proposal-1-scope",
+      label: "Alcance",
+      proposedValue: "Accepted remaining scope.",
+      reviewerComment: null,
+      sectionId: "scope" as const,
+      status: "pending" as const
+    };
+
+    const html = renderToStaticMarkup(
+      <ProposalDiffItemRow
+        disabled={false}
+        editing={false}
+        item={item}
+        onEditProposedContent={async () => true}
+        onRequestChanges={async () => true}
+        onResolve={() => undefined}
+        proposal={mixedProposal}
+        resolving={false}
+        reviewMessage="More context is needed: define QA evidence."
+        sections={{ ...emptyDescriptionSections, scope: "" }}
+      />
+    );
+
+    expect(html).toContain("More context is needed: define QA evidence.");
+    expect(html).toContain("Alcance");
+  });
+});
+
 const mixedProposal = {
   createdAt: "2026-07-09T00:00:00.000Z",
   decidedAt: null,
@@ -376,6 +436,20 @@ const mixedProposal = {
   title: "AI description proposal",
   updatedAt: "2026-07-09T00:02:00.000Z",
   userComment: null
+};
+
+const emptyDescriptionSections = {
+  user_story: "",
+  problem: "",
+  scope: "",
+  acceptance_criteria: "",
+  minimum_deliverable: "",
+  review_checklist: "",
+  context_impact: "",
+  reproduction_steps: "",
+  actual_result: "",
+  expected_result: "",
+  evidence: ""
 };
 
 const completeStoryDescription = `## Historia de usuario

@@ -1,6 +1,6 @@
 import { Bot, Check, KeyRound, Settings } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { Button, DetailBlock, DrawerShell, FeedbackNote, PanelHeader, SegmentedControl } from "../../components/ui";
+import { Button, DetailBlock, DrawerShell, PanelHeader, SegmentedControl } from "../../components/ui";
 import { appOverlayLayers, useAppOverlay } from "../../lib/app-overlays";
 import type { AppSettings, CredentialConnectionTestResult, JiraConnectionTestResult, JiraProjectOption, NotionCatalogConnectionTestResult, NotionOAuthConnectionResult, NotionOAuthStartResult, ProjectSyncApplyRequest, ProjectSyncReview, ThemeMode } from "../../lib/types";
 import { AiProviderSetupGuide, defaultAiProviderModels } from "./AiProviderSetupGuide";
@@ -385,9 +385,6 @@ export function SettingsPanel({
               ]}
             />
           </div>
-          {aiCredentialMessage ? (
-            <FeedbackNote className="mt-3" variant={aiCredentialMessageVariant(aiCredentialMessage)}>{aiCredentialMessage}</FeedbackNote>
-          ) : null}
           <p className="mt-2 text-xs leading-relaxed text-[#6b778c]">
             AI keys follow the same secret boundary as Jira credentials and are never included in backups.
           </p>
@@ -402,12 +399,6 @@ function catalogSourceModeLabel(mode: AppSettings["catalogSourceMode"]): string 
   if (mode === "notion") return "Sync from Notion page";
   if (mode === "public-exportable") return "Legacy external source";
   return "Manual catalog";
-}
-
-function aiCredentialMessageVariant(message: string) {
-  if (/saved|removed/i.test(message)) return "success";
-  if (/select|empty/i.test(message)) return "warning";
-  return "error";
 }
 
 function SettingsReadOnlyRows({ rows }: { rows: Array<[string, string]> }) {

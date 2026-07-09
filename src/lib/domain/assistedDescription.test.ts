@@ -430,6 +430,10 @@ Objetivo anterior.`);
     expect(patch?.proposal.status).toBe("Partial");
     expect(patch?.sections.user_story).toBe("Polished story");
     expect(patch?.sections.problem).toBe("");
+    expect(patch?.sectionStatuses.user_story).toBe("Polished");
+    expect(patch?.sectionStatuses.problem).toBe("Raw");
+    expect(patch?.proposal.sections.find((section) => section.sectionId === "user_story")?.status).toBe("Polished");
+    expect(patch?.proposal.sections.find((section) => section.sectionId === "problem")?.status).toBe("Raw");
   });
 
   it("rejects remaining proposal sections without changing description content", () => {

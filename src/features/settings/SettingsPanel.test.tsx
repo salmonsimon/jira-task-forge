@@ -104,6 +104,45 @@ describe("SettingsPanel", () => {
     expect(html.match(/>Setup<\/button>/g)).toHaveLength(3);
   });
 
+  it("keeps AI credential success messages inside the setup wizard instead of the drawer summary", () => {
+    const html = renderToStaticMarkup(
+      <SettingsPanel
+        settings={{ ...settings, aiProvider: "OpenAI", aiModel: "gpt-4.1" }}
+        hasJiraApiToken
+        hasAiProviderApiKey
+        aiCredentialMessage="OpenAI API key saved in the OS credential store."
+        isTestingJiraConnection={false}
+        isTestingAiProviderConnection={false}
+        onChange={async () => true}
+        onSaveJiraApiToken={async () => true}
+        onDeleteJiraApiToken={() => undefined}
+        onSaveAiProviderApiKey={async () => true}
+        onDeleteAiProviderApiKey={() => undefined}
+        onTestAiProviderConnection={async () => ({ ok: true, message: "Connected" })}
+        onTestAiProviderApiKey={async () => ({ ok: true, message: "Connected" })}
+        onListAiProviderModels={async () => ["gpt-4.1", "gpt-4.1-mini", "o3-mini"]}
+        onTestJiraApiTokenQuiet={async () => ({ ok: true, message: "Connected", accountDisplayName: null, accountEmail: null })}
+        onTestJiraConnectionSettings={async () => ({ ok: true, message: "Connected", accountDisplayName: null, accountEmail: null })}
+        hasNotionIntegrationToken={async () => true}
+        onDeleteNotionIntegrationToken={async () => undefined}
+        onStartNotionOAuthConnection={async () => ({ authorizationUrl: "https://api.notion.com/v1/oauth/authorize?state=state-123", state: "state-123" })}
+        onOpenNotionOAuthAuthorizationUrl={async () => undefined}
+        onCompleteNotionOAuthConnection={async () => ({ ok: true, message: "Connected", title: "JTF Sync Catalog", extractedBlockCount: 1 })}
+        onTestNotionCatalogConnection={async () => ({ ok: true, message: "Connected", title: "JTF Sync Catalog", extractedBlockCount: 1 })}
+        onSyncAreaCatalog={async () => undefined}
+        onListJiraProjectsForConnection={async () => []}
+        onOpenJiraApiTokens={() => undefined}
+        onOpenCatalogSourceRequirements={() => undefined}
+        onOpenAiProviderApiKeys={() => undefined}
+        onClose={() => undefined}
+      />
+    );
+
+    expect(html).toContain("API key");
+    expect(html).toContain("Saved");
+    expect(html).not.toContain("OpenAI API key saved in the OS credential store.");
+  });
+
   it("can open the Jira connection guide directly", () => {
     const html = renderToStaticMarkup(
       <SettingsPanel

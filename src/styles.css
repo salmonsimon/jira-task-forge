@@ -299,6 +299,11 @@ button {
   color: #0052cc !important;
 }
 
+.app-select-menu-fade {
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 12px, #000 calc(100% - 12px), transparent);
+  mask-image: linear-gradient(to bottom, transparent, #000 12px, #000 calc(100% - 12px), transparent);
+}
+
 .theme-dark .app-top-chip {
   background-color: #1d1f23;
   border-color: #34373d;
