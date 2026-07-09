@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use super::credentials::{JIRA_API_TOKEN_ACCOUNT, JIRA_CREDENTIAL_SERVICE};
 use super::AppServices;
 use crate::integrations::jira::{normalize_jira_site_url, JiraClient, JiraCredentials};
@@ -5,6 +7,7 @@ use crate::jira_sync::JiraSyncRunner;
 use crate::models::{
     JiraConnectionTestResult, JiraCreateIssuesResult, JiraCreateProgress, JiraProjectOption,
 };
+use crate::repositories::{CategoryRepository, TaskRepository};
 
 impl AppServices {
     pub fn test_jira_connection(&self) -> JiraConnectionTestResult {
@@ -114,7 +117,7 @@ impl AppServices {
 
         let mut client = self.jira_client()?;
         let connection = self.connection();
-        JiraSyncRunner::new(&connection, &mut client, creation_project_key)
+        let mut result = JiraSyncRunner::new(&connection, &mut client, creation_project_key)
             .with_app_data_dir(self.app_data_dir().to_path_buf())
             .create_parent_issues_from_tray_with_progress(
                 tray_id,
@@ -122,7 +125,16 @@ impl AppServices {
                 include_exported_tasks,
                 include_missing_description_tasks,
                 report_progress,
-            )
+            )?;
+        drop(connection);
+
+        if let Err(error) = self.promote_projects_from_created_jira_issues(&result) {
+            result.messages.push(format!(
+                "Jira issues were created, but Projects could not be marked as synced locally: {error}"
+            ));
+        }
+
+        Ok(result)
     }
 
     pub(in crate::services) fn jira_client(&self) -> Result<JiraClient, String> {
@@ -177,7 +189,7 @@ impl AppServices {
         }))
     }
 
-    fn jira_client_from_raw_parts(
+    pub(in crate::services) fn jira_client_from_raw_parts(
         &self,
         site_url: &str,
         account_email: &str,
@@ -192,7 +204,7 @@ impl AppServices {
         self.jira_client_from_parts(site_url, account_email.to_string(), api_token)
     }
 
-    fn jira_api_token(&self) -> Result<String, String> {
+    pub(in crate::services) fn jira_api_token(&self) -> Result<String, String> {
         let entry = keyring::Entry::new(JIRA_CREDENTIAL_SERVICE, JIRA_API_TOKEN_ACCOUNT)
             .map_err(|error| format!("Could not open OS credential store: {error}"))?;
         match entry.get_password() {
@@ -202,6 +214,51 @@ impl AppServices {
             }
             Err(error) => return Err(format!("Could not read Jira API token: {error}")),
         }
+    }
+
+    fn promote_projects_from_created_jira_issues(
+        &self,
+        result: &JiraCreateIssuesResult,
+    ) -> Result<(), String> {
+        if result.created_issues.is_empty() {
+            return Ok(());
+        }
+
+        let scope = self
+            .current_project_sync_scope()
+            .map_err(|error| error.to_string())?;
+        let connection = self.connection();
+        let task_repository = TaskRepository::new(&connection);
+        let mut project_names = BTreeSet::<String>::new();
+
+        for created_issue in &result.created_issues {
+            let Some(task_id) = created_issue.task_id.as_deref() else {
+                continue;
+            };
+            let Some(task) = task_repository
+                .find_by_id(task_id)
+                .map_err(|error| error.to_string())?
+            else {
+                continue;
+            };
+            let project_name = task.project.trim();
+            if !project_name.is_empty() {
+                project_names.insert(project_name.to_string());
+            }
+        }
+
+        if project_names.is_empty() {
+            return Ok(());
+        }
+
+        CategoryRepository::new(&connection)
+            .promote_local_projects_to_jira_scope(
+                &scope,
+                &project_names.into_iter().collect::<Vec<_>>(),
+            )
+            .map_err(|error| error.to_string())?;
+
+        Ok(())
     }
 }
 

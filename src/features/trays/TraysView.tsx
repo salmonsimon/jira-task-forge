@@ -15,6 +15,8 @@ export function TraysView({
   onOpenTray,
   onCreateTray,
   onSuggestTransversalScope,
+  onConfigureAiProvider,
+  isAiProviderConfigured,
   onRenameTray,
   onArchiveTray,
   onRestoreTray,
@@ -41,6 +43,8 @@ export function TraysView({
   onOpenTray: (tray: Tray) => void;
   onCreateTray: (input: CreateTrayInput) => void | Promise<void>;
   onSuggestTransversalScope?: (epicScope: string) => Promise<string>;
+  onConfigureAiProvider?: () => void;
+  isAiProviderConfigured?: boolean;
   onRenameTray: (trayId: string, name: string) => void;
   onArchiveTray: (trayId: string) => void;
   onRestoreTray: (trayId: string) => void;
@@ -75,6 +79,8 @@ export function TraysView({
         onOpenTray={onOpenTray}
         onCreateTray={onCreateTray}
         onSuggestTransversalScope={onSuggestTransversalScope}
+        onConfigureAiProvider={onConfigureAiProvider}
+        isAiProviderConfigured={isAiProviderConfigured}
         onRenameTray={onRenameTray}
         onArchiveTray={onArchiveTray}
         onRestoreTray={onRestoreTray}

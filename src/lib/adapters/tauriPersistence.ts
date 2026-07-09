@@ -23,6 +23,7 @@ import type {
   NotionCatalogConnectionTestResult,
   NotionOAuthStartResult,
   ProjectSyncApplyRequest,
+  ProjectSyncDiscoveryRequest,
   ProjectSyncReview,
   SyncLogEntry,
   Tray
@@ -166,8 +167,8 @@ export async function syncPersistedAreaCatalogFromNotion(pageUrlOrId: string): P
   return invoke<CatalogSyncResult>("sync_area_catalog_from_notion", { pageUrlOrId });
 }
 
-export async function discoverPersistedProjectSyncCandidates(): Promise<ProjectSyncReview> {
-  return invoke<ProjectSyncReview>("discover_project_sync_candidates");
+export async function discoverPersistedProjectSyncCandidates(request?: ProjectSyncDiscoveryRequest): Promise<ProjectSyncReview> {
+  return invoke<ProjectSyncReview>("discover_project_sync_candidates", { request });
 }
 
 export async function applyPersistedProjectSyncDecisions(request: ProjectSyncApplyRequest): Promise<Category[]> {

@@ -254,6 +254,12 @@ export type ProjectSyncReview = {
   notes: string[];
 };
 
+export type ProjectSyncDiscoveryRequest = {
+  jiraSiteUrl: string;
+  jiraAccountEmail: string;
+  jiraCreationProjectKey: string;
+};
+
 export type ProjectSyncApplyRequest = {
   activeProjectNames: string[];
   ignoredProjectNames: string[];
@@ -287,7 +293,7 @@ export type CatalogSyncResult = {
   }>;
   areaFormatRules: Array<{
     areaDisplayName: string;
-    priority: number;
+    order: number;
     condition: string;
     deliveryFormat: string;
     blocking: boolean;

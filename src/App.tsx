@@ -105,6 +105,7 @@ import {
   createEmptyAssistedDescriptionSections,
   serializeAssistedDescriptionSections
 } from "./lib/domain/assistedDescription";
+import { visibleAreasForMode, visibleProjectsForMode } from "./lib/domain/categoryVisibility";
 import type {
   AppSettings,
   AttachmentPurpose,
@@ -125,6 +126,7 @@ import type {
   LocalTask,
   MainTab,
   Panel,
+  ProjectSyncDiscoveryRequest,
   SyncLogEntry,
   Tray
 } from "./lib/types";
@@ -242,11 +244,19 @@ export default function App() {
 
   const projectCategories = useMemo(() => categories.filter((category) => category.categoryType === "project"), [categories]);
   const areaCategories = useMemo(() => categories.filter((category) => category.categoryType === "area"), [categories]);
-  const projectOptions = useMemo(
-    () => orderProjectNames(projectCategories.filter((project) => !project.hidden).map((project) => project.name)),
-    [projectCategories]
+  const visibleProjectCategories = useMemo(
+    () => visibleProjectsForMode(projectCategories, appSettings.projectSyncEnabled !== false),
+    [appSettings.projectSyncEnabled, projectCategories]
   );
-  const areaOptions = useMemo(() => areaCategories.filter((area) => !area.hidden).map((area) => area.name), [areaCategories]);
+  const visibleAreaCategories = useMemo(
+    () => visibleAreasForMode(areaCategories, appSettings.catalogSourceMode),
+    [appSettings.catalogSourceMode, areaCategories]
+  );
+  const projectOptions = useMemo(
+    () => orderProjectNames(visibleProjectCategories.filter((project) => !project.hidden).map((project) => project.name)),
+    [visibleProjectCategories]
+  );
+  const areaOptions = useMemo(() => visibleAreaCategories.filter((area) => !area.hidden).map((area) => area.name), [visibleAreaCategories]);
 
   useEffect(() => {
     let isCurrent = true;
@@ -358,7 +368,11 @@ export default function App() {
       listPersistedCategories(),
       listPersistedJqlFavorites()
     ]);
-    const nextCategories = persistedCategories.length ? persistedCategories : [...appData.listProjects(), ...appData.listAreas()];
+    const nextCategories = persistedCategories.length
+      ? persistedCategories
+      : usesTauriPersistence
+        ? appData.listProjects()
+        : [...appData.listProjects(), ...appData.listAreas()];
     const nextJqlFavorites = persistedJqlFavorites.length ? persistedJqlFavorites : appData.listJqlFavorites();
 
     trayWorkspace.replaceTrays(persistedTrays);
@@ -623,7 +637,7 @@ export default function App() {
     return null;
   }
 
-  async function discoverProjectSync() {
+  async function discoverProjectSync(request?: ProjectSyncDiscoveryRequest) {
     if (!usesTauriPersistence) {
       return {
         jiraProjectKey: appSettings.jiraCreationProjectKey || "JTFTEST",
@@ -641,7 +655,7 @@ export default function App() {
       };
     }
 
-    return discoverPersistedProjectSyncCandidates();
+    return discoverPersistedProjectSyncCandidates(request);
   }
 
   async function applyProjectSync(request: Parameters<typeof applyPersistedProjectSyncDecisions>[0]) {
@@ -1575,6 +1589,8 @@ export default function App() {
               onOpenTray={openTray}
               onCreateTray={trayWorkspace.createTray}
               onSuggestTransversalScope={suggestTrayTransversalEpicScope}
+              onConfigureAiProvider={() => setIsAiProviderSetupOpen(true)}
+              isAiProviderConfigured={!usesTauriPersistence || (appSettings.aiProvider !== "None" && hasAiProviderApiKey)}
               onRenameTray={trayWorkspace.renameTray}
               onArchiveTray={trayWorkspace.archiveTray}
               onRestoreTray={trayWorkspace.restoreTray}
@@ -1661,8 +1677,8 @@ export default function App() {
         ) : null}
         {openPanel === "categories" ? (
           <CategoriesPanel
-            projects={projectCategories}
-            areas={areaCategories}
+            projects={visibleProjectCategories}
+            areas={visibleAreaCategories}
             catalogSourceMode={appSettings.catalogSourceMode}
             catalogSourceUrl={appSettings.catalogSourceUrl}
             projectSyncEnabled={appSettings.projectSyncEnabled !== false}
@@ -1673,6 +1689,9 @@ export default function App() {
             onSyncAreaCatalog={syncAreaCatalog}
             onToggleProjectSync={(enabled) => {
               void updateAppSettings({ projectSyncEnabled: enabled });
+            }}
+            onToggleAreaSync={(enabled) => {
+              void updateAppSettings({ catalogSourceMode: enabled ? "notion" : "manual" });
             }}
             onDiscoverProjectSync={discoverProjectSync}
             onApplyProjectSync={applyProjectSync}

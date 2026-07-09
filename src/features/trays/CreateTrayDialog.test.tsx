@@ -21,4 +21,22 @@ describe("CreateTrayDialog", () => {
     expect(html).not.toContain("Demo Versión 1 or TBD");
     expect(html).toContain("[Project] [Area]");
   });
+
+  it("shows the AI provider setup action when assisted suggestions are not configured", () => {
+    const html = renderToStaticMarkup(
+      <CreateTrayDialog
+        onClose={() => undefined}
+        onCreateTray={() => undefined}
+        onConfigureAiProvider={() => undefined}
+        onSuggestTransversalScope={async () => "Demos Versión 1"}
+        isAiProviderConfigured={false}
+        initialStep="transversal"
+        initialTrayName="Demo prep"
+        initialEpicScope="Demo"
+      />
+    );
+
+    expect(html).toContain("Set up AI provider");
+    expect(html).not.toContain("Suggest with AI");
+  });
 });
