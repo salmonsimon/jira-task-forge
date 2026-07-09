@@ -390,6 +390,46 @@ Objetivo anterior.`);
     expect(patch?.shouldApplyDescription).toBe(false);
   });
 
+  it("keeps persisted item-level rejections rejected when accepting the remaining sections", () => {
+    const currentSections = parseAssistedDescriptionMarkdown("");
+    const proposal = buildAssistedDescriptionProposal({
+      currentMarkdown: serializeAssistedDescriptionSections(currentSections),
+      id: "proposal-1",
+      now: "2026-05-27T12:00:00.000Z",
+      proposedMarkdown: serializeAssistedDescriptionSections({
+        ...currentSections,
+        user_story: "Polished story",
+        problem: "Rejected context"
+      }),
+      sectionIds: ["user_story", "problem"],
+      taskId: "task-1"
+    });
+    const withRejectedSection = {
+      ...proposal,
+      sections: proposal.sections.map((section) =>
+        section.sectionId === "problem"
+          ? { ...section, reviewerComment: "Rejected Context.", status: "Raw" as const }
+          : section
+      )
+    };
+
+    expect(getAssistedDescriptionProposalItems(withRejectedSection).find((item) => item.sectionId === "problem")?.status).toBe("rejected");
+
+    const patch = buildResolveAssistedDescriptionProposalPatch(
+      {
+        sections: currentSections,
+        sectionStatuses: createEmptyAssistedDescriptionSectionStatuses()
+      },
+      withRejectedSection,
+      true,
+      "2026-05-27T12:05:00.000Z"
+    );
+
+    expect(patch?.proposal.status).toBe("Partial");
+    expect(patch?.sections.user_story).toBe("Polished story");
+    expect(patch?.sections.problem).toBe("");
+  });
+
   it("rejects remaining proposal sections without changing description content", () => {
     const currentSections = parseAssistedDescriptionMarkdown("## Historia de usuario\n\nRaw story");
     const proposal = buildAssistedDescriptionProposal({

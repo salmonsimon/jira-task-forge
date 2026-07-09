@@ -790,6 +790,102 @@ fn external_catalog_sync_removes_manual_areas_not_in_synced_catalog() {
 }
 
 #[test]
+fn delivery_format_gate_is_auto_without_synced_notion_templates() {
+    let services = AppServices::new(open_in_memory_database().expect("database opens"));
+
+    let gate = services
+        .resolve_delivery_format_gate("3D", "Entregar zip para integración manual")
+        .expect("fallback gate resolves");
+
+    assert_eq!(gate.kind, "auto");
+    assert_eq!(gate.area_display_name, "3D");
+    assert_eq!(gate.format, None);
+    assert!(gate.options.is_empty());
+}
+
+#[test]
+fn delivery_format_gate_requires_confirmation_when_synced_templates_exist() {
+    let services = AppServices::new(open_in_memory_database().expect("database opens"));
+    let source_url = serve_catalog_once(
+        r#"{
+          "areas": [
+            {
+              "areaDisplayName": "Bug",
+              "jiraLabel": "Bug",
+              "enabledInJTF": true,
+              "issueType": "Bug",
+              "defaultDeliveryFormat": "Bug",
+              "safeAliases": ["bug"]
+            },
+            {
+              "areaDisplayName": "3D",
+              "jiraLabel": "3D",
+              "enabledInJTF": true,
+              "issueType": "Story",
+              "defaultDeliveryFormat": "Arte Integrado",
+              "safeAliases": ["Modelos 3D"]
+            }
+          ],
+          "deliveryFormats": [
+            {
+              "formatName": "Bug",
+              "issueType": "Bug",
+              "storyHeadings": ["Problema"],
+              "minimumDeliverable": "Corrección verificable.",
+              "reviewChecklist": ["Pasos claros."]
+            },
+            {
+              "formatName": "Arte Integrado",
+              "issueType": "Story",
+              "storyHeadings": ["Historia de usuario"],
+              "minimumDeliverable": "PR/MR con assets integrados.",
+              "reviewChecklist": ["PR/MR creado."]
+            },
+            {
+              "formatName": "Arte Empaquetado",
+              "issueType": "Story",
+              "storyHeadings": ["Historia de usuario"],
+              "minimumDeliverable": "Zip disponible.",
+              "reviewChecklist": ["Zip disponible."]
+            }
+          ],
+          "areaFormatRules": [
+            {
+              "areaDisplayName": "3D",
+              "order": 1,
+              "condition": "if delivered as a package for another person to integrate",
+              "deliveryFormat": "Arte Empaquetado",
+              "blocking": false
+            },
+            {
+              "areaDisplayName": "3D",
+              "order": 2,
+              "condition": "fallback",
+              "deliveryFormat": "Arte Integrado",
+              "blocking": false
+            }
+          ]
+        }"#,
+    );
+    let result = services
+        .sync_area_catalog_from_source(&source_url)
+        .expect("catalog sync succeeds");
+    assert!(result.ok);
+
+    let gate = services
+        .resolve_delivery_format_gate("3D", "Entregar zip para integración manual")
+        .expect("synced gate resolves");
+
+    assert_eq!(gate.kind, "needs_confirmation");
+    assert_eq!(gate.format, None);
+    assert_eq!(gate.suggested_format, None);
+    assert_eq!(
+        gate.options,
+        vec!["Arte Integrado".to_string(), "Arte Empaquetado".to_string()]
+    );
+}
+
+#[test]
 fn exports_and_imports_backup_files_through_services() {
     let source_services = AppServices::new(open_in_memory_database().expect("database opens"));
     let tray = source_services

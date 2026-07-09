@@ -78,6 +78,24 @@ pub async fn test_notion_catalog_connection(
 }
 
 #[tauri::command]
+pub async fn test_notion_catalog_connection_with_token(
+    services: State<'_, AppServices>,
+    page_url_or_id: String,
+    token: String,
+) -> Result<NotionCatalogConnectionTestResult, String> {
+    let token = token.trim().to_string();
+    if token.is_empty() {
+        return Err("Notion integration token cannot be empty".to_string());
+    }
+
+    let services = services.inner().clone();
+    run_blocking_result("Catalog sync worker", move || {
+        services.test_notion_catalog_connection_with_token(&page_url_or_id, &token)
+    })
+    .await
+}
+
+#[tauri::command]
 pub async fn sync_area_catalog_from_notion(
     services: State<'_, AppServices>,
     page_url_or_id: String,

@@ -367,7 +367,11 @@ export default function App() {
       listPersistedCategories(),
       listPersistedJqlFavorites()
     ]);
-    const nextCategories = persistedCategories.length ? persistedCategories : [...appData.listProjects(), ...appData.listAreas()];
+    const nextCategories = persistedCategories.length
+      ? persistedCategories
+      : usesTauriPersistence
+        ? appData.listProjects()
+        : [...appData.listProjects(), ...appData.listAreas()];
     const nextJqlFavorites = persistedJqlFavorites.length ? persistedJqlFavorites : appData.listJqlFavorites();
 
     trayWorkspace.replaceTrays(persistedTrays);
@@ -1590,6 +1594,8 @@ export default function App() {
               onOpenTray={openTray}
               onCreateTray={trayWorkspace.createTray}
               onSuggestTransversalScope={suggestTrayTransversalEpicScope}
+              onConfigureAiProvider={() => setIsAiProviderSetupOpen(true)}
+              isAiProviderConfigured={!usesTauriPersistence || (appSettings.aiProvider !== "None" && hasAiProviderApiKey)}
               onRenameTray={trayWorkspace.renameTray}
               onArchiveTray={trayWorkspace.archiveTray}
               onRestoreTray={trayWorkspace.restoreTray}

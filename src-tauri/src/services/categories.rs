@@ -1,8 +1,8 @@
 use super::AppServices;
 use crate::area_catalog::{
-    catalog_delivery_format_gate_for_area, sync_exportable_catalog_from_notion_page,
-    sync_exportable_catalog_from_url, test_notion_catalog_page, CatalogSyncResult,
-    DeliveryFormatGateResult, NotionCatalogConnectionTestResult,
+    sync_exportable_catalog_from_notion_page, sync_exportable_catalog_from_url,
+    test_notion_catalog_page, CatalogSyncResult, DeliveryFormatGateResult,
+    NotionCatalogConnectionTestResult,
 };
 use crate::db::{DbError, DbResult};
 use crate::models::Category;
@@ -174,6 +174,14 @@ impl AppServices {
         test_notion_catalog_page(&token, page_url_or_id)
     }
 
+    pub fn test_notion_catalog_connection_with_token(
+        &self,
+        page_url_or_id: &str,
+        token: &str,
+    ) -> Result<NotionCatalogConnectionTestResult, String> {
+        test_notion_catalog_page(token, page_url_or_id)
+    }
+
     pub fn sync_area_catalog_from_notion(
         &self,
         page_url_or_id: &str,
@@ -207,7 +215,7 @@ impl AppServices {
     pub fn resolve_delivery_format_gate(
         &self,
         area: &str,
-        description_or_deliverable: &str,
+        _description_or_deliverable: &str,
     ) -> Result<DeliveryFormatGateResult, String> {
         let options = {
             let connection = self.connection();
@@ -216,22 +224,15 @@ impl AppServices {
                 .map_err(|error| error.to_string())?
         };
         if options.is_empty() {
-            return Ok(catalog_delivery_format_gate_for_area(
-                area,
-                description_or_deliverable,
-            ));
-        }
-        if options.len() == 1 {
             return Ok(DeliveryFormatGateResult {
                 kind: "auto".to_string(),
                 area_display_name: area.trim().to_string(),
-                format: options.first().cloned(),
+                format: None,
                 suggested_format: None,
-                options,
+                options: Vec::new(),
                 message: None,
             });
         }
-
         Ok(DeliveryFormatGateResult {
             kind: "needs_confirmation".to_string(),
             area_display_name: area.trim().to_string(),

@@ -19,6 +19,9 @@ Windows, WSL, or development-session change.
   configuration files still exist.
 - Live QA works in one session but a later session cannot reuse the same saved
   credential state.
+- After uninstalling a packaged Windows build, Jira, AI provider, and Notion
+  credentials owned by the app should be removed from Windows Credential
+  Manager.
 
 These symptoms usually mean the app cannot read the same keyring entry it wrote
 earlier. They should not be debugged by printing tokens, API keys, request
@@ -78,6 +81,14 @@ credential.
 
 If multiple providers are configured during QA, re-save only the provider needed
 for the current test. Do not inspect or compare stored secret values.
+
+## Uninstall Credential Cleanup
+
+Packaged Windows uninstalls remove the app-owned Credential Manager targets for
+Jira, OpenAI, Claude, Gemini, and Notion credentials.
+
+Validate this behavior only with fake or dedicated test credentials. Do not
+delete or inspect Saimon's real Credential Manager entries during AFK work.
 
 ## WSL and Dev-Session Caveats
 

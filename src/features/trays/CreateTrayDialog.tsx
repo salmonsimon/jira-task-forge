@@ -21,17 +21,27 @@ export type CreateTrayInput = {
 export function CreateTrayDialog({
   onClose,
   onCreateTray,
-  onSuggestTransversalScope
+  onSuggestTransversalScope,
+  onConfigureAiProvider,
+  isAiProviderConfigured = true,
+  initialStep = "tray",
+  initialTrayName = "",
+  initialEpicScope = ""
 }: {
   onClose: () => void;
   onCreateTray: (input: CreateTrayInput) => void | Promise<void>;
   onSuggestTransversalScope?: (epicScope: string) => Promise<string>;
+  onConfigureAiProvider?: () => void;
+  isAiProviderConfigured?: boolean;
+  initialStep?: CreateTrayStep;
+  initialTrayName?: string;
+  initialEpicScope?: string;
 }) {
   const surfaceRef = useRef<HTMLElement | null>(null);
   const epicScopeInputRef = useRef<HTMLInputElement | null>(null);
-  const [step, setStep] = useState<CreateTrayStep>("tray");
-  const [trayName, setTrayName] = useState("");
-  const [epicScopeDraft, setEpicScopeDraft] = useState("");
+  const [step, setStep] = useState<CreateTrayStep>(initialStep);
+  const [trayName, setTrayName] = useState(initialTrayName);
+  const [epicScopeDraft, setEpicScopeDraft] = useState(initialEpicScope);
   const [transversalScopeDraft, setTransversalScopeDraft] = useState("");
   const [suggestionState, setSuggestionState] = useState<"idle" | "loading" | "ready" | "failed">("idle");
   const [suggestionMessage, setSuggestionMessage] = useState<string | null>(null);
@@ -54,11 +64,18 @@ export function CreateTrayDialog({
   useEffect(() => {
     if (!normalizedScope || step !== "transversal" || isTbdScope) return;
     if (transversalScopeDraft.trim()) return;
+    if (!isAiProviderConfigured) return;
     void suggestTransversalScope();
-  }, [isTbdScope, normalizedScope, step, transversalScopeDraft]);
+  }, [isAiProviderConfigured, isTbdScope, normalizedScope, step, transversalScopeDraft]);
 
   async function suggestTransversalScope() {
     if (!normalizedScope || isTbdScope) return;
+    if (!isAiProviderConfigured) {
+      setSuggestionState("idle");
+      setSuggestionMessage("Set up an AI provider before asking for a Transversal scope suggestion.");
+      onConfigureAiProvider?.();
+      return;
+    }
     setSuggestionState("loading");
     setSuggestionMessage(null);
     try {
@@ -219,7 +236,7 @@ export function CreateTrayDialog({
                   variant="secondary"
                   onClick={() => void suggestTransversalScope()}
                 >
-                  {suggestionState === "loading" ? "Suggesting..." : "Suggest with AI"}
+                  {suggestionState === "loading" ? "Suggesting..." : isAiProviderConfigured ? "Suggest with AI" : "Set up AI provider"}
                 </Button>
               </div>
               <GuideInput label="Transversal Epic Scope" placeholder="Enter plural Epic Scope" value={transversalScopeDraft} onChange={setTransversalScopeDraft} />
