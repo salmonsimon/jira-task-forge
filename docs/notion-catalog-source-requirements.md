@@ -13,8 +13,11 @@ OAuth connection grants page access.
 
 Notion source placement and sharing:
 
-- Prefer a dedicated root-level Notion page for the sync source, such as
-  `JTF Sync Catalog`, outside sensitive parent page trees.
+- Prefer a dedicated top-level Notion page for the sync source, such as
+  `JTF Sync Catalog`, outside sensitive parent page trees. In the Notion OAuth
+  picker, nested pages may not appear as selectable entries even when the user
+  can open them in Notion, so keep the catalog page at the workspace/home
+  top level before connecting Jira Task Forge.
 - Personal users can create their own page in their own Notion workspace and
   copy the JSON contract into it.
 - Teams can share one catalog page, but every user who connects through OAuth
