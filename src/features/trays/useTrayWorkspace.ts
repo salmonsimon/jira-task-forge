@@ -369,7 +369,7 @@ export function useTrayWorkspace({
     );
   }
 
-  async function saveTaskDescription(taskId: string, description: string) {
+  async function saveTaskDescription(taskId: string, description: string, descriptionStatus: LocalTask["descriptionStatus"] = "Ready") {
     const tray = trays.find((candidate) => candidate.tasks.some((task) => task.id === taskId));
     const task = tray?.tasks.find((candidate) => candidate.id === taskId);
     const nextDescription = description.trim();
@@ -381,11 +381,11 @@ export function useTrayWorkspace({
     }
 
     const nextTask = usesTauriPersistence
-      ? await updatePersistedTaskDescription(taskId, nextDescription, "Ready")
+      ? await updatePersistedTaskDescription(taskId, nextDescription, descriptionStatus)
       : {
           ...task,
           description: nextDescription,
-          descriptionStatus: "Ready" as const
+          descriptionStatus
         };
     if (!nextTask) {
       throw new Error("Could not save the description.");

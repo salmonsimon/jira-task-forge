@@ -113,6 +113,7 @@ export function NotionSynchronizationGuide({
     dismissOnEscape: true,
     dismissOnOutsidePointer: true,
     lockScroll: true,
+    shouldDismiss: () => !isSavingSynchronization,
     surfaceRef
   });
 
@@ -289,19 +290,30 @@ export function NotionSynchronizationGuide({
           event.stopPropagation();
           return;
         }
-        if (event.target !== event.currentTarget) return;
+        if (isSavingSynchronization || event.target !== event.currentTarget) return;
         onClose();
       }}
       onMouseUp={handleModalMouseUp}
     >
       <section
         ref={surfaceRef}
-        className="flex max-h-[86vh] w-full max-w-[760px] flex-col overflow-hidden rounded border border-[#c1c7d0] bg-white shadow-2xl"
+        className="relative flex max-h-[86vh] w-full max-w-[760px] flex-col overflow-hidden rounded border border-[#c1c7d0] bg-white shadow-2xl"
         {...overlay.surfaceProps}
         onKeyDown={handleWizardEnter}
         onMouseDown={(event) => event.stopPropagation()}
         onMouseUp={handleModalMouseUp}
       >
+        {isSavingSynchronization ? (
+          <div className="absolute inset-0 z-20 flex items-center justify-center bg-white/80 px-4 backdrop-blur-[2px]">
+            <div className="rounded border border-[#dfe1e6] bg-white px-5 py-4 text-center shadow-2xl">
+              <LoadingOrb size="sm" />
+              <div className="mt-3 text-sm font-semibold text-[#172b4d]">Saving synchronization</div>
+              <div className="mt-1 max-w-xs text-xs leading-relaxed text-[#6b778c]">
+                Refreshing Areas from the selected catalog source.
+              </div>
+            </div>
+          </div>
+        ) : null}
         <PanelHeader title="Set Catalog Source" subtitle="Choose Manual catalog for local Areas or connect the JTF Sync Catalog page for official area sync." onClose={onClose} />
         <div className="border-b border-[#dfe1e6] bg-[#f7f8fa] px-5 py-3">
           <div className={`grid gap-2 ${visibleSteps.length === 1 ? "grid-cols-1" : "grid-cols-4"}`}>

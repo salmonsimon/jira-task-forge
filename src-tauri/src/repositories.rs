@@ -2425,10 +2425,17 @@ impl<'connection> AssistedDescriptionProposalRepository<'connection> {
         } else {
             Some(trimmed)
         };
-        let status = if description.is_some() {
+        let issue_type = self.connection.query_row(
+            "SELECT issue_type FROM tasks WHERE id = ?1",
+            [task_id],
+            |row| row.get::<_, String>(0),
+        )?;
+        let status = if description.is_none() {
+            "Missing"
+        } else if all_required_description_sections_polished(&issue_type, sections) {
             "Ready"
         } else {
-            "Missing"
+            "Draft"
         };
 
         TaskRepository::new(self.connection).update_description(task_id, description, status)?;
@@ -2947,6 +2954,46 @@ fn polished_section_count(sections: &[AssistedDescriptionProposalSection]) -> us
                 && !section.proposed_content.trim().is_empty()
         })
         .count()
+}
+
+fn all_required_description_sections_polished(
+    issue_type: &str,
+    sections: &[AssistedDescriptionProposalSection],
+) -> bool {
+    required_assisted_description_section_ids(issue_type)
+        .iter()
+        .all(|required_section_id| {
+            sections.iter().any(|section| {
+                section.section_id == *required_section_id
+                    && section.status == DescriptionSectionStatus::Polished
+                    && !section.proposed_content.trim().is_empty()
+            })
+        })
+}
+
+fn required_assisted_description_section_ids(issue_type: &str) -> &'static [&'static str] {
+    if issue_type.trim().eq_ignore_ascii_case("bug") {
+        &[
+            "problem",
+            "context_impact",
+            "reproduction_steps",
+            "actual_result",
+            "expected_result",
+            "evidence",
+            "acceptance_criteria",
+            "minimum_deliverable",
+            "review_checklist",
+        ]
+    } else {
+        &[
+            "user_story",
+            "problem",
+            "scope",
+            "acceptance_criteria",
+            "minimum_deliverable",
+            "review_checklist",
+        ]
+    }
 }
 
 fn is_rejected_proposal_section(reviewer_comment: Option<&str>) -> bool {
@@ -4843,6 +4890,67 @@ mod tests {
             problem.reviewer_comment.as_deref(),
             Some("Leave this section empty.")
         );
+    }
+
+    #[test]
+    fn accepting_one_proposal_section_keeps_task_description_draft_until_all_required_sections_polished(
+    ) {
+        let connection = open_in_memory_database().expect("database opens");
+        let tray = TrayRepository::new(&connection)
+            .create(NewTray {
+                name: "Partial section proposal tray".to_string(),
+            })
+            .expect("tray creates");
+        let task = TaskRepository::new(&connection)
+            .create(NewTask {
+                tray_id: tray.id,
+                project: "STT".to_string(),
+                area: "Bug".to_string(),
+                title: "Partial bug description".to_string(),
+                priority: "Medium".to_string(),
+                issue_type: "Bug".to_string(),
+                content_language: "Spanish".to_string(),
+            })
+            .expect("task creates");
+        let repository = AssistedDescriptionProposalRepository::new(&connection);
+        let proposal = repository
+            .create(NewAssistedDescriptionProposal {
+                task_id: task.id.clone(),
+                title: Some("Partial bug proposal".to_string()),
+                summary: None,
+                provider: None,
+                model: None,
+                user_comment: None,
+                sections: vec![proposal_section(
+                    "problem",
+                    "Los beacons de las manos no aparecen en VR.",
+                )],
+            })
+            .expect("proposal creates");
+
+        repository
+            .update_section(
+                &proposal.id,
+                "problem",
+                None,
+                Some(DescriptionSectionStatus::Polished),
+                Some("Accepted Problem."),
+                true,
+            )
+            .expect("section accepts")
+            .expect("proposal exists");
+
+        let task = TaskRepository::new(&connection)
+            .find_by_id(&task.id)
+            .expect("task reloads")
+            .expect("task exists");
+
+        assert_eq!(task.description_status, "Draft");
+        assert!(task
+            .description
+            .as_deref()
+            .unwrap_or_default()
+            .contains("Los beacons de las manos no aparecen en VR."));
     }
 
     #[test]

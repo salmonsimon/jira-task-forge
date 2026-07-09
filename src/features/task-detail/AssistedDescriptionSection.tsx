@@ -15,7 +15,6 @@ import {
   getAssistedDescriptionProposalItems,
   getAssistedDescriptionSectionDefinitions,
   getAssistedDescriptionSectionIds,
-  getAssistedDescriptionSectionLabel,
   hasAcceptedAssistedDescriptionProposalSections,
   hasMeaningfulAssistedDescriptionContent,
   hasRejectedAssistedDescriptionProposalSections,
@@ -51,7 +50,7 @@ export const assistedDescriptionEditorSelector = "[data-description-editor]";
 
 type DescriptionPromptStep = "context" | "delivery_format";
 type DeliveryFormatPromptAction =
-  | { kind: "generate"; deliveryFormat: null }
+  | { kind: "generate"; deliveryFormat: string | null }
   | { kind: "confirm"; selectedDeliveryFormat: string; message: string }
   | { kind: "blocked"; message: string };
 
@@ -60,6 +59,9 @@ export function resolveDeliveryFormatPromptAction(gate: CatalogDeliveryFormatGat
     return { kind: "blocked", message: gate.message };
   }
   if (gate.kind === "needs_confirmation") {
+    if (gate.options.length === 1) {
+      return { kind: "generate", deliveryFormat: gate.options[0] };
+    }
     return {
       kind: "confirm",
       selectedDeliveryFormat: gate.suggestedFormat ?? "",
@@ -97,7 +99,7 @@ export function AssistedDescriptionSection({
   onConfigureAiProvider?: () => void;
   onListProposals?: (taskId: string) => Promise<AssistedDescriptionProposal[]>;
   onListProposalLog?: (taskId: string) => Promise<DescriptionProposalLogEntry[]>;
-  onSaveDescription: (taskId: string, description: string) => void | Promise<void>;
+  onSaveDescription: (taskId: string, description: string, descriptionStatus?: LocalTask["descriptionStatus"]) => void | Promise<void>;
   onCreateProposal?: (proposal: NewAssistedDescriptionProposal) => Promise<AssistedDescriptionProposal>;
   onRefreshTask?: (taskId: string) => Promise<void>;
   onTransitionProposal?: (
@@ -124,6 +126,7 @@ export function AssistedDescriptionSection({
   const sections = useMemo(() => parseAssistedDescriptionMarkdown(task.description, task.issueType), [task.description, task.issueType]);
   const hasDescriptionContent = hasMeaningfulAssistedDescriptionContent(sections);
   const hasEmptySections = activeSectionDefinitions.some((section) => !sections[section.id].trim());
+  const canMarkAllSectionsPolished = activeSectionDefinitions.every((section) => sections[section.id].trim());
   const canLoadPersistedProposals = Boolean(onListProposals || onListProposalLog);
   const [sectionStatuses, setSectionStatuses] = useState<AssistedDescriptionSectionStatuses>(() =>
     createEmptyAssistedDescriptionSectionStatuses()
@@ -133,6 +136,7 @@ export function AssistedDescriptionSection({
   const [descriptionMessage, setDescriptionMessage] = useState<string | null>(null);
   const [deliveryFormatGate, setDeliveryFormatGate] = useState<CatalogDeliveryFormatGate | null>(null);
   const [selectedDeliveryFormat, setSelectedDeliveryFormat] = useState("");
+  const [lastConfirmedDeliveryFormat, setLastConfirmedDeliveryFormat] = useState<string | null>(null);
   const [descriptionPromptStep, setDescriptionPromptStep] = useState<DescriptionPromptStep>("context");
   const [clarificationQuestions, setClarificationQuestions] = useState<string[]>([]);
   const [promptOpen, setPromptOpen] = useState(false);
@@ -143,7 +147,7 @@ export function AssistedDescriptionSection({
   const [isLoadingProposals, setIsLoadingProposals] = useState(false);
   const [proposalLoadMessage, setProposalLoadMessage] = useState<string | null>(null);
   const [activeProposalId, setActiveProposalId] = useState<string | null>(null);
-  const [savingSectionId, setSavingSectionId] = useState<AssistedDescriptionSectionId | null>(null);
+  const [savingSectionId, setSavingSectionId] = useState<AssistedDescriptionSectionId | "all" | null>(null);
   const [sectionMessages, setSectionMessages] = useState<Partial<Record<AssistedDescriptionSectionId, string>>>({});
   const [reviewMessage, setReviewMessage] = useState<string | null>(null);
   const [resolvingProposalAction, setResolvingProposalAction] = useState<"accept" | "reject" | null>(null);
@@ -160,6 +164,7 @@ export function AssistedDescriptionSection({
     setDescriptionMessage(null);
     setDeliveryFormatGate(null);
     setSelectedDeliveryFormat("");
+    setLastConfirmedDeliveryFormat(null);
     setDescriptionPromptStep("context");
     setClarificationQuestions([]);
     setPromptOpen(false);
@@ -217,89 +222,43 @@ export function AssistedDescriptionSection({
     setPromptOpen(false);
   }
 
-  function openDescriptionPrompt(sectionIds: AssistedDescriptionSectionId[] = allSectionIds, initialContext = "") {
+  async function openDescriptionPrompt(sectionIds: AssistedDescriptionSectionId[] = allSectionIds, initialContext = "") {
     setPromptSectionIds(sectionIds);
     setDescriptionContext(initialContext);
     setDescriptionMessage(null);
     setDeliveryFormatGate(null);
     setSelectedDeliveryFormat("");
-    setDescriptionPromptStep("context");
     setClarificationQuestions([]);
     setPromptOpen(true);
-  }
-
-  async function resolveDeliveryFormatForPrompt(sectionIds: AssistedDescriptionSectionId[] = allSectionIds, changeRequest = descriptionContext) {
-    if (readOnly || isGeneratingDescription) return false;
-
-    setDescriptionMessage("Checking delivery format...");
-    setClarificationQuestions([]);
-    setReviewMessage(null);
+    if (sectionIds.length !== allSectionIds.length) {
+      setDescriptionPromptStep("context");
+      return;
+    }
 
     try {
-      const deliveryFormatContext = `${task.title}\n${changeRequest}\n${task.description ?? ""}`;
+      const deliveryFormatContext = `${task.title}\n${task.description ?? ""}`;
       const deliveryFormatResolution = onResolveDeliveryFormatGate
         ? await onResolveDeliveryFormatGate(task.area, deliveryFormatContext)
         : getDeliveryFormatGateForArea(task.area, deliveryFormatContext);
       const deliveryFormatAction = resolveDeliveryFormatPromptAction(deliveryFormatResolution);
       if (deliveryFormatAction.kind === "blocked") {
         setDescriptionMessage(deliveryFormatAction.message);
-        setProposalPanelOpen(true);
-        setPromptOpen(true);
-        return false;
+        setDescriptionPromptStep("context");
+        return;
       }
       if (deliveryFormatAction.kind === "confirm") {
         setDeliveryFormatGate(deliveryFormatResolution);
         setSelectedDeliveryFormat(deliveryFormatAction.selectedDeliveryFormat);
-        setDescriptionPromptStep("delivery_format");
         setDescriptionMessage(deliveryFormatAction.message);
-        setProposalPanelOpen(true);
-        setPromptOpen(true);
-        return false;
+        setDescriptionPromptStep("delivery_format");
+        return;
       }
-
-      return await generateProposalWithOptionalDeliveryFormat(sectionIds, changeRequest, deliveryFormatAction.deliveryFormat);
+      setSelectedDeliveryFormat(deliveryFormatAction.deliveryFormat ?? "");
+      setDescriptionPromptStep("context");
     } catch (error) {
-      setDescriptionMessage(error instanceof Error ? error.message : "Could not generate a description proposal.");
-      setProposalPanelOpen(true);
-      setPromptOpen(true);
-      return false;
+      setDescriptionMessage(error instanceof Error ? error.message : "Could not resolve delivery format.");
+      setDescriptionPromptStep("context");
     }
-  }
-
-  async function generateConfirmedDeliveryFormatProposal(sectionIds: AssistedDescriptionSectionId[] = allSectionIds, changeRequest = descriptionContext) {
-    if (readOnly || isGeneratingDescription) return false;
-
-    if (!deliveryFormatGate || deliveryFormatGate.kind !== "needs_confirmation") {
-      setDescriptionMessage("Confirm the delivery format before generating the description proposal.");
-      setProposalPanelOpen(true);
-      setPromptOpen(true);
-      return false;
-    }
-
-    if (!selectedDeliveryFormat || !deliveryFormatGate.options.includes(selectedDeliveryFormat)) {
-      setDescriptionMessage("Choose a valid catalog delivery format before generating the description proposal.");
-      setProposalPanelOpen(true);
-      setPromptOpen(true);
-      return false;
-    }
-
-    return await generateProposalWithConfirmedDeliveryFormat(sectionIds, changeRequest, deliveryFormatGate, selectedDeliveryFormat);
-  }
-
-  async function generateProposalWithConfirmedDeliveryFormat(
-    sectionIds: AssistedDescriptionSectionId[],
-    changeRequest: string,
-    deliveryFormatResolution: CatalogDeliveryFormatGate,
-    deliveryFormat: string
-  ) {
-    if (!deliveryFormatResolution.options.includes(deliveryFormat)) {
-      setDescriptionMessage("Choose a valid catalog delivery format before generating the description proposal.");
-      setProposalPanelOpen(true);
-      setPromptOpen(true);
-      return false;
-    }
-
-    return await generateProposalWithOptionalDeliveryFormat(sectionIds, changeRequest, deliveryFormat);
   }
 
   async function generateProposalWithOptionalDeliveryFormat(
@@ -355,6 +314,7 @@ export function AssistedDescriptionSection({
       setDescriptionContext("");
       setDescriptionMessage(null);
       setDeliveryFormatGate(null);
+      setLastConfirmedDeliveryFormat(deliveryFormat);
       setSelectedDeliveryFormat("");
       setDescriptionPromptStep("context");
       setClarificationQuestions([]);
@@ -413,9 +373,11 @@ export function AssistedDescriptionSection({
         return true;
       }
 
+      const revisionDeliveryFormat = await resolveDeliveryFormatForRevision(changeRequest);
       const draft = await onGenerateDescription(
         task.id,
-        buildAssistedDescriptionGenerationContext({ changeRequest, issueType: task.issueType, sectionIds })
+        buildAssistedDescriptionGenerationContext({ changeRequest, issueType: task.issueType, sectionIds }),
+        revisionDeliveryFormat
       );
       if (draft.status === "needs_clarification") {
         setReviewMessage(`More context is needed: ${draft.clarificationQuestions.join(" ")}`);
@@ -462,6 +424,20 @@ export function AssistedDescriptionSection({
     }
   }
 
+  async function resolveDeliveryFormatForRevision(changeRequest: string): Promise<string | null> {
+    if (lastConfirmedDeliveryFormat) return lastConfirmedDeliveryFormat;
+    const deliveryFormatContext = `${task.title}\n${changeRequest}\n${task.description ?? ""}`;
+    const deliveryFormatResolution = onResolveDeliveryFormatGate
+      ? await onResolveDeliveryFormatGate(task.area, deliveryFormatContext)
+      : getDeliveryFormatGateForArea(task.area, deliveryFormatContext);
+    const action = resolveDeliveryFormatPromptAction(deliveryFormatResolution);
+    if (action.kind === "blocked") throw new Error(action.message);
+    if (action.kind === "confirm") {
+      throw new Error("This proposal needs a delivery format selected before requesting AI changes.");
+    }
+    return action.deliveryFormat;
+  }
+
   async function saveSection(sectionId: AssistedDescriptionSectionId, content: string) {
     if (readOnly || savingSectionId) return false;
 
@@ -474,7 +450,7 @@ export function AssistedDescriptionSection({
     setSavingSectionId(sectionId);
     setSectionMessages((currentMessages) => ({ ...currentMessages, [sectionId]: undefined }));
     try {
-      await onSaveDescription(task.id, serializeAssistedDescriptionSections(nextState.sections, task.issueType));
+      await onSaveDescription(task.id, serializeAssistedDescriptionSections(nextState.sections, task.issueType), "Draft");
       setSectionStatuses(nextState.sectionStatuses);
       return true;
     } catch (error) {
@@ -492,6 +468,28 @@ export function AssistedDescriptionSection({
     if (readOnly) return;
     const nextState = markAssistedDescriptionSectionPolished({ sections, sectionStatuses }, sectionId);
     setSectionStatuses(nextState.sectionStatuses);
+  }
+
+  async function markAllSectionsPolished() {
+    if (readOnly || savingSectionId || !hasDescriptionContent) return;
+    if (!canMarkAllSectionsPolished) {
+      setReviewMessage("Complete every description section before marking the task as ready.");
+      return;
+    }
+    const nextStatuses = { ...sectionStatuses };
+    for (const section of activeSectionDefinitions) {
+      nextStatuses[section.id] = sections[section.id].trim() ? "Polished" : "Raw";
+    }
+    setSavingSectionId("all");
+    setSectionMessages({});
+    try {
+      await onSaveDescription(task.id, serializeAssistedDescriptionSections(sections, task.issueType), "Ready");
+      setSectionStatuses(nextStatuses);
+    } catch (error) {
+      setReviewMessage(error instanceof Error ? error.message : "Could not mark all sections polished.");
+    } finally {
+      setSavingSectionId(null);
+    }
   }
 
   async function resolveProposalItem(proposal: AssistedDescriptionProposal, item: AssistedDescriptionProposalItem, accepted: boolean) {
@@ -563,7 +561,7 @@ export function AssistedDescriptionSection({
         return;
       }
 
-      if (patch.shouldApplyDescription) await onSaveDescription(task.id, patch.markdown);
+      if (patch.shouldApplyDescription) await onSaveDescription(task.id, patch.markdown, "Draft");
       setSectionStatuses(patch.sectionStatuses);
       setProposals((currentProposals) => replaceAssistedDescriptionProposal(currentProposals, patch.proposal));
     } catch (error) {
@@ -656,7 +654,7 @@ export function AssistedDescriptionSection({
         return;
       }
 
-      if (patch.shouldApplyDescription) await onSaveDescription(task.id, patch.markdown);
+      if (patch.shouldApplyDescription) await onSaveDescription(task.id, patch.markdown, accepted ? "Ready" : "Draft");
       setSectionStatuses(patch.sectionStatuses);
       setProposals((currentProposals) => replaceAssistedDescriptionProposal(currentProposals, patch.proposal));
       setActiveProposalId(null);
@@ -686,7 +684,7 @@ export function AssistedDescriptionSection({
     if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
       event.preventDefault();
       event.stopPropagation();
-      void resolveDeliveryFormatForPrompt(promptSectionIds);
+      void generateProposalWithOptionalDeliveryFormat(promptSectionIds, descriptionContext, selectedDeliveryFormat || null);
       return;
     }
 
@@ -702,7 +700,9 @@ export function AssistedDescriptionSection({
       isLoadingProposals={isLoadingProposals}
       isGeneratingDescription={isGeneratingDescription}
       onOpenProposal={(proposalId) => setActiveProposalId(proposalId)}
-      onOpenPrompt={() => openDescriptionPrompt()}
+      onOpenPrompt={() => {
+        void openDescriptionPrompt();
+      }}
       onToggle={() => setProposalPanelOpen((current) => !current)}
       open={proposalPanelOpen}
       proposalLoadMessage={proposalLoadMessage}
@@ -724,10 +724,29 @@ export function AssistedDescriptionSection({
                   {showEmptySections ? "Hide empty" : "Show empty"}
                 </Button>
               ) : null}
+              {hasDescriptionContent ? (
+                <Button
+                  variant="darkSecondary"
+                  icon={savingSectionId ? <Loader2 className="animate-spin" size={14} /> : <Check size={14} />}
+                  disabled={!canMarkAllSectionsPolished || Boolean(savingSectionId)}
+                  onClick={() => {
+                    void markAllSectionsPolished();
+                  }}
+                  title={
+                    canMarkAllSectionsPolished
+                      ? "Mark every description section as polished"
+                      : "Complete every description section before marking the task as ready"
+                  }
+                >
+                  Set all as polished
+                </Button>
+              ) : null}
               <Button
                 variant="darkSecondary"
                 icon={<Sparkles size={14} />}
-                onClick={() => openDescriptionPrompt()}
+                onClick={() => {
+                  void openDescriptionPrompt();
+                }}
               >
                 Generate
               </Button>
@@ -740,11 +759,11 @@ export function AssistedDescriptionSection({
           notes={task.notes}
           onMarkSectionOk={markSectionOk}
           onRequestSectionProposal={(sectionId) => {
-            openDescriptionPrompt([sectionId], `Revise only ${getAssistedDescriptionSectionLabel(sectionId, task.issueType)}.`);
+            void openDescriptionPrompt([sectionId]);
           }}
           onSaveSection={saveSection}
           readOnly={readOnly}
-          savingSectionId={savingSectionId}
+          savingSectionId={savingSectionId === "all" ? null : savingSectionId}
           sectionMessages={sectionMessages}
           sectionStatuses={sectionStatuses}
           sectionDefinitions={activeSectionDefinitions}
@@ -779,10 +798,11 @@ export function AssistedDescriptionSection({
           onSelectDeliveryFormat={setSelectedDeliveryFormat}
           onGenerate={() => {
             if (descriptionPromptStep === "delivery_format") {
-              void generateConfirmedDeliveryFormatProposal(promptSectionIds);
+              setDescriptionMessage(null);
+              setDescriptionPromptStep("context");
               return;
             }
-            void resolveDeliveryFormatForPrompt(promptSectionIds);
+            void generateProposalWithOptionalDeliveryFormat(promptSectionIds, descriptionContext, selectedDeliveryFormat || null);
           }}
           onKeyDown={handleDescriptionContextKeyDown}
           selectedDeliveryFormat={selectedDeliveryFormat}
@@ -1319,7 +1339,7 @@ export function DescriptionPromptModal({
             variant="darkPrimary"
             onClick={onGenerate}
           >
-            {isGeneratingDescription ? "Generating" : isDeliveryFormatStep ? "Generate proposal" : "Continue"}
+            {isGeneratingDescription ? "Generating" : isDeliveryFormatStep ? "Continue" : "Generate proposal"}
           </Button>
         </>
       }

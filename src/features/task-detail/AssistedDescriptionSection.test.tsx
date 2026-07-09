@@ -100,6 +100,17 @@ describe("DescriptionPromptModal delivery-format gate", () => {
     });
   });
 
+  it("auto-generates when the synced catalog has exactly one delivery format option", () => {
+    expect(
+      resolveDeliveryFormatPromptAction({
+        kind: "needs_confirmation",
+        areaDisplayName: "Bug",
+        suggestedFormat: null,
+        options: ["Bug"]
+      })
+    ).toEqual({ kind: "generate", deliveryFormat: "Bug" });
+  });
+
   it("preselects a synced suggested format without hardcoding catalog values", () => {
     const action = resolveDeliveryFormatPromptAction({
       kind: "needs_confirmation",
@@ -139,7 +150,7 @@ describe("DescriptionPromptModal delivery-format gate", () => {
     );
 
     expect(html).toContain("Description context");
-    expect(html).toContain("Continue");
+    expect(html).toContain("Generate proposal");
     expect(html).not.toContain("Delivery format");
   });
 
@@ -168,6 +179,7 @@ describe("DescriptionPromptModal delivery-format gate", () => {
 
     expect(html).toContain("Confirm delivery format");
     expect(html).toContain("Delivery format");
+    expect(html).toContain("Continue");
     expect(html).toContain("Formato B");
     expect(html).not.toContain("Formato inventado");
     expect(html).not.toContain("<select");
