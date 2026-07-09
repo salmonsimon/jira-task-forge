@@ -336,12 +336,6 @@ export default function App() {
     };
   }, []);
 
-  useAppOverlay({
-    enabled: openPanel === "categories",
-    layer: appOverlayLayers.sidePanel,
-    lockScroll: true
-  });
-
   useEffect(() => {
     if (!connectionNotice) return;
 
@@ -680,9 +674,8 @@ export default function App() {
     setOpenPanel("settings");
   }
 
-  function returnToCategoriesFromSettingsGuide() {
+  function clearSettingsInitialGuide() {
     setSettingsInitialGuide(null);
-    setOpenPanel("categories");
   }
 
   async function openJiraIssue(url: string) {
@@ -1759,7 +1752,7 @@ export default function App() {
             onOpenCatalogSourceRequirements={openCatalogSourceRequirementsPage}
             onOpenAiProviderApiKeys={openAiProviderApiKeysPage}
             initialGuide={settingsInitialGuide}
-            onInitialGuideClose={returnToCategoriesFromSettingsGuide}
+            onInitialGuideClose={clearSettingsInitialGuide}
             onClose={() => setOpenPanel(null)}
           />
         ) : null}
