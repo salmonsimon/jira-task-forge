@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { AppSettings } from "../../lib/types";
+import { getAiProviderKeyFeedback } from "./AiProviderSetupGuide";
 import { SettingsPanel, shouldSyncAreaCatalogAfterCatalogSettingsSave } from "./SettingsPanel";
 
 const settings: AppSettings = {
@@ -234,5 +235,22 @@ describe("SettingsPanel", () => {
     ).toBe(true);
     expect(shouldSyncAreaCatalogAfterCatalogSettingsSave(true, { catalogSourceMode: "manual", catalogSourceUrl: "" })).toBe(false);
     expect(shouldSyncAreaCatalogAfterCatalogSettingsSave(false, { catalogSourceMode: "notion" })).toBe(false);
+  });
+});
+
+describe("AiProviderSetupGuide", () => {
+  it("uses one feedback slot for draft-key and saved-credential messages", () => {
+    expect(
+      getAiProviderKeyFeedback({
+        aiCredentialMessage: "OpenAI API key removed from the OS credential store.",
+        connectionTestFeedback: { ok: false, message: "Invalid API key." },
+        hasApiKeyDraft: true,
+        hasConnectionSettings: true,
+        keyDraftTestStatus: "failed"
+      })
+    ).toEqual({
+      message: "OpenAI API key removed from the OS credential store.",
+      variant: "success"
+    });
   });
 });

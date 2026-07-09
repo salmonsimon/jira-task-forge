@@ -6,11 +6,18 @@ import {
   ProposalDiffItemRow,
   TaskDetailNestedModalShell,
   buildProposalTransitionRequest,
+  deliveryFormatDropdownMenuClassName,
   dedupeProposalLogEntries,
   getAiProviderSetupActionLabel,
   isAiProviderSetupMessage,
+  preserveSameTaskPolishedSectionStatuses,
   resolveDeliveryFormatPromptAction
 } from "./AssistedDescriptionSection";
+import {
+  createAssistedDescriptionSectionStatusesForTask,
+  createEmptyAssistedDescriptionSectionStatuses,
+  parseAssistedDescriptionMarkdown
+} from "../../lib/domain/assistedDescription";
 import type { LocalTask } from "../../lib/types";
 
 const overlay = {
@@ -231,6 +238,13 @@ describe("DescriptionPromptModal delivery-format gate", () => {
     expect(html).not.toContain("<select");
   });
 
+  it("keeps the delivery-format dropdown scrollable without the low-legibility fade mask", () => {
+    expect(deliveryFormatDropdownMenuClassName).toContain("max-h-44");
+    expect(deliveryFormatDropdownMenuClassName).toContain("overflow-y-auto");
+    expect(deliveryFormatDropdownMenuClassName).toContain("app-select-menu-dark");
+    expect(deliveryFormatDropdownMenuClassName).not.toContain("app-select-menu-fade");
+  });
+
   it("asks for a delivery format without inference copy", () => {
     const html = renderToStaticMarkup(
       <DescriptionPromptModal
@@ -304,6 +318,31 @@ describe("DescriptionPromptModal delivery-format gate", () => {
 
     expect(html).toContain("overflow-visible");
     expect(html).toContain("Choose delivery format");
+  });
+});
+
+describe("same-task assisted description refresh", () => {
+  it("keeps a freshly saved focused-view section polished when the refreshed task is still Draft", () => {
+    const previousSections = parseAssistedDescriptionMarkdown("## Historia de usuario\n\nRaw story");
+    const currentSections = parseAssistedDescriptionMarkdown("## Historia de usuario\n\nEdited story");
+    const nextSections = parseAssistedDescriptionMarkdown("## Historia de usuario\n\nEdited story");
+    const currentStatuses = {
+      ...createEmptyAssistedDescriptionSectionStatuses(),
+      user_story: "Polished" as const
+    };
+    const nextStatuses = createAssistedDescriptionSectionStatusesForTask(nextSections, "Draft", "Story");
+
+    const preserved = preserveSameTaskPolishedSectionStatuses({
+      currentSections,
+      currentStatuses,
+      issueType: "Story",
+      nextSections,
+      nextStatuses,
+      previousSections
+    });
+
+    expect(nextStatuses.user_story).toBe("Raw");
+    expect(preserved.user_story).toBe("Polished");
   });
 });
 

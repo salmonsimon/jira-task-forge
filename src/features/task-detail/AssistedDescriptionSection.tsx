@@ -56,6 +56,39 @@ type DeliveryFormatPromptAction =
   | { kind: "confirm"; selectedDeliveryFormat: string; message: string }
   | { kind: "blocked"; message: string };
 
+export const deliveryFormatDropdownMenuClassName =
+  "app-select-menu-dark absolute left-0 top-[calc(100%+4px)] z-[500] max-h-44 w-full overflow-y-auto overscroll-contain rounded border border-[#5c606a] bg-[#2b2d31] py-1 text-sm text-[#f4f5f7] shadow-xl";
+
+export function preserveSameTaskPolishedSectionStatuses({
+  currentSections,
+  currentStatuses,
+  issueType,
+  nextSections,
+  nextStatuses,
+  previousSections
+}: {
+  currentSections: AssistedDescriptionSections;
+  currentStatuses: AssistedDescriptionSectionStatuses;
+  issueType?: string | null;
+  nextSections: AssistedDescriptionSections;
+  nextStatuses: AssistedDescriptionSectionStatuses;
+  previousSections: AssistedDescriptionSections;
+}): AssistedDescriptionSectionStatuses {
+  const preservedStatuses = { ...nextStatuses };
+  for (const section of getAssistedDescriptionSectionDefinitions(issueType)) {
+    const sectionId = section.id;
+    const nextContent = nextSections[sectionId].trim();
+    if (
+      nextContent &&
+      currentStatuses[sectionId] === "Polished" &&
+      (previousSections[sectionId].trim() === nextContent || currentSections[sectionId].trim() === nextContent)
+    ) {
+      preservedStatuses[sectionId] = "Polished";
+    }
+  }
+  return preservedStatuses;
+}
+
 export function resolveDeliveryFormatPromptAction(
   gate: CatalogDeliveryFormatGate,
   options: { autoSelectFirstConfirmationOption?: boolean } = {}
@@ -209,19 +242,14 @@ export function AssistedDescriptionSection({
       const nextStatuses = createAssistedDescriptionSectionStatusesForTask(nextSections, task.descriptionStatus, task.issueType);
       if (!sameTask || task.descriptionStatus === "Ready") return nextStatuses;
 
-      for (const section of activeSectionDefinitions) {
-        const sectionId = section.id;
-        const nextContent = nextSections[sectionId].trim();
-        if (
-          nextContent &&
-          currentStatuses[sectionId] === "Polished" &&
-          previousTask.sections[sectionId].trim() === nextContent
-        ) {
-          nextStatuses[sectionId] = "Polished";
-        }
-      }
-
-      return nextStatuses;
+      return preserveSameTaskPolishedSectionStatuses({
+        currentSections: sections,
+        currentStatuses,
+        issueType: task.issueType,
+        nextSections,
+        nextStatuses,
+        previousSections: previousTask.sections
+      });
     });
     previousTaskRef.current = { id: task.id, issueType: task.issueType, sections: nextSections };
     if (!sameTask) {
@@ -552,6 +580,7 @@ export function AssistedDescriptionSection({
       await onSaveDescription(task.id, nextMarkdown, nextDescriptionStatus);
       setLocalDescriptionOverride(nextMarkdown);
       setSectionStatuses(nextState.sectionStatuses);
+      previousTaskRef.current = { id: task.id, issueType: task.issueType, sections: nextState.sections };
       return true;
     } catch (error) {
       setSectionMessages((currentMessages) => ({
@@ -645,7 +674,10 @@ export function AssistedDescriptionSection({
             }));
           }
         }
-        if (patch.shouldApplyDescription) setLocalDescriptionOverride(patch.markdown);
+        if (patch.shouldApplyDescription) {
+          setLocalDescriptionOverride(patch.markdown);
+          previousTaskRef.current = { id: task.id, issueType: task.issueType, sections: patch.sections };
+        }
         setSectionStatuses(patch.sectionStatuses);
         if (persistedProposal) {
           setProposals((currentProposals) => replaceAssistedDescriptionProposal(currentProposals, persistedProposal));
@@ -655,7 +687,10 @@ export function AssistedDescriptionSection({
       }
 
       if (patch.shouldApplyDescription) await onSaveDescription(task.id, patch.markdown, "Draft");
-      if (patch.shouldApplyDescription) setLocalDescriptionOverride(patch.markdown);
+      if (patch.shouldApplyDescription) {
+        setLocalDescriptionOverride(patch.markdown);
+        previousTaskRef.current = { id: task.id, issueType: task.issueType, sections: patch.sections };
+      }
       setSectionStatuses(patch.sectionStatuses);
       setProposals((currentProposals) => replaceAssistedDescriptionProposal(currentProposals, patch.proposal));
     } catch (error) {
@@ -712,6 +747,7 @@ export function AssistedDescriptionSection({
           ...currentStatuses,
           [item.sectionId]: "Polished"
         }));
+        previousTaskRef.current = { id: task.id, issueType: task.issueType, sections: nextSections };
         await refreshTaskDescription();
       }
       setProposals((currentProposals) =>
@@ -749,9 +785,12 @@ export function AssistedDescriptionSection({
           reviewerComment: transition.reviewerComment,
           applyToTaskDescription: transition.applyToTaskDescription
         });
-        if (transition.applyToTaskDescription) await refreshTaskDescription();
-        if (patch.shouldApplyDescription) setLocalDescriptionOverride(patch.markdown);
+        if (patch.shouldApplyDescription) {
+          setLocalDescriptionOverride(patch.markdown);
+          previousTaskRef.current = { id: task.id, issueType: task.issueType, sections: patch.sections };
+        }
         setSectionStatuses(patch.sectionStatuses);
+        if (transition.applyToTaskDescription) await refreshTaskDescription();
         if (persistedProposal) {
           setProposals((currentProposals) => replaceAssistedDescriptionProposal(currentProposals, persistedProposal));
         }
@@ -761,7 +800,10 @@ export function AssistedDescriptionSection({
       }
 
       if (patch.shouldApplyDescription) await onSaveDescription(task.id, patch.markdown, accepted ? "Ready" : "Draft");
-      if (patch.shouldApplyDescription) setLocalDescriptionOverride(patch.markdown);
+      if (patch.shouldApplyDescription) {
+        setLocalDescriptionOverride(patch.markdown);
+        previousTaskRef.current = { id: task.id, issueType: task.issueType, sections: patch.sections };
+      }
       setSectionStatuses(patch.sectionStatuses);
       setProposals((currentProposals) => replaceAssistedDescriptionProposal(currentProposals, patch.proposal));
       setActiveProposalId(null);
@@ -1542,7 +1584,7 @@ function DeliveryFormatDropdown({
 
       {listbox.isOpen ? (
         <div
-          className="app-select-menu-dark app-select-menu-fade absolute left-0 top-[calc(100%+4px)] z-[500] max-h-44 w-full overflow-y-auto overscroll-contain rounded border border-[#5c606a] bg-[#2b2d31] py-1 text-sm text-[#f4f5f7] shadow-xl"
+          className={deliveryFormatDropdownMenuClassName}
           {...listbox.listboxProps}
         >
           {options.map((format) => {
