@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState, type KeyboardEvent as ReactKeyboardEvent,
 import { createPortal } from "react-dom";
 import { BlockingBusyOverlay, Button, FeedbackNote, IconButton, useListboxDropdown } from "../../components/ui";
 import { appOverlayLayers, useAppOverlay } from "../../lib/app-overlays";
+import { formatUnknownError } from "../../lib/domain";
 import {
   applyManualAssistedDescriptionSectionEdit,
   buildAssistedDescriptionGenerationContext,
@@ -323,7 +324,7 @@ export function AssistedDescriptionSection({
       setProposalPanelOpen(true);
       return true;
     } catch (error) {
-      setDescriptionMessage(error instanceof Error ? error.message : "Could not generate a description proposal.");
+      setDescriptionMessage(formatUnknownError(error, "Could not generate a description proposal."));
       setProposalPanelOpen(true);
       setPromptOpen(true);
       return false;
@@ -416,7 +417,7 @@ export function AssistedDescriptionSection({
       setActiveProposalId(proposal.id);
       return true;
     } catch (error) {
-      setReviewMessage(error instanceof Error ? error.message : "Could not request changes for this proposal.");
+      setReviewMessage(formatUnknownError(error, "Could not request changes for this proposal."));
       return false;
     } finally {
       setIsRequestingProposalChanges(false);

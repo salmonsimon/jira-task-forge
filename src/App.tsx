@@ -2252,7 +2252,7 @@ function getTrayDeleteConfirmation(tray: Tray): {
 }
 
 function createPreviewAssistedDescription(task: LocalTask, additionalContext: string): AssistedDescriptionDraft {
-  const context = additionalContext.trim();
+  const context = previewUserDescriptionContext(additionalContext);
   if (!context && task.title.trim().split(/\s+/).filter(Boolean).length <= 4) {
     return {
       status: "needs_clarification",
@@ -2285,6 +2285,17 @@ function createPreviewAssistedDescription(task: LocalTask, additionalContext: st
       ].join("\n")
     })
   };
+}
+
+function previewUserDescriptionContext(additionalContext: string): string {
+  return additionalContext
+    .split(/\n{2,}/)
+    .map((block) => block.trim())
+    .find((block) => block && !isAssistedDescriptionInternalInstruction(block)) ?? "";
+}
+
+function isAssistedDescriptionInternalInstruction(block: string): boolean {
+  return /^(Generate a complete proposal|Revise only these fixed|Use only these fixed sections:)/i.test(block);
 }
 
 function isTaskDescriptionCommandUnavailable(error: unknown): boolean {

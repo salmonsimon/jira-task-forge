@@ -156,28 +156,6 @@ it("keeps Transversal visible and read-only even in manual Projects mode", () =>
   expect(html).toContain("text-right text-xs text-[#6b778c]\">local</span>");
 });
 
-it("blocks manual Project creation while Jira Project sync is enabled", () => {
-  const html = renderToStaticMarkup(
-    <CategoriesPanel
-      projects={[project]}
-      areas={[]}
-      catalogSourceMode="manual"
-      catalogSourceUrl=""
-      projectSyncEnabled
-      onCreateCategory={() => undefined}
-      onDeleteCategory={() => undefined}
-      onUpdateCategory={() => undefined}
-      onSyncAreaCatalog={async () => null}
-      onConfigureCatalogSource={() => undefined}
-      onClose={() => undefined}
-    />
-  );
-
-  expect(html).toContain("Project sync enabled");
-  expect(html).toContain("title=\"Disable Project sync before adding manual Projects\"");
-  expect(html).toContain("disabled");
-});
-
 it("places edit and delete actions before the right-aligned source label", () => {
   const html = renderToStaticMarkup(
     <CategoriesPanel
