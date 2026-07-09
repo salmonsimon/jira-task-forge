@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   DescriptionPromptModal,
   TaskDetailNestedModalShell,
+  buildProposalTransitionRequest,
   dedupeProposalLogEntries,
   getAiProviderSetupActionLabel,
   isAiProviderSetupMessage,
@@ -236,6 +237,71 @@ describe("DescriptionPromptModal delivery-format gate", () => {
     expect(html).not.toContain("bg-[#102d50]");
   });
 });
+
+describe("proposal transition request", () => {
+  it("marks partial accept-remaining transitions so the backend applies pending sections", () => {
+    const transition = buildProposalTransitionRequest(mixedProposal, true);
+
+    expect(transition).toEqual({
+      status: "Partial",
+      reviewerComment: "Accepted remaining proposal sections.",
+      applyToTaskDescription: true
+    });
+  });
+
+  it("marks partial reject-remaining transitions so accepted sections stay applied", () => {
+    const transition = buildProposalTransitionRequest(mixedProposal, false);
+
+    expect(transition).toEqual({
+      status: "Partial",
+      reviewerComment: "Rejected remaining proposal sections.",
+      applyToTaskDescription: true
+    });
+  });
+});
+
+const mixedProposal = {
+  createdAt: "2026-07-09T00:00:00.000Z",
+  decidedAt: null,
+  id: "proposal-1",
+  model: "gpt-4.1",
+  provider: "OpenAI",
+  sections: [
+    {
+      currentContent: "",
+      heading: "Story",
+      proposedContent: "Accepted first.",
+      reviewerComment: "Accepted Story.",
+      sectionId: "user_story" as const,
+      status: "Polished" as const,
+      updatedAt: "2026-07-09T00:01:00.000Z"
+    },
+    {
+      currentContent: "",
+      heading: "Context",
+      proposedContent: "Rejected context.",
+      reviewerComment: "Rejected Context.",
+      sectionId: "problem" as const,
+      status: "Raw" as const,
+      updatedAt: "2026-07-09T00:02:00.000Z"
+    },
+    {
+      currentContent: "",
+      heading: "Scope",
+      proposedContent: "Accepted remaining scope.",
+      reviewerComment: null,
+      sectionId: "scope" as const,
+      status: "Raw" as const,
+      updatedAt: "2026-07-09T00:00:00.000Z"
+    }
+  ],
+  status: "Pending" as const,
+  summary: "Review proposed Jira description changes.",
+  taskId: "task-1",
+  title: "AI description proposal",
+  updatedAt: "2026-07-09T00:02:00.000Z",
+  userComment: null
+};
 
 describe("dedupeProposalLogEntries", () => {
   it("shows one visible proposal log entry per proposal", () => {

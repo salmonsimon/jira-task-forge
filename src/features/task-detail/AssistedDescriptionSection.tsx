@@ -74,6 +74,34 @@ export function resolveDeliveryFormatPromptAction(gate: CatalogDeliveryFormatGat
   return { kind: "generate", deliveryFormat: null };
 }
 
+export function buildProposalTransitionRequest(
+  proposal: AssistedDescriptionProposal,
+  accepted: boolean
+): {
+  status: AssistedDescriptionProposalStatus;
+  reviewerComment?: string;
+  applyToTaskDescription: boolean;
+} {
+  const status = accepted
+    ? hasRejectedAssistedDescriptionProposalSections(proposal)
+      ? "Partial"
+      : "Accepted"
+    : hasAcceptedAssistedDescriptionProposalSections(proposal)
+      ? "Partial"
+      : "Rejected";
+
+  return {
+    status,
+    reviewerComment:
+      status === "Partial"
+        ? accepted
+          ? "Accepted remaining proposal sections."
+          : "Rejected remaining proposal sections."
+        : undefined,
+    applyToTaskDescription: accepted || status === "Partial"
+  };
+}
+
 export function AssistedDescriptionSection({
   task,
   readOnly,
@@ -124,7 +152,11 @@ export function AssistedDescriptionSection({
 }) {
   const activeSectionDefinitions = useMemo(() => getAssistedDescriptionSectionDefinitions(task.issueType), [task.issueType]);
   const allSectionIds = useMemo(() => getAssistedDescriptionSectionIds(task.issueType), [task.issueType]);
-  const sections = useMemo(() => parseAssistedDescriptionMarkdown(task.description, task.issueType), [task.description, task.issueType]);
+  const [localDescriptionOverride, setLocalDescriptionOverride] = useState<string | null>(null);
+  const sections = useMemo(
+    () => parseAssistedDescriptionMarkdown(localDescriptionOverride ?? task.description, task.issueType),
+    [localDescriptionOverride, task.description, task.issueType]
+  );
   const hasDescriptionContent = hasMeaningfulAssistedDescriptionContent(sections);
   const hasEmptySections = activeSectionDefinitions.some((section) => !sections[section.id].trim());
   const canMarkAllSectionsPolished = activeSectionDefinitions.every((section) => sections[section.id].trim());
@@ -159,6 +191,7 @@ export function AssistedDescriptionSection({
 
   useEffect(() => {
     const nextSections = parseAssistedDescriptionMarkdown(task.description, task.issueType);
+    setLocalDescriptionOverride(null);
     setSectionStatuses(createEmptyAssistedDescriptionSectionStatuses());
     setShowEmptySections(false);
     setDescriptionContext("");
@@ -231,10 +264,6 @@ export function AssistedDescriptionSection({
     setSelectedDeliveryFormat("");
     setClarificationQuestions([]);
     setPromptOpen(true);
-    if (sectionIds.length !== allSectionIds.length) {
-      setDescriptionPromptStep("context");
-      return;
-    }
 
     try {
       const deliveryFormatContext = `${task.title}\n${task.description ?? ""}`;
@@ -452,6 +481,7 @@ export function AssistedDescriptionSection({
     setSectionMessages((currentMessages) => ({ ...currentMessages, [sectionId]: undefined }));
     try {
       await onSaveDescription(task.id, serializeAssistedDescriptionSections(nextState.sections, task.issueType), "Draft");
+      setLocalDescriptionOverride(serializeAssistedDescriptionSections(nextState.sections, task.issueType));
       setSectionStatuses(nextState.sectionStatuses);
       return true;
     } catch (error) {
@@ -485,6 +515,7 @@ export function AssistedDescriptionSection({
     setSectionMessages({});
     try {
       await onSaveDescription(task.id, serializeAssistedDescriptionSections(sections, task.issueType), "Ready");
+      setLocalDescriptionOverride(serializeAssistedDescriptionSections(sections, task.issueType));
       setSectionStatuses(nextStatuses);
     } catch (error) {
       setReviewMessage(error instanceof Error ? error.message : "Could not mark all sections polished.");
@@ -551,6 +582,7 @@ export function AssistedDescriptionSection({
             );
           }
         }
+        if (patch.shouldApplyDescription) setLocalDescriptionOverride(patch.markdown);
         setSectionStatuses(patch.sectionStatuses);
         if (persistedProposal) {
           setProposals((currentProposals) => replaceAssistedDescriptionProposal(currentProposals, persistedProposal));
@@ -563,6 +595,7 @@ export function AssistedDescriptionSection({
       }
 
       if (patch.shouldApplyDescription) await onSaveDescription(task.id, patch.markdown, "Draft");
+      if (patch.shouldApplyDescription) setLocalDescriptionOverride(patch.markdown);
       setSectionStatuses(patch.sectionStatuses);
       setProposals((currentProposals) => replaceAssistedDescriptionProposal(currentProposals, patch.proposal));
     } catch (error) {
@@ -635,17 +668,13 @@ export function AssistedDescriptionSection({
     setReviewMessage(null);
     try {
       if (onTransitionProposal) {
-        const nextStatus = accepted
-          ? hasRejectedAssistedDescriptionProposalSections(proposal)
-            ? "Partial"
-            : "Accepted"
-          : hasAcceptedAssistedDescriptionProposalSections(proposal)
-            ? "Partial"
-            : "Rejected";
-        const persistedProposal = await onTransitionProposal(proposal.id, nextStatus, {
-          applyToTaskDescription: accepted || nextStatus === "Partial"
+        const transition = buildProposalTransitionRequest(proposal, accepted);
+        const persistedProposal = await onTransitionProposal(proposal.id, transition.status, {
+          reviewerComment: transition.reviewerComment,
+          applyToTaskDescription: transition.applyToTaskDescription
         });
-        if (accepted || nextStatus === "Partial") await refreshTaskDescription();
+        if (transition.applyToTaskDescription) await refreshTaskDescription();
+        if (patch.shouldApplyDescription) setLocalDescriptionOverride(patch.markdown);
         setSectionStatuses(patch.sectionStatuses);
         if (persistedProposal) {
           setProposals((currentProposals) => replaceAssistedDescriptionProposal(currentProposals, persistedProposal));
@@ -656,6 +685,7 @@ export function AssistedDescriptionSection({
       }
 
       if (patch.shouldApplyDescription) await onSaveDescription(task.id, patch.markdown, accepted ? "Ready" : "Draft");
+      if (patch.shouldApplyDescription) setLocalDescriptionOverride(patch.markdown);
       setSectionStatuses(patch.sectionStatuses);
       setProposals((currentProposals) => replaceAssistedDescriptionProposal(currentProposals, patch.proposal));
       setActiveProposalId(null);
