@@ -1,3 +1,4 @@
+export { BlockingBusyOverlay } from "./BlockingBusyOverlay";
 export { Button } from "./Button";
 export { DrawerShell } from "./DrawerShell";
 export { FeedbackNote, feedbackNoteClassName, type FeedbackNoteSurface, type FeedbackNoteVariant } from "./FeedbackNote";

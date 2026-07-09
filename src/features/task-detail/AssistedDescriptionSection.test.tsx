@@ -96,7 +96,7 @@ describe("DescriptionPromptModal delivery-format gate", () => {
     expect(action).toEqual({
       kind: "confirm",
       selectedDeliveryFormat: "",
-      message: "Could not infer a delivery format from the provided context. Choose one before generating the description proposal."
+      message: "Choose the delivery format for this description proposal."
     });
   });
 
@@ -122,7 +122,7 @@ describe("DescriptionPromptModal delivery-format gate", () => {
     expect(action).toEqual({
       kind: "confirm",
       selectedDeliveryFormat: "Formato B",
-      message: "Review the inferred delivery format before generating the description proposal."
+      message: "Review the selected delivery format before continuing."
     });
   });
 
@@ -177,15 +177,17 @@ describe("DescriptionPromptModal delivery-format gate", () => {
       />
     );
 
-    expect(html).toContain("Confirm delivery format");
+    expect(html).toContain("Choose delivery format");
     expect(html).toContain("Delivery format");
     expect(html).toContain("Continue");
     expect(html).toContain("Formato B");
     expect(html).not.toContain("Formato inventado");
+    expect(html).not.toContain("Context used for inference");
+    expect(html).not.toContain("Could not infer");
     expect(html).not.toContain("<select");
   });
 
-  it("warns when delivery format cannot be inferred from the provided context", () => {
+  it("asks for a delivery format without inference copy", () => {
     const html = renderToStaticMarkup(
       <DescriptionPromptModal
         clarificationQuestions={[]}
@@ -208,9 +210,29 @@ describe("DescriptionPromptModal delivery-format gate", () => {
       />
     );
 
-    expect(html).toContain("Could not infer a delivery format from the provided context.");
     expect(html).toContain("Choose delivery format");
     expect(html).toContain("disabled");
+    expect(html).not.toContain("Context used for inference");
+    expect(html).not.toContain("Could not infer");
+  });
+
+  it("renders generation failures as warning feedback instead of info", () => {
+    const html = renderToStaticMarkup(
+      <DescriptionPromptModal
+        clarificationQuestions={[]}
+        descriptionContext="Crear bug de manos VR"
+        descriptionMessage="Could not generate a description proposal."
+        isGeneratingDescription={false}
+        onCancel={() => undefined}
+        onChange={() => undefined}
+        onGenerate={() => undefined}
+        onKeyDown={() => undefined}
+      />
+    );
+
+    expect(html).toContain("Could not generate a description proposal.");
+    expect(html).toContain("bg-[#3f3102]");
+    expect(html).not.toContain("bg-[#102d50]");
   });
 });
 

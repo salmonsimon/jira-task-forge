@@ -1,7 +1,7 @@
 import { Check, ChevronDown, ChevronLeft, ExternalLink, Link, RefreshCw, Trash2 } from "lucide-react";
 import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Button, FeedbackNote, LoadingOrb, PanelHeader } from "../../components/ui";
+import { BlockingBusyOverlay, Button, FeedbackNote, LoadingOrb, PanelHeader } from "../../components/ui";
 import { appOverlayLayers, useAppOverlay } from "../../lib/app-overlays";
 import { getModalMouseNavigationIntent, isMouseNavigationButton, shouldHandleEnterAsWizardAdvance } from "../../lib/modal-navigation";
 import type { AppSettings, NotionCatalogConnectionTestResult, NotionOAuthConnectionResult, NotionOAuthStartResult } from "../../lib/types";
@@ -304,15 +304,7 @@ export function NotionSynchronizationGuide({
         onMouseUp={handleModalMouseUp}
       >
         {isSavingSynchronization ? (
-          <div className="absolute inset-0 z-20 flex items-center justify-center bg-white/80 px-4 backdrop-blur-[2px]">
-            <div className="rounded border border-[#dfe1e6] bg-white px-5 py-4 text-center shadow-2xl">
-              <LoadingOrb size="sm" />
-              <div className="mt-3 text-sm font-semibold text-[#172b4d]">Saving synchronization</div>
-              <div className="mt-1 max-w-xs text-xs leading-relaxed text-[#6b778c]">
-                Refreshing Areas from the selected catalog source.
-              </div>
-            </div>
-          </div>
+          <BlockingBusyOverlay title="Saving synchronization" detail="Refreshing Areas from the selected catalog source." />
         ) : null}
         <PanelHeader title="Set Catalog Source" subtitle="Choose Manual catalog for local Areas or connect the JTF Sync Catalog page for official area sync." onClose={onClose} />
         <div className="border-b border-[#dfe1e6] bg-[#f7f8fa] px-5 py-3">

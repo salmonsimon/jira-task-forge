@@ -246,7 +246,13 @@ function CategoryList({
             >
               {isSyncing ? "Syncing..." : "Sync"}
             </Button>
-            <Button variant="ghost" icon={<Plus size={13} />} onClick={() => setIsAdding(true)}>
+            <Button
+              variant="ghost"
+              icon={<Plus size={13} />}
+              disabled={Boolean(useProjectSync)}
+              onClick={() => setIsAdding(true)}
+              title={useProjectSync ? "Disable Project sync before adding manual Projects" : "New Project"}
+            >
               New
             </Button>
           </div>

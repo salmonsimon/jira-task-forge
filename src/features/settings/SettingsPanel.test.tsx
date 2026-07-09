@@ -47,8 +47,6 @@ describe("SettingsPanel", () => {
         onOpenJiraApiTokens={() => undefined}
         onOpenCatalogSourceRequirements={() => undefined}
         onOpenAiProviderApiKeys={() => undefined}
-        onExportBackup={() => undefined}
-        onImportBackup={() => undefined}
         onClose={() => undefined}
       />
     );
@@ -59,6 +57,9 @@ describe("SettingsPanel", () => {
     expect(html).not.toContain("Set Synchronization");
     expect(html).toContain("notion-mark");
     expect(html).toContain("h-5 w-5 shrink-0");
+    expect(html).not.toContain("Backup and restore");
+    expect(html).not.toContain("Export backup");
+    expect(html).not.toContain("Import backup");
   });
 
   it("can open the Notion synchronization guide directly", () => {
@@ -91,8 +92,6 @@ describe("SettingsPanel", () => {
         onOpenJiraApiTokens={() => undefined}
         onOpenCatalogSourceRequirements={() => undefined}
         onOpenAiProviderApiKeys={() => undefined}
-        onExportBackup={() => undefined}
-        onImportBackup={() => undefined}
         initialGuide="notion-synchronization"
         onClose={() => undefined}
       />
@@ -135,8 +134,6 @@ describe("SettingsPanel", () => {
         onOpenJiraApiTokens={() => undefined}
         onOpenCatalogSourceRequirements={() => undefined}
         onOpenAiProviderApiKeys={() => undefined}
-        onExportBackup={() => undefined}
-        onImportBackup={() => undefined}
         initialGuide="jira-connection"
         onClose={() => undefined}
       />
@@ -177,8 +174,6 @@ describe("SettingsPanel", () => {
         onOpenJiraApiTokens={() => undefined}
         onOpenCatalogSourceRequirements={() => undefined}
         onOpenAiProviderApiKeys={() => undefined}
-        onExportBackup={() => undefined}
-        onImportBackup={() => undefined}
         initialGuide="ai-provider"
         onClose={() => undefined}
       />

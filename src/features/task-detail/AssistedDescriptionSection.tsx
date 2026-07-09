@@ -1,7 +1,7 @@
 import { Check, ChevronDown, Eye, Loader2, MessageCircle, Pencil, Sparkles, X } from "lucide-react";
 import { useEffect, useMemo, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Button, FeedbackNote, IconButton, useListboxDropdown } from "../../components/ui";
+import { BlockingBusyOverlay, Button, FeedbackNote, IconButton, useListboxDropdown } from "../../components/ui";
 import { appOverlayLayers, useAppOverlay } from "../../lib/app-overlays";
 import {
   applyManualAssistedDescriptionSectionEdit,
@@ -66,8 +66,8 @@ export function resolveDeliveryFormatPromptAction(gate: CatalogDeliveryFormatGat
       kind: "confirm",
       selectedDeliveryFormat: gate.suggestedFormat ?? "",
       message: gate.suggestedFormat
-        ? "Review the inferred delivery format before generating the description proposal."
-        : "Could not infer a delivery format from the provided context. Choose one before generating the description proposal."
+        ? "Review the selected delivery format before continuing."
+        : "Choose the delivery format for this description proposal."
     };
   }
   return { kind: "generate", deliveryFormat: null };
@@ -1307,19 +1307,13 @@ export function DescriptionPromptModal({
       selectedDeliveryFormat &&
       deliveryFormatGate.options.includes(selectedDeliveryFormat)
   );
-  const showUninferredDeliveryFormatWarning =
-    isDeliveryFormatStep && deliveryFormatGate?.kind === "needs_confirmation" && !deliveryFormatGate.suggestedFormat;
+  const messageVariant = descriptionPromptMessageVariant(descriptionMessage);
 
   return (
     <TaskDetailNestedModalShell
       busyOverlay={
         isGeneratingDescription ? (
-          <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#1f2126]/80 px-4 text-sm font-medium text-[#dfe1e6] backdrop-blur-[2px]">
-            <span className="inline-flex items-center gap-2 rounded border border-[#454852] bg-[#25272c] px-4 py-3 shadow-xl">
-              <Loader2 className="animate-spin text-[#85b8ff]" size={16} />
-              Generating proposal...
-            </span>
-          </div>
+          <BlockingBusyOverlay title="Generating proposal" detail="Creating a structured Jira description proposal." />
         ) : null
       }
       dataDescriptionEditor
@@ -1328,9 +1322,9 @@ export function DescriptionPromptModal({
           <Button disabled={isGeneratingDescription} variant="darkSecondary" onClick={onCancel}>
             Cancel
           </Button>
-          {isDeliveryFormatStep ? (
+          {isDeliveryFormatStep && onEditContext ? (
             <Button disabled={isGeneratingDescription} variant="darkSecondary" onClick={onEditContext}>
-              Back
+              Edit context
             </Button>
           ) : null}
           <Button
@@ -1349,19 +1343,12 @@ export function DescriptionPromptModal({
         if (!isGeneratingDescription) onCancel();
       }}
       overlay={overlay}
-      subtitle={isDeliveryFormatStep ? "Confirm the catalog format before proposal generation." : "You can leave the request empty."}
-      title={isDeliveryFormatStep ? "Confirm delivery format" : "Description context"}
+      subtitle={isDeliveryFormatStep ? "Select the catalog format for this proposal." : "You can leave the request empty."}
+      title={isDeliveryFormatStep ? "Choose delivery format" : "Description context"}
     >
 
         <div className="space-y-3 px-5 py-4">
-          {isDeliveryFormatStep ? (
-            <div className="rounded border border-[#454852] bg-[#1f2126] p-3 text-sm leading-relaxed text-[#dfe1e6]">
-              <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-[#9aa0aa]">Context used for inference</div>
-              <p className="whitespace-pre-wrap text-[#dfe1e6]">
-                {descriptionContext.trim() || "No additional context provided."}
-              </p>
-            </div>
-          ) : (
+          {!isDeliveryFormatStep ? (
             <textarea
               autoFocus
               className="min-h-[150px] w-full resize-y rounded border border-[#454852] bg-[#1f2126] p-3 text-sm leading-relaxed text-[#dfe1e6] outline-none placeholder:text-[#7f858f] focus:border-[#85b8ff]"
@@ -1371,9 +1358,9 @@ export function DescriptionPromptModal({
               placeholder="Optional context to guide the proposal..."
               value={descriptionContext}
             />
-          )}
+          ) : null}
           {descriptionMessage ? (
-            <FeedbackNote surface="dark" variant={showUninferredDeliveryFormatWarning ? "warning" : "info"}>
+            <FeedbackNote surface="dark" variant={messageVariant}>
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <span>{descriptionMessage}</span>
                 {canConfigureAiProvider ? (
@@ -1388,11 +1375,6 @@ export function DescriptionPromptModal({
                   </Button>
                 ) : null}
               </div>
-            </FeedbackNote>
-          ) : null}
-          {showUninferredDeliveryFormatWarning && !descriptionMessage ? (
-            <FeedbackNote surface="dark" variant="warning">
-              Could not infer a delivery format from the provided context.
             </FeedbackNote>
           ) : null}
           {isDeliveryFormatStep && deliveryFormatGate?.kind === "needs_confirmation" ? (
@@ -2027,6 +2009,12 @@ export function isAiProviderSetupMessage(message: string): boolean {
 
 export function getAiProviderSetupActionLabel(message: string): string {
   return /Save a .* API key/i.test(message) ? "Save API key" : "Configure OpenAI";
+}
+
+function descriptionPromptMessageVariant(message: string | null): "info" | "warning" {
+  if (!message) return "info";
+  if (/generating/i.test(message)) return "info";
+  return "warning";
 }
 
 function isEmptySectionChangeRequest(changeRequest: string): boolean {

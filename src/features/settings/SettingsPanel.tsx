@@ -1,4 +1,4 @@
-import { Bot, Check, Download, KeyRound, Settings, UploadCloud } from "lucide-react";
+import { Bot, Check, KeyRound, Settings } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button, DetailBlock, DrawerShell, FeedbackNote, PanelHeader, SegmentedControl } from "../../components/ui";
 import { appOverlayLayers, useAppOverlay } from "../../lib/app-overlays";
@@ -45,8 +45,6 @@ export function SettingsPanel({
   onOpenJiraApiTokens,
   onOpenCatalogSourceRequirements,
   onOpenAiProviderApiKeys,
-  onExportBackup,
-  onImportBackup,
   initialGuide,
   onInitialGuideClose,
   onClose
@@ -80,8 +78,6 @@ export function SettingsPanel({
   onOpenJiraApiTokens: () => void;
   onOpenCatalogSourceRequirements: () => void;
   onOpenAiProviderApiKeys: () => void;
-  onExportBackup: () => void;
-  onImportBackup: () => void;
   initialGuide?: "jira-connection" | "notion-synchronization" | "ai-provider" | null;
   onInitialGuideClose?: () => void;
   onClose: () => void;
@@ -227,7 +223,7 @@ export function SettingsPanel({
           onListAiProviderModels={onListAiProviderModels}
         />
       ) : null}
-      <PanelHeader title="Settings" subtitle="Local configuration without secrets in backups" onClose={onClose} />
+      <PanelHeader title="Settings" subtitle="Local configuration with secrets kept outside app data" onClose={onClose} />
       <div className="flex-1 overflow-y-auto overscroll-contain p-4">
         <DetailBlock icon={<Settings size={15} />} title="Appearance">
           <div className="mb-2 text-xs font-medium text-[#6b778c]">Theme</div>
@@ -397,19 +393,6 @@ export function SettingsPanel({
           </p>
         </div>
 
-        <DetailBlock icon={<Download size={15} />} title="Backup and restore">
-          <p className="mb-3 text-sm text-[#6b778c]">
-            JSON backups include trays, tasks, categories, epic mappings, JQL favorites, settings, and attachment metadata. Secrets are excluded.
-          </p>
-          <div className="flex gap-2">
-            <Button className="settings-button-secondary" variant="secondary" icon={<Download size={14} />} onClick={onExportBackup}>
-              Export backup
-            </Button>
-            <Button className="settings-button-secondary" variant="secondary" icon={<UploadCloud size={14} />} onClick={onImportBackup}>
-              Import backup
-            </Button>
-          </div>
-        </DetailBlock>
       </div>
     </DrawerShell>
   );

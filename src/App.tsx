@@ -1468,9 +1468,11 @@ export default function App() {
         options.includeMissingDescriptionTasks
       );
       const persistedTrays = await listPersistedTrays();
+      const persistedCategories = await listPersistedCategories();
       trayWorkspace.replaceTrays(persistedTrays, {
         fallbackSelectedTrayId: jiraCreatePreflight.tray.id
       });
+      setCategories(persistedCategories);
       if (result.status === "succeeded" && result.failedIssueCount === 0) {
         shouldClosePreflight = true;
       } else if (shouldShowBlockingJiraCreationNotice(result)) {
@@ -1756,8 +1758,6 @@ export default function App() {
             onOpenJiraApiTokens={openJiraApiTokensPage}
             onOpenCatalogSourceRequirements={openCatalogSourceRequirementsPage}
             onOpenAiProviderApiKeys={openAiProviderApiKeysPage}
-            onExportBackup={exportBackup}
-            onImportBackup={importBackup}
             initialGuide={settingsInitialGuide}
             onInitialGuideClose={returnToCategoriesFromSettingsGuide}
             onClose={() => setOpenPanel(null)}
