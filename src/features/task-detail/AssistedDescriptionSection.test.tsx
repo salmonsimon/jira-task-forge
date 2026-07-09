@@ -181,6 +181,7 @@ describe("DescriptionPromptModal delivery-format gate", () => {
     expect(html).toContain("Delivery format");
     expect(html).toContain("Continue");
     expect(html).toContain("Formato B");
+    expect(html).not.toContain("Edit context");
     expect(html).not.toContain("Formato inventado");
     expect(html).not.toContain("Context used for inference");
     expect(html).not.toContain("Could not infer");

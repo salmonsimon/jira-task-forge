@@ -786,16 +786,9 @@ export function AssistedDescriptionSection({
           onChange={(nextContext) => {
             setDescriptionContext(nextContext);
             setDeliveryFormatGate(null);
-            setSelectedDeliveryFormat("");
             setDescriptionMessage(null);
           }}
           onConfigureAiProvider={onConfigureAiProvider}
-          onEditContext={() => {
-            setDeliveryFormatGate(null);
-            setSelectedDeliveryFormat("");
-            setDescriptionMessage(null);
-            setDescriptionPromptStep("context");
-          }}
           onSelectDeliveryFormat={setSelectedDeliveryFormat}
           onGenerate={() => {
             if (descriptionPromptStep === "delivery_format") {
@@ -1270,7 +1263,6 @@ export function DescriptionPromptModal({
   onCancel,
   onChange,
   onConfigureAiProvider,
-  onEditContext,
   onGenerate,
   onKeyDown,
   onSelectDeliveryFormat,
@@ -1285,7 +1277,6 @@ export function DescriptionPromptModal({
   onCancel: () => void;
   onChange: (value: string) => void;
   onConfigureAiProvider?: () => void;
-  onEditContext?: () => void;
   onGenerate: () => void;
   onKeyDown: (event: ReactKeyboardEvent<HTMLTextAreaElement>) => void;
   onSelectDeliveryFormat?: (value: string) => void;
@@ -1323,11 +1314,6 @@ export function DescriptionPromptModal({
           <Button disabled={isGeneratingDescription} variant="darkSecondary" onClick={onCancel}>
             Cancel
           </Button>
-          {isDeliveryFormatStep && onEditContext ? (
-            <Button disabled={isGeneratingDescription} variant="darkSecondary" onClick={onEditContext}>
-              Edit context
-            </Button>
-          ) : null}
           <Button
             disabled={isGeneratingDescription || (isDeliveryFormatStep && !hasValidSelectedDeliveryFormat)}
             icon={isGeneratingDescription ? <Loader2 className="animate-spin" size={14} /> : <Sparkles size={14} />}

@@ -206,6 +206,7 @@ pub fn list_task_sync_audit_events(
 
 #[cfg(test)]
 mod tests {
+    use super::official_area_display_name;
     use crate::area_catalog::derive_issue_type_from_area;
 
     #[test]
@@ -216,9 +217,26 @@ mod tests {
         assert_eq!(derive_issue_type_from_area("3D"), "Story");
         assert_eq!(derive_issue_type_from_area(""), "Story");
     }
+
+    #[test]
+    fn keeps_manual_area_names_when_the_catalog_does_not_know_them() {
+        assert_eq!(
+            official_area_display_name("  Herramienta Recortes  ").expect("manual area is accepted"),
+            "Herramienta Recortes"
+        );
+    }
+
+    #[test]
+    fn still_normalizes_known_catalog_area_aliases() {
+        assert_eq!(
+            official_area_display_name("Programacion").expect("catalog alias resolves"),
+            "Programación"
+        );
+    }
 }
 
 fn official_area_display_name(area: &str) -> Result<String, String> {
+    let trimmed_area = area.trim();
     match resolve_catalog_area(area) {
         CatalogAreaResolution::Official {
             area_display_name, ..
@@ -226,8 +244,7 @@ fn official_area_display_name(area: &str) -> Result<String, String> {
         | CatalogAreaResolution::Normalized {
             area_display_name, ..
         } => Ok(area_display_name.to_string()),
-        CatalogAreaResolution::Blocked => {
-            Err("Choose an official catalog area before saving this task.".to_string())
-        }
+        CatalogAreaResolution::Blocked if !trimmed_area.is_empty() => Ok(trimmed_area.to_string()),
+        CatalogAreaResolution::Blocked => Err("Choose an area before saving this task.".to_string()),
     }
 }
