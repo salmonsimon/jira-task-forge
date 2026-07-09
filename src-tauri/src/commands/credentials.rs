@@ -1,8 +1,7 @@
 use tauri::State;
 
 use super::worker::run_blocking_result;
-use crate::area_catalog::NotionCatalogConnectionTestResult;
-use crate::notion_oauth::NotionOAuthStartResult;
+use crate::notion_oauth::{NotionOAuthConnectionResult, NotionOAuthStartResult};
 use crate::services::AppServices;
 
 #[tauri::command]
@@ -160,11 +159,10 @@ pub async fn complete_notion_oauth_connection(
     services: State<'_, AppServices>,
     authorization_code: String,
     state: String,
-    page_url_or_id: String,
-) -> Result<NotionCatalogConnectionTestResult, String> {
+) -> Result<NotionOAuthConnectionResult, String> {
     let services = services.inner().clone();
     run_blocking_result("Credential worker", move || {
-        services.complete_notion_oauth_connection(&authorization_code, &state, &page_url_or_id)
+        services.complete_notion_oauth_connection(&authorization_code, &state)
     })
     .await
 }

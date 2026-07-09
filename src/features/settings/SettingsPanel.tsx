@@ -2,7 +2,7 @@ import { Bot, Check, Download, KeyRound, Settings, UploadCloud } from "lucide-re
 import { useEffect, useRef, useState } from "react";
 import { Button, DetailBlock, DrawerShell, FeedbackNote, PanelHeader, SegmentedControl } from "../../components/ui";
 import { appOverlayLayers, useAppOverlay } from "../../lib/app-overlays";
-import type { AppSettings, CredentialConnectionTestResult, JiraConnectionTestResult, JiraProjectOption, NotionCatalogConnectionTestResult, NotionOAuthStartResult, ProjectSyncApplyRequest, ProjectSyncReview, ThemeMode } from "../../lib/types";
+import type { AppSettings, CredentialConnectionTestResult, JiraConnectionTestResult, JiraProjectOption, NotionCatalogConnectionTestResult, NotionOAuthConnectionResult, NotionOAuthStartResult, ProjectSyncApplyRequest, ProjectSyncReview, ThemeMode } from "../../lib/types";
 import { AiProviderSetupGuide, defaultAiProviderModels } from "./AiProviderSetupGuide";
 import { JiraConnectionGuide } from "./JiraConnectionGuide";
 import notionMark from "../../assets/notion-mark.png";
@@ -73,7 +73,7 @@ export function SettingsPanel({
   onDeleteNotionIntegrationToken: () => Promise<void>;
   onStartNotionOAuthConnection: () => Promise<NotionOAuthStartResult>;
   onOpenNotionOAuthAuthorizationUrl: (url: string) => Promise<void> | void;
-  onCompleteNotionOAuthConnection: (authorizationCode: string, state: string, pageUrlOrId: string) => Promise<NotionCatalogConnectionTestResult>;
+  onCompleteNotionOAuthConnection: (authorizationCode: string, state: string) => Promise<NotionOAuthConnectionResult>;
   onTestNotionCatalogConnection: (pageUrlOrId: string, token?: string) => Promise<NotionCatalogConnectionTestResult>;
   onSyncAreaCatalog: (sourceUrl?: string, sourceMode?: AppSettings["catalogSourceMode"]) => Promise<unknown>;
   onListJiraProjectsForConnection: (siteUrl: string, accountEmail: string) => Promise<JiraProjectOption[]>;
@@ -203,8 +203,8 @@ export function SettingsPanel({
           onOpenCatalogSourceRequirements={onOpenCatalogSourceRequirements}
           onStartNotionOAuthConnection={onStartNotionOAuthConnection}
           onOpenNotionOAuthAuthorizationUrl={onOpenNotionOAuthAuthorizationUrl}
-          onCompleteNotionOAuthConnection={async (authorizationCode, state, pageUrlOrId) => {
-            const result = await onCompleteNotionOAuthConnection(authorizationCode, state, pageUrlOrId);
+          onCompleteNotionOAuthConnection={async (authorizationCode, state) => {
+            const result = await onCompleteNotionOAuthConnection(authorizationCode, state);
             setHasNotionToken(true);
             return result;
           }}

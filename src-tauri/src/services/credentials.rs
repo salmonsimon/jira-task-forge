@@ -1,10 +1,10 @@
 use super::AppServices;
-use crate::area_catalog::test_notion_catalog_page;
 use crate::integrations::ai::AiProvider;
 use crate::notion_oauth::{
     build_notion_oauth_start_result, validate_backend_start_response, validate_exchange_response,
-    validate_oauth_completion, NotionOAuthBackendStartResponse, NotionOAuthExchangeRequest,
-    NotionOAuthExchangeResponse, NotionOAuthStartResult, NotionOAuthTokenSet,
+    validate_oauth_completion, NotionOAuthBackendStartResponse, NotionOAuthConnectionResult,
+    NotionOAuthExchangeRequest, NotionOAuthExchangeResponse, NotionOAuthStartResult,
+    NotionOAuthTokenSet,
 };
 use uuid::Uuid;
 
@@ -198,19 +198,18 @@ impl AppServices {
         &self,
         authorization_code: &str,
         returned_state: &str,
-        page_url_or_id: &str,
-    ) -> Result<crate::area_catalog::NotionCatalogConnectionTestResult, String> {
+    ) -> Result<NotionOAuthConnectionResult, String> {
         let expected_state = self.pending_notion_oauth_state()?;
         let exchange_request =
             validate_oauth_completion(authorization_code, returned_state, &expected_state)?;
         self.delete_pending_notion_oauth_state()?;
         let token_set = exchange_notion_oauth_code(exchange_request)?;
-        let test_result = test_notion_catalog_page(&token_set.access_token, page_url_or_id)?;
-        if !test_result.ok {
-            return Err(test_result.message);
-        }
         self.save_notion_oauth_token_set(&token_set)?;
-        Ok(test_result)
+        Ok(NotionOAuthConnectionResult {
+            ok: true,
+            message: "Notion callback code accepted. Connection saved in the OS credential store."
+                .to_string(),
+        })
     }
 
     fn save_pending_notion_oauth_state(&self, state: &str) -> Result<(), String> {

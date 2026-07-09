@@ -91,6 +91,63 @@ describe("NotionSynchronizationGuide", () => {
     expect(html).not.toContain("href=\"https://www.notion.so/developers\"");
   });
 
+  it("uses OAuth-specific test and save language in the Connect step", () => {
+    const html = renderToStaticMarkup(
+      <NotionSynchronizationGuide
+        settings={settings}
+        hasNotionIntegrationToken={async () => false}
+        onChangeCatalogSettings={async () => true}
+        onClose={() => undefined}
+        onDeleteNotionIntegrationToken={async () => undefined}
+        onOpenCatalogSourceRequirements={() => undefined}
+        onStartNotionOAuthConnection={async () => ({ authorizationUrl: "https://api.notion.com/v1/oauth/authorize?state=state-123", state: "state-123" })}
+        onOpenNotionOAuthAuthorizationUrl={async () => undefined}
+        onCompleteNotionOAuthConnection={async () => ({ ok: true, message: "Connection saved" })}
+        onTestNotionCatalogConnection={async () => ({
+          ok: true,
+          message: "Connected",
+          title: "JTF Sync Catalog",
+          extractedBlockCount: 1
+        })}
+        initialStep="connect"
+      />
+    );
+
+    expect(html).toContain("OAuth callback codes are single-use");
+    expect(html).toContain("Test &amp; save code");
+    expect(html).toContain("Delete connection");
+    expect(html).not.toContain("Remove connection");
+    expect(html).not.toContain("Finish connection");
+  });
+
+  it("keeps catalog page selection and source testing in the Catalog page step", () => {
+    const html = renderToStaticMarkup(
+      <NotionSynchronizationGuide
+        settings={settings}
+        hasNotionIntegrationToken={async () => true}
+        onChangeCatalogSettings={async () => true}
+        onClose={() => undefined}
+        onDeleteNotionIntegrationToken={async () => undefined}
+        onOpenCatalogSourceRequirements={() => undefined}
+        onStartNotionOAuthConnection={async () => ({ authorizationUrl: "https://api.notion.com/v1/oauth/authorize?state=state-123", state: "state-123" })}
+        onOpenNotionOAuthAuthorizationUrl={async () => undefined}
+        onCompleteNotionOAuthConnection={async () => ({ ok: true, message: "Connection saved" })}
+        onTestNotionCatalogConnection={async () => ({
+          ok: true,
+          message: "Connected",
+          title: "JTF Sync Catalog",
+          extractedBlockCount: 1
+        })}
+        initialStep="catalog"
+      />
+    );
+
+    expect(html).toContain("Selected catalog page URL or ID");
+    expect(html).toContain("Test source");
+    expect(html).toContain("must pass validation before synchronization can be saved");
+    expect(html).not.toContain("Finish connection");
+  });
+
   it("keeps manual catalog setup free of Notion token, URL, and test prompts", () => {
     const html = renderToStaticMarkup(
       <NotionSynchronizationGuide
@@ -142,13 +199,12 @@ describe("NotionSynchronizationGuide", () => {
     expect(canSaveNotionSynchronization("notion", { ok: true, message: "Connected", title: "JTF Sync Catalog", extractedBlockCount: 12 })).toBe(true);
   });
 
-  it("keeps Notion OAuth completion blocked until code, state, and selected page are present", () => {
-    expect(canCompleteNotionOAuth("manual", "code", "state", settings.catalogSourceUrl, false)).toBe(false);
-    expect(canCompleteNotionOAuth("notion", "", "state", settings.catalogSourceUrl, false)).toBe(false);
-    expect(canCompleteNotionOAuth("notion", "code", null, settings.catalogSourceUrl, false)).toBe(false);
-    expect(canCompleteNotionOAuth("notion", "code", "state", "", false)).toBe(false);
-    expect(canCompleteNotionOAuth("notion", "code", "state", settings.catalogSourceUrl, true)).toBe(false);
-    expect(canCompleteNotionOAuth("notion", "code", "state", settings.catalogSourceUrl, false)).toBe(true);
+  it("keeps Notion OAuth completion blocked until code and state are present", () => {
+    expect(canCompleteNotionOAuth("manual", "code", "state", false)).toBe(false);
+    expect(canCompleteNotionOAuth("notion", "", "state", false)).toBe(false);
+    expect(canCompleteNotionOAuth("notion", "code", null, false)).toBe(false);
+    expect(canCompleteNotionOAuth("notion", "code", "state", true)).toBe(false);
+    expect(canCompleteNotionOAuth("notion", "code", "state", false)).toBe(true);
   });
 
   it("disables Notion source testing until the page and a saved OAuth token are available", () => {

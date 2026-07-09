@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, FeedbackNote, LoadingOrb, PanelHeader } from "../../components/ui";
 import { appOverlayLayers, useAppOverlay } from "../../lib/app-overlays";
 import { getModalMouseNavigationIntent, isMouseNavigationButton, shouldHandleEnterAsWizardAdvance } from "../../lib/modal-navigation";
-import type { AppSettings, NotionCatalogConnectionTestResult, NotionOAuthStartResult } from "../../lib/types";
+import type { AppSettings, NotionCatalogConnectionTestResult, NotionOAuthConnectionResult, NotionOAuthStartResult } from "../../lib/types";
 
 export const defaultNotionCatalogUrl = "https://app.notion.com/p/387c335aece481c292baf6991a86a5c3";
 export const notionCatalogSourceRequirementsUrl = "https://app.notion.com/p/395c335aece48144b2dbe2cc2e0de298";
@@ -32,11 +32,10 @@ export function canCompleteNotionOAuth(
   mode: AppSettings["catalogSourceMode"],
   authorizationCode: string,
   pendingState: string | null,
-  sourceUrl: string,
   isCompleting: boolean
 ): boolean {
   if (isCompleting || mode !== "notion") return false;
-  return Boolean(authorizationCode.trim() && pendingState?.trim() && sourceUrl.trim());
+  return Boolean(authorizationCode.trim() && pendingState?.trim());
 }
 
 export function canTestNotionCatalogSource(
@@ -60,7 +59,8 @@ export function NotionSynchronizationGuide({
   onStartNotionOAuthConnection,
   onOpenNotionOAuthAuthorizationUrl,
   onCompleteNotionOAuthConnection,
-  onTestNotionCatalogConnection
+  onTestNotionCatalogConnection,
+  initialStep = "source"
 }: {
   settings: AppSettings;
   hasNotionIntegrationToken: () => Promise<boolean>;
@@ -70,11 +70,12 @@ export function NotionSynchronizationGuide({
   onOpenCatalogSourceRequirements: () => void;
   onStartNotionOAuthConnection: () => Promise<NotionOAuthStartResult>;
   onOpenNotionOAuthAuthorizationUrl: (url: string) => Promise<void> | void;
-  onCompleteNotionOAuthConnection: (authorizationCode: string, state: string, pageUrlOrId: string) => Promise<NotionCatalogConnectionTestResult>;
+  onCompleteNotionOAuthConnection: (authorizationCode: string, state: string) => Promise<NotionOAuthConnectionResult>;
   onTestNotionCatalogConnection: (pageUrlOrId: string, token?: string) => Promise<NotionCatalogConnectionTestResult>;
+  initialStep?: NotionStep;
 }) {
   const surfaceRef = useRef<HTMLElement | null>(null);
-  const [step, setStep] = useState<NotionStep>("source");
+  const [step, setStep] = useState<NotionStep>(initialStep);
   const [mode, setMode] = useState<AppSettings["catalogSourceMode"]>(
     settings.catalogSourceMode === "public-exportable" ? "notion" : settings.catalogSourceMode
   );
@@ -89,15 +90,18 @@ export function NotionSynchronizationGuide({
   const [isStartingOAuth, setIsStartingOAuth] = useState(false);
   const [isCompletingOAuth, setIsCompletingOAuth] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
+  const [isSavingSynchronization, setIsSavingSynchronization] = useState(false);
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "error">("idle");
   const visibleSteps = mode === "manual" ? notionSteps.filter((candidate) => candidate.id === "source") : notionSteps;
   const currentStepIndex = visibleSteps.findIndex((candidate) => candidate.id === step);
   const canContinue =
     step === "source" ||
-    (step === "connect" && (hasToken || oauthStatus === "success" || Boolean(pendingOAuthState && oauthCode.trim()) || mode !== "notion")) ||
-    (step === "catalog" && (hasToken || oauthStatus === "success" || mode !== "notion")) ||
+    (step === "connect" && (hasToken || oauthStatus === "success" || mode !== "notion")) ||
+    (step === "catalog" && (mode !== "notion" || canSaveNotionSynchronization(mode, testResult))) ||
     step === "review";
   const canSaveSynchronization = canSaveNotionSynchronization(mode, testResult) && (mode !== "notion" || hasToken);
-  const canCompleteOAuth = canCompleteNotionOAuth(mode, oauthCode, pendingOAuthState, sourceUrl, isCompletingOAuth);
+  const canCompleteOAuth = canCompleteNotionOAuth(mode, oauthCode, pendingOAuthState, isCompletingOAuth);
   const canTestSource = canTestNotionCatalogSource(mode, sourceUrl, hasToken, isTesting);
   const sourceLabel = useMemo(
     () => catalogModeOptions.find((option) => option.value === mode)?.label ?? "Unknown",
@@ -165,16 +169,15 @@ export function NotionSynchronizationGuide({
     setOauthMessage(null);
     setTestResult(null);
     try {
-      const result = await onCompleteNotionOAuthConnection(oauthCode.trim(), pendingOAuthState, sourceUrl.trim());
-      setTestResult(result);
+      const result = await onCompleteNotionOAuthConnection(oauthCode.trim(), pendingOAuthState);
       setHasToken(true);
       setOauthCode("");
       setOauthStatus("success");
-      setOauthMessage("Notion connected and the selected catalog page passed validation.");
+      setOauthMessage(result.message || "Notion callback code accepted. Connection saved.");
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       setOauthStatus("error");
-      setOauthMessage(message || "Notion OAuth failed. No unusable credential was saved.");
+      setOauthMessage(message || "Notion OAuth failed. No connection was saved.");
     } finally {
       setIsCompletingOAuth(false);
     }
@@ -222,16 +225,32 @@ export function NotionSynchronizationGuide({
   }
 
   async function saveAndClose() {
-    if (!canSaveSynchronization) return;
-    await onChangeCatalogSettings({ catalogSourceMode: mode, catalogSourceUrl: mode === "manual" ? "" : sourceUrl.trim() });
-    onClose();
+    if (!canSaveSynchronization || isSavingSynchronization) return;
+    setIsSavingSynchronization(true);
+    setSaveStatus("saving");
+    setSaveMessage(mode === "manual" ? "Saving manual catalog mode..." : "Saving synchronization and refreshing Areas...");
+    try {
+      const saved = await onChangeCatalogSettings({ catalogSourceMode: mode, catalogSourceUrl: mode === "manual" ? "" : sourceUrl.trim() });
+      if (saved) {
+        onClose();
+        return;
+      }
+      setSaveStatus("error");
+      setSaveMessage("Could not save synchronization settings.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setSaveStatus("error");
+      setSaveMessage(message || "Could not save synchronization settings.");
+    } finally {
+      setIsSavingSynchronization(false);
+    }
   }
 
   function handleWizardEnter(event: ReactKeyboardEvent<HTMLElement>) {
     if (event.key !== "Enter" || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
     if (!shouldHandleEnterAsWizardAdvance(event.target)) return;
     if (step === "review") {
-      if (!canContinue || isTesting || !canSaveSynchronization) return;
+      if (!canContinue || isTesting || isSavingSynchronization || !canSaveSynchronization) return;
       event.preventDefault();
       void saveAndClose();
       return;
@@ -244,7 +263,7 @@ export function NotionSynchronizationGuide({
   function handleModalMouseUp(event: ReactMouseEvent<HTMLElement>) {
     const intent = getModalMouseNavigationIntent(event.button, {
       canGoBack: currentStepIndex > 0,
-      canGoForward: step === "review" ? canContinue && !isTesting && canSaveSynchronization : canContinue
+      canGoForward: step === "review" ? canContinue && !isTesting && !isSavingSynchronization && canSaveSynchronization : canContinue
     });
     if (!intent) return;
     event.preventDefault();
@@ -316,13 +335,13 @@ export function NotionSynchronizationGuide({
             </GuideSection>
           ) : null}
           {step === "connect" ? (
-            <GuideSection title="Connect Notion" description="Authorize the Jira Task Forge public connection in Notion. No Notion developer setup, integration secret, or manual page connection is required for app users.">
+            <GuideSection title="Connect Notion" description="Authorize the Jira Task Forge public connection in Notion, paste the callback code, then save the connection. OAuth callback codes are single-use, so saving the connection is the code check.">
               <div className="mb-5 rounded border border-[#dfe1e6] bg-[#f7f8fa] p-4">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div className="min-w-0">
                     <div className="text-sm font-semibold text-[#172b4d]">{hasToken ? "Notion connected" : "Notion not connected"}</div>
                     <p className="text-xs leading-relaxed text-[#6b778c]">
-                      The access token is saved in the OS credential store only after the selected page passes validation.
+                      The access token is saved in the OS credential store after the callback code is accepted. The catalog page is selected and tested in the next step.
                     </p>
                   </div>
                   <Button
@@ -356,20 +375,29 @@ export function NotionSynchronizationGuide({
               ) : null}
               <div className="mt-5 flex flex-wrap gap-2">
                 <Button
+                  className="settings-button-test"
+                  disabled={!canCompleteOAuth}
+                  icon={isCompletingOAuth ? <LoadingOrb size="xs" /> : <Link size={14} />}
+                  variant="secondary"
+                  onClick={completeOAuth}
+                >
+                  {isCompletingOAuth ? "Saving..." : "Test & save code"}
+                </Button>
+                <Button
                   className="settings-button-danger"
                   disabled={!hasToken || isCompletingOAuth}
                   icon={<Trash2 size={14} />}
                   variant="secondary"
                   onClick={removeToken}
                 >
-                  Remove connection
+                  Delete connection
                 </Button>
               </div>
               {oauthMessage ? <FeedbackNote className="mt-4" variant={oauthStatus === "error" ? "error" : "success"}>{oauthMessage}</FeedbackNote> : null}
             </GuideSection>
           ) : null}
           {step === "catalog" ? (
-            <GuideSection title="Catalog page" description="Paste the dedicated catalog page URL or ID that you selected in the Notion OAuth picker. The page must pass validation before the token is saved.">
+            <GuideSection title="Catalog page" description="Paste the dedicated catalog page URL or ID that you selected in the Notion OAuth picker. The page must pass validation before synchronization can be saved.">
               <GuideInput
                 label="Selected catalog page URL or ID"
                 placeholder={defaultNotionCatalogUrl}
@@ -396,38 +424,12 @@ export function NotionSynchronizationGuide({
               <div className="mt-5 flex flex-wrap gap-2">
                 <Button
                   className="settings-button-test"
-                  disabled={!canCompleteOAuth}
-                  icon={isCompletingOAuth ? <LoadingOrb size="xs" /> : <Link size={14} />}
-                  variant="secondary"
-                  onClick={completeOAuth}
-                >
-                  {isCompletingOAuth ? "Connecting..." : "Finish connection"}
-                </Button>
-              </div>
-              {oauthMessage ? <FeedbackNote className="mt-4" variant={oauthStatus === "error" ? "error" : "success"}>{oauthMessage}</FeedbackNote> : null}
-            </GuideSection>
-          ) : null}
-          {step === "review" ? (
-            <GuideSection title="Review and test" description="Save the source settings, then test that the app can read the JTF catalog contract.">
-              <ReviewRows
-                rows={[
-                  ["Catalog mode", sourceLabel],
-                  ["Source", mode === "manual" ? "Manual fallback" : sourceUrl.trim() || "Missing"],
-                  ["Notion connection", mode === "notion" ? (hasToken ? "Connected" : "Missing") : "Not required"]
-                ]}
-              />
-              <div className="mt-5 flex flex-wrap gap-2">
-                <Button
-                  className="settings-button-test"
-                  disabled={!canTestSource || (mode === "notion" && !hasToken)}
+                  disabled={!canTestSource || !hasToken}
                   icon={isTesting ? <LoadingOrb size="xs" /> : <RefreshCw size={14} />}
                   variant="secondary"
                   onClick={testSource}
                 >
                   {isTesting ? "Testing..." : "Test source"}
-                </Button>
-                <Button className="settings-button-primary" disabled={isTesting || !canSaveSynchronization} icon={<Check size={14} />} onClick={saveAndClose}>
-                  Save synchronization
                 </Button>
               </div>
               {testResult ? (
@@ -438,18 +440,51 @@ export function NotionSynchronizationGuide({
               ) : null}
             </GuideSection>
           ) : null}
+          {step === "review" ? (
+            <GuideSection title="Review and save" description="Save the source settings after the catalog page test passes. Saving refreshes Areas from the selected source.">
+              <ReviewRows
+                rows={[
+                  ["Catalog mode", sourceLabel],
+                  ["Source", mode === "manual" ? "Manual fallback" : sourceUrl.trim() || "Missing"],
+                  ["Notion connection", mode === "notion" ? (hasToken ? "Connected" : "Missing") : "Not required"]
+                ]}
+              />
+              <div className="mt-5 flex flex-wrap gap-2">
+                <Button className="settings-button-primary" disabled={isTesting || isSavingSynchronization || !canSaveSynchronization} icon={isSavingSynchronization ? <LoadingOrb size="xs" /> : <Check size={14} />} onClick={saveAndClose}>
+                  {isSavingSynchronization ? "Saving..." : "Save synchronization"}
+                </Button>
+              </div>
+              {testResult ? (
+                <FeedbackNote className="mt-4" variant={testResult.ok ? "success" : "error"}>
+                  {testResult.message}
+                  {testResult.title ? ` Page: ${testResult.title}.` : ""}
+                </FeedbackNote>
+              ) : null}
+              {saveMessage ? <FeedbackNote className="mt-4" variant={saveStatus === "error" ? "error" : "info"}>{saveMessage}</FeedbackNote> : null}
+            </GuideSection>
+          ) : null}
         </div>
         <div className="flex items-center justify-between border-t border-[#dfe1e6] bg-[#f7f8fa] px-5 py-3">
           <Button disabled={currentStepIndex === 0} icon={<ChevronLeft size={14} />} variant="secondary" onClick={moveBack}>
             Back
           </Button>
           {step === "review" ? (
-            <Button className="settings-button-primary" disabled={!canContinue || isTesting || !canSaveSynchronization} icon={<Check size={14} />} onClick={saveAndClose}>
-              Done
+            <Button
+              className="settings-button-primary"
+              disabled={!canContinue || isTesting || isSavingSynchronization || !canSaveSynchronization}
+              icon={isSavingSynchronization ? <LoadingOrb size="xs" /> : <Check size={14} />}
+              onClick={saveAndClose}
+            >
+              {isSavingSynchronization ? "Saving..." : "Done"}
             </Button>
           ) : step === "source" && mode === "manual" ? (
-            <Button className="settings-button-primary" disabled={!canContinue || isTesting} icon={<Check size={14} />} onClick={saveAndClose}>
-              Use manual catalog
+            <Button
+              className="settings-button-primary"
+              disabled={!canContinue || isTesting || isSavingSynchronization}
+              icon={isSavingSynchronization ? <LoadingOrb size="xs" /> : <Check size={14} />}
+              onClick={saveAndClose}
+            >
+              {isSavingSynchronization ? "Saving..." : "Use manual catalog"}
             </Button>
           ) : (
             <Button className="settings-button-primary" disabled={!canContinue} onClick={moveNext}>

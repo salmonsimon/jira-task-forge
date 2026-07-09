@@ -307,6 +307,11 @@ export type NotionCatalogConnectionTestResult = {
   extractedBlockCount: number;
 };
 
+export type NotionOAuthConnectionResult = {
+  ok: boolean;
+  message: string;
+};
+
 export type JiraConnectionTestResult = {
   ok: boolean;
   message: string;

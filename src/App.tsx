@@ -1738,9 +1738,7 @@ export default function App() {
                 ? completePersistedNotionOAuthConnection
                 : async () => ({
                     ok: false,
-                    message: "Notion OAuth is available in the Tauri app.",
-                    title: null,
-                    extractedBlockCount: 0
+                    message: "Notion OAuth is available in the Tauri app."
                   })
             }
             onTestNotionCatalogConnection={

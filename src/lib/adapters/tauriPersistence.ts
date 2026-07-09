@@ -21,6 +21,7 @@ import type {
   LocalIssueRelationship,
   NewAssistedDescriptionProposal,
   NotionCatalogConnectionTestResult,
+  NotionOAuthConnectionResult,
   NotionOAuthStartResult,
   ProjectSyncApplyRequest,
   ProjectSyncDiscoveryRequest,
@@ -272,13 +273,11 @@ export async function startPersistedNotionOAuthConnection(): Promise<NotionOAuth
 
 export async function completePersistedNotionOAuthConnection(
   authorizationCode: string,
-  state: string,
-  pageUrlOrId: string
-): Promise<NotionCatalogConnectionTestResult> {
-  return invoke<NotionCatalogConnectionTestResult>("complete_notion_oauth_connection", {
+  state: string
+): Promise<NotionOAuthConnectionResult> {
+  return invoke<NotionOAuthConnectionResult>("complete_notion_oauth_connection", {
     authorizationCode,
-    state,
-    pageUrlOrId
+    state
   });
 }
 

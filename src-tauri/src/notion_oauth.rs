@@ -11,6 +11,13 @@ pub struct NotionOAuthStartResult {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct NotionOAuthConnectionResult {
+    pub ok: bool,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct NotionOAuthExchangeRequest {
     pub authorization_code: String,
     pub state: String,
