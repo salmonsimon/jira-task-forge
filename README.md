@@ -4,7 +4,8 @@ Local-first Windows desktop app for preparing Jira work before creating issues t
 
 ## Current State
 
-This repo contains the product/architecture decisions and the first Tauri/React desktop app skeleton.
+This repo contains the product/architecture decisions and the first public beta
+of the Tauri/React desktop app.
 
 The app now has SQLite-backed local trays/tasks, persisted non-secret settings,
 CSV export, JSON backup/restore without secrets, Jira API token storage through
@@ -17,6 +18,23 @@ detail sub-tasks, local issue relationship drafts, attachment metadata and
 managed-file ingestion, assisted description sections/proposals, and a guarded
 `Create in Jira` flow that creates required epics, parent Story/Bug issues,
 accepted sub-tasks, and selected Jira-ready attachments.
+
+## Download Beta
+
+The current public beta is `v0.1.0-beta.1`:
+
+```text
+Jira Task Forge Installer.exe
+```
+
+Download it from the GitHub Releases page:
+
+```text
+https://github.com/salmonsimon/jira-task-forge/releases/tag/v0.1.0-beta.1
+```
+
+The Windows installer is currently unsigned, so Windows SmartScreen may warn
+before installation. This beta is public but may still contain bugs.
 
 ## Stack
 
@@ -61,13 +79,14 @@ npm run build
 
 ## Package Windows Installer
 
-After local validation, build the Personal v1 Windows installer from a Windows packaging host with:
+After local validation, build the unsigned Windows installer from WSL with:
 
 ```bash
-npm run package:windows
+CARGO_BUILD_JOBS=1 npm run package:windows:cross
 ```
 
-See [`docs/windows-packaging.md`](docs/windows-packaging.md) for the current packaging gate, install smoke, and Windows-only validation boundary.
+See [`docs/windows-packaging.md`](docs/windows-packaging.md) for the current
+packaging gate, install smoke, and Windows validation boundary.
 
 ## Internal Release Readiness
 
