@@ -6,7 +6,7 @@ import { appOverlayLayers, useAppOverlay } from "../../lib/app-overlays";
 import { getModalMouseNavigationIntent, isMouseNavigationButton, shouldHandleEnterAsWizardAdvance } from "../../lib/modal-navigation";
 import type { AppSettings, NotionCatalogConnectionTestResult, NotionOAuthStartResult } from "../../lib/types";
 
-export const defaultNotionCatalogUrl = "https://app.notion.com/p/capacitacion-interna-dts/JTF-Sync-Catalog-387c335aece481c292baf6991a86a5c3";
+export const defaultNotionCatalogUrl = "https://app.notion.com/p/387c335aece481c292baf6991a86a5c3";
 export const notionCatalogSourceRequirementsUrl = "https://app.notion.com/p/395c335aece48144b2dbe2cc2e0de298";
 
 type NotionStep = "source" | "connect" | "catalog" | "review";

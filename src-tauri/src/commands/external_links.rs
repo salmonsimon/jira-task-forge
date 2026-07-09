@@ -75,9 +75,8 @@ fn platform_open_command(url: &str) -> Result<Command, String> {
 
     if cfg!(target_os = "linux") {
         if is_wsl() {
-            let mut command = Command::new("/mnt/c/Windows/System32/cmd.exe");
-            let quoted_url = cmd_start_url_argument(url);
-            command.args(["/C", "start", "", &quoted_url]);
+            let mut command = Command::new("/mnt/c/Windows/System32/rundll32.exe");
+            command.args(["url.dll,FileProtocolHandler", url]);
             return Ok(command);
         }
 
@@ -87,10 +86,6 @@ fn platform_open_command(url: &str) -> Result<Command, String> {
     }
 
     Err("Opening external links is not supported on this platform.".to_string())
-}
-
-fn cmd_start_url_argument(url: &str) -> String {
-    format!("\"{}\"", url.replace('"', "%22"))
 }
 
 fn is_wsl() -> bool {
@@ -201,8 +196,8 @@ fn site_host(canonical_site_url: &str) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        ai_provider_api_keys_url, cmd_start_url_argument, is_wsl, platform_open_command,
-        validate_jira_issue_url, validate_notion_oauth_authorization_url,
+        ai_provider_api_keys_url, is_wsl, platform_open_command, validate_jira_issue_url,
+        validate_notion_oauth_authorization_url,
     };
 
     #[test]
@@ -237,27 +232,19 @@ mod tests {
             assert!(command.get_args().any(|arg| arg == "https://example.test"));
         } else if cfg!(target_os = "linux") {
             if is_wsl() {
-                assert_eq!(command.get_program(), "/mnt/c/Windows/System32/cmd.exe");
-                assert!(command.get_args().any(|arg| arg == "/C"));
-                assert!(command.get_args().any(|arg| arg == "start"));
+                assert_eq!(
+                    command.get_program(),
+                    "/mnt/c/Windows/System32/rundll32.exe"
+                );
                 assert!(command
                     .get_args()
-                    .any(|arg| arg == "\"https://example.test\""));
+                    .any(|arg| arg == "url.dll,FileProtocolHandler"));
+                assert!(command.get_args().any(|arg| arg == "https://example.test"));
             } else {
                 assert_eq!(command.get_program(), "xdg-open");
                 assert!(command.get_args().any(|arg| arg == "https://example.test"));
             }
         }
-    }
-
-    #[test]
-    fn quotes_wsl_cmd_start_urls_so_query_parameters_survive_ampersands() {
-        assert_eq!(
-            cmd_start_url_argument(
-                "https://api.notion.com/v1/oauth/authorize?client_id=client&response_type=code"
-            ),
-            "\"https://api.notion.com/v1/oauth/authorize?client_id=client&response_type=code\""
-        );
     }
 
     #[test]

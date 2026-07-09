@@ -549,7 +549,7 @@ impl<'connection> CategoryRepository<'connection> {
                     id.as_str(),
                     rule.area_display_name.as_str(),
                     normalize_name(&rule.area_display_name).as_str(),
-                    rule.priority,
+                    rule.order,
                     rule.condition.as_str(),
                     normalize_name(&rule.condition).as_str(),
                     rule.delivery_format.as_str(),
@@ -3012,7 +3012,7 @@ mod tests {
                 }],
                 &[SyncedAreaFormatRule {
                     area_display_name: "Programación".to_string(),
-                    priority: 1,
+                    order: 1,
                     condition: "fallback".to_string(),
                     delivery_format: "Feature de Programación".to_string(),
                     blocking: false,
@@ -3069,14 +3069,14 @@ mod tests {
                 &[
                     SyncedAreaFormatRule {
                         area_display_name: "Arquitectura".to_string(),
-                        priority: 1,
+                        order: 1,
                         condition: "fallback".to_string(),
                         delivery_format: "Arquitectura - Brief".to_string(),
                         blocking: false,
                     },
                     SyncedAreaFormatRule {
                         area_display_name: "Arquitectura".to_string(),
-                        priority: 2,
+                        order: 2,
                         condition: "fallback".to_string(),
                         delivery_format: "Arquitectura - Propuesta Final".to_string(),
                         blocking: false,

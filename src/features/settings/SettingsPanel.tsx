@@ -8,6 +8,13 @@ import { JiraConnectionGuide } from "./JiraConnectionGuide";
 import notionMark from "../../assets/notion-mark.png";
 import { defaultNotionCatalogUrl, NotionSynchronizationGuide } from "./NotionSynchronizationGuide";
 
+export function shouldSyncAreaCatalogAfterCatalogSettingsSave(
+  saved: boolean,
+  patch: Partial<AppSettings>
+): patch is Partial<AppSettings> & { catalogSourceMode: Exclude<AppSettings["catalogSourceMode"], "manual"> } {
+  return Boolean(saved && patch.catalogSourceMode && patch.catalogSourceMode !== "manual");
+}
+
 export function SettingsPanel({
   settings,
   hasJiraApiToken,
@@ -33,6 +40,7 @@ export function SettingsPanel({
   onOpenNotionOAuthAuthorizationUrl,
   onCompleteNotionOAuthConnection,
   onTestNotionCatalogConnection,
+  onSyncAreaCatalog,
   onListJiraProjectsForConnection,
   onOpenJiraApiTokens,
   onOpenCatalogSourceRequirements,
@@ -67,6 +75,7 @@ export function SettingsPanel({
   onOpenNotionOAuthAuthorizationUrl: (url: string) => Promise<void> | void;
   onCompleteNotionOAuthConnection: (authorizationCode: string, state: string, pageUrlOrId: string) => Promise<NotionCatalogConnectionTestResult>;
   onTestNotionCatalogConnection: (pageUrlOrId: string, token?: string) => Promise<NotionCatalogConnectionTestResult>;
+  onSyncAreaCatalog: (sourceUrl?: string, sourceMode?: AppSettings["catalogSourceMode"]) => Promise<unknown>;
   onListJiraProjectsForConnection: (siteUrl: string, accountEmail: string) => Promise<JiraProjectOption[]>;
   onOpenJiraApiTokens: () => void;
   onOpenCatalogSourceRequirements: () => void;
@@ -179,7 +188,13 @@ export function SettingsPanel({
         <NotionSynchronizationGuide
           settings={settings}
           hasNotionIntegrationToken={hasNotionIntegrationToken}
-          onChangeCatalogSettings={onChange}
+          onChangeCatalogSettings={async (patch) => {
+            const saved = await onChange(patch);
+            if (shouldSyncAreaCatalogAfterCatalogSettingsSave(saved, patch)) {
+              await onSyncAreaCatalog(patch.catalogSourceUrl, patch.catalogSourceMode);
+            }
+            return saved;
+          }}
           onClose={closeNotionSynchronizationGuide}
           onDeleteNotionIntegrationToken={async () => {
             await onDeleteNotionIntegrationToken();

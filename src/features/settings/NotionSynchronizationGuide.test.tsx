@@ -20,7 +20,7 @@ const settings: AppSettings = {
   aiModel: "",
   defaultContentLanguage: "Spanish",
   catalogSourceMode: "notion",
-  catalogSourceUrl: "https://app.notion.com/p/capacitacion-interna-dts/JTF-Sync-Catalog-387c335aece481c292baf6991a86a5c3"
+  catalogSourceUrl: "https://app.notion.com/p/387c335aece481c292baf6991a86a5c3"
 };
 
 describe("NotionSynchronizationGuide", () => {

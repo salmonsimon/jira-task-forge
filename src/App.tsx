@@ -582,19 +582,22 @@ export default function App() {
     setCategories((currentCategories) => currentCategories.filter((category) => category.id !== categoryId));
   }
 
-  async function syncAreaCatalog(sourceUrl?: string): Promise<CatalogSyncResult | null> {
+  async function syncAreaCatalog(
+    sourceUrl?: string,
+    sourceMode: AppSettings["catalogSourceMode"] = appSettings.catalogSourceMode
+  ): Promise<CatalogSyncResult | null> {
     const requestedSourceUrl = sourceUrl?.trim() || appSettings.catalogSourceUrl.trim();
-    const shouldUseExternalSource = Boolean(sourceUrl?.trim()) || appSettings.catalogSourceMode !== "manual";
+    const shouldUseExternalSource = Boolean(sourceUrl?.trim()) || sourceMode !== "manual";
 
     if (usesTauriPersistence && requestedSourceUrl && shouldUseExternalSource) {
       const result =
-        appSettings.catalogSourceMode === "notion"
+        sourceMode === "notion"
           ? await syncPersistedAreaCatalogFromNotion(requestedSourceUrl)
           : await syncPersistedAreaCatalogFromSource(requestedSourceUrl);
       if (!result.ok) return result;
 
       setCategories((currentCategories) => [
-        ...currentCategories.filter((category) => category.categoryType !== "area"),
+        ...currentCategories.filter((category) => category.categoryType !== "area" || category.source !== "catalog"),
         ...result.areas.map((area) => ({
           id: `catalog-${area.areaDisplayName}`,
           categoryType: "area" as const,
@@ -603,8 +606,8 @@ export default function App() {
         }))
       ]);
       await updateAppSettings({
-        catalogSourceMode: appSettings.catalogSourceMode,
-        catalogSourceUrl: appSettings.catalogSourceMode === "notion" ? requestedSourceUrl : result.sourceUrl
+        catalogSourceMode: sourceMode,
+        catalogSourceUrl: sourceMode === "notion" ? requestedSourceUrl : result.sourceUrl
       });
       return result;
     }
@@ -614,8 +617,8 @@ export default function App() {
       : appData.listAreas().map((area) => ({ ...area, source: "catalog" as const }));
 
     setCategories((currentCategories) => [
-      ...currentCategories.filter((category) => category.categoryType !== "area"),
-      ...syncedAreas
+      ...currentCategories.filter((category) => category.categoryType !== "area" || category.source !== "catalog"),
+      ...syncedAreas.filter((area) => area.source === "catalog")
     ]);
     return null;
   }
@@ -1731,6 +1734,7 @@ export default function App() {
                     extractedBlockCount: 0
                   })
             }
+            onSyncAreaCatalog={syncAreaCatalog}
             onListJiraProjectsForConnection={listJiraProjectsForConnection}
             onOpenJiraApiTokens={openJiraApiTokensPage}
             onOpenCatalogSourceRequirements={openCatalogSourceRequirementsPage}

@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { AppSettings } from "../../lib/types";
-import { SettingsPanel } from "./SettingsPanel";
+import { SettingsPanel, shouldSyncAreaCatalogAfterCatalogSettingsSave } from "./SettingsPanel";
 
 const settings: AppSettings = {
   themeMode: "light",
@@ -13,7 +13,7 @@ const settings: AppSettings = {
   aiModel: "",
   defaultContentLanguage: "Spanish",
   catalogSourceMode: "notion",
-  catalogSourceUrl: "https://app.notion.com/p/capacitacion-interna-dts/JTF-Sync-Catalog-387c335aece481c292baf6991a86a5c3"
+  catalogSourceUrl: "https://app.notion.com/p/387c335aece481c292baf6991a86a5c3"
 };
 
 describe("SettingsPanel", () => {
@@ -42,6 +42,7 @@ describe("SettingsPanel", () => {
         onOpenNotionOAuthAuthorizationUrl={async () => undefined}
         onCompleteNotionOAuthConnection={async () => ({ ok: true, message: "Connected", title: "JTF Sync Catalog", extractedBlockCount: 1 })}
         onTestNotionCatalogConnection={async () => ({ ok: true, message: "Connected", title: "JTF Sync Catalog", extractedBlockCount: 1 })}
+        onSyncAreaCatalog={async () => undefined}
         onListJiraProjectsForConnection={async () => []}
         onOpenJiraApiTokens={() => undefined}
         onOpenCatalogSourceRequirements={() => undefined}
@@ -85,6 +86,7 @@ describe("SettingsPanel", () => {
         onOpenNotionOAuthAuthorizationUrl={async () => undefined}
         onCompleteNotionOAuthConnection={async () => ({ ok: true, message: "Connected", title: "JTF Sync Catalog", extractedBlockCount: 1 })}
         onTestNotionCatalogConnection={async () => ({ ok: true, message: "Connected", title: "JTF Sync Catalog", extractedBlockCount: 1 })}
+        onSyncAreaCatalog={async () => undefined}
         onListJiraProjectsForConnection={async () => []}
         onOpenJiraApiTokens={() => undefined}
         onOpenCatalogSourceRequirements={() => undefined}
@@ -128,6 +130,7 @@ describe("SettingsPanel", () => {
         onOpenNotionOAuthAuthorizationUrl={async () => undefined}
         onCompleteNotionOAuthConnection={async () => ({ ok: true, message: "Connected", title: "JTF Sync Catalog", extractedBlockCount: 1 })}
         onTestNotionCatalogConnection={async () => ({ ok: true, message: "Connected", title: "JTF Sync Catalog", extractedBlockCount: 1 })}
+        onSyncAreaCatalog={async () => undefined}
         onListJiraProjectsForConnection={async () => []}
         onOpenJiraApiTokens={() => undefined}
         onOpenCatalogSourceRequirements={() => undefined}
@@ -169,6 +172,7 @@ describe("SettingsPanel", () => {
         onOpenNotionOAuthAuthorizationUrl={async () => undefined}
         onCompleteNotionOAuthConnection={async () => ({ ok: true, message: "Connected", title: "JTF Sync Catalog", extractedBlockCount: 1 })}
         onTestNotionCatalogConnection={async () => ({ ok: true, message: "Connected", title: "JTF Sync Catalog", extractedBlockCount: 1 })}
+        onSyncAreaCatalog={async () => undefined}
         onListJiraProjectsForConnection={async () => []}
         onOpenJiraApiTokens={() => undefined}
         onOpenCatalogSourceRequirements={() => undefined}
@@ -185,5 +189,16 @@ describe("SettingsPanel", () => {
     expect(html).toContain("AI provider");
     expect(html).toContain("Default model");
     expect(html).toContain("gpt-4.1");
+  });
+
+  it("syncs Areas after saving Notion catalog settings", () => {
+    expect(
+      shouldSyncAreaCatalogAfterCatalogSettingsSave(true, {
+        catalogSourceMode: "notion",
+        catalogSourceUrl: "https://app.notion.com/p/387c335aece481c292baf6991a86a5c3"
+      })
+    ).toBe(true);
+    expect(shouldSyncAreaCatalogAfterCatalogSettingsSave(true, { catalogSourceMode: "manual", catalogSourceUrl: "" })).toBe(false);
+    expect(shouldSyncAreaCatalogAfterCatalogSettingsSave(false, { catalogSourceMode: "notion" })).toBe(false);
   });
 });
