@@ -547,12 +547,11 @@ export function JiraConnectionGuide({
                       onOpenChange={setIsProjectMenuOpen}
                     />
                   ) : null}
-                  <GuideInput
-                    label={projects.length ? "Manual fallback project key" : "Project key"}
-                    placeholder="JTFTEST"
-                    value={projectKeyDraft}
-                    onChange={(value) => setProjectKeyDraft(value.toUpperCase())}
-                  />
+                  {!projects.length ? (
+                    <FeedbackNote className="mt-3" variant="warning">
+                      Discover Jira projects before choosing where Jira Task Forge creates issues.
+                    </FeedbackNote>
+                  ) : null}
                   {projectDiscoveryMessage ? (
                     <FeedbackNote className="mt-3" variant={projectDiscoveryState === "failed" ? "warning" : "success"}>{projectDiscoveryMessage}</FeedbackNote>
                   ) : null}

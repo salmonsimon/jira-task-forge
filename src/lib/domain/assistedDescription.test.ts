@@ -7,9 +7,11 @@ import {
   buildAssistedDescriptionProposal,
   buildResolveAssistedDescriptionProposalItemPatch,
   buildResolveAssistedDescriptionProposalPatch,
+  createAssistedDescriptionSectionStatusesForTask,
   createEmptyAssistedDescriptionSectionStatuses,
   getAssistedDescriptionProposalItems,
   getAssistedDescriptionSectionIds,
+  hasCompletePolishedAssistedDescription,
   hasReviewableAssistedDescriptionProposalItems,
   parseAssistedDescriptionMarkdown,
   reviseAssistedDescriptionProposal,
@@ -428,6 +430,10 @@ Objetivo anterior.`);
     expect(patch?.proposal.status).toBe("Partial");
     expect(patch?.sections.user_story).toBe("Polished story");
     expect(patch?.sections.problem).toBe("");
+    expect(patch?.sectionStatuses.user_story).toBe("Polished");
+    expect(patch?.sectionStatuses.problem).toBe("Raw");
+    expect(patch?.proposal.sections.find((section) => section.sectionId === "user_story")?.status).toBe("Polished");
+    expect(patch?.proposal.sections.find((section) => section.sectionId === "problem")?.status).toBe("Raw");
   });
 
   it("rejects remaining proposal sections without changing description content", () => {
@@ -474,5 +480,58 @@ Objetivo anterior.`);
     expect(polished.sectionStatuses.user_story).toBe("Polished");
     expect(cleared.sections.user_story).toBe("");
     expect(cleared.sectionStatuses.user_story).toBe("Raw");
+  });
+
+  it("treats a ready persisted task as polished only when every active section has content", () => {
+    const readySections = {
+      ...parseAssistedDescriptionMarkdown(""),
+      user_story: "Como usuario, quiero claridad.",
+      problem: "Hay contexto suficiente.",
+      scope: "Incluye el flujo principal.",
+      acceptance_criteria: "- Cumple el resultado esperado.",
+      minimum_deliverable: "- Cambio verificable.",
+      review_checklist: "- Revisar en build."
+    };
+    const statuses = createAssistedDescriptionSectionStatusesForTask(readySections, "Ready", "Story");
+
+    expect(hasCompletePolishedAssistedDescription({ sections: readySections, sectionStatuses: statuses }, "Story")).toBe(true);
+
+    const incompleteSections = {
+      ...readySections,
+      review_checklist: ""
+    };
+    const incompleteStatuses = createAssistedDescriptionSectionStatusesForTask(incompleteSections, "Ready", "Story");
+
+    expect(hasCompletePolishedAssistedDescription({ sections: incompleteSections, sectionStatuses: incompleteStatuses }, "Story")).toBe(false);
+    expect(incompleteStatuses.review_checklist).toBe("Raw");
+  });
+
+  it("promotes a manually completed final section to a complete polished description", () => {
+    const sections = {
+      ...parseAssistedDescriptionMarkdown(""),
+      user_story: "Como usuario, quiero claridad.",
+      problem: "Hay contexto suficiente.",
+      scope: "Incluye el flujo principal.",
+      acceptance_criteria: "- Cumple el resultado esperado.",
+      minimum_deliverable: "- Cambio verificable.",
+      review_checklist: ""
+    };
+    const startedStatuses = createAssistedDescriptionSectionStatusesForTask({
+      ...sections,
+      review_checklist: "- Revisar en build."
+    }, "Ready", "Story");
+    const currentStatuses = {
+      ...startedStatuses,
+      review_checklist: "Raw" as const
+    };
+
+    const completed = applyManualAssistedDescriptionSectionEdit(
+      { sections, sectionStatuses: currentStatuses },
+      "review_checklist",
+      "- Revisar en build."
+    );
+
+    expect(completed.sectionStatuses.review_checklist).toBe("Polished");
+    expect(hasCompletePolishedAssistedDescription(completed, "Story")).toBe(true);
   });
 });

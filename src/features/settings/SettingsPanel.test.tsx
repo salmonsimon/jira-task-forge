@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { AppSettings } from "../../lib/types";
+import { getAiProviderKeyFeedback } from "./AiProviderSetupGuide";
 import { SettingsPanel, shouldSyncAreaCatalogAfterCatalogSettingsSave } from "./SettingsPanel";
 
 const settings: AppSettings = {
@@ -13,32 +14,10 @@ const settings: AppSettings = {
   aiModel: "",
   defaultContentLanguage: "Spanish",
   catalogSourceMode: "notion",
-  catalogSourceUrl: "https://app.notion.com/p/capacitacion-interna-dts/JTF-Sync-Catalog-387c335aece481c292baf6991a86a5c3"
+  catalogSourceUrl: "https://app.notion.com/p/387c335aece481c292baf6991a86a5c3"
 };
 
 describe("SettingsPanel", () => {
-  it("syncs Areas after a successful Notion catalog settings save", () => {
-    expect(
-      shouldSyncAreaCatalogAfterCatalogSettingsSave(true, {
-        catalogSourceMode: "notion",
-        catalogSourceUrl: "https://app.notion.com/catalog"
-      })
-    ).toBe(true);
-    expect(
-      shouldSyncAreaCatalogAfterCatalogSettingsSave(true, {
-        catalogSourceMode: "public-exportable",
-        catalogSourceUrl: "https://example.com/catalog.json"
-      })
-    ).toBe(true);
-    expect(shouldSyncAreaCatalogAfterCatalogSettingsSave(true, { catalogSourceMode: "manual" })).toBe(false);
-    expect(
-      shouldSyncAreaCatalogAfterCatalogSettingsSave(false, {
-        catalogSourceMode: "notion",
-        catalogSourceUrl: "https://app.notion.com/catalog"
-      })
-    ).toBe(false);
-  });
-
   it("keeps Jira and Notion setup actions compact and uses the Notion mark asset", () => {
     const html = renderToStaticMarkup(
       <SettingsPanel
@@ -59,17 +38,16 @@ describe("SettingsPanel", () => {
         onTestJiraApiTokenQuiet={async () => ({ ok: true, message: "Connected", accountDisplayName: null, accountEmail: null })}
         onTestJiraConnectionSettings={async () => ({ ok: true, message: "Connected", accountDisplayName: null, accountEmail: null })}
         hasNotionIntegrationToken={async () => true}
-        onSaveNotionIntegrationToken={async () => undefined}
         onDeleteNotionIntegrationToken={async () => undefined}
+        onStartNotionOAuthConnection={async () => ({ authorizationUrl: "https://api.notion.com/v1/oauth/authorize?state=state-123", state: "state-123" })}
+        onOpenNotionOAuthAuthorizationUrl={async () => undefined}
+        onCompleteNotionOAuthConnection={async () => ({ ok: true, message: "Connected", title: "JTF Sync Catalog", extractedBlockCount: 1 })}
         onTestNotionCatalogConnection={async () => ({ ok: true, message: "Connected", title: "JTF Sync Catalog", extractedBlockCount: 1 })}
-        onSyncAreaCatalog={async () => null}
+        onSyncAreaCatalog={async () => undefined}
         onListJiraProjectsForConnection={async () => []}
         onOpenJiraApiTokens={() => undefined}
         onOpenCatalogSourceRequirements={() => undefined}
-        onOpenNotionDevelopers={() => undefined}
         onOpenAiProviderApiKeys={() => undefined}
-        onExportBackup={() => undefined}
-        onImportBackup={() => undefined}
         onClose={() => undefined}
       />
     );
@@ -80,6 +58,9 @@ describe("SettingsPanel", () => {
     expect(html).not.toContain("Set Synchronization");
     expect(html).toContain("notion-mark");
     expect(html).toContain("h-5 w-5 shrink-0");
+    expect(html).not.toContain("Backup and restore");
+    expect(html).not.toContain("Export backup");
+    expect(html).not.toContain("Import backup");
   });
 
   it("can open the Notion synchronization guide directly", () => {
@@ -102,17 +83,16 @@ describe("SettingsPanel", () => {
         onTestJiraApiTokenQuiet={async () => ({ ok: true, message: "Connected", accountDisplayName: null, accountEmail: null })}
         onTestJiraConnectionSettings={async () => ({ ok: true, message: "Connected", accountDisplayName: null, accountEmail: null })}
         hasNotionIntegrationToken={async () => true}
-        onSaveNotionIntegrationToken={async () => undefined}
         onDeleteNotionIntegrationToken={async () => undefined}
+        onStartNotionOAuthConnection={async () => ({ authorizationUrl: "https://api.notion.com/v1/oauth/authorize?state=state-123", state: "state-123" })}
+        onOpenNotionOAuthAuthorizationUrl={async () => undefined}
+        onCompleteNotionOAuthConnection={async () => ({ ok: true, message: "Connected", title: "JTF Sync Catalog", extractedBlockCount: 1 })}
         onTestNotionCatalogConnection={async () => ({ ok: true, message: "Connected", title: "JTF Sync Catalog", extractedBlockCount: 1 })}
-        onSyncAreaCatalog={async () => null}
+        onSyncAreaCatalog={async () => undefined}
         onListJiraProjectsForConnection={async () => []}
         onOpenJiraApiTokens={() => undefined}
         onOpenCatalogSourceRequirements={() => undefined}
-        onOpenNotionDevelopers={() => undefined}
         onOpenAiProviderApiKeys={() => undefined}
-        onExportBackup={() => undefined}
-        onImportBackup={() => undefined}
         initialGuide="notion-synchronization"
         onClose={() => undefined}
       />
@@ -121,8 +101,47 @@ describe("SettingsPanel", () => {
     expect(html).toContain("Set Catalog Source");
     expect(html).toContain("Catalog source");
     expect(html).toContain("Catalog mode");
-    expect(html).not.toContain("Notion integration token");
+    expect(html).not.toContain("Paste Notion integration token");
     expect(html.match(/>Setup<\/button>/g)).toHaveLength(3);
+  });
+
+  it("keeps AI credential success messages inside the setup wizard instead of the drawer summary", () => {
+    const html = renderToStaticMarkup(
+      <SettingsPanel
+        settings={{ ...settings, aiProvider: "OpenAI", aiModel: "gpt-4.1" }}
+        hasJiraApiToken
+        hasAiProviderApiKey
+        aiCredentialMessage="OpenAI API key saved in the OS credential store."
+        isTestingJiraConnection={false}
+        isTestingAiProviderConnection={false}
+        onChange={async () => true}
+        onSaveJiraApiToken={async () => true}
+        onDeleteJiraApiToken={() => undefined}
+        onSaveAiProviderApiKey={async () => true}
+        onDeleteAiProviderApiKey={() => undefined}
+        onTestAiProviderConnection={async () => ({ ok: true, message: "Connected" })}
+        onTestAiProviderApiKey={async () => ({ ok: true, message: "Connected" })}
+        onListAiProviderModels={async () => ["gpt-4.1", "gpt-4.1-mini", "o3-mini"]}
+        onTestJiraApiTokenQuiet={async () => ({ ok: true, message: "Connected", accountDisplayName: null, accountEmail: null })}
+        onTestJiraConnectionSettings={async () => ({ ok: true, message: "Connected", accountDisplayName: null, accountEmail: null })}
+        hasNotionIntegrationToken={async () => true}
+        onDeleteNotionIntegrationToken={async () => undefined}
+        onStartNotionOAuthConnection={async () => ({ authorizationUrl: "https://api.notion.com/v1/oauth/authorize?state=state-123", state: "state-123" })}
+        onOpenNotionOAuthAuthorizationUrl={async () => undefined}
+        onCompleteNotionOAuthConnection={async () => ({ ok: true, message: "Connected", title: "JTF Sync Catalog", extractedBlockCount: 1 })}
+        onTestNotionCatalogConnection={async () => ({ ok: true, message: "Connected", title: "JTF Sync Catalog", extractedBlockCount: 1 })}
+        onSyncAreaCatalog={async () => undefined}
+        onListJiraProjectsForConnection={async () => []}
+        onOpenJiraApiTokens={() => undefined}
+        onOpenCatalogSourceRequirements={() => undefined}
+        onOpenAiProviderApiKeys={() => undefined}
+        onClose={() => undefined}
+      />
+    );
+
+    expect(html).toContain("API key");
+    expect(html).toContain("Saved");
+    expect(html).not.toContain("OpenAI API key saved in the OS credential store.");
   });
 
   it("can open the Jira connection guide directly", () => {
@@ -145,17 +164,16 @@ describe("SettingsPanel", () => {
         onTestJiraApiTokenQuiet={async () => ({ ok: true, message: "Connected", accountDisplayName: null, accountEmail: null })}
         onTestJiraConnectionSettings={async () => ({ ok: true, message: "Connected", accountDisplayName: null, accountEmail: null })}
         hasNotionIntegrationToken={async () => true}
-        onSaveNotionIntegrationToken={async () => undefined}
         onDeleteNotionIntegrationToken={async () => undefined}
+        onStartNotionOAuthConnection={async () => ({ authorizationUrl: "https://api.notion.com/v1/oauth/authorize?state=state-123", state: "state-123" })}
+        onOpenNotionOAuthAuthorizationUrl={async () => undefined}
+        onCompleteNotionOAuthConnection={async () => ({ ok: true, message: "Connected", title: "JTF Sync Catalog", extractedBlockCount: 1 })}
         onTestNotionCatalogConnection={async () => ({ ok: true, message: "Connected", title: "JTF Sync Catalog", extractedBlockCount: 1 })}
-        onSyncAreaCatalog={async () => null}
+        onSyncAreaCatalog={async () => undefined}
         onListJiraProjectsForConnection={async () => []}
         onOpenJiraApiTokens={() => undefined}
         onOpenCatalogSourceRequirements={() => undefined}
-        onOpenNotionDevelopers={() => undefined}
         onOpenAiProviderApiKeys={() => undefined}
-        onExportBackup={() => undefined}
-        onImportBackup={() => undefined}
         initialGuide="jira-connection"
         onClose={() => undefined}
       />
@@ -186,17 +204,16 @@ describe("SettingsPanel", () => {
         onTestJiraApiTokenQuiet={async () => ({ ok: true, message: "Connected", accountDisplayName: null, accountEmail: null })}
         onTestJiraConnectionSettings={async () => ({ ok: true, message: "Connected", accountDisplayName: null, accountEmail: null })}
         hasNotionIntegrationToken={async () => true}
-        onSaveNotionIntegrationToken={async () => undefined}
         onDeleteNotionIntegrationToken={async () => undefined}
+        onStartNotionOAuthConnection={async () => ({ authorizationUrl: "https://api.notion.com/v1/oauth/authorize?state=state-123", state: "state-123" })}
+        onOpenNotionOAuthAuthorizationUrl={async () => undefined}
+        onCompleteNotionOAuthConnection={async () => ({ ok: true, message: "Connected", title: "JTF Sync Catalog", extractedBlockCount: 1 })}
         onTestNotionCatalogConnection={async () => ({ ok: true, message: "Connected", title: "JTF Sync Catalog", extractedBlockCount: 1 })}
-        onSyncAreaCatalog={async () => null}
+        onSyncAreaCatalog={async () => undefined}
         onListJiraProjectsForConnection={async () => []}
         onOpenJiraApiTokens={() => undefined}
         onOpenCatalogSourceRequirements={() => undefined}
-        onOpenNotionDevelopers={() => undefined}
         onOpenAiProviderApiKeys={() => undefined}
-        onExportBackup={() => undefined}
-        onImportBackup={() => undefined}
         initialGuide="ai-provider"
         onClose={() => undefined}
       />
@@ -207,5 +224,33 @@ describe("SettingsPanel", () => {
     expect(html).toContain("AI provider");
     expect(html).toContain("Default model");
     expect(html).toContain("gpt-4.1");
+  });
+
+  it("syncs Areas after saving Notion catalog settings", () => {
+    expect(
+      shouldSyncAreaCatalogAfterCatalogSettingsSave(true, {
+        catalogSourceMode: "notion",
+        catalogSourceUrl: "https://app.notion.com/p/387c335aece481c292baf6991a86a5c3"
+      })
+    ).toBe(true);
+    expect(shouldSyncAreaCatalogAfterCatalogSettingsSave(true, { catalogSourceMode: "manual", catalogSourceUrl: "" })).toBe(false);
+    expect(shouldSyncAreaCatalogAfterCatalogSettingsSave(false, { catalogSourceMode: "notion" })).toBe(false);
+  });
+});
+
+describe("AiProviderSetupGuide", () => {
+  it("uses one feedback slot for draft-key and saved-credential messages", () => {
+    expect(
+      getAiProviderKeyFeedback({
+        aiCredentialMessage: "OpenAI API key removed from the OS credential store.",
+        connectionTestFeedback: { ok: false, message: "Invalid API key." },
+        hasApiKeyDraft: true,
+        hasConnectionSettings: true,
+        keyDraftTestStatus: "failed"
+      })
+    ).toEqual({
+      message: "OpenAI API key removed from the OS credential store.",
+      variant: "success"
+    });
   });
 });

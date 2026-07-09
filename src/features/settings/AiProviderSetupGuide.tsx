@@ -105,6 +105,13 @@ export function AiProviderSetupGuide({
     lockScroll: true,
     surfaceRef
   });
+  const keyFeedback = getAiProviderKeyFeedback({
+    aiCredentialMessage,
+    connectionTestFeedback,
+    hasApiKeyDraft: Boolean(apiKeyDraft),
+    hasConnectionSettings: controls.hasConnectionSettings,
+    keyDraftTestStatus
+  });
 
   useEffect(() => {
     if (!apiKeyDraft) return;
@@ -356,13 +363,8 @@ export function AiProviderSetupGuide({
                   Remove key
                 </Button>
               </div>
-              {apiKeyDraft || connectionTestFeedback ? (
-                <FeedbackNote className="mt-4" variant={aiProviderConnectionFeedbackVariant(connectionTestFeedback, keyDraftTestStatus, controls.hasConnectionSettings)}>
-                  {aiProviderConnectionFeedbackMessage(connectionTestFeedback, keyDraftTestStatus, controls.hasConnectionSettings, Boolean(apiKeyDraft))}
-                </FeedbackNote>
-              ) : null}
-              {aiCredentialMessage ? (
-                <FeedbackNote className="mt-4" variant={aiCredentialMessageVariant(aiCredentialMessage)}>{aiCredentialMessage}</FeedbackNote>
+              {keyFeedback ? (
+                <FeedbackNote className="mt-4" variant={keyFeedback.variant}>{keyFeedback.message}</FeedbackNote>
               ) : null}
             </div>
           ) : null}
@@ -424,6 +426,37 @@ export function AiProviderSetupGuide({
       </section>
     </div>
   );
+}
+
+export function getAiProviderKeyFeedback({
+  aiCredentialMessage,
+  connectionTestFeedback,
+  hasApiKeyDraft,
+  hasConnectionSettings,
+  keyDraftTestStatus
+}: {
+  aiCredentialMessage: string | null;
+  connectionTestFeedback: CredentialConnectionTestResult | null;
+  hasApiKeyDraft: boolean;
+  hasConnectionSettings: boolean;
+  keyDraftTestStatus: CredentialDraftTestStatus;
+}): { message: string; variant: "error" | "info" | "success" | "warning" } | null {
+  if (aiCredentialMessage) {
+    return {
+      message: aiCredentialMessage,
+      variant: aiCredentialMessageVariant(aiCredentialMessage)
+    };
+  }
+  if (!hasApiKeyDraft && !connectionTestFeedback) return null;
+  return {
+    message: aiProviderConnectionFeedbackMessage(
+      connectionTestFeedback,
+      keyDraftTestStatus,
+      hasConnectionSettings,
+      hasApiKeyDraft
+    ),
+    variant: aiProviderConnectionFeedbackVariant(connectionTestFeedback, keyDraftTestStatus, hasConnectionSettings)
+  };
 }
 
 function mergeModelOptions(models: string[], selectedModel: string): string[] {

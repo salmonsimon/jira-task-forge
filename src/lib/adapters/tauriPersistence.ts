@@ -21,6 +21,8 @@ import type {
   LocalIssueRelationship,
   NewAssistedDescriptionProposal,
   NotionCatalogConnectionTestResult,
+  NotionOAuthConnectionResult,
+  NotionOAuthStartResult,
   ProjectSyncApplyRequest,
   ProjectSyncDiscoveryRequest,
   ProjectSyncReview,
@@ -265,6 +267,20 @@ export async function deletePersistedNotionIntegrationToken(): Promise<void> {
   await invoke("delete_notion_integration_token");
 }
 
+export async function startPersistedNotionOAuthConnection(): Promise<NotionOAuthStartResult> {
+  return invoke<NotionOAuthStartResult>("start_notion_oauth_connection");
+}
+
+export async function completePersistedNotionOAuthConnection(
+  authorizationCode: string,
+  state: string
+): Promise<NotionOAuthConnectionResult> {
+  return invoke<NotionOAuthConnectionResult>("complete_notion_oauth_connection", {
+    authorizationCode,
+    state
+  });
+}
+
 export async function testPersistedOpenAiConnection(): Promise<string> {
   return testPersistedAiProviderConnection();
 }
@@ -428,6 +444,10 @@ export async function openPersistedNotionDevelopersPage(): Promise<void> {
 
 export async function openPersistedNotionCatalogSourceRequirementsPage(): Promise<void> {
   await invoke("open_notion_catalog_source_requirements_page");
+}
+
+export async function openPersistedNotionOAuthAuthorizationUrl(url: string): Promise<void> {
+  await invoke("open_notion_oauth_authorization_url", { url });
 }
 
 export async function openPersistedJiraIssueUrl(url: string): Promise<void> {

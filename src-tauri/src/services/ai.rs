@@ -52,20 +52,13 @@ impl AppServices {
         let catalog_context = {
             let connection = self.connection();
             let category_repository = CategoryRepository::new(&connection);
-            let delivery_format = delivery_format
-                .map(str::trim)
-                .filter(|value| !value.is_empty());
             let synced_options = category_repository
                 .catalog_delivery_format_options_for_area(&task.area)
                 .map_err(|error| format!("Could not load catalog delivery formats: {error}"))?;
 
             if !synced_options.is_empty() {
-                let Some(delivery_format) = delivery_format else {
-                    return Err(
-                        "Choose a delivery format before generating a description proposal."
-                            .to_string(),
-                    );
-                };
+                let delivery_format =
+                    resolve_synced_delivery_format(delivery_format, &synced_options)?;
                 let template = category_repository
                     .catalog_template_for_confirmed_delivery_format(&task.area, delivery_format)
                     .map_err(|error| format!("Could not load catalog template context: {error}"))?
@@ -195,6 +188,24 @@ impl AppServices {
     }
 }
 
+fn resolve_synced_delivery_format<'a>(
+    delivery_format: Option<&'a str>,
+    synced_options: &'a [String],
+) -> Result<&'a str, String> {
+    if let Some(delivery_format) = delivery_format
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        return Ok(delivery_format);
+    }
+
+    if synced_options.len() == 1 {
+        return Ok(synced_options[0].as_str());
+    }
+
+    Err("Choose a delivery format before generating a description proposal.".to_string())
+}
+
 fn append_synced_catalog_final_sections(
     draft: &mut AssistedDescriptionDraft,
     template: &SyncedCatalogTemplateContext,
@@ -294,7 +305,10 @@ fn normalize_markdown_heading(line: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{append_synced_catalog_final_sections, SyncedCatalogTemplateContext};
+    use super::{
+        append_synced_catalog_final_sections, resolve_synced_delivery_format,
+        SyncedCatalogTemplateContext,
+    };
     use crate::models::AssistedDescriptionDraft;
 
     #[test]
@@ -347,5 +361,31 @@ Texto inventado por IA.
         ));
         assert!(!description.contains("Texto inventado por IA"));
         assert!(!description.contains("Checklist inventado"));
+    }
+
+    #[test]
+    fn synced_delivery_format_resolution_auto_selects_the_only_option() {
+        let options = vec!["Bug".to_string()];
+
+        assert_eq!(
+            resolve_synced_delivery_format(None, &options).expect("single option resolves"),
+            "Bug"
+        );
+        assert_eq!(
+            resolve_synced_delivery_format(Some("  Bug  "), &options)
+                .expect("explicit option resolves"),
+            "Bug"
+        );
+    }
+
+    #[test]
+    fn synced_delivery_format_resolution_still_blocks_ambiguous_missing_format() {
+        let options = vec!["Arte Integrado".to_string(), "Arte Empaquetado".to_string()];
+
+        assert_eq!(
+            resolve_synced_delivery_format(None, &options)
+                .expect_err("ambiguous missing format blocks"),
+            "Choose a delivery format before generating a description proposal."
+        );
     }
 }

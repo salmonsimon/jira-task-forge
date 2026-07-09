@@ -17,6 +17,7 @@ import { appOverlayLayers, useAppOverlay } from "./lib/app-overlays";
 import { hasOpenAppOverlay, isMouseNavigationButton } from "./lib/modal-navigation";
 import {
   choosePersistedTaskAttachmentFiles,
+  completePersistedNotionOAuthConnection,
   createPersistedCategory,
   createPersistedJiraParentIssues,
   createPersistedJqlFavorite,
@@ -52,12 +53,12 @@ import {
   openPersistedAtlassianApiTokensPage,
   openPersistedJiraIssueUrl,
   openPersistedNotionCatalogSourceRequirementsPage,
-  openPersistedNotionDevelopersPage,
+  openPersistedNotionOAuthAuthorizationUrl,
   runPersistedJqlQuery,
   saveCsvFile,
   savePersistedAiProviderApiKey,
   savePersistedJiraApiToken,
-  savePersistedNotionIntegrationToken,
+  startPersistedNotionOAuthConnection,
   resolvePersistedDeliveryFormatGate,
   syncPersistedAreaCatalog,
   syncPersistedAreaCatalogFromNotion,
@@ -733,21 +734,6 @@ export default function App() {
     window.open(url, "_blank", "noopener,noreferrer");
   }
 
-  async function openNotionDevelopersPage() {
-    const url = "https://app.notion.com/developers/connections";
-
-    if (usesTauriPersistence) {
-      try {
-        await openPersistedNotionDevelopersPage();
-        return;
-      } catch {
-        console.warn(`Could not open Notion automatically. Open ${url} in your browser.`);
-      }
-    }
-
-    window.open(url, "_blank", "noopener,noreferrer");
-  }
-
   async function openCatalogSourceRequirementsPage() {
     if (usesTauriPersistence) {
       try {
@@ -759,6 +745,15 @@ export default function App() {
     }
 
     window.open(notionCatalogSourceRequirementsUrl, "_blank", "noopener,noreferrer");
+  }
+
+  async function openNotionOAuthAuthorizationUrl(url: string) {
+    if (usesTauriPersistence) {
+      await openPersistedNotionOAuthAuthorizationUrl(url);
+      return;
+    }
+
+    window.open(url, "_blank", "noopener,noreferrer");
   }
 
   function showConnectionNotice(notice: Omit<ConnectionNotice, "id">) {
@@ -1473,9 +1468,11 @@ export default function App() {
         options.includeMissingDescriptionTasks
       );
       const persistedTrays = await listPersistedTrays();
+      const persistedCategories = await listPersistedCategories();
       trayWorkspace.replaceTrays(persistedTrays, {
         fallbackSelectedTrayId: jiraCreatePreflight.tray.id
       });
+      setCategories(persistedCategories);
       if (result.status === "succeeded" && result.failedIssueCount === 0) {
         shouldClosePreflight = true;
       } else if (shouldShowBlockingJiraCreationNotice(result)) {
@@ -1729,8 +1726,23 @@ export default function App() {
             onDiscoverProjectSync={discoverProjectSync}
             onApplyProjectSync={applyProjectSync}
             hasNotionIntegrationToken={usesTauriPersistence ? hasPersistedNotionIntegrationToken : async () => false}
-            onSaveNotionIntegrationToken={usesTauriPersistence ? savePersistedNotionIntegrationToken : async () => undefined}
             onDeleteNotionIntegrationToken={usesTauriPersistence ? deletePersistedNotionIntegrationToken : async () => undefined}
+            onStartNotionOAuthConnection={
+              usesTauriPersistence
+                ? startPersistedNotionOAuthConnection
+                : async () => {
+                    throw new Error("Notion OAuth is available in the Tauri app.");
+                  }
+            }
+            onOpenNotionOAuthAuthorizationUrl={openNotionOAuthAuthorizationUrl}
+            onCompleteNotionOAuthConnection={
+              usesTauriPersistence
+                ? completePersistedNotionOAuthConnection
+                : async () => ({
+                    ok: false,
+                    message: "Notion OAuth is available in the Tauri app."
+                  })
+            }
             onTestNotionCatalogConnection={
               usesTauriPersistence
                 ? testPersistedNotionCatalogConnection
@@ -1745,10 +1757,7 @@ export default function App() {
             onListJiraProjectsForConnection={listJiraProjectsForConnection}
             onOpenJiraApiTokens={openJiraApiTokensPage}
             onOpenCatalogSourceRequirements={openCatalogSourceRequirementsPage}
-            onOpenNotionDevelopers={openNotionDevelopersPage}
             onOpenAiProviderApiKeys={openAiProviderApiKeysPage}
-            onExportBackup={exportBackup}
-            onImportBackup={importBackup}
             initialGuide={settingsInitialGuide}
             onInitialGuideClose={returnToCategoriesFromSettingsGuide}
             onClose={() => setOpenPanel(null)}
@@ -2243,7 +2252,7 @@ function getTrayDeleteConfirmation(tray: Tray): {
 }
 
 function createPreviewAssistedDescription(task: LocalTask, additionalContext: string): AssistedDescriptionDraft {
-  const context = additionalContext.trim();
+  const context = previewUserDescriptionContext(additionalContext);
   if (!context && task.title.trim().split(/\s+/).filter(Boolean).length <= 4) {
     return {
       status: "needs_clarification",
@@ -2276,6 +2285,17 @@ function createPreviewAssistedDescription(task: LocalTask, additionalContext: st
       ].join("\n")
     })
   };
+}
+
+function previewUserDescriptionContext(additionalContext: string): string {
+  return additionalContext
+    .split(/\n{2,}/)
+    .map((block) => block.trim())
+    .find((block) => block && !isAssistedDescriptionInternalInstruction(block)) ?? "";
+}
+
+function isAssistedDescriptionInternalInstruction(block: string): boolean {
+  return /^(Generate a complete proposal|Revise only these fixed|Use only these fixed sections:)/i.test(block);
 }
 
 function isTaskDescriptionCommandUnavailable(error: unknown): boolean {

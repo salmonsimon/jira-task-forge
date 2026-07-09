@@ -3,6 +3,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AssistedDescriptionProposal, NewAssistedDescriptionProposal } from "../types";
 import {
   createPersistedAssistedDescriptionProposal,
+  completePersistedNotionOAuthConnection,
+  openPersistedNotionOAuthAuthorizationUrl,
+  startPersistedNotionOAuthConnection,
   testPersistedNotionCatalogConnection,
   testPersistedJiraApiToken,
   transitionPersistedAssistedDescriptionProposal,
@@ -118,6 +121,41 @@ describe("Tauri persistence assisted description proposals", () => {
     await expect(testPersistedNotionCatalogConnection("https://app.notion.com/page-id")).resolves.toEqual(result);
     expect(invokeMock).toHaveBeenCalledWith("test_notion_catalog_connection", {
       pageUrlOrId: "https://app.notion.com/page-id"
+    });
+  });
+
+  it("starts Notion OAuth without passing desktop secrets", async () => {
+    const result = {
+      authorizationUrl: "https://api.notion.com/v1/oauth/authorize?client_id=public-client&state=state-123",
+      state: "state-123"
+    };
+    invokeMock.mockResolvedValueOnce(result);
+
+    await expect(startPersistedNotionOAuthConnection()).resolves.toEqual(result);
+    expect(invokeMock).toHaveBeenCalledWith("start_notion_oauth_connection");
+  });
+
+  it("opens Notion OAuth authorization URLs through the native external-link command", async () => {
+    invokeMock.mockResolvedValueOnce(undefined);
+
+    await expect(
+      openPersistedNotionOAuthAuthorizationUrl("https://api.notion.com/v1/oauth/authorize?client_id=public-client&response_type=code&redirect_uri=https://example.test&state=state-123")
+    ).resolves.toBeUndefined();
+    expect(invokeMock).toHaveBeenCalledWith("open_notion_oauth_authorization_url", {
+      url: "https://api.notion.com/v1/oauth/authorize?client_id=public-client&response_type=code&redirect_uri=https://example.test&state=state-123"
+    });
+  });
+
+  it("completes Notion OAuth through the backend exchange before catalog page testing", async () => {
+    const result = { ok: true, message: "Connected" };
+    invokeMock.mockResolvedValueOnce(result);
+
+    await expect(
+      completePersistedNotionOAuthConnection("oauth-code", "state-123")
+    ).resolves.toEqual(result);
+    expect(invokeMock).toHaveBeenCalledWith("complete_notion_oauth_connection", {
+      authorizationCode: "oauth-code",
+      state: "state-123"
     });
   });
 });

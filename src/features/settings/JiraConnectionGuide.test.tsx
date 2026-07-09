@@ -59,13 +59,14 @@ describe("JiraConnectionGuide", () => {
     expect(html).toContain("whitespace-nowrap");
   });
 
-  it("keeps the Project sync switch at the end of the Project step", () => {
+  it("keeps the Project sync switch at the end of the Project step without manual fallback copy", () => {
     const html = renderGuide({ initialStep: "project" });
 
     expect(html).toContain("Use Project sync");
     expect(html).toContain("app-toggle-track-on");
     expect(html).not.toContain('type="checkbox"');
-    expect(html.indexOf("Project key")).toBeLessThan(html.indexOf("Use Project sync"));
+    expect(html).toContain("Discover Jira projects before choosing where Jira Task Forge creates issues.");
+    expect(html).not.toContain("Manual fallback project key");
   });
 
   it("uses the Decide step for decision-list guidance instead of the toggle", () => {

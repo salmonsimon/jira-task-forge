@@ -227,6 +227,11 @@ export type AppSettings = {
   projectSyncEnabled?: boolean;
 };
 
+export type NotionOAuthStartResult = {
+  authorizationUrl: string;
+  state: string;
+};
+
 export type ProjectSyncCandidate = {
   name: string;
   normalizedName: string;
@@ -300,6 +305,11 @@ export type NotionCatalogConnectionTestResult = {
   message: string;
   title?: string | null;
   extractedBlockCount: number;
+};
+
+export type NotionOAuthConnectionResult = {
+  ok: boolean;
+  message: string;
 };
 
 export type JiraConnectionTestResult = {

@@ -8,6 +8,7 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "test": "TMPDIR=${TMPDIR:-/tmp} vitest run",
+    "notion:oauth-backend": "node scripts/notion-oauth-backend.mjs",
     "lint:feedback-pattern": "node scripts/lint-feedback-pattern.mjs",
     "coverage:rust": "cd src-tauri && ${CARGO:-$HOME/.cargo/bin/cargo} llvm-cov --summary-only",
     "tauri": "tauri",

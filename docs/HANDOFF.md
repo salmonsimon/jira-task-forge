@@ -139,8 +139,9 @@ As of the merged PR #175 Epic Scope checkpoint, the app includes:
   derivation, delivery-format mappings, conditional Arquitectura Brief/Propuesta
   Final resolution, and Assisted Description/Jira payload catalog context.
 - Notion synchronization for the `JTF Sync Catalog` page, including Settings
-  setup, Notion API page/block reads, Notion integration-token storage in the OS
-  credential store, connection testing, and manual/public fallback modes.
+  setup, Notion API page/block reads, public connection OAuth access-token
+  storage in the OS credential store, connection testing, and manual fallback
+  mode.
 - Jira QA boundary: `JTFTEST` is the writable test project. Agents may freely
   mutate `JTFTEST` for implementation and QA. `DTS` is read-only reference data
   and must not be mutated by agents.

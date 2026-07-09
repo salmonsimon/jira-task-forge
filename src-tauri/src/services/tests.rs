@@ -716,7 +716,7 @@ fn manages_categories_and_jql_favorites_through_services() {
 }
 
 #[test]
-fn external_catalog_sync_removes_manual_areas_not_in_synced_catalog() {
+fn external_catalog_sync_preserves_manual_areas_and_removes_fallback_catalog_areas() {
     let services = AppServices::new(open_in_memory_database().expect("database opens"));
     let manual_area_name = "__manual_area_should_be_pruned__";
     services
@@ -783,9 +783,9 @@ fn external_catalog_sync_removes_manual_areas_not_in_synced_catalog() {
     assert!(areas
         .iter()
         .any(|category| category.name == "Bug" && category.source == "catalog"));
-    assert!(!areas
+    assert!(areas
         .iter()
-        .any(|category| category.name == manual_area_name));
+        .any(|category| category.name == manual_area_name && category.source == "local"));
     assert!(!areas.iter().any(|category| category.name == "3D"));
 }
 
@@ -883,6 +883,47 @@ fn delivery_format_gate_requires_confirmation_when_synced_templates_exist() {
         gate.options,
         vec!["Arte Integrado".to_string(), "Arte Empaquetado".to_string()]
     );
+}
+
+#[test]
+fn delivery_format_gate_auto_selects_single_synced_template() {
+    let services = AppServices::new(open_in_memory_database().expect("database opens"));
+    let source_url = serve_catalog_once(
+        r#"{
+          "areas": [
+            {
+              "areaDisplayName": "Bug",
+              "jiraLabel": "Bug",
+              "enabledInJTF": true,
+              "issueType": "Bug",
+              "defaultDeliveryFormat": "Bug",
+              "safeAliases": []
+            }
+          ],
+          "deliveryFormats": [
+            {
+              "formatName": "Bug",
+              "issueType": "Bug",
+              "storyHeadings": ["Problema"],
+              "minimumDeliverable": "Bug reproducible.",
+              "reviewChecklist": ["Pasos de reproducción incluidos."]
+            }
+          ],
+          "areaFormatRules": []
+        }"#,
+    );
+
+    services
+        .sync_area_catalog_from_source(&source_url)
+        .expect("catalog sync succeeds");
+
+    let gate = services
+        .resolve_delivery_format_gate("Bug", "Contexto mínimo")
+        .expect("delivery gate resolves");
+
+    assert_eq!(gate.kind, "auto");
+    assert_eq!(gate.format.as_deref(), Some("Bug"));
+    assert_eq!(gate.options, vec!["Bug"]);
 }
 
 #[test]
