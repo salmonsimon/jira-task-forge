@@ -1,6 +1,6 @@
 # Windows Packaging
 
-This is the shortest safe path for producing a Personal v1 Windows installer for Jira Task Forge. It intentionally covers a local/team installable build only; public store distribution, autoupdate, OAuth or enterprise auth, and a formal security review remain out of scope for Issue #153.
+This is the shortest safe path for producing a Personal v1 Windows installer for Jira Task Forge. It intentionally covers a local/team installable build only; public store distribution, autoupdate, Jira OAuth or enterprise auth, and a formal security review remain out of scope for Issue #153.
 
 ## Current Status
 
@@ -113,12 +113,12 @@ After building the installer:
 2. Launch `Jira Task Forge` from the Start menu or installer completion action.
 3. Confirm the app icon appears in the installer/start surface and app window.
 4. Open Settings and confirm connection state is shown without exposing Jira or AI secrets.
-5. Open Categories and the Notion catalog source setup entry point.
+5. Open Categories and the Notion catalog source setup entry point, including the `Connect Notion` OAuth flow entry point.
 6. Open Trays, create or select a Preparation Tray, and navigate local tray/task flows without using `npm run tauri dev`.
 7. Save a fake or dedicated test Jira API token, uninstall the app, reinstall
    it, and confirm Settings does not show a reusable saved Jira credential until
-   a token is saved again. Repeat for any AI provider or Notion token included
-   in the release smoke account.
+   a token is saved again. Repeat for any AI provider key or Notion OAuth access
+   token included in the release smoke account.
 
 Use JTFTEST for any optional Jira write smoke. DTS remains read-only reference data.
 
@@ -133,7 +133,7 @@ Manager to delete the app-owned generic credential targets used by the Rust
 - `api-key.jira-task-forge:openai`
 - `api-key.jira-task-forge:claude`
 - `api-key.jira-task-forge:gemini`
-- `integration-token.jira-task-forge:notion`
+- `integration-token.jira-task-forge:notion` for the saved Notion OAuth access token
 
 The hook deletes by target name only. It does not enumerate, read, print, or
 export credential values.
