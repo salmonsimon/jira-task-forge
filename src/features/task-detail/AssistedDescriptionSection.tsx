@@ -11,12 +11,13 @@ import {
   buildAssistedDescriptionProposal,
   buildResolveAssistedDescriptionProposalItemPatch,
   buildResolveAssistedDescriptionProposalPatch,
-  createEmptyAssistedDescriptionSectionStatuses,
+  createAssistedDescriptionSectionStatusesForTask,
   formatAssistedDescriptionSectionScopeLabel,
   getAssistedDescriptionProposalItems,
   getAssistedDescriptionSectionDefinitions,
   getAssistedDescriptionSectionIds,
   hasAcceptedAssistedDescriptionProposalSections,
+  hasCompletePolishedAssistedDescription,
   hasMeaningfulAssistedDescriptionContent,
   hasRejectedAssistedDescriptionProposalSections,
   hasReviewableAssistedDescriptionProposalItems,
@@ -78,7 +79,7 @@ export function resolveDeliveryFormatPromptAction(
         : "Choose the delivery format for this description proposal."
     };
   }
-  return { kind: "generate", deliveryFormat: null };
+  return { kind: "generate", deliveryFormat: gate.format ?? null };
 }
 
 export function buildProposalTransitionRequest(
@@ -166,11 +167,12 @@ export function AssistedDescriptionSection({
   );
   const hasDescriptionContent = hasMeaningfulAssistedDescriptionContent(sections);
   const hasEmptySections = activeSectionDefinitions.some((section) => !sections[section.id].trim());
-  const canMarkAllSectionsPolished = activeSectionDefinitions.every((section) => sections[section.id].trim());
   const canLoadPersistedProposals = Boolean(onListProposals || onListProposalLog);
   const [sectionStatuses, setSectionStatuses] = useState<AssistedDescriptionSectionStatuses>(() =>
-    createEmptyAssistedDescriptionSectionStatuses()
+    createAssistedDescriptionSectionStatusesForTask(sections, task.descriptionStatus, task.issueType)
   );
+  const allSectionsPolished = hasCompletePolishedAssistedDescription({ sections, sectionStatuses }, task.issueType);
+  const canMarkAllSectionsPolished = hasDescriptionContent && !hasEmptySections && !allSectionsPolished;
   const [showEmptySections, setShowEmptySections] = useState(false);
   const [descriptionContext, setDescriptionContext] = useState("");
   const [descriptionMessage, setDescriptionMessage] = useState<string | null>(null);
@@ -199,7 +201,7 @@ export function AssistedDescriptionSection({
   useEffect(() => {
     const nextSections = parseAssistedDescriptionMarkdown(task.description, task.issueType);
     setLocalDescriptionOverride(null);
-    setSectionStatuses(createEmptyAssistedDescriptionSectionStatuses());
+    setSectionStatuses(createAssistedDescriptionSectionStatusesForTask(nextSections, task.descriptionStatus, task.issueType));
     setShowEmptySections(false);
     setDescriptionContext("");
     setDescriptionMessage(null);
@@ -248,7 +250,7 @@ export function AssistedDescriptionSection({
     return () => {
       isCurrent = false;
     };
-  }, [task.id, task.issueType, canLoadPersistedProposals]);
+  }, [task.id, task.issueType, task.description, task.descriptionStatus, canLoadPersistedProposals]);
 
   const activeProposal = activeProposalId ? proposals.find((proposal) => proposal.id === activeProposalId) ?? null : null;
 
@@ -495,8 +497,10 @@ export function AssistedDescriptionSection({
     setSavingSectionId(sectionId);
     setSectionMessages((currentMessages) => ({ ...currentMessages, [sectionId]: undefined }));
     try {
-      await onSaveDescription(task.id, serializeAssistedDescriptionSections(nextState.sections, task.issueType), "Draft");
-      setLocalDescriptionOverride(serializeAssistedDescriptionSections(nextState.sections, task.issueType));
+      const nextDescriptionStatus = hasCompletePolishedAssistedDescription(nextState, task.issueType) ? "Ready" : "Draft";
+      const nextMarkdown = serializeAssistedDescriptionSections(nextState.sections, task.issueType);
+      await onSaveDescription(task.id, nextMarkdown, nextDescriptionStatus);
+      setLocalDescriptionOverride(nextMarkdown);
       setSectionStatuses(nextState.sectionStatuses);
       return true;
     } catch (error) {
@@ -779,9 +783,11 @@ export function AssistedDescriptionSection({
                     void markAllSectionsPolished();
                   }}
                   title={
-                    canMarkAllSectionsPolished
-                      ? "Mark every description section as polished"
-                      : "Complete every description section before marking the task as ready"
+                    allSectionsPolished
+                      ? "Every description section is already polished"
+                      : hasEmptySections
+                        ? "Complete every description section before marking the task as ready"
+                        : "Mark every description section as polished"
                   }
                 >
                   Set all as polished

@@ -77,6 +77,29 @@ export function createEmptyAssistedDescriptionSectionStatuses(): AssistedDescrip
   return statuses;
 }
 
+export function createAssistedDescriptionSectionStatusesForTask(
+  sections: AssistedDescriptionSections,
+  descriptionStatus: "Ready" | "Missing" | "Draft",
+  issueType?: IssueType | string | null
+): AssistedDescriptionSectionStatuses {
+  const statuses = createEmptyAssistedDescriptionSectionStatuses();
+  if (descriptionStatus !== "Ready") return statuses;
+
+  for (const section of getAssistedDescriptionSectionDefinitions(issueType)) {
+    statuses[section.id] = sections[section.id].trim() ? "Polished" : "Raw";
+  }
+  return statuses;
+}
+
+export function hasCompletePolishedAssistedDescription(
+  state: AssistedDescriptionState,
+  issueType?: IssueType | string | null
+): boolean {
+  return getAssistedDescriptionSectionDefinitions(issueType).every((section) =>
+    state.sections[section.id].trim() && state.sectionStatuses[section.id] === "Polished"
+  );
+}
+
 export function parseAssistedDescriptionMarkdown(
   markdown: string | null | undefined,
   issueType?: IssueType | string | null

@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import {
+  AssistedDescriptionSection,
   DescriptionPromptModal,
   TaskDetailNestedModalShell,
   buildProposalTransitionRequest,
@@ -9,6 +10,7 @@ import {
   isAiProviderSetupMessage,
   resolveDeliveryFormatPromptAction
 } from "./AssistedDescriptionSection";
+import type { LocalTask } from "../../lib/types";
 
 const overlay = {
   id: "task-detail-test-modal",
@@ -84,6 +86,17 @@ describe("DescriptionPromptModal delivery-format gate", () => {
         options: []
       })
     ).toEqual({ kind: "generate", deliveryFormat: null });
+  });
+
+  it("passes explicit auto delivery formats through to generation", () => {
+    expect(
+      resolveDeliveryFormatPromptAction({
+        kind: "auto",
+        areaDisplayName: "Synced Area",
+        format: "Formato Unico",
+        options: ["Formato Unico"]
+      })
+    ).toEqual({ kind: "generate", deliveryFormat: "Formato Unico" });
   });
 
   it("requires generic synced delivery-format confirmation before generation", () => {
@@ -288,6 +301,40 @@ describe("proposal transition request", () => {
   });
 });
 
+describe("AssistedDescriptionSection polished state", () => {
+  it("disables the bulk polished action when the ready description is already polished", () => {
+    const html = renderToStaticMarkup(
+      <AssistedDescriptionSection
+        task={taskWithDescription("Ready", completeStoryDescription)}
+        readOnly={false}
+        isGeneratingDescription={false}
+        onGenerateDescription={async () => ({ status: "drafted", description: completeStoryDescription, clarificationQuestions: [] })}
+        onSaveDescription={() => undefined}
+      />
+    );
+
+    expect(html).toContain("Set all as polished");
+    expect(html).toContain("Every description section is already polished");
+    expect(html).toContain("disabled");
+  });
+
+  it("keeps the bulk polished action disabled when required sections are missing", () => {
+    const html = renderToStaticMarkup(
+      <AssistedDescriptionSection
+        task={taskWithDescription("Draft", "## Historia de usuario\n\nComo usuario, quiero claridad.")}
+        readOnly={false}
+        isGeneratingDescription={false}
+        onGenerateDescription={async () => ({ status: "drafted", description: completeStoryDescription, clarificationQuestions: [] })}
+        onSaveDescription={() => undefined}
+      />
+    );
+
+    expect(html).toContain("Set all as polished");
+    expect(html).toContain("Complete every description section before marking the task as ready");
+    expect(html).toContain("disabled");
+  });
+});
+
 const mixedProposal = {
   createdAt: "2026-07-09T00:00:00.000Z",
   decidedAt: null,
@@ -330,6 +377,45 @@ const mixedProposal = {
   updatedAt: "2026-07-09T00:02:00.000Z",
   userComment: null
 };
+
+const completeStoryDescription = `## Historia de usuario
+
+Como usuario, quiero claridad.
+
+## Contexto
+
+Hay contexto suficiente.
+
+## Alcance
+
+Incluye el flujo principal.
+
+## Criterios de aceptacion
+
+- Cumple el resultado esperado.
+
+## Entregable mínimo
+
+- Cambio verificable.
+
+## Checklist antes de Review
+
+- Revisar en build.`;
+
+function taskWithDescription(descriptionStatus: LocalTask["descriptionStatus"], description: string): LocalTask {
+  return {
+    id: "task-1",
+    project: "STT",
+    area: "Programación",
+    title: "Resolver problema timer",
+    priority: "Medium",
+    issueType: "Story",
+    syncStatus: "Pending",
+    descriptionStatus,
+    language: "Spanish",
+    description
+  };
+}
 
 describe("dedupeProposalLogEntries", () => {
   it("shows one visible proposal log entry per proposal", () => {
