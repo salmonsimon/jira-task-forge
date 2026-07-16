@@ -1,7 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { getCredentialDraftControls, validateJiraSiteUrlDraft } from "./settings";
+import { createDefaultAppSettings, getCredentialDraftControls, validateJiraSiteUrlDraft } from "./settings";
 
 describe("settings domain helpers", () => {
+  it("starts with Notion sync selected but without bundled connection URLs", () => {
+    expect(createDefaultAppSettings()).toMatchObject({
+      jiraSiteUrl: "",
+      catalogSourceMode: "notion",
+      catalogSourceUrl: ""
+    });
+  });
+
   it("requires a successful connection test before saving a new credential", () => {
     const baseInput = {
       hasConnectionSettings: true,

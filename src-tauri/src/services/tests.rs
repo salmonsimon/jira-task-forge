@@ -1102,13 +1102,13 @@ fn returns_early_jira_errors_before_keyring_or_network_work() {
 
     let connection_result = services.test_jira_connection();
     assert!(!connection_result.ok);
-    assert_eq!(connection_result.message, "Jira account email is required.");
+    assert_eq!(connection_result.message, "Jira site URL is required.");
 
     assert_eq!(
         services
             .run_jql_query("project = JTFTEST", 50)
-            .expect_err("missing email should fail"),
-        "Jira account email is required."
+            .expect_err("missing site URL should fail"),
+        "Jira site URL is required."
     );
 
     let draft_token_result = services.test_jira_connection_with_api_token("   ", None, None);
@@ -1131,6 +1131,7 @@ fn returns_early_jira_errors_before_keyring_or_network_work() {
 
     services
         .update_app_settings(AppSettings {
+            jira_site_url: "https://example.atlassian.net".to_string(),
             jira_creation_project_key: "JTFTEST".to_string(),
             ..AppSettings::default()
         })

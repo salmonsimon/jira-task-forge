@@ -452,7 +452,7 @@ impl Default for AppSettings {
     fn default() -> Self {
         Self {
             theme_mode: "dark".to_string(),
-            jira_site_url: "https://dts.atlassian.net".to_string(),
+            jira_site_url: String::new(),
             jira_account_email: String::new(),
             jira_auth_method: "api-token".to_string(),
             jira_creation_project_key: String::new(),

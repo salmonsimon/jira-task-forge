@@ -92,6 +92,7 @@ import {
   formatJqlQueryError,
   formatJqlQueryMessage,
   getVisibleBackupCounts,
+  createDefaultAppSettings,
   isEligibleForCsvExport,
   isSubtask,
   orderProjectNames
@@ -133,19 +134,6 @@ import type {
 import { cn } from "./lib/utils";
 
 const appData = mockAppDataAdapter;
-const defaultAppSettings: AppSettings = {
-  themeMode: "dark",
-  jiraSiteUrl: "https://dts.atlassian.net",
-  jiraAccountEmail: "",
-  jiraAuthMethod: "api-token",
-  jiraCreationProjectKey: "",
-  aiProvider: "OpenAI",
-  aiModel: "gpt-4.1",
-  defaultContentLanguage: "Spanish",
-  catalogSourceMode: "notion",
-  catalogSourceUrl: "",
-  projectSyncEnabled: true
-};
 const defaultJqlPrompt = "Show me high and highest open bugs for STT, sorted by priority";
 const atlassianApiTokensUrl = "https://id.atlassian.com/manage-profile/security/api-tokens";
 const aiProviderApiKeysUrls: Partial<Record<AiProvider, string>> = {
@@ -198,7 +186,7 @@ export default function App() {
   const [isRunningJqlQuery, setIsRunningJqlQuery] = useState(false);
   const [isDraftingJqlWithAi, setIsDraftingJqlWithAi] = useState(false);
   const [generatingDescriptionTaskId, setGeneratingDescriptionTaskId] = useState<string | null>(null);
-  const [appSettings, setAppSettings] = useState<AppSettings>(defaultAppSettings);
+  const [appSettings, setAppSettings] = useState<AppSettings>(createDefaultAppSettings);
   const [systemPrefersDark, setSystemPrefersDark] = useState(false);
   const [usesTauriPersistence, setUsesTauriPersistence] = useState(false);
   const [csvExportNotice, setCsvExportNotice] = useState<CsvExportNotice | null>(null);

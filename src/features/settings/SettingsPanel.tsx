@@ -6,7 +6,7 @@ import type { AppSettings, CredentialConnectionTestResult, JiraConnectionTestRes
 import { AiProviderSetupGuide, defaultAiProviderModels } from "./AiProviderSetupGuide";
 import { JiraConnectionGuide } from "./JiraConnectionGuide";
 import notionMark from "../../assets/notion-mark.png";
-import { defaultNotionCatalogUrl, NotionSynchronizationGuide } from "./NotionSynchronizationGuide";
+import { NotionSynchronizationGuide } from "./NotionSynchronizationGuide";
 
 export function shouldSyncAreaCatalogAfterCatalogSettingsSave(
   saved: boolean,
@@ -324,13 +324,13 @@ export function SettingsPanel({
             <div className="mb-3">
               <div className="text-sm font-semibold text-[#172b4d]">Synchronization state</div>
               <p className="text-xs leading-relaxed text-[#6b778c]">
-                Official area catalog sync is configured through the guided setup.
+                Area catalog synchronization is configured through the guided setup.
               </p>
             </div>
             <SettingsReadOnlyRows
               rows={[
                 ["Catalog mode", catalogSourceModeLabel(settings.catalogSourceMode)],
-                ["Source", settings.catalogSourceMode === "manual" ? "Manual fallback" : settings.catalogSourceUrl || defaultNotionCatalogUrl],
+                ["Source", settings.catalogSourceMode === "manual" ? "Manual catalog" : settings.catalogSourceUrl || "Not set"],
                 ["Notion connection", settings.catalogSourceMode === "notion" ? (hasNotionToken ? "Connected" : "Missing") : "Not required"]
               ]}
             />
