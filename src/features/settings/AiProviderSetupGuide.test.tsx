@@ -52,6 +52,8 @@ describe("AiProviderSetupGuide", () => {
     expect(availableAiProviderModels.OpenAI).toContain(defaultAiProviderModels.OpenAI);
     expect(availableAiProviderModels.Claude).toContain(defaultAiProviderModels.Claude);
     expect(availableAiProviderModels.Gemini).toContain(defaultAiProviderModels.Gemini);
+    expect(defaultAiProviderModels.Claude).toBe("claude-3-5-haiku-20241022");
+    expect(availableAiProviderModels.Claude[0]).toBe("claude-3-5-haiku-20241022");
   });
 
   it("keeps OpenAI as the provider-agnostic default when AI is off", () => {
@@ -59,5 +61,12 @@ describe("AiProviderSetupGuide", () => {
 
     expect(html).toContain("Provider:</span> OpenAI");
     expect(html).toContain("Default model:</span> gpt-4.1");
+  });
+
+  it("uses the selected provider default when switching providers without a model", () => {
+    const html = renderGuide({ aiProvider: "Claude", aiModel: "" });
+
+    expect(html).toContain("Provider:</span> Claude");
+    expect(html).toContain("Default model:</span> claude-3-5-haiku-20241022");
   });
 });
