@@ -127,7 +127,7 @@ export function TaskRelationshipsSection({
               </Button>
             </div>
             <div className="mt-2 text-xs text-[#8f96a3]">
-              Draft only. Jira sync does not send these links yet.
+              Synced to Jira after both local tasks have Jira keys.
             </div>
           </div>
         ) : null}

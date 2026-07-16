@@ -676,8 +676,9 @@ Goals:
 - Preserve the accepted ADR 0005 safety model while improving locality around
   Jira payload generation, post-create updates, audit events, and recovery
   outcomes.
-- Decide where the next useful test seams live before adding relationship sync,
-  attachment cleanup/compression hardening, or additional AI provider calls.
+- Decide where the next useful test seams live before adding attachment
+  cleanup/compression hardening, broader Jira sync changes, or additional AI
+  provider calls.
 - Add a real frontend test approach if the architecture pass finds UI behavior
   that should stop relying on manual QA only.
 - Include a focused security review of the surfaces that now matter most:
@@ -714,7 +715,7 @@ Initial deepening opportunities from the first pass:
 
    Benefits: better Locality for Jira payload and metadata bugs, more Leverage
    from small tests around accepted sync rules, and less risk when maintaining
-   child-issue creation, attachment upload, and future Jira relationship sync.
+   child-issue creation, attachment upload, and Jira relationship sync.
 
 2. **Sync Audit Log detail Module**
 

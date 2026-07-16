@@ -141,6 +141,56 @@ pub(crate) fn jira_priority_error_detail(
     }))
 }
 
+pub(crate) fn jira_issue_link_created_detail(
+    source_task_id: &str,
+    target_task_id: &str,
+    outward_jira_key: &str,
+    inward_jira_key: &str,
+    relationship_type_name: &str,
+    relationship_type_id: &str,
+) -> SyncAuditDetail {
+    SyncAuditDetail::from_allowed_value(json!({
+        "sourceTaskId": source_task_id,
+        "targetTaskId": target_task_id,
+        "outwardJiraKey": outward_jira_key,
+        "inwardJiraKey": inward_jira_key,
+        "relationshipTypeName": relationship_type_name,
+        "relationshipTypeId": relationship_type_id,
+    }))
+}
+
+pub(crate) fn jira_issue_link_skipped_detail(
+    source_task_id: &str,
+    target_task_id: &str,
+    outward_jira_key: &str,
+    inward_jira_key: &str,
+    reason: &str,
+) -> SyncAuditDetail {
+    SyncAuditDetail::from_allowed_value(json!({
+        "sourceTaskId": source_task_id,
+        "targetTaskId": target_task_id,
+        "outwardJiraKey": outward_jira_key,
+        "inwardJiraKey": inward_jira_key,
+        "reason": reason,
+    }))
+}
+
+pub(crate) fn jira_issue_link_error_detail(
+    source_task_id: &str,
+    target_task_id: &str,
+    outward_jira_key: Option<&str>,
+    inward_jira_key: Option<&str>,
+    message: &str,
+) -> SyncAuditDetail {
+    SyncAuditDetail::from_allowed_value(json!({
+        "sourceTaskId": source_task_id,
+        "targetTaskId": target_task_id,
+        "outwardJiraKey": outward_jira_key,
+        "inwardJiraKey": inward_jira_key,
+        "message": audit_error_message(message),
+    }))
+}
+
 pub(crate) fn attachment_uploaded_detail(
     jira_key: &str,
     filename: &str,

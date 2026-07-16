@@ -44,6 +44,22 @@ export function buildProjectSyncDiscoveryRequest(
   };
 }
 
+export function getProjectSyncReviewForProject(
+  review: ProjectSyncReview | null,
+  jiraCreationProjectKey: string
+): ProjectSyncReview | null {
+  const projectKey = jiraCreationProjectKey.trim().toUpperCase();
+  if (!review || review.jiraProjectKey.trim().toUpperCase() !== projectKey) return null;
+  return review;
+}
+
+export function shouldShowManualProjectKeyInput(
+  discoveryState: "idle" | "loading" | "loaded" | "failed",
+  discoveredProjectCount: number
+): boolean {
+  return discoveredProjectCount === 0 && (discoveryState === "loaded" || discoveryState === "failed");
+}
+
 export function canContinueJiraConnectionGuideStep({
   step,
   hasValidSiteUrl,
@@ -104,6 +120,7 @@ export function JiraConnectionGuide({
   onClose: () => void;
 }) {
   const surfaceRef = useRef<HTMLElement | null>(null);
+  const projectSyncRequestIdRef = useRef(0);
   const [step, setStep] = useState<GuideStep>(initialStep);
   const [siteUrlDraft, setSiteUrlDraft] = useState(settings.jiraSiteUrl);
   const [accountEmailDraft, setAccountEmailDraft] = useState(settings.jiraAccountEmail);
@@ -129,6 +146,7 @@ export function JiraConnectionGuide({
   const normalizedSiteUrl = siteUrlValidation.ok ? siteUrlValidation.value : siteUrlDraft.trim();
   const accountEmail = accountEmailDraft.trim();
   const projectKey = projectKeyDraft.trim().toUpperCase();
+  const currentProjectSyncReview = getProjectSyncReviewForProject(projectSyncReview, projectKey);
   const hasUnsavedTokenDraft = Boolean(jiraApiTokenDraft.trim());
   const canContinue = canContinueJiraConnectionGuideStep({
     step,
@@ -219,7 +237,7 @@ export function JiraConnectionGuide({
           : "No projects were returned. Enter a project key manually."
       );
       if (!projectKeyDraft.trim() && discoveredProjects[0]) {
-        setProjectKeyDraft(discoveredProjects[0].key);
+        changeProjectKey(discoveredProjects[0].key);
       }
     } catch (error) {
       setProjects([]);
@@ -228,19 +246,37 @@ export function JiraConnectionGuide({
     }
   }
 
+  function changeProjectKey(value: string) {
+    if (value.trim().toUpperCase() === projectKey) {
+      setProjectKeyDraft(value);
+      return;
+    }
+    projectSyncRequestIdRef.current += 1;
+    setProjectKeyDraft(value);
+    setProjectSyncReview(null);
+    setProjectSyncActiveNames(new Set());
+    setProjectSyncArchivedNames(new Set());
+    setProjectSyncReviewState("idle");
+    setProjectSyncReviewMessage(null);
+  }
+
   async function discoverProjectSyncDecisions() {
     if (!onDiscoverProjectSync || !projectSyncEnabledDraft || projectSyncReviewState === "loading") return;
+    const requestId = projectSyncRequestIdRef.current + 1;
+    projectSyncRequestIdRef.current = requestId;
     setProjectSyncReviewState("loading");
     setProjectSyncReviewMessage(null);
     try {
       const review = await onDiscoverProjectSync({
         ...buildProjectSyncDiscoveryRequest(siteUrlValidation.value, accountEmail, projectKey)
       });
+      if (requestId !== projectSyncRequestIdRef.current) return;
       setProjectSyncReview(review);
       setProjectSyncActiveNames(new Set(review.defaultActiveNames));
       setProjectSyncArchivedNames(new Set(review.sections.archived.map((candidate) => candidate.name)));
       setProjectSyncReviewState("loaded");
     } catch (error) {
+      if (requestId !== projectSyncRequestIdRef.current) return;
       setProjectSyncReview(null);
       setProjectSyncReviewState("failed");
       setProjectSyncReviewMessage(error instanceof Error ? error.message : "Project sync discovery failed.");
@@ -273,9 +309,9 @@ export function JiraConnectionGuide({
   }
 
   useEffect(() => {
-    if (step !== "project-sync" || !projectSyncEnabledDraft || projectSyncReview || projectSyncReviewState !== "idle") return;
+    if (step !== "project-sync" || !projectSyncEnabledDraft || currentProjectSyncReview || projectSyncReviewState !== "idle") return;
     void discoverProjectSyncDecisions();
-  }, [projectSyncEnabledDraft, projectSyncReview, projectSyncReviewState, step]);
+  }, [currentProjectSyncReview, projectKey, projectSyncEnabledDraft, projectSyncReviewState, step]);
 
   async function saveConnection() {
     if (!siteUrlValidation.ok || !accountEmail || !projectKey) return;
@@ -287,8 +323,8 @@ export function JiraConnectionGuide({
       jiraCreationProjectKey: projectKey,
       projectSyncEnabled: projectSyncEnabledDraft
     });
-    if (saved && projectSyncEnabledDraft && projectSyncReview && hasSyncableProjectCandidates(projectSyncReview) && onApplyProjectSync) {
-      await onApplyProjectSync(buildProjectSyncApplyRequest(projectSyncReview));
+    if (saved && projectSyncEnabledDraft && currentProjectSyncReview && hasSyncableProjectCandidates(currentProjectSyncReview) && onApplyProjectSync) {
+      await onApplyProjectSync(buildProjectSyncApplyRequest(currentProjectSyncReview));
     }
     setIsSaving(false);
     if (saved) {
@@ -541,16 +577,27 @@ export function JiraConnectionGuide({
                       label="Discovered project"
                       options={projects}
                       value={projectKey}
-                      onChange={(value) => {
-                        setProjectKeyDraft(value);
-                      }}
+                      onChange={changeProjectKey}
                       onOpenChange={setIsProjectMenuOpen}
                     />
                   ) : null}
-                  {!projects.length ? (
+                  {!projects.length && !shouldShowManualProjectKeyInput(projectDiscoveryState, projects.length) ? (
                     <FeedbackNote className="mt-3" variant="warning">
                       Discover Jira projects before choosing where Jira Task Forge creates issues.
                     </FeedbackNote>
+                  ) : null}
+                  {shouldShowManualProjectKeyInput(projectDiscoveryState, projects.length) ? (
+                    <div className="mt-4 rounded border border-[#ffab00] bg-[#fffae6] p-3">
+                      <GuideInput
+                        label="Manual Jira project key"
+                        placeholder="SCRUM"
+                        value={projectKeyDraft}
+                        onChange={changeProjectKey}
+                      />
+                      <p className="text-xs leading-relaxed text-[#42526e]">
+                        Discovery did not provide a project to select. Confirm this key in Jira before saving the connection.
+                      </p>
+                    </div>
                   ) : null}
                   {projectDiscoveryMessage ? (
                     <FeedbackNote className="mt-3" variant={projectDiscoveryState === "failed" ? "warning" : "success"}>{projectDiscoveryMessage}</FeedbackNote>
@@ -574,7 +621,7 @@ export function JiraConnectionGuide({
                     isProjectSyncEnabled={projectSyncEnabledDraft}
                     onChange={setProjectSyncCandidateActive}
                     onDiscoverProjectSync={onDiscoverProjectSync ? discoverProjectSyncDecisions : undefined}
-                    review={projectSyncReview}
+                    review={currentProjectSyncReview}
                     reviewState={projectSyncReviewState}
                   />
                   {projectSyncReviewMessage ? <FeedbackNote className="mt-3" variant="error">{projectSyncReviewMessage}</FeedbackNote> : null}
@@ -755,7 +802,7 @@ function ProjectSelect({
   onChange: (value: string) => void;
   onOpenChange: (isOpen: boolean) => void;
 }) {
-  const selectedProject = options.find((project) => project.key === value) ?? options[0];
+  const selectedProject = options.find((project) => project.key === value);
 
   return (
     <div className="relative mb-5" onBlur={(event) => closeProjectSelectOnBlur(event, onOpenChange)}>
@@ -766,7 +813,7 @@ function ProjectSelect({
         type="button"
       >
         <span className="truncate">
-          {selectedProject ? `${selectedProject.key} - ${selectedProject.name}` : "Select project"}
+          {selectedProject ? `${selectedProject.key} - ${selectedProject.name}` : value ? `${value} - Manual key` : "Select project"}
         </span>
         <ChevronDown size={14} />
       </button>
