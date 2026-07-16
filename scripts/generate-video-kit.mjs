@@ -1,9 +1,19 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { chromium } from "playwright";
+import gifenc from "gifenc";
+import { PNG } from "pngjs";
+
+const { GIFEncoder, applyPalette, quantize } = gifenc;
 
 const outDir = "docs/video-kit/generated";
 const frameDir = "docs/video-kit/frames";
+const animatedDir = "docs/video-kit/animated";
+const gifWidth = 640;
+const gifHeight = 360;
+const gifDurationSeconds = 6;
+const gifFps = 10;
+const gifFrameDelayMs = 1000 / gifFps;
 
 const palette = {
   ink: "#182230",
@@ -190,6 +200,7 @@ function proposalLine(x, y, heading, detail, color) {
 async function writeAssets() {
   await mkdir(outDir, { recursive: true });
   await mkdir(frameDir, { recursive: true });
+  await mkdir(animatedDir, { recursive: true });
 
   const assets = [
     ["automatic-naming", automaticNamingSvg()],
@@ -205,13 +216,64 @@ async function writeAssets() {
   const page = await browser.newPage({ viewport: { width: 960, height: 540 }, deviceScaleFactor: 1 });
   for (const [name, svg] of assets) {
     for (const [label, width] of [["desktop", 960], ["mobile", 480]]) {
-      await page.setViewportSize({ width, height: Math.round(width * 9 / 16) });
-      await page.setContent(`<body style="margin:0;background:#f7f9fc"><div style="width:100vw">${svg}</div><style>svg{width:100%;height:auto;display:block}</style></body>`, { waitUntil: "load" });
-      await page.waitForTimeout(3800);
-      await page.screenshot({ path: join(frameDir, `${name}-${label}.png`), fullPage: true });
+      const buffer = await renderFrame(page, svg, width, 3.8);
+      await writeFile(join(frameDir, `${name}-${label}.png`), buffer);
     }
+    await writeGif(page, name, svg);
   }
   await browser.close();
+
+  const manifest = {
+    generatedAt: "deterministic",
+    command: "npm run assets:video-kit",
+    animatedExports: assets.map(([name]) => ({
+      name,
+      path: `docs/video-kit/animated/${name}.gif`,
+      format: "GIF89a",
+      dimensions: `${gifWidth}x${gifHeight}`,
+      durationSeconds: gifDurationSeconds,
+      fps: gifFps,
+      frames: gifDurationSeconds * gifFps
+    }))
+  };
+  await writeFile(join(animatedDir, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+}
+
+function svgAtTime(svg, seconds) {
+  const cssPause = `.fade-in,.draw{animation-play-state:paused!important;animation-delay:-${seconds}s;}`;
+  return svg
+    .replace(/animation-delay:([0-9.]+)s/g, (_, delay) => `animation-delay:${Number(delay) - seconds}s`)
+    .replace("</style>", `${cssPause}</style>`);
+}
+
+async function renderFrame(page, svg, width, seconds) {
+  await page.setViewportSize({ width, height: Math.round(width * 9 / 16) });
+  await page.setContent(`<body style="margin:0;background:#f7f9fc"><div style="width:100vw">${svgAtTime(svg, seconds)}</div><style>svg{width:100%;height:auto;display:block}</style></body>`, { waitUntil: "load" });
+  await page.evaluate((time) => {
+    const svgElement = document.querySelector("svg");
+    svgElement.setCurrentTime(time);
+    svgElement.pauseAnimations();
+  }, seconds);
+  return page.screenshot({ fullPage: true });
+}
+
+async function writeGif(page, name, svg) {
+  const gif = GIFEncoder();
+  const totalFrames = gifDurationSeconds * gifFps;
+  for (let frame = 0; frame < totalFrames; frame += 1) {
+    const seconds = frame / gifFps;
+    const buffer = await renderFrame(page, svg, gifWidth, seconds);
+    const png = PNG.sync.read(buffer);
+    const palette = quantize(png.data, 128);
+    const index = applyPalette(png.data, palette);
+    gif.writeFrame(index, gifWidth, gifHeight, {
+      palette,
+      delay: gifFrameDelayMs,
+      repeat: 0
+    });
+  }
+  gif.finish();
+  await writeFile(join(animatedDir, `${name}.gif`), gif.bytes());
 }
 
 await writeAssets();
