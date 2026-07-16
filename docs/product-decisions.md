@@ -228,10 +228,10 @@ This document captures the product scope decisions from the grill session. UI co
 - First Jira write slice included metadata preflight, epic search/create, parent
   Story/Bug creation, local Jira link persistence, remote correlation markers,
   audit events, and partial recovery.
-- Later slices have added accepted sub-task creation and selected Jira-ready
-  attachment upload to the `Create in Jira` path. Broader relationship sync,
-  attachment cleanup/compression hardening, and additional partial-failure polish
-  remain separate scopes.
+- Later slices have added accepted sub-task creation, selected Jira-ready
+  attachment upload, and Jira `blocks` / `blocked_by` issue-link creation to
+  the `Create in Jira` path. Attachment cleanup/compression hardening and
+  additional partial-failure polish remain separate scopes.
 - If there are no warnings, sync starts directly.
 - If warnings exist, show a preflight panel.
 - Blocking warnings:
@@ -538,9 +538,9 @@ the implemented prompt shape and required sections aligned with the dedicated
   textarea, and then the app generates an editable Jira description.
 - AI-generated descriptions are never uploaded automatically. They must remain
   editable and are uploaded only through the normal `Create in Jira` flow.
-- Jira issue relationship links such as `blocks` and `blocked by` are a future
-  standalone feature. Do not mix them into the first description/tray polish
-  pass.
+- Jira issue relationship intents support only `blocks` and `blocked_by`.
+  `Create in Jira` syncs those links after both involved Local Tasks have Jira
+  keys. Arbitrary Jira issue links remain out of scope.
 
 ## Images and Attachments
 
@@ -802,10 +802,10 @@ the implemented prompt shape and required sections aligned with the dedicated
 
 - After the quality and security stabilization pass, Personal v1 feature work
   has advanced through sub-task creation, attachment metadata/filesystem policy,
-  attachment upload to Jira, AI-assisted Jira descriptions, and JQL generation.
-  Remaining Personal v1 feature work should stay focused on hardcoded 3D
-  sub-task suggestions, Jira issue relationship sync, and QA hardening for the
-  new Jira child-operation and AI proposal-review paths.
+  attachment upload to Jira, Jira issue relationship sync, AI-assisted Jira
+  descriptions, and JQL generation. Remaining Personal v1 feature work should
+  stay focused on hardcoded 3D sub-task suggestions and QA hardening for the new
+  Jira child-operation and AI proposal-review paths.
 
 ## Personal V1 Definition Of Done
 

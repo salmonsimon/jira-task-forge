@@ -196,7 +196,9 @@ where
         self.progress("finalizing", "Finalizing Jira creation", None, "running");
         let final_status = if result.failed_issue_count == 0 && !had_non_blocking_warning {
             "succeeded"
-        } else if result.created_issue_count == 0 {
+        } else if result.created_issue_count == 0
+            && (result.failed_issue_count > 0 || result.skipped_issue_count == 0)
+        {
             "failed"
         } else {
             "partial"

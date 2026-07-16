@@ -1,7 +1,7 @@
 mod attempt_recorder;
 mod planning;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::thread;
@@ -21,13 +21,14 @@ use crate::integrations::jira::JiraClient;
 use crate::models::{
     JiraAttachmentSettings, JiraCreateAllowedValue, JiraCreateFieldMetadata,
     JiraCreateIssueResponse, JiraCreateIssuesResult, JiraCreateMetadata, JiraCreateProgress,
-    JiraCreatedIssueResult, JiraMyself, JiraRemoteMarkerIssue, JqlSearchResponse, LocalTask,
-    TaskAttachment,
+    JiraCreatedIssueResult, JiraIssueLink, JiraIssueLinkType, JiraMyself, JiraRemoteMarkerIssue,
+    JqlSearchResponse, LocalTask, TaskAttachment,
 };
 use crate::repositories::{TaskRepository, TrayRepository};
 use crate::sync_audit::{
     attachment_error_detail, attachment_uploaded_detail, jira_epic_detail,
-    jira_epic_resolved_detail, jira_issue_created_detail, jira_priority_detail,
+    jira_epic_resolved_detail, jira_issue_created_detail, jira_issue_link_created_detail,
+    jira_issue_link_error_detail, jira_issue_link_skipped_detail, jira_priority_detail,
     jira_priority_error_detail, jira_remote_marker_recovered_detail, jira_subtask_created_detail,
 };
 
@@ -56,6 +57,9 @@ pub trait JiraIssueGateway {
         local_task_id: &str,
     ) -> Result<Option<JiraRemoteMarkerIssue>, String>;
     fn create_issue(&mut self, payload: Value) -> Result<JiraCreateIssueResponse, String>;
+    fn issue_link_types(&mut self) -> Result<Vec<JiraIssueLinkType>, String>;
+    fn issue_links(&mut self, key: &str) -> Result<Vec<JiraIssueLink>, String>;
+    fn create_issue_link(&mut self, payload: Value) -> Result<(), String>;
     fn update_issue_fields(&mut self, key: &str, payload: Value) -> Result<(), String>;
     fn upload_attachment(
         &mut self,
@@ -103,6 +107,18 @@ impl JiraIssueGateway for JiraClient {
 
     fn create_issue(&mut self, payload: Value) -> Result<JiraCreateIssueResponse, String> {
         JiraClient::create_issue(self, payload)
+    }
+
+    fn issue_link_types(&mut self) -> Result<Vec<JiraIssueLinkType>, String> {
+        JiraClient::issue_link_types(self)
+    }
+
+    fn issue_links(&mut self, key: &str) -> Result<Vec<JiraIssueLink>, String> {
+        JiraClient::issue_links(self, key)
+    }
+
+    fn create_issue_link(&mut self, payload: Value) -> Result<(), String> {
+        JiraClient::create_issue_link(self, payload)
     }
 
     fn update_issue_fields(&mut self, key: &str, payload: Value) -> Result<(), String> {
@@ -382,6 +398,7 @@ where
                     .map(|key| (task.id.clone(), key.clone()))
             })
             .collect::<HashMap<_, _>>();
+        let mut jira_keys_by_task_id = parent_jira_keys.clone();
         for (target, group_tasks) in &plan.epic_target_groups {
             let epic_summary = target.summary();
             recorder.progress(
@@ -451,6 +468,7 @@ where
                         task.title
                     ));
                     parent_jira_keys.insert(task.id.clone(), existing_key.to_string());
+                    jira_keys_by_task_id.insert(task.id.clone(), existing_key.to_string());
                     had_non_blocking_warning |= upload_task_attachments(
                         self.connection,
                         self.app_data_dir.as_deref(),
@@ -511,6 +529,7 @@ where
                                 task.title
                             ));
                             parent_jira_keys.insert(task.id.clone(), existing_key.clone());
+                            jira_keys_by_task_id.insert(task.id.clone(), existing_key.clone());
                             had_non_blocking_warning |= upload_task_attachments(
                                 self.connection,
                                 self.app_data_dir.as_deref(),
@@ -602,6 +621,8 @@ where
                         });
                         let created_key_for_upload = created_key.clone();
                         parent_jira_keys.insert(task.id.clone(), created_key);
+                        jira_keys_by_task_id
+                            .insert(task.id.clone(), created_key_for_upload.clone());
                         had_non_blocking_warning |= upload_task_attachments(
                             self.connection,
                             self.app_data_dir.as_deref(),
@@ -673,6 +694,7 @@ where
                         .mark_jira_subtask_created(&subtask.id, existing_key, &existing_url)
                         .map_err(db_error_message)?;
                     result.skipped_issue_count += 1;
+                    jira_keys_by_task_id.insert(subtask.id.clone(), existing_key.to_string());
                     result.messages.push(format!(
                         "{} already had Jira key {existing_key}; local sub-task status was repaired.",
                         subtask.title
@@ -731,6 +753,7 @@ where
                             summary: jira_subtask_summary(&subtask),
                             epic_key: None,
                         });
+                        jira_keys_by_task_id.insert(subtask.id.clone(), created_key.clone());
                         had_non_blocking_warning |= upload_task_attachments(
                             self.connection,
                             self.app_data_dir.as_deref(),
@@ -761,8 +784,341 @@ where
             }
         }
 
+        had_non_blocking_warning |= sync_issue_relationships(
+            self.gateway,
+            &mut recorder,
+            &tasks,
+            &jira_keys_by_task_id,
+            &mut result,
+        )?;
+
         recorder.finish(result, had_non_blocking_warning)
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct JiraIssueRelationshipIntent {
+    source_task_id: String,
+    target_task_id: String,
+    local_relationship_type: String,
+    outward_jira_key: String,
+    inward_jira_key: String,
+}
+
+fn sync_issue_relationships<Gateway, F>(
+    gateway: &mut Gateway,
+    recorder: &mut SyncAttemptRecorder<'_, '_, F>,
+    tasks: &[LocalTask],
+    jira_keys_by_task_id: &HashMap<String, String>,
+    result: &mut JiraCreateIssuesResult,
+) -> Result<bool, String>
+where
+    Gateway: JiraIssueGateway,
+    F: FnMut(JiraCreateProgress),
+{
+    let local_relationship_count = tasks
+        .iter()
+        .map(|task| task.issue_relationships.len())
+        .sum::<usize>();
+    if local_relationship_count == 0 {
+        return Ok(false);
+    }
+
+    recorder.progress(
+        "relationships",
+        "Creating Jira issue links",
+        Some("Resolving Blocks relationship metadata"),
+        "running",
+    );
+    let blocks_link_type = match gateway
+        .issue_link_types()
+        .and_then(|link_types| resolve_blocks_issue_link_type(&link_types))
+    {
+        Ok(link_type) => link_type,
+        Err(message) => {
+            recorder.record_event(
+                None,
+                "jira.issue_link.metadata_failed",
+                "failed",
+                crate::sync_audit::audit_error_detail(&message),
+            )?;
+            result.messages.push(format!(
+                "Jira issue relationships were not created: {message}"
+            ));
+            return Ok(true);
+        }
+    };
+
+    let intents =
+        normalize_issue_relationship_intents(tasks, jira_keys_by_task_id, recorder, result)?;
+    if intents.is_empty() {
+        return Ok(!result.messages.is_empty());
+    }
+
+    let mut existing_link_pairs = HashSet::<(String, String)>::new();
+    let outward_keys = intents
+        .iter()
+        .map(|intent| intent.outward_jira_key.clone())
+        .collect::<HashSet<_>>();
+    for outward_key in outward_keys {
+        match gateway.issue_links(&outward_key) {
+            Ok(issue_links) => {
+                for issue_link in issue_links {
+                    collect_existing_blocks_link_pair(
+                        &mut existing_link_pairs,
+                        &blocks_link_type,
+                        &outward_key,
+                        &issue_link,
+                    );
+                }
+            }
+            Err(message) => {
+                recorder.record_event(
+                    None,
+                    "jira.issue_link.lookup_failed",
+                    "failed",
+                    crate::sync_audit::audit_error_detail(&message),
+                )?;
+                result.messages.push(format!(
+                    "Jira issue relationships for {outward_key} could not be checked for existing links: {message}"
+                ));
+                return Ok(true);
+            }
+        }
+    }
+
+    let mut had_warning = false;
+    for intent in intents {
+        let link_pair = (
+            intent.outward_jira_key.clone(),
+            intent.inward_jira_key.clone(),
+        );
+        if existing_link_pairs.contains(&link_pair) {
+            recorder.record_event(
+                Some(&intent.source_task_id),
+                "jira.issue_link.skipped",
+                "succeeded",
+                jira_issue_link_skipped_detail(
+                    &intent.source_task_id,
+                    &intent.target_task_id,
+                    &intent.outward_jira_key,
+                    &intent.inward_jira_key,
+                    "already-exists",
+                ),
+            )?;
+            continue;
+        }
+
+        let payload = json!({
+            "type": { "id": &blocks_link_type.id },
+            "outwardIssue": { "key": &intent.outward_jira_key },
+            "inwardIssue": { "key": &intent.inward_jira_key },
+        });
+        match gateway.create_issue_link(payload) {
+            Ok(()) => {
+                existing_link_pairs.insert(link_pair);
+                recorder.record_event(
+                    Some(&intent.source_task_id),
+                    "jira.issue_link.created",
+                    "succeeded",
+                    jira_issue_link_created_detail(
+                        &intent.source_task_id,
+                        &intent.target_task_id,
+                        &intent.outward_jira_key,
+                        &intent.inward_jira_key,
+                        &blocks_link_type.name,
+                        &blocks_link_type.id,
+                    ),
+                )?;
+            }
+            Err(message) => {
+                had_warning = true;
+                recorder.record_event(
+                    Some(&intent.source_task_id),
+                    "jira.issue_link.create_failed",
+                    "failed",
+                    jira_issue_link_error_detail(
+                        &intent.source_task_id,
+                        &intent.target_task_id,
+                        Some(&intent.outward_jira_key),
+                        Some(&intent.inward_jira_key),
+                        &message,
+                    ),
+                )?;
+                result.messages.push(format!(
+                    "Jira relationship {} -> {} could not be created: {}",
+                    intent.outward_jira_key, intent.inward_jira_key, message
+                ));
+            }
+        }
+    }
+
+    Ok(had_warning)
+}
+
+fn normalize_issue_relationship_intents<F>(
+    tasks: &[LocalTask],
+    jira_keys_by_task_id: &HashMap<String, String>,
+    recorder: &SyncAttemptRecorder<'_, '_, F>,
+    result: &mut JiraCreateIssuesResult,
+) -> Result<Vec<JiraIssueRelationshipIntent>, String>
+where
+    F: FnMut(JiraCreateProgress),
+{
+    let task_ids = tasks
+        .iter()
+        .map(|task| task.id.as_str())
+        .collect::<HashSet<_>>();
+    let mut seen_pairs = HashSet::<(String, String)>::new();
+    let mut intents = Vec::new();
+    for task in tasks {
+        for relationship in &task.issue_relationships {
+            if !matches!(
+                relationship.relationship_type.as_str(),
+                "blocks" | "blocked_by"
+            ) {
+                continue;
+            }
+            if !task_ids.contains(relationship.target_task_id.as_str()) {
+                continue;
+            }
+
+            let source_jira_key = jira_keys_by_task_id
+                .get(&task.id)
+                .map(String::as_str)
+                .filter(|key| !key.trim().is_empty());
+            let target_jira_key = jira_keys_by_task_id
+                .get(&relationship.target_task_id)
+                .map(String::as_str)
+                .filter(|key| !key.trim().is_empty());
+            let (Some(source_jira_key), Some(target_jira_key)) = (source_jira_key, target_jira_key)
+            else {
+                let message =
+                    "Jira relationship skipped because both Local Tasks need Jira keys first.";
+                recorder.record_event(
+                    Some(&task.id),
+                    "jira.issue_link.skipped",
+                    "succeeded",
+                    jira_issue_link_error_detail(
+                        &task.id,
+                        &relationship.target_task_id,
+                        source_jira_key,
+                        target_jira_key,
+                        message,
+                    ),
+                )?;
+                result.messages.push(format!("{}: {message}", task.title));
+                continue;
+            };
+
+            let (outward_jira_key, inward_jira_key) = match relationship.relationship_type.as_str()
+            {
+                "blocks" => (source_jira_key.to_string(), target_jira_key.to_string()),
+                "blocked_by" => (target_jira_key.to_string(), source_jira_key.to_string()),
+                _ => continue,
+            };
+            if outward_jira_key == inward_jira_key {
+                continue;
+            }
+
+            if !seen_pairs.insert((outward_jira_key.clone(), inward_jira_key.clone())) {
+                recorder.record_event(
+                    Some(&task.id),
+                    "jira.issue_link.skipped",
+                    "succeeded",
+                    jira_issue_link_skipped_detail(
+                        &task.id,
+                        &relationship.target_task_id,
+                        &outward_jira_key,
+                        &inward_jira_key,
+                        "duplicate-local-intent",
+                    ),
+                )?;
+                continue;
+            }
+
+            intents.push(JiraIssueRelationshipIntent {
+                source_task_id: task.id.clone(),
+                target_task_id: relationship.target_task_id.clone(),
+                local_relationship_type: relationship.relationship_type.clone(),
+                outward_jira_key,
+                inward_jira_key,
+            });
+        }
+    }
+
+    Ok(intents)
+}
+
+fn resolve_blocks_issue_link_type(
+    link_types: &[JiraIssueLinkType],
+) -> Result<JiraIssueLinkType, String> {
+    link_types
+        .iter()
+        .find(|link_type| is_blocks_issue_link_type(link_type))
+        .cloned()
+        .ok_or_else(|| {
+            "Jira did not expose a Blocks issue-link type with blocks / is blocked by directions."
+                .to_string()
+        })
+}
+
+fn is_blocks_issue_link_type(link_type: &JiraIssueLinkType) -> bool {
+    let name = normalize_issue_link_label(&link_type.name);
+    let outward = normalize_issue_link_label(&link_type.outward);
+    let inward = normalize_issue_link_label(&link_type.inward);
+    name == "blocks"
+        && outward.contains("block")
+        && inward.contains("blocked")
+        && !link_type.id.trim().is_empty()
+}
+
+fn collect_existing_blocks_link_pair(
+    existing_link_pairs: &mut HashSet<(String, String)>,
+    blocks_link_type: &JiraIssueLinkType,
+    queried_issue_key: &str,
+    issue_link: &JiraIssueLink,
+) {
+    if issue_link.link_type.id != blocks_link_type.id
+        && !is_same_issue_link_type_name(&issue_link.link_type, blocks_link_type)
+    {
+        return;
+    }
+
+    let outward_issue_key = issue_link
+        .outward_issue
+        .as_ref()
+        .map(|issue| issue.key.as_str());
+    let inward_issue_key = issue_link
+        .inward_issue
+        .as_ref()
+        .map(|issue| issue.key.as_str());
+    if let (Some(outward), Some(inward)) = (outward_issue_key, inward_issue_key) {
+        existing_link_pairs.insert((outward.to_string(), inward.to_string()));
+        return;
+    }
+
+    if let Some(inward) = inward_issue_key {
+        existing_link_pairs.insert((queried_issue_key.to_string(), inward.to_string()));
+    }
+    if let Some(outward) = outward_issue_key {
+        existing_link_pairs.insert((outward.to_string(), queried_issue_key.to_string()));
+    }
+}
+
+fn is_same_issue_link_type_name(left: &JiraIssueLinkType, right: &JiraIssueLinkType) -> bool {
+    normalize_issue_link_label(&left.name) == normalize_issue_link_label(&right.name)
+        && normalize_issue_link_label(&left.outward) == normalize_issue_link_label(&right.outward)
+        && normalize_issue_link_label(&left.inward) == normalize_issue_link_label(&right.inward)
+}
+
+fn normalize_issue_link_label(value: &str) -> String {
+    value
+        .trim()
+        .to_ascii_lowercase()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 fn resolve_or_create_epic<Gateway, F>(
@@ -1493,7 +1849,8 @@ mod tests {
     use super::*;
     use crate::db::open_in_memory_database;
     use crate::models::{
-        JiraCreateIssueTypeMetadata, JqlResult, NewTask, NewTaskAttachment, NewTray,
+        JiraCreateIssueTypeMetadata, JqlResult, LocalIssueRelationship, NewTask, NewTaskAttachment,
+        NewTray, Tray,
     };
     use crate::repositories::{TaskRepository, TrayRepository};
     use std::fs;
@@ -1524,6 +1881,10 @@ mod tests {
             })
             .expect("task creates");
         let mut gateway = FakeJiraGateway::new();
+        gateway.search_results = vec![epic_search_result(
+            "JTFTEST-60",
+            "[STT] [Programacion] Demo Version 1",
+        )];
         gateway.created_keys = vec!["JTFTEST-10".to_string(), "JTFTEST-11".to_string()];
 
         let mut runner = JiraSyncRunner::new(&connection, &mut gateway, "JTFTEST".to_string());
@@ -2552,6 +2913,383 @@ mod tests {
     }
 
     #[test]
+    fn creates_same_run_blocks_issue_link_after_both_parent_issues_have_keys() {
+        let connection = open_in_memory_database().expect("database opens");
+        let tray_repository = TrayRepository::new(&connection);
+        let task_repository = TaskRepository::new(&connection);
+        let tray = tray_repository
+            .create(NewTray {
+                name: "Relationship sync".to_string(),
+            })
+            .expect("tray creates");
+        tray_repository
+            .update_epic_scopes(&tray.id, Some("Demo Version 1"), Some("Demos Version 1"))
+            .expect("tray scopes update");
+        let source_task = task_repository
+            .create(NewTask {
+                tray_id: tray.id.clone(),
+                project: "STT".to_string(),
+                area: "Programacion".to_string(),
+                title: "Unblock dependency".to_string(),
+                priority: "High".to_string(),
+                issue_type: "Story".to_string(),
+                content_language: "Spanish".to_string(),
+            })
+            .expect("source task creates");
+        let target_task = task_repository
+            .create(NewTask {
+                tray_id: tray.id.clone(),
+                project: "STT".to_string(),
+                area: "Programacion".to_string(),
+                title: "Wait for dependency".to_string(),
+                priority: "Medium".to_string(),
+                issue_type: "Story".to_string(),
+                content_language: "Spanish".to_string(),
+            })
+            .expect("target task creates");
+        task_repository
+            .update_issue_relationships(
+                &source_task.id,
+                &[LocalIssueRelationship {
+                    id: "rel-source-blocks-target".to_string(),
+                    relationship_type: "blocks".to_string(),
+                    target_task_id: target_task.id.clone(),
+                }],
+            )
+            .expect("relationship persists");
+        let mut gateway = FakeJiraGateway::new();
+        gateway.created_keys = vec![
+            "JTFTEST-40".to_string(),
+            "JTFTEST-41".to_string(),
+            "JTFTEST-42".to_string(),
+        ];
+
+        let mut runner = JiraSyncRunner::new(&connection, &mut gateway, "JTFTEST".to_string());
+        let result = runner
+            .create_parent_issues_from_tray(&tray.id, true)
+            .expect("sync succeeds");
+
+        assert_eq!(result.status, "succeeded");
+        assert_eq!(result.created_issue_count, 2);
+        assert_eq!(gateway.created_issue_links.len(), 1);
+        assert_eq!(
+            gateway.created_issue_links[0],
+            json!({
+                "type": { "id": "10010" },
+                "outwardIssue": { "key": "JTFTEST-41" },
+                "inwardIssue": { "key": "JTFTEST-42" }
+            })
+        );
+    }
+
+    #[test]
+    fn creates_blocked_by_issue_link_with_inverse_blocks_payload_direction() {
+        let connection = open_in_memory_database().expect("database opens");
+        let tray_repository = TrayRepository::new(&connection);
+        let task_repository = TaskRepository::new(&connection);
+        let tray = create_scoped_test_tray(&tray_repository, "Relationship direction");
+        let source_task = create_relationship_test_task(&task_repository, &tray.id, "Waiter");
+        let target_task = create_relationship_test_task(&task_repository, &tray.id, "Blocker");
+        task_repository
+            .update_issue_relationships(
+                &source_task.id,
+                &[LocalIssueRelationship {
+                    id: "rel-source-blocked-by-target".to_string(),
+                    relationship_type: "blocked_by".to_string(),
+                    target_task_id: target_task.id.clone(),
+                }],
+            )
+            .expect("relationship persists");
+        let mut gateway = FakeJiraGateway::new();
+        gateway.created_keys = vec![
+            "JTFTEST-50".to_string(),
+            "JTFTEST-51".to_string(),
+            "JTFTEST-52".to_string(),
+        ];
+
+        let mut runner = JiraSyncRunner::new(&connection, &mut gateway, "JTFTEST".to_string());
+        let result = runner
+            .create_parent_issues_from_tray(&tray.id, true)
+            .expect("sync succeeds");
+
+        assert_eq!(result.status, "succeeded");
+        assert_eq!(
+            gateway.created_issue_links[0],
+            json!({
+                "type": { "id": "10010" },
+                "outwardIssue": { "key": "JTFTEST-52" },
+                "inwardIssue": { "key": "JTFTEST-51" }
+            })
+        );
+    }
+
+    #[test]
+    fn creates_issue_link_between_existing_jira_keys_without_recreating_issues() {
+        let connection = open_in_memory_database().expect("database opens");
+        let tray_repository = TrayRepository::new(&connection);
+        let task_repository = TaskRepository::new(&connection);
+        let tray = create_scoped_test_tray(&tray_repository, "Existing key relationship");
+        let source_task =
+            create_relationship_test_task(&task_repository, &tray.id, "Existing source");
+        let target_task =
+            create_relationship_test_task(&task_repository, &tray.id, "Existing target");
+        set_existing_jira_key(&connection, &source_task.id, "JTFTEST-61");
+        set_existing_jira_key(&connection, &target_task.id, "JTFTEST-62");
+        task_repository
+            .update_issue_relationships(
+                &source_task.id,
+                &[LocalIssueRelationship {
+                    id: "rel-existing".to_string(),
+                    relationship_type: "blocks".to_string(),
+                    target_task_id: target_task.id.clone(),
+                }],
+            )
+            .expect("relationship persists");
+        let mut gateway = FakeJiraGateway::new();
+        gateway.search_results = vec![epic_search_result(
+            "JTFTEST-60",
+            "[STT] [Programacion] Demo Version 1",
+        )];
+
+        let mut runner = JiraSyncRunner::new(&connection, &mut gateway, "JTFTEST".to_string());
+        let result = runner
+            .create_parent_issues_from_tray(&tray.id, true)
+            .expect("sync succeeds");
+
+        assert_eq!(result.status, "succeeded");
+        assert_eq!(result.created_issue_count, 0);
+        assert_eq!(result.skipped_issue_count, 2);
+        assert!(gateway.created_payloads.is_empty());
+        assert_eq!(
+            gateway.created_issue_links[0]["outwardIssue"]["key"],
+            json!("JTFTEST-61")
+        );
+    }
+
+    #[test]
+    fn skips_issue_link_when_target_task_has_no_jira_key() {
+        let connection = open_in_memory_database().expect("database opens");
+        let tray_repository = TrayRepository::new(&connection);
+        let task_repository = TaskRepository::new(&connection);
+        let tray = create_scoped_test_tray(&tray_repository, "Missing relationship key");
+        let source_task =
+            create_relationship_test_task(&task_repository, &tray.id, "Created source");
+        let target_task =
+            create_relationship_test_task(&task_repository, &tray.id, "Failed target");
+        task_repository
+            .update_issue_relationships(
+                &source_task.id,
+                &[LocalIssueRelationship {
+                    id: "rel-missing-target".to_string(),
+                    relationship_type: "blocks".to_string(),
+                    target_task_id: target_task.id.clone(),
+                }],
+            )
+            .expect("relationship persists");
+        let mut gateway = FakeJiraGateway::new();
+        gateway.created_keys = vec!["JTFTEST-70".to_string(), "JTFTEST-71".to_string()];
+        task_repository
+            .mark_csv_exported(&[target_task.id.clone()])
+            .expect("target marks exported");
+
+        let mut runner = JiraSyncRunner::new(&connection, &mut gateway, "JTFTEST".to_string());
+        let result = runner
+            .create_parent_issues_from_tray_with_progress(&tray.id, true, false, true, |_| {})
+            .expect("sync returns partial");
+
+        assert_eq!(result.status, "partial");
+        assert_eq!(result.created_issue_count, 1);
+        assert!(gateway.created_issue_links.is_empty());
+        assert!(result
+            .messages
+            .iter()
+            .any(|message| message.contains("both Local Tasks need Jira keys")));
+    }
+
+    #[test]
+    fn normalizes_duplicate_inverse_relationship_intents_to_one_issue_link_write() {
+        let connection = open_in_memory_database().expect("database opens");
+        let tray_repository = TrayRepository::new(&connection);
+        let task_repository = TaskRepository::new(&connection);
+        let tray = create_scoped_test_tray(&tray_repository, "Duplicate relationship");
+        let source_task = create_relationship_test_task(&task_repository, &tray.id, "Blocker");
+        let target_task = create_relationship_test_task(&task_repository, &tray.id, "Blocked");
+        task_repository
+            .update_issue_relationships(
+                &source_task.id,
+                &[LocalIssueRelationship {
+                    id: "rel-source-blocks-target".to_string(),
+                    relationship_type: "blocks".to_string(),
+                    target_task_id: target_task.id.clone(),
+                }],
+            )
+            .expect("source relationship persists");
+        task_repository
+            .update_issue_relationships(
+                &target_task.id,
+                &[LocalIssueRelationship {
+                    id: "rel-target-blocked-by-source".to_string(),
+                    relationship_type: "blocked_by".to_string(),
+                    target_task_id: source_task.id.clone(),
+                }],
+            )
+            .expect("target relationship persists");
+        let mut gateway = FakeJiraGateway::new();
+        gateway.created_keys = vec![
+            "JTFTEST-80".to_string(),
+            "JTFTEST-81".to_string(),
+            "JTFTEST-82".to_string(),
+        ];
+
+        let mut runner = JiraSyncRunner::new(&connection, &mut gateway, "JTFTEST".to_string());
+        let result = runner
+            .create_parent_issues_from_tray(&tray.id, true)
+            .expect("sync succeeds");
+
+        assert_eq!(result.status, "succeeded");
+        assert_eq!(gateway.created_issue_links.len(), 1);
+    }
+
+    #[test]
+    fn skips_issue_link_write_when_blocks_link_already_exists_in_jira() {
+        let connection = open_in_memory_database().expect("database opens");
+        let tray_repository = TrayRepository::new(&connection);
+        let task_repository = TaskRepository::new(&connection);
+        let tray = create_scoped_test_tray(&tray_repository, "Existing remote relationship");
+        let source_task =
+            create_relationship_test_task(&task_repository, &tray.id, "Remote source");
+        let target_task =
+            create_relationship_test_task(&task_repository, &tray.id, "Remote target");
+        set_existing_jira_key(&connection, &source_task.id, "JTFTEST-91");
+        set_existing_jira_key(&connection, &target_task.id, "JTFTEST-92");
+        task_repository
+            .update_issue_relationships(
+                &source_task.id,
+                &[LocalIssueRelationship {
+                    id: "rel-existing-remote".to_string(),
+                    relationship_type: "blocks".to_string(),
+                    target_task_id: target_task.id.clone(),
+                }],
+            )
+            .expect("relationship persists");
+        let mut gateway = FakeJiraGateway::new();
+        gateway.search_results = vec![epic_search_result(
+            "JTFTEST-90",
+            "[STT] [Programacion] Demo Version 1",
+        )];
+        gateway.issue_links_by_key.insert(
+            "JTFTEST-91".to_string(),
+            vec![jira_issue_link("1", "JTFTEST-91", "JTFTEST-92")],
+        );
+
+        let mut runner = JiraSyncRunner::new(&connection, &mut gateway, "JTFTEST".to_string());
+        let result = runner
+            .create_parent_issues_from_tray(&tray.id, true)
+            .expect("sync succeeds");
+
+        assert_eq!(result.status, "succeeded");
+        assert!(gateway.created_issue_links.is_empty());
+    }
+
+    #[test]
+    fn keeps_created_issues_when_issue_link_create_fails() {
+        let connection = open_in_memory_database().expect("database opens");
+        let tray_repository = TrayRepository::new(&connection);
+        let task_repository = TaskRepository::new(&connection);
+        let tray = create_scoped_test_tray(&tray_repository, "Relationship failure");
+        let source_task =
+            create_relationship_test_task(&task_repository, &tray.id, "Source survives");
+        let target_task =
+            create_relationship_test_task(&task_repository, &tray.id, "Target survives");
+        task_repository
+            .update_issue_relationships(
+                &source_task.id,
+                &[LocalIssueRelationship {
+                    id: "rel-link-failure".to_string(),
+                    relationship_type: "blocks".to_string(),
+                    target_task_id: target_task.id.clone(),
+                }],
+            )
+            .expect("relationship persists");
+        let mut gateway = FakeJiraGateway::new();
+        gateway.created_keys = vec![
+            "JTFTEST-100".to_string(),
+            "JTFTEST-101".to_string(),
+            "JTFTEST-102".to_string(),
+        ];
+        gateway
+            .issue_link_failures
+            .push("link permission denied with Basic second-secret".to_string());
+
+        let mut runner = JiraSyncRunner::new(&connection, &mut gateway, "JTFTEST".to_string());
+        let result = runner
+            .create_parent_issues_from_tray(&tray.id, true)
+            .expect("sync returns partial");
+
+        assert_eq!(result.status, "partial");
+        assert_eq!(result.created_issue_count, 2);
+        let persisted_tasks = TaskRepository::new(&connection)
+            .list_for_tray(&tray.id)
+            .expect("tasks list");
+        assert!(
+            persisted_tasks
+                .iter()
+                .filter(|task| task.sync_status == "Created")
+                .count()
+                >= 2
+        );
+        let failure_event_detail: String = connection
+            .query_row(
+                "SELECT detail_json FROM sync_audit_events WHERE event_type = 'jira.issue_link.create_failed'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("failure event detail reads");
+        assert!(failure_event_detail.contains("Basic <redacted>"));
+        assert!(!failure_event_detail.contains("second-secret"));
+    }
+
+    #[test]
+    fn reports_partial_when_existing_key_issue_link_retry_fails_without_recreating_issues() {
+        let connection = open_in_memory_database().expect("database opens");
+        let tray_repository = TrayRepository::new(&connection);
+        let task_repository = TaskRepository::new(&connection);
+        let tray = create_scoped_test_tray(&tray_repository, "Relationship retry failure");
+        let source_task = create_relationship_test_task(&task_repository, &tray.id, "Retry source");
+        let target_task = create_relationship_test_task(&task_repository, &tray.id, "Retry target");
+        set_existing_jira_key(&connection, &source_task.id, "JTFTEST-111");
+        set_existing_jira_key(&connection, &target_task.id, "JTFTEST-112");
+        task_repository
+            .update_issue_relationships(
+                &source_task.id,
+                &[LocalIssueRelationship {
+                    id: "rel-retry-link-failure".to_string(),
+                    relationship_type: "blocks".to_string(),
+                    target_task_id: target_task.id.clone(),
+                }],
+            )
+            .expect("relationship persists");
+        let mut gateway = FakeJiraGateway::new();
+        gateway.search_results = vec![epic_search_result(
+            "JTFTEST-110",
+            "[STT] [Programacion] Demo Version 1",
+        )];
+        gateway
+            .issue_link_failures
+            .push("link still unavailable".to_string());
+
+        let mut runner = JiraSyncRunner::new(&connection, &mut gateway, "JTFTEST".to_string());
+        let result = runner
+            .create_parent_issues_from_tray(&tray.id, true)
+            .expect("sync returns partial");
+
+        assert_eq!(result.status, "partial");
+        assert_eq!(result.created_issue_count, 0);
+        assert_eq!(result.skipped_issue_count, 2);
+        assert!(gateway.created_payloads.is_empty());
+    }
+
+    #[test]
     fn fails_subtask_without_parent_jira_key_without_recreating_parent() {
         let connection = open_in_memory_database().expect("database opens");
         let tray_repository = TrayRepository::new(&connection);
@@ -3150,6 +3888,9 @@ mod tests {
         attachment_settings: Result<JiraAttachmentSettings, String>,
         attachment_settings_calls: usize,
         created_payloads: Vec<Value>,
+        created_issue_links: Vec<Value>,
+        link_types: Vec<JiraIssueLinkType>,
+        issue_links_by_key: HashMap<String, Vec<JiraIssueLink>>,
         updated_payloads: Vec<(String, Value)>,
         uploaded_attachments: Vec<(String, String, Option<String>, Vec<u8>)>,
         search_results: Vec<JqlResult>,
@@ -3157,6 +3898,7 @@ mod tests {
         created_keys: Vec<String>,
         create_failures: Vec<String>,
         update_failures: Vec<String>,
+        issue_link_failures: Vec<String>,
         attachment_failures: Vec<String>,
         remote_marker_results: Vec<Result<Option<JiraRemoteMarkerIssue>, String>>,
         remote_marker_lookups: Vec<(String, String, String, String)>,
@@ -3172,6 +3914,9 @@ mod tests {
                 }),
                 attachment_settings_calls: 0,
                 created_payloads: Vec::new(),
+                created_issue_links: Vec::new(),
+                link_types: vec![blocks_issue_link_type()],
+                issue_links_by_key: HashMap::new(),
                 updated_payloads: Vec::new(),
                 uploaded_attachments: Vec::new(),
                 search_results: Vec::new(),
@@ -3179,6 +3924,7 @@ mod tests {
                 created_keys: Vec::new(),
                 create_failures: Vec::new(),
                 update_failures: Vec::new(),
+                issue_link_failures: Vec::new(),
                 attachment_failures: Vec::new(),
                 remote_marker_results: Vec::new(),
                 remote_marker_lookups: Vec::new(),
@@ -3254,6 +4000,27 @@ mod tests {
             })
         }
 
+        fn issue_link_types(&mut self) -> Result<Vec<JiraIssueLinkType>, String> {
+            Ok(self.link_types.clone())
+        }
+
+        fn issue_links(&mut self, key: &str) -> Result<Vec<JiraIssueLink>, String> {
+            Ok(self
+                .issue_links_by_key
+                .get(key)
+                .cloned()
+                .unwrap_or_default())
+        }
+
+        fn create_issue_link(&mut self, payload: Value) -> Result<(), String> {
+            self.created_issue_links.push(payload);
+            if !self.issue_link_failures.is_empty() {
+                return Err(self.issue_link_failures.remove(0));
+            }
+
+            Ok(())
+        }
+
         fn update_issue_fields(&mut self, key: &str, payload: Value) -> Result<(), String> {
             self.updated_payloads.push((key.to_string(), payload));
             if !self.update_failures.is_empty() {
@@ -3309,6 +4076,75 @@ mod tests {
                 subtask_issue_type("10045", "Subtarea"),
             ],
         }
+    }
+
+    fn blocks_issue_link_type() -> JiraIssueLinkType {
+        JiraIssueLinkType {
+            id: "10010".to_string(),
+            name: "Blocks".to_string(),
+            inward: "is blocked by".to_string(),
+            outward: "blocks".to_string(),
+        }
+    }
+
+    fn jira_issue_link(id: &str, outward_key: &str, inward_key: &str) -> JiraIssueLink {
+        JiraIssueLink {
+            id: id.to_string(),
+            link_type: blocks_issue_link_type(),
+            outward_issue: Some(crate::models::JiraIssueLinkIssue {
+                key: outward_key.to_string(),
+            }),
+            inward_issue: Some(crate::models::JiraIssueLinkIssue {
+                key: inward_key.to_string(),
+            }),
+        }
+    }
+
+    fn create_scoped_test_tray(tray_repository: &TrayRepository<'_>, name: &str) -> Tray {
+        let tray = tray_repository
+            .create(NewTray {
+                name: name.to_string(),
+            })
+            .expect("tray creates");
+        tray_repository
+            .update_epic_scopes(&tray.id, Some("Demo Version 1"), Some("Demos Version 1"))
+            .expect("tray scopes update");
+        tray
+    }
+
+    fn create_relationship_test_task(
+        task_repository: &TaskRepository<'_>,
+        tray_id: &str,
+        title: &str,
+    ) -> LocalTask {
+        task_repository
+            .create(NewTask {
+                tray_id: tray_id.to_string(),
+                project: "STT".to_string(),
+                area: "Programacion".to_string(),
+                title: title.to_string(),
+                priority: "Medium".to_string(),
+                issue_type: "Story".to_string(),
+                content_language: "Spanish".to_string(),
+            })
+            .expect("task creates")
+    }
+
+    fn set_existing_jira_key(connection: &Connection, task_id: &str, jira_key: &str) {
+        connection
+            .execute(
+                "
+                UPDATE tasks
+                SET sync_status = 'Failed', jira_key = ?1, jira_url = ?2
+                WHERE id = ?3
+                ",
+                (
+                    jira_key,
+                    format!("https://example.atlassian.net/browse/{jira_key}"),
+                    task_id,
+                ),
+            )
+            .expect("existing jira key fixture updates");
     }
 
     fn issue_type(id: &str, name: &str, role: IssueTypeRole) -> JiraCreateIssueTypeMetadata {
