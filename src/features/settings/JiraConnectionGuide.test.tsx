@@ -1,12 +1,14 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import type { AppSettings } from "../../lib/types";
+import type { AppSettings, ProjectSyncReview } from "../../lib/types";
 import {
   JiraConnectionGuide,
   buildProjectSyncDiscoveryRequest,
   canContinueJiraConnectionGuideStep,
+  getProjectSyncReviewForProject,
   jiraConnectionGuideCopy,
-  jiraConnectionGuideSteps
+  jiraConnectionGuideSteps,
+  shouldShowManualProjectKeyInput
 } from "./JiraConnectionGuide";
 
 const settings: AppSettings = {
@@ -20,6 +22,14 @@ const settings: AppSettings = {
   defaultContentLanguage: "Spanish",
   catalogSourceMode: "manual",
   catalogSourceUrl: ""
+};
+
+const jtftestProjectSyncReview: ProjectSyncReview = {
+  jiraProjectKey: "JTFTEST",
+  jql: "project = JTFTEST AND issuetype = Epic ORDER BY updated DESC",
+  sections: { active: [], newlyAvailable: [], ignored: [], archived: [] },
+  defaultActiveNames: [],
+  notes: []
 };
 
 function renderGuide({ initialStep }: { initialStep?: "site" | "account" | "token" | "verify" | "project" | "project-sync" | "review" } = {}) {
@@ -119,5 +129,17 @@ describe("JiraConnectionGuide", () => {
       jiraAccountEmail: "simon.bahamonde@gmail.com",
       jiraCreationProjectKey: "JTFTEST"
     });
+  });
+
+  it("does not reuse JTFTEST project decisions after the draft project changes to SCRUM", () => {
+    expect(getProjectSyncReviewForProject(jtftestProjectSyncReview, "SCRUM")).toBeNull();
+    expect(getProjectSyncReviewForProject(jtftestProjectSyncReview, " jtftest ")).toBe(jtftestProjectSyncReview);
+  });
+
+  it("offers a manual project key only when discovery fails or returns no projects", () => {
+    expect(shouldShowManualProjectKeyInput("idle", 0)).toBe(false);
+    expect(shouldShowManualProjectKeyInput("loaded", 0)).toBe(true);
+    expect(shouldShowManualProjectKeyInput("failed", 0)).toBe(true);
+    expect(shouldShowManualProjectKeyInput("loaded", 1)).toBe(false);
   });
 });
