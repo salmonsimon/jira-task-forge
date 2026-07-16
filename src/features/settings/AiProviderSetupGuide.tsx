@@ -24,13 +24,13 @@ export const aiProviderOptions: Array<{ label: string; value: SupportedAiProvide
 
 export const defaultAiProviderModels: Record<SupportedAiProvider, string> = {
   OpenAI: "gpt-4.1",
-  Claude: "claude-sonnet-4-20250514",
+  Claude: "claude-3-5-haiku-20241022",
   Gemini: "gemini-2.5-flash"
 };
 
 export const availableAiProviderModels: Record<SupportedAiProvider, string[]> = {
   OpenAI: ["gpt-4.1", "gpt-4.1-mini", "gpt-4o", "gpt-4o-mini"],
-  Claude: ["claude-sonnet-4-20250514", "claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022"],
+  Claude: ["claude-3-5-haiku-20241022", "claude-3-5-sonnet-20241022", "claude-3-7-sonnet-20250219"],
   Gemini: ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-1.5-flash"]
 };
 

@@ -1,4 +1,5 @@
-import { Check } from "lucide-react";
+import { Check, RefreshCw } from "lucide-react";
+import { Button } from "../../components/ui";
 import type { ProjectSyncCandidate, ProjectSyncReview } from "../../lib/types";
 
 export function mergeProjectSyncCandidates(review: ProjectSyncReview) {
@@ -16,6 +17,44 @@ export function mergeProjectSyncCandidates(review: ProjectSyncReview) {
     if (right.normalizedName === "transversal") return 1;
     return left.name.localeCompare(right.name);
   });
+}
+
+export function hasSyncableProjectCandidates(review: ProjectSyncReview) {
+  return mergeProjectSyncCandidates(review).some((candidate) => candidate.normalizedName !== "transversal");
+}
+
+export function ProjectSyncEmptyState({
+  jiraProjectKey,
+  isRetrying = false,
+  onRetry
+}: {
+  jiraProjectKey: string;
+  isRetrying?: boolean;
+  onRetry?: () => void | Promise<void>;
+}) {
+  return (
+    <div className="rounded border border-[#dfe1e6] bg-[#f7f8fa] p-4">
+      <div className="mb-1 text-sm font-semibold text-[#172b4d]">No Jira Projects found yet</div>
+      <p className="text-sm leading-relaxed text-[#42526e]">
+        Project Sync discovers Projects from Jira Epic summaries formatted <span className="font-mono text-xs">{"[{Project}] [{Area}] {Scope}"}</span>.
+      </p>
+      <p className="mt-2 text-sm leading-relaxed text-[#42526e]">
+        Create at least one compatible Epic in {jiraProjectKey}, then sync again. Transversal remains available locally without a decision.
+      </p>
+      <div className="mt-4 flex justify-end gap-2">
+        {onRetry ? (
+          <Button
+            icon={<RefreshCw size={13} className={isRetrying ? "animate-spin" : undefined} />}
+            variant="secondary"
+            disabled={isRetrying}
+            onClick={() => void onRetry()}
+          >
+            {isRetrying ? "Trying..." : "Try again"}
+          </Button>
+        ) : null}
+      </div>
+    </div>
+  );
 }
 
 export function ProjectSyncDecisionTable({

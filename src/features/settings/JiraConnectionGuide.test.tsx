@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { AppSettings, ProjectSyncReview } from "../../lib/types";
 import {
   JiraConnectionGuide,
+  JiraProjectSyncDecisionStep,
   buildProjectSyncDiscoveryRequest,
   canContinueJiraConnectionGuideStep,
   getProjectSyncReviewForProject,
@@ -29,6 +30,28 @@ const jtftestProjectSyncReview: ProjectSyncReview = {
   jql: "project = JTFTEST AND issuetype = Epic ORDER BY updated DESC",
   sections: { active: [], newlyAvailable: [], ignored: [], archived: [] },
   defaultActiveNames: [],
+  notes: []
+};
+
+const emptyProjectSyncReview: ProjectSyncReview = {
+  jiraProjectKey: "SCRUM",
+  jql: "project = SCRUM AND issuetype = Epic ORDER BY updated DESC",
+  sections: {
+    active: [
+      {
+        name: "Transversal",
+        normalizedName: "transversal",
+        jiraIssueKeys: [],
+        status: "active",
+        alreadyLocal: true,
+        willPromoteLocal: false
+      }
+    ],
+    newlyAvailable: [],
+    ignored: [],
+    archived: []
+  },
+  defaultActiveNames: ["Transversal"],
   notes: []
 };
 
@@ -141,5 +164,24 @@ describe("JiraConnectionGuide", () => {
     expect(shouldShowManualProjectKeyInput("loaded", 0)).toBe(true);
     expect(shouldShowManualProjectKeyInput("failed", 0)).toBe(true);
     expect(shouldShowManualProjectKeyInput("loaded", 1)).toBe(false);
+  });
+
+  it("shows the Project Sync empty state in the setup decision step", () => {
+    const html = renderToStaticMarkup(
+      <JiraProjectSyncDecisionStep
+        activeNames={new Set(["Transversal"])}
+        isProjectSyncEnabled
+        onChange={() => undefined}
+        onDiscoverProjectSync={() => undefined}
+        review={emptyProjectSyncReview}
+        reviewState="loaded"
+      />
+    );
+
+    expect(html).toContain("No Jira Projects found yet");
+    expect(html).toContain("[{Project}] [{Area}] {Scope}");
+    expect(html).toContain("Try again");
+    expect(html).not.toContain("Load Jira Projects");
+    expect(html).not.toContain("aria-pressed=");
   });
 });

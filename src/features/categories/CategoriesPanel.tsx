@@ -5,7 +5,7 @@ import { appOverlayLayers, useAppOverlay } from "../../lib/app-overlays";
 import { isTransversalProject } from "../../lib/domain/categoryVisibility";
 import type { AppSettings, CatalogSyncResult, Category, ProjectSyncApplyRequest, ProjectSyncCandidate, ProjectSyncReview } from "../../lib/types";
 import { cn } from "../../lib/utils";
-import { mergeProjectSyncCandidates, ProjectSyncDecisionTable } from "./ProjectSyncDecisionTable";
+import { hasSyncableProjectCandidates, mergeProjectSyncCandidates, ProjectSyncDecisionTable, ProjectSyncEmptyState } from "./ProjectSyncDecisionTable";
 
 
 export function CategoriesPanel({
@@ -108,6 +108,20 @@ export function CategoriesPanel({
             setProjectSyncReview(null);
           }}
           onClose={() => setProjectSyncReview(null)}
+          onRetry={
+            onDiscoverProjectSync
+              ? async () => {
+                  try {
+                    setProjectSyncError(null);
+                    const review = await onDiscoverProjectSync();
+                    setProjectSyncReview(review);
+                  } catch (error) {
+                    setProjectSyncReview(null);
+                    setProjectSyncError(catalogSyncErrorMessage(error));
+                  }
+                }
+              : undefined
+          }
         />
       ) : null}
     </DrawerShell>
@@ -383,20 +397,24 @@ function ProjectSyncErrorNotice({ message, onClose }: { message: string; onClose
   );
 }
 
-function ProjectSyncModal({
+export function ProjectSyncModal({
   review,
   onApply,
-  onClose
+  onClose,
+  onRetry
 }: {
   review: ProjectSyncReview;
   onApply: (request: ProjectSyncApplyRequest) => Promise<void>;
   onClose: () => void;
+  onRetry?: () => Promise<void>;
 }) {
   const modalRef = useRef<HTMLElement | null>(null);
   const allCandidates = mergeProjectSyncCandidates(review);
+  const hasCandidates = hasSyncableProjectCandidates(review);
   const [activeNames, setActiveNames] = useState(() => new Set(review.defaultActiveNames));
   const [archivedNames, setArchivedNames] = useState(() => new Set(review.sections.archived.map((candidate) => candidate.name)));
   const [isApplying, setIsApplying] = useState(false);
+  const [isRetrying, setIsRetrying] = useState(false);
   const overlay = useAppOverlay({
     layer: appOverlayLayers.nestedModal,
     onDismiss: onClose,
@@ -433,6 +451,16 @@ function ProjectSyncModal({
     setIsApplying(false);
   }
 
+  async function retry() {
+    if (!onRetry || isRetrying) return;
+    setIsRetrying(true);
+    try {
+      await onRetry();
+    } finally {
+      setIsRetrying(false);
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-[rgba(9,30,66,0.66)] px-4" {...overlay.backdropProps}>
       <section
@@ -442,21 +470,29 @@ function ProjectSyncModal({
       >
         <PanelHeader title="Sync Projects" subtitle={`Jira epics from ${review.jiraProjectKey}`} onClose={onClose} />
         <div className="flex-1 overflow-y-auto p-4">
-          <FeedbackNote variant="info">Choose which Jira Projects stay active in Jira Task Forge. Active synced Projects become read-only; ignored Projects stay recoverable.</FeedbackNote>
-          {review.notes.length ? (
-            <FeedbackNote className="mt-2" variant="success">
-              {review.notes.join(" ")}
-            </FeedbackNote>
-          ) : null}
-          <div className="mt-3">
-            <ProjectSyncDecisionTable activeNames={activeNames} candidates={allCandidates} maxVisibleRows={6} onChange={setCandidateActive} />
-          </div>
+          {hasCandidates ? (
+            <>
+              <FeedbackNote variant="info">Choose which Jira Projects stay active in Jira Task Forge. Active synced Projects become read-only; ignored Projects stay recoverable.</FeedbackNote>
+              {review.notes.length ? (
+                <FeedbackNote className="mt-2" variant="success">
+                  {review.notes.join(" ")}
+                </FeedbackNote>
+              ) : null}
+              <div className="mt-3">
+                <ProjectSyncDecisionTable activeNames={activeNames} candidates={allCandidates} maxVisibleRows={6} onChange={setCandidateActive} />
+              </div>
+            </>
+          ) : (
+            <ProjectSyncEmptyState jiraProjectKey={review.jiraProjectKey} isRetrying={isRetrying} onRetry={onRetry ? retry : undefined} />
+          )}
         </div>
         <div className="flex justify-end gap-2 border-t border-[#dfe1e6] bg-[#f7f8fa] p-3">
-          <Button variant="secondary" onClick={onClose}>Cancel</Button>
-          <Button variant="primary" disabled={isApplying} onClick={() => void apply()}>
-            {isApplying ? "Applying..." : "Apply"}
-          </Button>
+          <Button variant="secondary" onClick={onClose}>{hasCandidates ? "Cancel" : "Close"}</Button>
+          {hasCandidates ? (
+            <Button variant="primary" disabled={isApplying} onClick={() => void apply()}>
+              {isApplying ? "Applying..." : "Apply"}
+            </Button>
+          ) : null}
         </div>
       </section>
     </div>
