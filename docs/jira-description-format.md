@@ -5,8 +5,8 @@ descriptions in Jira Task Forge.
 
 ## Decision
 
-Personal v1 uses the practical DTS Jira description style, not SRS Lite or SRE
-Lite.
+Personal v1 uses a practical Jira Task Forge description style, not SRS Lite or
+SRE Lite.
 
 Story descriptions should include only:
 

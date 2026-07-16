@@ -1,53 +1,159 @@
 # Jira Task Forge
 
-Local-first Windows desktop app for preparing Jira work before creating issues through Jira Cloud.
+Jira Task Forge is a local-first Windows desktop app for turning rough work notes into reviewed Jira-ready issues before anything is created in Jira.
 
-## Current State
+It is built for people who prepare many Jira tasks from production notes, AI conversations, QA findings, or meeting follow-ups and want a private review step before sending work to Jira Cloud.
 
-This repo contains the product/architecture decisions and the first public beta
-of the Tauri/React desktop app.
+## What It Helps With
 
-The app now has SQLite-backed local trays/tasks, persisted non-secret settings,
-CSV export, JSON backup/restore without secrets, Jira API token storage through
-the OS credential store, Jira connection testing, read-only JQL search with
-favorites/recent history, AI-assisted JQL drafting through the Tauri backend,
-sync audit activity, Jira-admin-import-friendly CSV export, official
-area catalog sync from Notion with public OAuth connection token handling in the
-OS credential store, task
-detail sub-tasks, local issue relationship drafts, attachment metadata and
-managed-file ingestion, assisted description sections/proposals, and a guarded
-`Create in Jira` flow that creates required epics, parent Story/Bug issues,
-accepted sub-tasks, and selected Jira-ready attachments.
+- Capture local tasks in a **Preparation Tray** before Jira is touched.
+- Review generated Story or Bug descriptions before they become Jira content.
+- Keep project and area naming consistent with automatic summaries such as:
+  - Epic: `[F1 Car Simulator] [Gameplay] Pit Stop Polish`
+  - Story/Bug: `[Gameplay] Smooth pit entry steering assist`
+- Create Jira Epics, Stories/Bugs, accepted sub-tasks, and selected attachments through the Jira Cloud API.
+- Draft JQL with AI assistance and run read-only Jira searches from the app.
+- Use either manual Areas or synchronized Areas from a Notion catalog.
+- Keep Jira, Notion, and AI credentials out of backups by storing secrets in Windows Credential Manager.
 
-## Download Beta
+Jira relationship links such as `blocks` and `blocked by` are still pending [Issue #200](https://github.com/salmonsimon/jira-task-forge/issues/200). The app can keep local relationship drafts, but public docs should not claim Jira relationship-link creation is shipped until that issue is merged.
 
-The current public beta is `v0.1.0-beta.1`:
+## Who It Is For
 
-```text
-Jira Task Forge Installer.exe
-```
+Jira Task Forge is a personal open project that other people can use, fork, and adapt. It is useful when you want a structured local drafting space instead of creating half-reviewed Jira issues directly.
 
-Download it from the GitHub Releases page:
+The app is Windows-only today because it is packaged as a Tauri desktop app and uses Windows Credential Manager for local secret storage. The source is MIT licensed.
 
-```text
+## Current Beta
+
+The current public beta is `v0.1.0-beta.1`.
+
+Download:
+
 https://github.com/salmonsimon/jira-task-forge/releases/tag/v0.1.0-beta.1
+
+The installer is unsigned, so Windows SmartScreen may warn before installation. This beta may contain errors. Please report reproducible problems in [GitHub Issues](https://github.com/salmonsimon/jira-task-forge/issues).
+
+## Main Features
+
+- Local Preparation Trays with editable task drafts.
+- Jira Cloud connection setup and project metadata validation.
+- AI-assisted JQL drafting.
+- AI-assisted Story and Bug descriptions using OpenAI, Anthropic Claude, or Google Gemini.
+- Proposal Review for accepting, rejecting, editing, or requesting another AI revision before description content is final.
+- Epic Scope support with Jira Epic naming: `[{Project}] [{Area}] {Scope}`.
+- Story/Bug summary naming: `[{Area}] {Task name}`.
+- Accepted sub-task creation after parent issues are created.
+- Selected attachment upload to Jira.
+- CSV export as a fallback for Jira admin import workflows.
+- JSON backup/import without secrets.
+- Manual Areas or Notion-synchronized catalog Areas.
+
+## Documentation
+
+English:
+
+- [Catalog sync guide](docs/catalog-sync.md)
+- [Assisted descriptions](docs/assisted-descriptions.md)
+- [Jira formatting](docs/jira-formatting.md)
+- [Installation and security](docs/installation-security.md)
+- [Known beta limitations](docs/beta-limitations.md)
+- [Agent-ready workflow](docs/contributing-agent-workflow.md)
+- [Video animation kit](docs/video-kit/README.md)
+
+Spanish:
+
+- [Guion de demo de 60-90 segundos](docs/video-kit/spanish-demo-script.md)
+- [Guia rapida: sincronizacion de catalogo](docs/catalog-sync.md#ruta-rapida-en-espanol)
+- [Notas de beta](docs/beta-limitations.md#resumen-en-espanol)
+
+Technical references:
+
+- [Source contract for Notion catalog pages](docs/notion-catalog-source-requirements.md)
+- [Notion public OAuth connection](docs/notion-oauth-public-connection.md)
+- [Canonical Jira description format](docs/jira-description-format.md)
+- [Product decisions](docs/product-decisions.md)
+- [Project context for agents](CONTEXT.md)
+
+## Assisted Description Templates
+
+Story descriptions focus on user value and delivery scope:
+
+```markdown
+## Historia de usuario
+
+Como [usuario o rol],
+quiero [accion o resultado],
+para [beneficio].
+
+## Contexto
+
+## Alcance
+
+## Criterios de aceptacion
+
+## Entregable minimo
+
+## Checklist antes de Review
 ```
 
-The Windows installer is currently unsigned, so Windows SmartScreen may warn
-before installation. This beta is public but may still contain bugs.
+Bug descriptions focus on reproducible failure and expected behavior:
 
-## Stack
+```markdown
+## Problema
 
-- Tauri
-- React
-- TypeScript
-- shadcn-style UI with Tailwind
-- SQLite via `rusqlite` for local persistence
+## Contexto / impacto
 
-## Run Frontend Dev Server
+## Pasos para reproducir
+
+## Resultado actual
+
+## Resultado esperado
+
+## Evidencia
+
+## Criterios de aceptacion
+
+## Entregable minimo
+
+## Checklist antes de Review
+```
+
+See [docs/jira-description-format.md](docs/jira-description-format.md) for the exact format.
+
+## Catalog Modes
+
+Jira Task Forge can use two Area catalog modes:
+
+- **Manual mode**: maintain Areas directly in the app. This is best for a quick setup or a personal project with a small stable Area list.
+- **Sync from Notion page**: connect Notion through OAuth, select a catalog page in your own workspace, validate the JSON contract, and sync Areas plus delivery-format mappings.
+
+The public Notion example is only a reference. It is not a usable OAuth source by itself. To sync from Notion, duplicate or copy the example into your own Notion workspace, keep or move it as a top-level page, select/share that owned page in the OAuth picker, validate it in Jira Task Forge, and then sync.
+
+Start here: [docs/catalog-sync.md](docs/catalog-sync.md).
+
+## For Agents
+
+This repository is agent-ready. Before making product, architecture, or implementation changes, read:
+
+- [AGENTS.md](AGENTS.md)
+- [CONTEXT.md](CONTEXT.md)
+- [docs/product-decisions.md](docs/product-decisions.md)
+- [docs/HANDOFF.md](docs/HANDOFF.md)
+
+User-facing UI copy should be English. Jira task content and user-authored task descriptions may be Spanish.
+
+## Development
+
+Install dependencies:
 
 ```bash
 npm install
+```
+
+Run the frontend dev server:
+
+```bash
 npm run dev
 ```
 
@@ -57,65 +163,28 @@ Open:
 http://127.0.0.1:1420
 ```
 
-## Run Native Tauri App
-
-Running the native app requires Rust/Cargo in the WSL development environment.
+Run the native app:
 
 ```bash
-npm install
 npm run tauri dev
 ```
 
-For Notion public OAuth catalog sync, the desktop app uses the configured HTTPS
-OAuth backend. The product default is `https://notion-oauth.salmonsimon.com`;
-local localhost testing is an explicit development override. See
-[`docs/notion-oauth-public-connection.md`](docs/notion-oauth-public-connection.md).
-
-## Build Frontend
+Build the frontend:
 
 ```bash
 npm run build
 ```
 
-## Package Windows Installer
+Regenerate the public animation kit:
 
-After local validation, build the unsigned Windows installer from WSL with:
+```bash
+npm run assets:video-kit
+```
+
+Package the unsigned Windows installer from WSL:
 
 ```bash
 CARGO_BUILD_JOBS=1 npm run package:windows:cross
 ```
 
-See [`docs/windows-packaging.md`](docs/windows-packaging.md) for the current
-packaging gate, install smoke, and Windows validation boundary.
-
-## Internal Release Readiness
-
-Before using a new batch of PRs for daily internal work, run the concise
-readiness gate in [`docs/internal-release-readiness.md`](docs/internal-release-readiness.md).
-Use [`docs/live-qa.md`](docs/live-qa.md) for the longer native and live Jira QA
-procedure.
-
-For local storage locations, cleanup expectations, and Windows/WSL app data
-caveats, see [`docs/local-data-storage-inventory.md`](docs/local-data-storage-inventory.md).
-
-For the Notion catalog sync source contract, see
-[`docs/notion-catalog-source-requirements.md`](docs/notion-catalog-source-requirements.md)
-and the stable Notion reference linked there.
-
-## Local Git Guard
-
-This repo uses a local Git hook to block direct pushes to `main` from this workspace.
-
-Enable it after cloning:
-
-```bash
-git config core.hooksPath .githooks
-chmod +x .githooks/pre-push
-```
-
-GitHub branch protection is still preferred when available for the repository owner/plan.
-
-## Tauri Notes
-
-The Tauri app stores local data under the app data directory. Jira API tokens
-are intentionally stored outside SQLite through the OS credential store.
+See [docs/windows-packaging.md](docs/windows-packaging.md) for packaging details.

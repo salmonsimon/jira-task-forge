@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" role="img" aria-label="Manual versus sync catalog mode animation">
+  <style>
+    .bg { fill: #f7f9fc; }
+    .panel { fill: #ffffff; stroke: #d6deea; stroke-width: 2; }
+    .title { fill: #182230; font: 700 34px Inter, Segoe UI, Arial, sans-serif; }
+    .label { fill: #53627a; font: 600 18px Inter, Segoe UI, Arial, sans-serif; }
+    .body { fill: #182230; font: 500 24px Inter, Segoe UI, Arial, sans-serif; }
+    .small { fill: #53627a; font: 500 16px Inter, Segoe UI, Arial, sans-serif; }
+    .mono { fill: #182230; font: 600 22px Consolas, Menlo, monospace; }
+    .chip { fill: #edf3ff; stroke: #b9ccf6; stroke-width: 1.5; }
+    .blue { fill: #1d5fd1; }
+    .green { fill: #147a4f; }
+    .red { fill: #c93a3a; }
+    .amber { fill: #b66a04; }
+    .purple { fill: #6f48c9; }
+    .stroke-blue { stroke: #1d5fd1; }
+    .stroke-green { stroke: #147a4f; }
+    .stroke-muted { stroke: #53627a; }
+    .fade-in { opacity: 0; animation: fade 6s infinite; }
+    .draw { stroke-dasharray: 500; stroke-dashoffset: 500; animation: draw 6s infinite; }
+    @keyframes fade {
+      0%, 10% { opacity: 0; transform: translateY(8px); }
+      20%, 72% { opacity: 1; transform: translateY(0); }
+      90%, 100% { opacity: 0; transform: translateY(-4px); }
+    }
+    @keyframes draw {
+      0%, 18% { stroke-dashoffset: 500; opacity: 0; }
+      32%, 78% { stroke-dashoffset: 0; opacity: 1; }
+      100% { stroke-dashoffset: 0; opacity: 0; }
+    }
+  </style>
+  <rect class="bg" width="1280" height="720"/>
+  
+  <text class="title" x="72" y="78">Area Catalog Modes</text>
+  <text class="small" x="72" y="112">Choose local Manual mode or validate a user-owned Notion page</text>
+
+  <rect class="panel" x="104" y="170" width="460" height="390" rx="18"/>
+  <text class="label" x="142" y="222">Manual mode</text>
+  <circle cx="166" cy="286" r="38" fill="#fff4db" stroke="#dfb05a" stroke-width="3"/>
+  <path d="M150 300 L180 270 L196 286 L166 316 L146 320 Z" fill="#b66a04"/>
+  <text class="body" x="226" y="282">Create Areas in the app</text>
+  <text class="small" x="226" y="316">Best for quick personal setup</text>
+  <rect class="chip" x="142" y="384" width="138" height="42" rx="21"/>
+  <text class="small" x="166" y="411">Gameplay</text>
+  <rect class="chip" x="296" y="384" width="86" height="42" rx="21"/>
+  <text class="small" x="322" y="411">QA</text>
+  <rect class="chip" x="398" y="384" width="90" height="42" rx="21"/>
+  <text class="small" x="421" y="411">Bug</text>
+
+  <rect class="panel" x="716" y="170" width="460" height="390" rx="18"/>
+  <text class="label" x="754" y="222">Sync from Notion page</text>
+  <circle cx="778" cy="286" r="38" fill="#e9f5ff" stroke="#9ec4ee" stroke-width="3"/>
+  <path d="M758 286 C758 270 770 258 786 258 C798 258 808 264 814 274" fill="none" stroke="#1d5fd1" stroke-width="7" stroke-linecap="round"/>
+  <path d="M817 259 L815 278 L797 273" fill="none" stroke="#1d5fd1" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  <text class="body" x="838" y="282">Select owned top-level page</text>
+  <text class="small" x="838" y="316">Validate JSON, then sync Areas</text>
+  <g class="fade-in" style="animation-delay:.5s">
+    <rect x="754" y="372" width="360" height="76" rx="14" fill="#fff" stroke="#147a4f" stroke-width="3"/>
+    <text class="small" x="782" y="402">OAuth picker</text>
+    <text class="body" x="782" y="432">JTF Sync Catalog - My Copy</text>
+  </g>
+
+  <line class="stroke-muted" x1="610" y1="218" x2="610" y2="512" stroke-width="2" stroke-dasharray="10 12"/>
+  <rect x="556" y="326" width="108" height="56" rx="28" fill="#eef3fb" stroke="#d6deea" stroke-width="2"/>
+  <circle cx="586" cy="354" r="22" fill="#147a4f">
+    <animate attributeName="cx" values="586;634;586" dur="6s" repeatCount="indefinite"/>
+    <animate attributeName="fill" values="#147a4f;#1d5fd1;#147a4f" dur="6s" repeatCount="indefinite"/>
+  </circle>
+  
+</svg>

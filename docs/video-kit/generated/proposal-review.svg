@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" role="img" aria-label="Proposal Review decisions animation">
+  <style>
+    .bg { fill: #f7f9fc; }
+    .panel { fill: #ffffff; stroke: #d6deea; stroke-width: 2; }
+    .title { fill: #182230; font: 700 34px Inter, Segoe UI, Arial, sans-serif; }
+    .label { fill: #53627a; font: 600 18px Inter, Segoe UI, Arial, sans-serif; }
+    .body { fill: #182230; font: 500 24px Inter, Segoe UI, Arial, sans-serif; }
+    .small { fill: #53627a; font: 500 16px Inter, Segoe UI, Arial, sans-serif; }
+    .mono { fill: #182230; font: 600 22px Consolas, Menlo, monospace; }
+    .chip { fill: #edf3ff; stroke: #b9ccf6; stroke-width: 1.5; }
+    .blue { fill: #1d5fd1; }
+    .green { fill: #147a4f; }
+    .red { fill: #c93a3a; }
+    .amber { fill: #b66a04; }
+    .purple { fill: #6f48c9; }
+    .stroke-blue { stroke: #1d5fd1; }
+    .stroke-green { stroke: #147a4f; }
+    .stroke-muted { stroke: #53627a; }
+    .fade-in { opacity: 0; animation: fade 6s infinite; }
+    .draw { stroke-dasharray: 500; stroke-dashoffset: 500; animation: draw 6s infinite; }
+    @keyframes fade {
+      0%, 10% { opacity: 0; transform: translateY(8px); }
+      20%, 72% { opacity: 1; transform: translateY(0); }
+      90%, 100% { opacity: 0; transform: translateY(-4px); }
+    }
+    @keyframes draw {
+      0%, 18% { stroke-dashoffset: 500; opacity: 0; }
+      32%, 78% { stroke-dashoffset: 0; opacity: 1; }
+      100% { stroke-dashoffset: 0; opacity: 0; }
+    }
+  </style>
+  <rect class="bg" width="1280" height="720"/>
+  
+  <text class="title" x="72" y="78">Proposal Review Decisions</text>
+  <text class="small" x="72" y="112">AI drafts stay local until the user accepts or edits them</text>
+
+  <rect class="panel" x="74" y="156" width="586" height="452" rx="18"/>
+  <text class="label" x="112" y="204">AI proposal for [Gameplay] Smooth pit entry steering assist</text>
+  <rect x="112" y="222" width="500" height="58" rx="12" fill="#fff" stroke="#147a4f" stroke-width="2"/>
+  <text class="small" x="130" y="245">Historia de usuario</text>
+  <text class="small" x="130" y="270">Improve driver control entering pit lane.</text>
+  <rect x="112" y="300" width="500" height="58" rx="12" fill="#fff" stroke="#1d5fd1" stroke-width="2"/>
+  <text class="small" x="130" y="323">Alcance</text>
+  <text class="small" x="130" y="348">Assist steering only below pit speed threshold.</text>
+  <rect x="112" y="378" width="500" height="58" rx="12" fill="#fff" stroke="#b66a04" stroke-width="2"/>
+  <text class="small" x="130" y="401">Criterios de aceptacion</text>
+  <text class="small" x="130" y="426">Car remains controllable without auto-driving.</text>
+  <rect x="112" y="456" width="500" height="58" rx="12" fill="#fff" stroke="#6f48c9" stroke-width="2"/>
+  <text class="small" x="130" y="479">Checklist antes de Review</text>
+  <text class="small" x="130" y="504">Attach short before/after capture.</text>
+
+  <g class="fade-in" style="animation-delay:.3s">
+    <rect class="panel" x="736" y="170" width="396" height="72" rx="16"/>
+    <circle cx="774" cy="206" r="16" class="green"/>
+    <path d="M765 206 L772 214 L786 196" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+    <text class="body" x="812" y="214">Accept section</text>
+  </g>
+  <g class="fade-in" style="animation-delay:.9s">
+    <rect class="panel" x="736" y="278" width="396" height="72" rx="16"/>
+    <circle cx="774" cy="314" r="16" class="red"/>
+    <path d="M766 306 L782 322 M782 306 L766 322" stroke="#fff" stroke-width="5" stroke-linecap="round"/>
+    <text class="body" x="812" y="322">Reject section</text>
+  </g>
+  <g class="fade-in" style="animation-delay:1.5s">
+    <rect class="panel" x="736" y="386" width="396" height="72" rx="16"/>
+    <circle cx="774" cy="422" r="16" class="amber"/>
+    <path d="M764 430 L784 410 L792 418 L772 438 L762 440 Z" fill="#fff"/>
+    <text class="body" x="812" y="430">Manual edit</text>
+  </g>
+  <g class="fade-in" style="animation-delay:2.1s">
+    <rect class="panel" x="736" y="494" width="396" height="72" rx="16"/>
+    <circle cx="774" cy="530" r="16" class="blue"/>
+    <path d="M764 530 C764 522 770 516 778 516 C784 516 789 519 792 524" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round"/>
+    <path d="M792 516 L792 526 L782 524" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+    <text class="body" x="812" y="538">Request AI revision</text>
+  </g>
+  
+</svg>

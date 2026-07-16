@@ -14,6 +14,7 @@
     "tauri": "tauri",
     "coverage:frontend": "TMPDIR=${TMPDIR:-/tmp} vitest run --coverage",
     "audit:js": "npm audit",
+    "assets:video-kit": "TMPDIR=${TMPDIR:-/tmp} node scripts/generate-video-kit.mjs",
     "package:windows": "tauri build --bundles nsis",
     "package:windows:cross": "node scripts/package-windows-cross.mjs"
   },

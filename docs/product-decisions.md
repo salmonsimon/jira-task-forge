@@ -538,9 +538,10 @@ the implemented prompt shape and required sections aligned with the dedicated
   textarea, and then the app generates an editable Jira description.
 - AI-generated descriptions are never uploaded automatically. They must remain
   editable and are uploaded only through the normal `Create in Jira` flow.
-- Jira issue relationship links such as `blocks` and `blocked by` are a future
-  standalone feature. Do not mix them into the first description/tray polish
-  pass.
+- Jira issue relationship links such as `blocks` and `blocked by` are tracked
+  by Issue #200 and are not shipped until that implementation PR is merged and
+  validated. Public docs should keep relationship-link wording conditional until
+  then.
 
 ## Images and Attachments
 
@@ -914,7 +915,8 @@ the implemented prompt shape and required sections aligned with the dedicated
 - Multi-user/team administration.
 - Editable AI prompt/template UI.
 - Configurable sub-task template editor.
-- Jira issue relationship management such as `blocks` and `blocked by`.
+- Jira issue relationship creation such as `blocks` and `blocked by` remains
+  pending Issue #200 until its implementation PR is merged and validated.
 - Rich CSV export customization.
 - Automatic archival of completed trays.
 - Full tray duplication.
