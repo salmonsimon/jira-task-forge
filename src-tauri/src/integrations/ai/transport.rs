@@ -9,6 +9,7 @@ use crate::redaction::redact_secret_fragments;
 const OPENAI_RESPONSES_URL: &str = "https://api.openai.com/v1/responses";
 const OPENAI_MODELS_URL: &str = "https://api.openai.com/v1/models";
 const CLAUDE_MESSAGES_URL: &str = "https://api.anthropic.com/v1/messages";
+const CLAUDE_MODELS_URL: &str = "https://api.anthropic.com/v1/models";
 const GEMINI_API_BASE_URL: &str = "https://generativelanguage.googleapis.com/v1beta";
 const ANTHROPIC_API_VERSION: &str = "2023-06-01";
 const AI_REQUEST_TIMEOUT: Duration = Duration::from_secs(45);
@@ -43,14 +44,18 @@ impl AiTransportClient {
             AiProvider::OpenAi => OpenAiAdapter::new(&self.api_key)
                 .get_models_with_retry()
                 .map(|_| ()),
-            AiProvider::Claude | AiProvider::Gemini => self.send_json(model, probe).map(|_| ()),
+            AiProvider::Claude => ClaudeAdapter::new(&self.api_key)
+                .get_models_with_retry()
+                .map(|_| ()),
+            AiProvider::Gemini => self.send_json(model, probe).map(|_| ()),
         }
     }
 
     pub(crate) fn list_models(&self) -> Result<Vec<String>, String> {
         match self.provider {
             AiProvider::OpenAi => OpenAiAdapter::new(&self.api_key).list_models(),
-            AiProvider::Claude | AiProvider::Gemini => Ok(self
+            AiProvider::Claude => ClaudeAdapter::new(&self.api_key).list_models(),
+            AiProvider::Gemini => Ok(self
                 .provider
                 .fallback_models()
                 .iter()
@@ -212,6 +217,48 @@ impl<'a> ClaudeAdapter<'a> {
 
         Err(last_error.unwrap_or_else(|| "Claude request failed.".to_string()))
     }
+
+    fn get_models_with_retry(&self) -> Result<Value, String> {
+        let mut last_error = None;
+        for attempt in 1..=AI_REQUEST_ATTEMPTS {
+            let response = ureq::get(CLAUDE_MODELS_URL)
+                .set("x-api-key", self.api_key.trim())
+                .set("anthropic-version", ANTHROPIC_API_VERSION)
+                .set("Accept", "application/json")
+                .timeout(AI_REQUEST_TIMEOUT)
+                .call();
+
+            match parse_ai_response(AiProvider::Claude, response) {
+                Ok(value) => return Ok(value),
+                Err(error) if error.retryable && attempt < AI_REQUEST_ATTEMPTS => {
+                    last_error = Some(error.message);
+                }
+                Err(error) => return Err(error.message),
+            }
+        }
+
+        Err(last_error.unwrap_or_else(|| "Claude request failed.".to_string()))
+    }
+
+    fn list_models(&self) -> Result<Vec<String>, String> {
+        let response = self.get_models_with_retry()?;
+        claude_model_ids(&response)
+    }
+}
+
+fn claude_model_ids(response: &Value) -> Result<Vec<String>, String> {
+    let mut models = response
+        .get("data")
+        .and_then(Value::as_array)
+        .ok_or_else(|| "Claude models response did not include a data array.".to_string())?
+        .iter()
+        .filter_map(|model| model.get("id").and_then(Value::as_str))
+        .filter(|id| id.to_ascii_lowercase().starts_with("claude-"))
+        .map(ToString::to_string)
+        .collect::<Vec<_>>();
+    models.dedup();
+
+    Ok(models)
 }
 
 struct GeminiAdapter<'a> {
@@ -285,13 +332,18 @@ fn parse_ai_response(
             }),
         Err(ureq::Error::Status(status, response)) => {
             let body_text = response.into_string().unwrap_or_default();
-            let message = provider_error_message(&body_text);
+            let raw_message = provider_error_message(&body_text);
+            let is_direct_claude_message =
+                is_direct_claude_http_error(provider, status, &raw_message);
+            let message = provider_http_error_message(provider, status, &raw_message);
             let retryable = (500..=599).contains(&status);
             if message.is_empty() {
                 Err(AiRequestError {
                     message: format!("{} request failed with HTTP {status}.", provider.label()),
                     retryable,
                 })
+            } else if is_direct_claude_message {
+                Err(AiRequestError { message, retryable })
             } else {
                 Err(AiRequestError {
                     message: redact_secret_fragments(&format!(
@@ -310,6 +362,32 @@ fn parse_ai_response(
             retryable: true,
         }),
     }
+}
+
+fn is_direct_claude_http_error(provider: AiProvider, status: u16, message: &str) -> bool {
+    provider == AiProvider::Claude
+        && (matches!(status, 401 | 403)
+            || (status == 404 && message.trim().strip_prefix("model:").is_some()))
+}
+
+fn provider_http_error_message(provider: AiProvider, status: u16, message: &str) -> String {
+    if provider == AiProvider::Claude {
+        if matches!(status, 401 | 403) {
+            return "Claude rejected the API key. Check that the key is active and has Anthropic API access.".to_string();
+        }
+
+        if status == 404 {
+            if let Some(model) = message.trim().strip_prefix("model:").map(str::trim) {
+                if !model.is_empty() {
+                    return format!(
+                        "Claude model is unavailable or deprecated: {model}. Refresh the model list or choose another Claude model."
+                    );
+                }
+            }
+        }
+    }
+
+    message.to_string()
 }
 
 fn provider_error_message(body_text: &str) -> String {
@@ -416,9 +494,11 @@ fn encode_url_component(value: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    use super::super::provider::AiProvider;
     use super::{
-        encode_url_component, extract_claude_output_text, extract_gemini_output_text,
-        extract_openai_output_text, provider_error_message,
+        claude_model_ids, encode_url_component, extract_claude_output_text,
+        extract_gemini_output_text, extract_openai_output_text, parse_ai_response,
+        provider_error_message,
     };
     use serde_json::json;
 
@@ -475,6 +555,67 @@ mod tests {
 
         assert_eq!(provider_error_message(body), "Invalid API key");
         assert_eq!(provider_error_message("not json"), "");
+    }
+
+    #[test]
+    fn parses_claude_model_list_response() {
+        let response = json!({
+            "data": [
+                {"type": "model", "id": "claude-3-5-haiku-20241022", "display_name": "Claude 3.5 Haiku"},
+                {"type": "model", "id": "not-a-claude-model"}
+            ],
+            "has_more": false
+        });
+
+        assert_eq!(
+            claude_model_ids(&response).expect("models parse"),
+            vec!["claude-3-5-haiku-20241022"]
+        );
+    }
+
+    #[test]
+    fn empty_claude_model_list_allows_builtin_fallback() {
+        assert_eq!(
+            claude_model_ids(&json!({"data": [], "has_more": false})).expect("empty list parses"),
+            Vec::<String>::new()
+        );
+    }
+
+    #[test]
+    fn classifies_claude_unauthorized_as_credentials() {
+        let response = ureq::Response::new(
+            401,
+            "Unauthorized",
+            r#"{"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"}}"#,
+        )
+        .expect("response builds");
+
+        let error = parse_ai_response(AiProvider::Claude, Err(ureq::Error::Status(401, response)))
+            .expect_err("unauthorized is rejected");
+
+        assert_eq!(
+            error.message,
+            "Claude rejected the API key. Check that the key is active and has Anthropic API access."
+        );
+    }
+
+    #[test]
+    fn classifies_claude_model_404_as_model_availability_not_invalid_credentials() {
+        let response = ureq::Response::new(
+            404,
+            "Not Found",
+            r#"{"type":"error","error":{"type":"not_found_error","message":"model: claude-sonnet-4-20250514"}}"#,
+        )
+        .expect("response builds");
+
+        let error = parse_ai_response(AiProvider::Claude, Err(ureq::Error::Status(404, response)))
+            .expect_err("model 404 is rejected");
+
+        assert_eq!(
+            error.message,
+            "Claude model is unavailable or deprecated: claude-sonnet-4-20250514. Refresh the model list or choose another Claude model."
+        );
+        assert!(!error.message.to_ascii_lowercase().contains("api key"));
     }
 
     #[test]

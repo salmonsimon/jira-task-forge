@@ -39,7 +39,7 @@ impl AiProvider {
     pub fn default_model(self) -> &'static str {
         match self {
             Self::OpenAi => "gpt-4.1",
-            Self::Claude => "claude-sonnet-4-20250514",
+            Self::Claude => "claude-3-5-haiku-20241022",
             Self::Gemini => "gemini-2.5-flash",
         }
     }
@@ -48,11 +48,9 @@ impl AiProvider {
         match self {
             Self::OpenAi => &["gpt-4.1", "gpt-4.1-mini", "gpt-4o", "gpt-4o-mini"],
             Self::Claude => &[
-                "claude-sonnet-4-20250514",
-                "claude-opus-4-20250514",
-                "claude-3-7-sonnet-20250219",
-                "claude-3-5-sonnet-20241022",
                 "claude-3-5-haiku-20241022",
+                "claude-3-5-sonnet-20241022",
+                "claude-3-7-sonnet-20250219",
             ],
             Self::Gemini => &[
                 "gemini-2.5-pro",
@@ -132,11 +130,11 @@ mod tests {
         assert_eq!(ai_model_or_default(AiProvider::OpenAi, ""), "gpt-4.1");
         assert_eq!(
             ai_model_or_default(AiProvider::Claude, "   "),
-            "claude-sonnet-4-20250514"
+            "claude-3-5-haiku-20241022"
         );
         assert_eq!(
             ai_model_or_default(AiProvider::Claude, "gpt-4.1"),
-            "claude-sonnet-4-20250514"
+            "claude-3-5-haiku-20241022"
         );
         assert_eq!(ai_model_or_default(AiProvider::Gemini, "custom"), "custom");
     }
@@ -144,9 +142,10 @@ mod tests {
     #[test]
     fn exposes_fallback_model_catalogs() {
         assert!(AiProvider::OpenAi.fallback_models().contains(&"gpt-4.1"));
-        assert!(AiProvider::Claude
-            .fallback_models()
-            .contains(&"claude-sonnet-4-20250514"));
+        assert_eq!(
+            AiProvider::Claude.fallback_models().first().copied(),
+            Some("claude-3-5-haiku-20241022")
+        );
         assert!(AiProvider::Gemini
             .fallback_models()
             .contains(&"gemini-2.5-flash"));
