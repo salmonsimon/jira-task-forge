@@ -9,8 +9,7 @@ that catalog manually or synchronize it from Notion.
 ## Choose A Catalog Mode
 
 Use **Manual** when you want the shortest setup, only need a small Area list, or
-do not want to connect Notion. Manual Areas live in the local app data and are
-included in JSON backups.
+do not want to connect Notion. Manual Areas remain in the app's local data.
 
 Use **Sync from Notion page** when you want a reusable catalog that can be
 maintained outside the app or shared across installations.

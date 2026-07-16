@@ -18,5 +18,5 @@ for important Jira work:
 - The installer has not completed final signed-distribution and automatic-update
   polish.
 
-Keep backups of important local work and verify created Jira issues before
-discarding source material.
+Verify created Jira issues and uploaded attachments before deleting important
+source material.

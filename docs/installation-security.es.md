@@ -19,20 +19,27 @@ Jira Task Forge guarda estos secretos en Windows Credential Manager:
 - tokens OAuth de Notion;
 - claves de API de OpenAI, Anthropic Claude o Google Gemini.
 
-El diseño mantiene los secretos fuera de SQLite, los respaldos JSON, los registros de
-la aplicación, las capturas y los archivos versionados. Un respaldo recupera el
-trabajo local y la configuración, pero las credenciales deben conectarse
-nuevamente en la instalación restaurada.
+Windows Credential Manager mantiene estos secretos en el almacén de
+credenciales del sistema operativo, no en la base de datos SQLite de la
+aplicación, los registros habituales, las capturas ni los archivos versionados.
+Jira Task Forge obtiene una credencial solo cuando la conexión o acción
+correspondiente la necesita y no muestra los valores secretos almacenados en la
+interfaz.
 
 ## Datos locales
 
 La aplicación almacena localmente las Preparation Trays, tareas, descripciones
 aceptadas, categorías, configuraciones no secretas, historial de sincronización
 y metadatos de adjuntos. Los adjuntos seleccionados se copian al almacenamiento
-local administrado por la aplicación.
+local administrado por la aplicación mientras se prepara el trabajo.
 
-El detalle sobre almacenamiento y limpieza está en el
-[inventario de datos locales](local-data-storage-inventory.md).
+Después de subir correctamente un adjunto destinado a Jira, la aplicación
+elimina sus bytes locales administrados y conserva los metadatos necesarios
+para el historial local. Los archivos utilizados solo como contexto para IA se
+eliminan cuando la tarea alcanza el estado `Created`. Eliminar una tarea
+editable, una bandeja o un adjunto también elimina los archivos administrados
+correspondientes, y la aplicación limpia archivos temporales de importaciones
+interrumpidas.
 
 ## Conexiones de red
 
@@ -53,7 +60,8 @@ secret de Notion dentro de la aplicación de escritorio. Consulta
 - Utiliza tokens y claves de API con los permisos mínimos necesarios.
 - No compartas registros ni capturas que expongan códigos de autorización o
   tokens.
-- Mantén un respaldo JSON actualizado de las bandejas importantes.
+- Verifica las tareas creadas y los adjuntos subidos a Jira antes de eliminar
+  archivos fuente importantes.
 
 Reporta problemas reproducibles de seguridad o privacidad mediante
 [GitHub Issues](https://github.com/salmonsimon/jira-task-forge/issues).

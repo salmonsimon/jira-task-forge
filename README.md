@@ -31,7 +31,7 @@ When the tray is ready, Jira Task Forge can create:
 - accepted sub-tasks;
 - selected attachments.
 
-JSON backup and CSV export are available as local backup and fallback paths.
+CSV export provides a portable fallback for reviewed task content.
 
 ## Review AI Changes Before They Become Jira Content
 
@@ -42,16 +42,20 @@ section before the description is used.
 
 ![Proposal review in Jira Task Forge](docs/assets/proposal-review.gif)
 
-The description structure remains predictable:
+The description structure remains predictable. Story and Bug templates use
+separate Markdown sections so the result is readable in Jira and easy to review
+before creation:
 
-| Story | Bug |
-| --- | --- |
-| User story | Problem |
-| Context | Context and impact |
-| Scope | Steps to reproduce |
-| Acceptance criteria | Current and expected results |
-| Minimum deliverable | Evidence |
-| Review checklist | Acceptance criteria, minimum deliverable, and review checklist |
+<table>
+<tr>
+<th width="50%">Story</th>
+<th width="50%">Bug</th>
+</tr>
+<tr>
+<td width="50%" valign="top"><pre><code>&#35;&#35; User Story&#10;&#10;&#35;&#35; Context&#10;&#10;&#35;&#35; Scope&#10;&#10;&#35;&#35; Acceptance Criteria&#10;&#10;&#35;&#35; Minimum Deliverable&#10;&#10;&#35;&#35; Review Checklist</code></pre></td>
+<td width="50%" valign="top"><pre><code>&#35;&#35; Problem&#10;&#10;&#35;&#35; Context And Impact&#10;&#10;&#35;&#35; Steps To Reproduce&#10;&#10;&#35;&#35; Current Result&#10;&#10;&#35;&#35; Expected Result&#10;&#10;&#35;&#35; Evidence&#10;&#10;&#35;&#35; Acceptance Criteria&#10;&#10;&#35;&#35; Minimum Deliverable&#10;&#10;&#35;&#35; Review Checklist</code></pre></td>
+</tr>
+</table>
 
 ## Keep Jira Names Consistent
 
@@ -60,11 +64,14 @@ Jira Task Forge derives Jira summaries from the reviewed local fields:
 - Epic: `[{Project}] [{Area}] {Scope}`
 - Story or Bug: `[{Area}] {Task name}`
 
-The examples below use fictitious data.
+The following animation shows how those fields become Jira summaries in
+practice.
 
 ![Automatic Jira naming from local fields](docs/assets/automatic-naming.gif)
 
-## Manage Categories Manually Or With Notion
+## Manage Categories From Their Real Sources
+
+### Areas: Manual Or Notion
 
 Areas can be maintained directly in Jira Task Forge or synchronized from a
 Notion catalog. Manual mode is the shortest setup. Notion sync is useful when
@@ -78,17 +85,49 @@ through OAuth. Copy it into your own workspace and select that owned top-level
 page when connecting Jira Task Forge. The
 [Catalog Sync Guide](docs/catalog-sync.md) explains the complete flow.
 
+### Projects: Manual Or Jira
+
+Projects can also be maintained manually or discovered from Jira. Project Sync
+parses Jira Epic summaries using the naming format defined above:
+`[{Project}] [{Area}] {Scope}`. The review wizard lets you choose which
+discovered Projects stay active and which remain ignored but recoverable.
+
+![Projects discovered from Jira Epic summaries](docs/assets/project-sync.gif)
+
 ## Search Jira With Assisted JQL
 
-The JQL workspace can run read-only Jira searches, keep favorites and recent
-queries, and draft JQL with the configured AI provider. You always review the
-query before running it.
+The JQL workspace supports two paths. Write JQL directly when you know the
+syntax, or describe the issues in normal language and let the configured AI
+provider draft the equivalent JQL. The generated query moves into **Direct
+JQL** for review and does not run automatically.
+
+For example, `Show me high and highest open bugs for STT, sorted by priority`
+can become:
+
+```jql
+project = STT AND issuetype = Bug AND priority in (High, Highest)
+AND statusCategory != Done ORDER BY priority DESC
+```
+
+![A natural-language search becoming reviewable JQL](docs/assets/assisted-jql.gif)
+
+Queries are read-only. You can run them, save favorites, and return to recent
+queries after reviewing the final JQL.
 
 ## Local Data And Credentials
 
-Trays, tasks, accepted descriptions, settings, categories, and sync history are
-stored locally. Jira tokens, Notion OAuth tokens, and AI provider keys are kept
-in Windows Credential Manager and excluded from JSON backups.
+Trays, tasks, accepted descriptions, non-secret settings, categories, and sync
+history stay on this computer. Jira tokens, Notion OAuth tokens, and AI
+provider keys are stored in Windows Credential Manager instead of the app's
+local database. This uses the Windows credential vault so the app does not need
+to expose secrets in its interface or ordinary local data.
+
+Selected attachments are copied into app-managed storage while a task is being
+prepared. After a Jira-ready attachment uploads successfully, Jira Task Forge
+deletes its managed local bytes and keeps only the metadata needed for local
+history. AI-only attachment files are removed when the task reaches `Created`,
+and deleting an editable task, tray, or attachment also removes its managed
+files.
 
 Read [Installation and Security](docs/installation-security.md) before
 connecting personal accounts or API keys.

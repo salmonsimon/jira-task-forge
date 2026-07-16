@@ -22,5 +22,5 @@ para trabajo importante en Jira:
 - El instalador todavía no cuenta con firma, actualización automática ni el
   pulido final de distribución.
 
-Mantén respaldos del trabajo local importante y verifica las tareas creadas en
-Jira antes de descartar el material original.
+Verifica las tareas creadas y los adjuntos subidos a Jira antes de eliminar
+material fuente importante.

@@ -18,18 +18,23 @@ Jira Task Forge stores these secrets in Windows Credential Manager:
 - Notion OAuth token sets;
 - OpenAI, Anthropic Claude, or Google Gemini API keys.
 
-Secrets are designed to stay out of SQLite, JSON backups, application logs,
-screenshots, and committed files. A backup restores local work and settings, but
-you must reconnect credentials on the restored installation.
+Windows Credential Manager keeps these secrets in the operating system's
+credential vault instead of the app's SQLite database, ordinary logs,
+screenshots, or committed files. Jira Task Forge retrieves a credential only
+when the related connection or action needs it and does not display stored
+secret values in the interface.
 
 ## Local Data
 
 The app stores Preparation Trays, tasks, accepted descriptions, categories,
 non-secret settings, sync history, and attachment metadata locally. Selected
-attachments are copied into app-managed local storage.
+attachments are copied into app-managed local storage while work is prepared.
 
-The detailed storage and cleanup boundary is documented in
-[Local Data Storage Inventory](local-data-storage-inventory.md).
+After a Jira-ready attachment uploads successfully, the app deletes its managed
+local bytes and retains the metadata needed for local history. Files used only
+as AI context are removed when the task reaches `Created`. Deleting an editable
+task, tray, or attachment also removes the corresponding managed files, and the
+app clears stale staging files left by interrupted imports.
 
 ## Network Connections
 
@@ -48,7 +53,8 @@ placing the Notion client secret inside the desktop app. See
 - Review the [known beta limitations](beta-limitations.md).
 - Use API tokens and keys with the narrowest practical permissions.
 - Do not share logs or screenshots that expose authorization codes or tokens.
-- Keep a current JSON backup of important local trays.
+- Verify created Jira issues and uploaded attachments before deleting important
+  source files.
 
 Report reproducible security or privacy problems through
 [GitHub Issues](https://github.com/salmonsimon/jira-task-forge/issues).

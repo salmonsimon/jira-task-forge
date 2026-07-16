@@ -11,7 +11,7 @@ manualmente o sincronizarlo desde Notion.
 
 Usa **Manual** cuando quieras la configuración más corta, solo necesites una
 lista pequeña de áreas o no quieras conectar Notion. Las áreas manuales forman
-parte de los datos locales y se incluyen en los respaldos JSON.
+parte de los datos locales de la aplicación.
 
 Usa **Sync from Notion page** cuando quieras un catálogo reutilizable que pueda
 mantenerse fuera de la aplicación o compartirse entre instalaciones.
