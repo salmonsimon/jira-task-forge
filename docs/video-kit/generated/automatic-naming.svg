@@ -1,21 +1,24 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" role="img" aria-label="Automatic naming animation">
   <style>
-    .bg { fill: #f7f9fc; }
-    .panel { fill: #ffffff; stroke: #d6deea; stroke-width: 2; }
-    .title { fill: #182230; font: 700 34px Inter, Segoe UI, Arial, sans-serif; }
-    .label { fill: #53627a; font: 600 18px Inter, Segoe UI, Arial, sans-serif; }
-    .body { fill: #182230; font: 500 24px Inter, Segoe UI, Arial, sans-serif; }
-    .small { fill: #53627a; font: 500 16px Inter, Segoe UI, Arial, sans-serif; }
-    .mono { fill: #182230; font: 600 22px Consolas, Menlo, monospace; }
-    .chip { fill: #edf3ff; stroke: #b9ccf6; stroke-width: 1.5; }
-    .blue { fill: #1d5fd1; }
-    .green { fill: #147a4f; }
-    .red { fill: #c93a3a; }
-    .amber { fill: #b66a04; }
-    .purple { fill: #6f48c9; }
-    .stroke-blue { stroke: #1d5fd1; }
-    .stroke-green { stroke: #147a4f; }
-    .stroke-muted { stroke: #53627a; }
+    .bg { fill: #151719; }
+    .panel { fill: #1d1f23; stroke: #454852; stroke-width: 2; }
+    .raised { fill: #25272c; stroke: #454852; stroke-width: 2; }
+    .input { fill: #22252a; stroke: #454852; stroke-width: 2; }
+    .title { fill: #f4f5f7; font: 700 32px Inter, Segoe UI, Arial, sans-serif; }
+    .label { fill: #f4f5f7; font: 600 18px Inter, Segoe UI, Arial, sans-serif; }
+    .body { fill: #f4f5f7; font: 500 22px Inter, Segoe UI, Arial, sans-serif; }
+    .small { fill: #aeb3bd; font: 500 16px Inter, Segoe UI, Arial, sans-serif; }
+    .tiny { fill: #aeb3bd; font: 500 14px Inter, Segoe UI, Arial, sans-serif; }
+    .mono { fill: #f4f5f7; font: 600 20px Consolas, Menlo, monospace; }
+    .chip { fill: #1d355c; stroke: #31588f; stroke-width: 1.5; }
+    .blue { fill: #0c66e4; }
+    .green { fill: #7ee2a8; }
+    .red { fill: #ff9c8f; }
+    .amber { fill: #f5cd47; }
+    .purple { fill: #b8a7ff; }
+    .stroke-blue { stroke: #0c66e4; }
+    .stroke-green { stroke: #7ee2a8; }
+    .stroke-muted { stroke: #aeb3bd; }
     .fade-in { opacity: 0; animation: fade 6s infinite; }
     .draw { stroke-dasharray: 500; stroke-dashoffset: 500; animation: draw 6s infinite; }
     @keyframes fade {
@@ -32,38 +35,43 @@
   <rect class="bg" width="1280" height="720"/>
   
   <text class="title" x="72" y="78">Automatic Jira Naming</text>
-  <text class="small" x="72" y="112">Fictitious example data for public docs and demo inserts</text>
+  <text class="small" x="72" y="110">Local task fields become consistent Jira summaries</text>
 
-  <rect class="panel" x="72" y="156" width="540" height="430" rx="18"/>
-  <text class="label" x="106" y="204">Local Task Inputs</text>
-  <text class="small" x="106" y="236">Project</text>
-  <rect x="106" y="256" width="445" height="42" rx="10" fill="#fff" stroke="#1d5fd1" stroke-width="2"/>
-  <text class="body" x="124" y="285">F1 Car Simulator</text>
-  <text class="small" x="106" y="314">Area</text>
-  <rect x="106" y="334" width="445" height="42" rx="10" fill="#fff" stroke="#147a4f" stroke-width="2"/>
-  <text class="body" x="124" y="363">Gameplay</text>
-  <text class="small" x="106" y="392">Scope</text>
-  <rect x="106" y="412" width="445" height="42" rx="10" fill="#fff" stroke="#6f48c9" stroke-width="2"/>
-  <text class="body" x="124" y="441">Pit Stop Polish</text>
-  <text class="small" x="106" y="470">Task</text>
-  <rect x="106" y="490" width="445" height="42" rx="10" fill="#fff" stroke="#b66a04" stroke-width="2"/>
-  <text class="body" x="124" y="519">Smooth pit entry steering assist</text>
+  <rect class="panel" x="72" y="144" width="548" height="500" rx="8"/>
+  <text class="label" x="106" y="188">Local Task</text>
+  <text class="tiny" x="106" y="214">Preparation Tray fields</text>
+  <text class="small" x="106" y="254">Project</text>
+  <rect x="106" y="268" width="474" height="48" rx="4" fill="#22252a" stroke="#85b8ff" stroke-width="2"/>
+  <text class="body" x="122" y="300">F1 Car Simulator</text>
+  <text class="small" x="106" y="346">Area</text>
+  <rect x="106" y="360" width="474" height="48" rx="4" fill="#22252a" stroke="#7ee2a8" stroke-width="2"/>
+  <text class="body" x="122" y="392">Gameplay</text>
+  <text class="small" x="106" y="438">Scope</text>
+  <rect x="106" y="452" width="474" height="48" rx="4" fill="#22252a" stroke="#b8a7ff" stroke-width="2"/>
+  <text class="body" x="122" y="484">Pit Stop Polish</text>
+  <text class="small" x="106" y="530">Task</text>
+  <rect x="106" y="544" width="474" height="48" rx="4" fill="#22252a" stroke="#f5cd47" stroke-width="2"/>
+  <text class="body" x="122" y="576">Smooth pit entry steering assist</text>
 
-  <path class="draw stroke-blue" d="M638 365 C692 365 692 250 735 250" fill="none" stroke-width="6" stroke-linecap="round"/>
-  <path class="draw stroke-green" d="M638 405 C692 405 692 454 735 454" fill="none" stroke-width="6" stroke-linecap="round" style="animation-delay:.6s"/>
+  <path class="draw stroke-blue" d="M650 360 C704 360 704 252 746 252" fill="none" stroke-width="5" stroke-linecap="round"/>
+  <path class="draw stroke-green" d="M650 414 C704 414 704 498 746 498" fill="none" stroke-width="5" stroke-linecap="round" style="animation-delay:.6s"/>
 
   <g class="fade-in" style="animation-delay:.4s">
-    <rect class="panel" x="736" y="176" width="472" height="150" rx="18"/>
-    <text class="label" x="770" y="222">Epic Summary</text>
-    <text class="mono" x="770" y="270">[F1 Car Simulator] [Gameplay]</text>
-    <text class="mono" x="770" y="304">Pit Stop Polish</text>
+    <rect class="panel" x="746" y="166" width="462" height="176" rx="8"/>
+    <rect x="770" y="190" width="54" height="24" rx="4" fill="#1d355c"/>
+    <text x="782" y="207" fill="#85b8ff" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="13" font-weight="700">EPIC</text>
+    <text class="label" x="770" y="246">Epic summary</text>
+    <text class="mono" x="770" y="288">[F1 Car Simulator] [Gameplay]</text>
+    <text class="mono" x="770" y="320">Pit Stop Polish</text>
   </g>
 
   <g class="fade-in" style="animation-delay:1s">
-    <rect class="panel" x="736" y="382" width="472" height="150" rx="18"/>
-    <text class="label" x="770" y="428">Story/Bug Summary</text>
-    <text class="mono" x="770" y="480">[Gameplay] Smooth pit entry</text>
-    <text class="mono" x="770" y="514">steering assist</text>
+    <rect class="panel" x="746" y="412" width="462" height="176" rx="8"/>
+    <rect x="770" y="436" width="64" height="24" rx="4" fill="#183f2e"/>
+    <text x="782" y="453" fill="#7ee2a8" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="13" font-weight="700">STORY</text>
+    <text class="label" x="770" y="492">Story / Bug summary</text>
+    <text class="mono" x="770" y="534">[Gameplay] Smooth pit entry</text>
+    <text class="mono" x="770" y="566">steering assist</text>
   </g>
   
 </svg>

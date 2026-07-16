@@ -4,6 +4,10 @@ This kit contains reproducible visual inserts for README and video editing. It
 does not include a fabricated live demo; the final app footage must be recorded
 manually.
 
+The inserts use Jira Task Forge's dark-mode palette, compact controls, panel
+geometry, and review states so they read as product UI rather than standalone
+infographics.
+
 ## Assets
 
 - `animated/automatic-naming.gif`: directly usable animated export for automatic
