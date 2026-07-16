@@ -3,11 +3,13 @@ import { describe, expect, it } from "vitest";
 import type { AppSettings } from "../../lib/types";
 import {
   JiraConnectionGuide,
+  JiraProjectSyncDecisionStep,
   buildProjectSyncDiscoveryRequest,
   canContinueJiraConnectionGuideStep,
   jiraConnectionGuideCopy,
   jiraConnectionGuideSteps
 } from "./JiraConnectionGuide";
+import type { ProjectSyncReview } from "../../lib/types";
 
 const settings: AppSettings = {
   themeMode: "light",
@@ -20,6 +22,28 @@ const settings: AppSettings = {
   defaultContentLanguage: "Spanish",
   catalogSourceMode: "manual",
   catalogSourceUrl: ""
+};
+
+const emptyProjectSyncReview: ProjectSyncReview = {
+  jiraProjectKey: "SCRUM",
+  jql: "project = SCRUM AND issuetype = Epic ORDER BY updated DESC",
+  sections: {
+    active: [
+      {
+        name: "Transversal",
+        normalizedName: "transversal",
+        jiraIssueKeys: [],
+        status: "active",
+        alreadyLocal: true,
+        willPromoteLocal: false
+      }
+    ],
+    newlyAvailable: [],
+    ignored: [],
+    archived: []
+  },
+  defaultActiveNames: ["Transversal"],
+  notes: []
 };
 
 function renderGuide({ initialStep }: { initialStep?: "site" | "account" | "token" | "verify" | "project" | "project-sync" | "review" } = {}) {
@@ -119,5 +143,24 @@ describe("JiraConnectionGuide", () => {
       jiraAccountEmail: "simon.bahamonde@gmail.com",
       jiraCreationProjectKey: "JTFTEST"
     });
+  });
+
+  it("shows the Project Sync empty state in the setup decision step", () => {
+    const html = renderToStaticMarkup(
+      <JiraProjectSyncDecisionStep
+        activeNames={new Set(["Transversal"])}
+        isProjectSyncEnabled
+        onChange={() => undefined}
+        onDiscoverProjectSync={() => undefined}
+        review={emptyProjectSyncReview}
+        reviewState="loaded"
+      />
+    );
+
+    expect(html).toContain("No Jira Projects found yet");
+    expect(html).toContain("[{Project}] [{Area}] {Scope}");
+    expect(html).toContain("Try again");
+    expect(html).not.toContain("Load Jira Projects");
+    expect(html).not.toContain("aria-pressed=");
   });
 });
