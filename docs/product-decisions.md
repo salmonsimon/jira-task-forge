@@ -530,18 +530,17 @@ happen instead, and what evidence proves the fix. Story descriptions should
 stay focused on user value, scope, and acceptance criteria.
 
 Personal v1 refines the current "Crear descripciones de JIRA" chat format into
-the fixed internal template captured in `docs/jira-description-format.md`. Keep
-the implemented prompt shape and required sections aligned with the dedicated
+the fixed Story and Bug templates described above. Keep the implemented prompt
+shape and required sections aligned with the dedicated
 `docs/assisted-description-context.md` context.
 - The Personal v1 clarification UX should be structured rather than chat-like:
   AI shows the targeted questions it needs answered, Saimon responds in a single
   textarea, and then the app generates an editable Jira description.
 - AI-generated descriptions are never uploaded automatically. They must remain
   editable and are uploaded only through the normal `Create in Jira` flow.
-- Jira issue relationship links such as `blocks` and `blocked by` are tracked
-  by Issue #200 and are not shipped until that implementation PR is merged and
-  validated. Public docs should keep relationship-link wording conditional until
-  then.
+- Jira issue relationship links such as `blocks` and `blocked by` are a future
+  standalone feature. Do not mix them into the first description/tray polish
+  pass.
 
 ## Images and Attachments
 
@@ -915,8 +914,7 @@ the implemented prompt shape and required sections aligned with the dedicated
 - Multi-user/team administration.
 - Editable AI prompt/template UI.
 - Configurable sub-task template editor.
-- Jira issue relationship creation such as `blocks` and `blocked by` remains
-  pending Issue #200 until its implementation PR is merged and validated.
+- Jira issue relationship management such as `blocks` and `blocked by`.
 - Rich CSV export customization.
 - Automatic archival of completed trays.
 - Full tray duplication.

@@ -1,112 +1,93 @@
+[English](catalog-sync.md) | [Español](catalog-sync.es.md) · [Back to README](../README.md)
+
 # Catalog Sync Guide
 
-Jira Task Forge uses an Area catalog to keep task Areas, Jira labels, issue
-types, and Assisted Description delivery formats consistent.
+Jira Task Forge uses an Area catalog to keep capture options, Jira labels, issue
+types, and assisted-description delivery formats consistent. You can maintain
+that catalog manually or synchronize it from Notion.
 
-You can choose either **Manual mode** or **Sync from Notion page**.
+## Choose A Catalog Mode
 
-## Which Mode To Use
+Use **Manual** when you want the shortest setup, only need a small Area list, or
+do not want to connect Notion. Manual Areas live in the local app data and are
+included in JSON backups.
 
-Use **Manual mode** when you want the fastest setup or only need a small Area
-list in one app install.
-
-Use **Sync from Notion page** when you want a reusable catalog that can be edited
-outside the app and shared with another user or machine.
+Use **Sync from Notion page** when you want a reusable catalog that can be
+maintained outside the app or shared across installations.
 
 ## Manual Mode
 
-Manual mode does not require Notion.
-
 1. Open `Categories`.
-2. Choose Manual catalog mode.
-3. Create the Areas you want to use, such as `Gameplay`, `UI`, `QA`, or `Bug`.
-4. Review the Areas before creating Jira issues.
+2. Keep the catalog mode set to `Manual`.
+3. Add the Areas you want available during capture.
+4. Review each Area before using it to create Jira issues.
 
-Manual Areas are local app data. They are included in app backups, but no Notion
-OAuth token is needed.
+Notion and OAuth are not required in this mode.
 
-## Sync From Notion Page
+## Sync From Notion
 
-Sync mode reads one JSON code block from a Notion page. The public example shows
-the expected shape, but it is not a usable OAuth source by itself.
+The public example shows the expected catalog structure, but it cannot be used
+directly as your OAuth source. The page selected through OAuth must belong to
+your own Notion workspace and be accessible to the Jira Task Forge connection.
 
-You must use a page owned by your own Notion workspace and accessible to the
-Jira Task Forge public connection.
-
-Public references:
+Start with these public references:
 
 - [JTF Catalog Source Requirements](https://app.notion.com/p/salmonsimon-workflow/JTF-Catalog-Source-Requirements-395c335aece48144b2dbe2cc2e0de298)
 - [JTF Sync Catalog Public Example](https://app.notion.com/p/salmonsimon-workflow/JTF-Sync-Catalog-Public-Example-397c335aece481818013f3fe51cd2030)
 
-### Required Setup
+### Connect An Owned Catalog Page
 
-1. Open the public `JTF Sync Catalog Public Example`.
-2. Duplicate or copy it into your own Notion workspace.
-3. Keep or move the copied catalog as a top-level page in your workspace.
+1. Open `JTF Sync Catalog Public Example`.
+2. Duplicate it, or copy its catalog content into your own Notion workspace.
+3. Keep or move the copy to the top level of your workspace.
 4. In Jira Task Forge, open `Categories` and choose `Sync from Notion page`.
-5. Click `Connect Notion`.
-6. In Notion's OAuth picker, select/share the owned top-level catalog page.
-7. Return to Jira Task Forge and enter the selected page URL or page id.
-8. Validate the page.
-9. Review the mapped Areas and delivery formats.
-10. Save and sync.
+5. Select `Connect Notion`.
+6. On Notion's authorization page, select only your owned catalog page.
+7. Return to Jira Task Forge and provide the selected page URL or page id.
+8. Validate the catalog.
+9. Review the detected Areas and delivery formats.
+10. Save the catalog and run the sync.
 
-### Why A Top-Level Owned Page Matters
+## Why The Page Should Be Owned And Top-Level
 
-Notion's OAuth picker decides which pages the Jira Task Forge public connection
-can read. A public example page on someone else's workspace is only a reference;
-it does not automatically become part of your OAuth grant.
+The OAuth page picker controls which Notion content the Jira Task Forge
+connection can read. A public page from another workspace is only a reference
+and cannot be added automatically to your authorization grant.
 
-Nested pages may also be hard to select in the OAuth picker, especially when the
-parent page is not meant to be shared. A dedicated top-level catalog page keeps
-the grant narrow and avoids accidentally selecting a broad workspace or project
-wiki parent.
+A dedicated top-level page is also easier to find in the picker and keeps the
+grant narrow. Avoid selecting a broad wiki or project parent: granting access to
+a parent can also expose its child pages to the connection.
 
-Select only the dedicated catalog page. Do not select a broad parent page unless
-you intentionally want the connection to access that parent and its children.
+## What The App Reads
 
-## What Jira Task Forge Reads
+Jira Task Forge reads the machine-readable JSON code block in the selected page.
+That contract defines:
 
-The app reads the machine-readable JSON contract from the selected Notion page.
-It does not infer official Areas from prose, tables, headings, or examples.
-
-The JSON contract provides:
-
-- official Area display names;
-- Jira label values;
-- whether an Area is enabled;
-- whether an Area creates a Story or Bug;
+- Area display names and safe aliases;
+- Jira labels;
+- enabled and disabled Areas;
+- Story or Bug issue type mapping;
 - default delivery formats;
-- conditional delivery-format rules;
-- safe aliases.
+- conditional delivery-format rules.
 
-The technical source contract is documented in
-[docs/notion-catalog-source-requirements.md](notion-catalog-source-requirements.md).
+The app does not treat surrounding prose, examples, comments, or decorative
+tables as authoritative catalog data.
 
 ## Troubleshooting
 
-If the page does not appear in Notion's OAuth picker, move the copied catalog to
-the top level of your workspace and try again.
+**The catalog page does not appear in Notion**
 
-If validation fails, confirm the page contains one parseable JSON code block and
-that the values match the source contract.
+Confirm that the page is in your own workspace, that you can share it, and that
+it is at the workspace top level. Restart the connection and select that page in
+the OAuth picker.
 
-If you do not want to use Notion, switch back to Manual mode and maintain Areas
-inside Jira Task Forge.
+**Validation fails**
 
-## Ruta Rapida En Espanol
+Compare the JSON code block against the public source requirements. Confirm
+there is one parseable catalog block and that required fields have not been
+renamed.
 
-El ejemplo publico de Notion es solo una referencia. No basta con pegar ese link
-como fuente OAuth.
+**You no longer want Notion sync**
 
-Para sincronizar:
-
-1. Abre el ejemplo publico.
-2. Duplica o copia la pagina en tu propio workspace de Notion.
-3. Dejala como pagina principal, no escondida bajo una pagina privada.
-4. Conecta Notion desde Jira Task Forge.
-5. Selecciona esa copia propia en el selector OAuth.
-6. Valida la pagina, revisa las Areas detectadas y sincroniza.
-
-Si no quieres usar Notion, usa Manual mode y administra las Areas dentro de la
-app.
+Switch the catalog mode back to `Manual` and maintain Areas inside Jira Task
+Forge.

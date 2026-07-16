@@ -169,9 +169,10 @@ Still pending:
   read-only.
 - Issue #138 documentation alignment is closed.
 - Issue #139 JTFTEST live workflow QA is closed.
-- Issue #179 Notion catalog source reference is closed and documented in
-  [`docs/notion-catalog-source-requirements.md`](notion-catalog-source-requirements.md)
-  plus the linked stable Notion reference.
+- Issue #179 Notion catalog source reference is closed. The public source
+  requirements remain in
+  [Notion](https://app.notion.com/p/salmonsimon-workflow/JTF-Catalog-Source-Requirements-395c335aece48144b2dbe2cc2e0de298),
+  while the user flow is documented in [the catalog sync guide](catalog-sync.md).
 - Issue #153 remains open for final Windows install smoke: the unsigned NSIS
   installer can be built from WSL with `npm run package:windows:cross`; install
   it on Windows, launch the packaged app, verify the approved icon in

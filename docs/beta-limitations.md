@@ -1,24 +1,22 @@
+[English](beta-limitations.md) | [Español](beta-limitations.es.md) · [Back to README](../README.md)
+
 # Known Beta Limitations
 
-Jira Task Forge is a public beta. These limitations are intentional or still in
-progress.
+Jira Task Forge is a public beta. Review these boundaries before relying on it
+for important Jira work:
 
-- Windows-only distribution.
-- Unsigned installer; Windows SmartScreen may warn.
-- Jira relationship-link creation is pending Issue #200.
-- Jira OAuth is not implemented; Jira uses bring-your-own API token storage.
-- AI provider OAuth is not implemented; AI providers use bring-your-own API key
-  storage.
-- Notion catalog sync requires a user-owned catalog page selected through the
-  OAuth picker. The public example is not a direct OAuth source.
-- CSV export is a fallback artifact for Jira admin import, not a full Jira sync
-  replacement.
-- Manual final video/demo footage is not included in the repo. The checked-in
-  video kit contains reusable visual inserts only.
+- Distribution is Windows-only.
+- The installer is unsigned, so Windows SmartScreen may display a warning.
+- Jira uses a user-provided API token; Jira OAuth is not implemented.
+- AI providers use user-provided API keys; provider OAuth is not implemented.
+- Jira `blocks` and `blocked by` relationship creation remains pending
+  [Issue #200](https://github.com/salmonsimon/jira-task-forge/issues/200).
+- Notion sync requires a catalog page owned by your workspace and selected in
+  the OAuth flow. The public example cannot be used directly as the source.
+- CSV export is a fallback for Jira admin import, not a replacement for the
+  guarded Jira API creation flow.
+- The installer has not completed final signed-distribution and automatic-update
+  polish.
 
-## Resumen En Espanol
-
-La beta actual es solo para Windows, usa un instalador sin firma y todavia no
-crea enlaces Jira `blocks` / `blocked by` hasta que se cierre Issue #200. El
-ejemplo publico de Notion sirve como referencia, pero cada usuario debe copiarlo
-a su propio workspace para sincronizarlo por OAuth.
+Keep backups of important local work and verify created Jira issues before
+discarding source material.

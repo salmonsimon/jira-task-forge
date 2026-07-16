@@ -1,3 +1,5 @@
+[English](notion-oauth-public-connection.md) | [Español](notion-oauth-public-connection.es.md) · [Back to README](../README.md)
+
 # Notion Public Connection OAuth
 
 Jira Task Forge uses a Notion public connection OAuth flow for catalog sync.
@@ -8,6 +10,10 @@ End users do not create Notion integrations, do not paste integration secrets,
 and do not manually add a connection from the Notion page menu. They only click
 `Connect Notion`, authorize the Jira Task Forge public connection on Notion's
 OAuth page, and choose the catalog page in Notion's page picker.
+
+The selected catalog must be an owned page in the user's workspace. The
+[Catalog Sync Guide](catalog-sync.md) explains how to copy the public example,
+keep it as a dedicated top-level page, and select only that page in the picker.
 
 Why Jira Task Forge needs its own backend:
 

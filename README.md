@@ -1,190 +1,104 @@
+[English](README.md) | [Español](README.es.md)
+
 # Jira Task Forge
 
-Jira Task Forge is a local-first Windows desktop app for turning rough work notes into reviewed Jira-ready issues before anything is created in Jira.
+Jira Task Forge is a local-first Windows desktop app for preparing and reviewing
+work before creating anything in Jira Cloud.
 
-It is built for people who prepare many Jira tasks from production notes, AI conversations, QA findings, or meeting follow-ups and want a private review step before sending work to Jira Cloud.
+It is designed for people who turn production notes, QA findings, meeting
+follow-ups, or AI conversations into Jira issues and want a deliberate review
+step between the rough idea and Jira.
 
-## What It Helps With
+## Download The Beta
 
-- Capture local tasks in a **Preparation Tray** before Jira is touched.
-- Review generated Story or Bug descriptions before they become Jira content.
-- Keep project and area naming consistent with automatic summaries such as:
-  - Epic: `[F1 Car Simulator] [Gameplay] Pit Stop Polish`
-  - Story/Bug: `[Gameplay] Smooth pit entry steering assist`
-- Create Jira Epics, Stories/Bugs, accepted sub-tasks, and selected attachments through the Jira Cloud API.
-- Draft JQL with AI assistance and run read-only Jira searches from the app.
-- Use either manual Areas or synchronized Areas from a Notion catalog.
-- Keep Jira, Notion, and AI credentials out of backups by storing secrets in Windows Credential Manager.
+Download the current public beta from
+[GitHub Releases](https://github.com/salmonsimon/jira-task-forge/releases/tag/v0.1.0-beta.1).
 
-Jira relationship links such as `blocks` and `blocked by` are still pending [Issue #200](https://github.com/salmonsimon/jira-task-forge/issues/200). The app can keep local relationship drafts, but public docs should not claim Jira relationship-link creation is shipped until that issue is merged.
+The installer is unsigned, so Windows SmartScreen may display a warning. This is
+a public beta and may contain errors. Report reproducible problems through
+[GitHub Issues](https://github.com/salmonsimon/jira-task-forge/issues).
 
-## Who It Is For
+## Prepare First, Create In Jira When Ready
 
-Jira Task Forge is a personal open project that other people can use, fork, and adapt. It is useful when you want a structured local drafting space instead of creating half-reviewed Jira issues directly.
+Work begins in a local **Preparation Tray**. You can capture tasks, organize
+them by Project and Area, add evidence, prepare descriptions, and review the
+result without creating incomplete issues in Jira.
 
-The app is Windows-only today because it is packaged as a Tauri desktop app and uses Windows Credential Manager for local secret storage. The source is MIT licensed.
+When the tray is ready, Jira Task Forge can create:
 
-## Current Beta
+- required Epics;
+- parent Stories and Bugs;
+- accepted sub-tasks;
+- selected attachments.
 
-The current public beta is `v0.1.0-beta.1`.
+JSON backup and CSV export are available as local backup and fallback paths.
 
-Download:
+## Review AI Changes Before They Become Jira Content
 
-https://github.com/salmonsimon/jira-task-forge/releases/tag/v0.1.0-beta.1
+Jira Task Forge can assist with Story and Bug descriptions using OpenAI,
+Anthropic Claude, or Google Gemini. AI output stays local as a proposal.
+**Proposal review** lets you accept, reject, edit, or request changes section by
+section before the description is used.
 
-The installer is unsigned, so Windows SmartScreen may warn before installation. This beta may contain errors. Please report reproducible problems in [GitHub Issues](https://github.com/salmonsimon/jira-task-forge/issues).
+![Proposal review in Jira Task Forge](docs/assets/proposal-review.gif)
 
-## Main Features
+The description structure remains predictable:
 
-- Local Preparation Trays with editable task drafts.
-- Jira Cloud connection setup and project metadata validation.
-- AI-assisted JQL drafting.
-- AI-assisted Story and Bug descriptions using OpenAI, Anthropic Claude, or Google Gemini.
-- Proposal Review for accepting, rejecting, editing, or requesting another AI revision before description content is final.
-- Epic Scope support with Jira Epic naming: `[{Project}] [{Area}] {Scope}`.
-- Story/Bug summary naming: `[{Area}] {Task name}`.
-- Accepted sub-task creation after parent issues are created.
-- Selected attachment upload to Jira.
-- CSV export as a fallback for Jira admin import workflows.
-- JSON backup/import without secrets.
-- Manual Areas or Notion-synchronized catalog Areas.
+| Story | Bug |
+| --- | --- |
+| User story | Problem |
+| Context | Context and impact |
+| Scope | Steps to reproduce |
+| Acceptance criteria | Current and expected results |
+| Minimum deliverable | Evidence |
+| Review checklist | Acceptance criteria, minimum deliverable, and review checklist |
+
+## Keep Jira Names Consistent
+
+Jira Task Forge derives Jira summaries from the reviewed local fields:
+
+- Epic: `[{Project}] [{Area}] {Scope}`
+- Story or Bug: `[{Area}] {Task name}`
+
+The examples below use fictitious data.
+
+![Automatic Jira naming from local fields](docs/assets/automatic-naming.gif)
+
+## Manage Categories Manually Or With Notion
+
+Areas can be maintained directly in Jira Task Forge or synchronized from a
+Notion catalog. Manual mode is the shortest setup. Notion sync is useful when
+you want one reusable source for Areas, Jira labels, issue types, and delivery
+formats.
+
+![Categories changing from Manual mode to a validated Notion catalog](docs/assets/catalog-sync.gif)
+
+The public Notion example is a template, not a page that can be used directly
+through OAuth. Copy it into your own workspace and select that owned top-level
+page when connecting Jira Task Forge. The
+[Catalog Sync Guide](docs/catalog-sync.md) explains the complete flow.
+
+## Search Jira With Assisted JQL
+
+The JQL workspace can run read-only Jira searches, keep favorites and recent
+queries, and draft JQL with the configured AI provider. You always review the
+query before running it.
+
+## Local Data And Credentials
+
+Trays, tasks, accepted descriptions, settings, categories, and sync history are
+stored locally. Jira tokens, Notion OAuth tokens, and AI provider keys are kept
+in Windows Credential Manager and excluded from JSON backups.
+
+Read [Installation and Security](docs/installation-security.md) before
+connecting personal accounts or API keys.
 
 ## Documentation
 
-English:
+- [Installation and Security](docs/installation-security.md)
+- [Known Beta Limitations](docs/beta-limitations.md)
+- [Catalog Sync Guide](docs/catalog-sync.md)
+- [Notion Public Connection OAuth](docs/notion-oauth-public-connection.md)
 
-- [Catalog sync guide](docs/catalog-sync.md)
-- [Assisted descriptions](docs/assisted-descriptions.md)
-- [Jira formatting](docs/jira-formatting.md)
-- [Installation and security](docs/installation-security.md)
-- [Known beta limitations](docs/beta-limitations.md)
-- [Agent-ready workflow](docs/contributing-agent-workflow.md)
-- [Video animation kit](docs/video-kit/README.md)
-
-Spanish:
-
-- [Guion de demo de 60-90 segundos](docs/video-kit/spanish-demo-script.md)
-- [Guia rapida: sincronizacion de catalogo](docs/catalog-sync.md#ruta-rapida-en-espanol)
-- [Notas de beta](docs/beta-limitations.md#resumen-en-espanol)
-
-Technical references:
-
-- [Source contract for Notion catalog pages](docs/notion-catalog-source-requirements.md)
-- [Notion public OAuth connection](docs/notion-oauth-public-connection.md)
-- [Canonical Jira description format](docs/jira-description-format.md)
-- [Product decisions](docs/product-decisions.md)
-- [Project context for agents](CONTEXT.md)
-
-## Assisted Description Templates
-
-Story descriptions focus on user value and delivery scope:
-
-```markdown
-## Historia de usuario
-
-Como [usuario o rol],
-quiero [accion o resultado],
-para [beneficio].
-
-## Contexto
-
-## Alcance
-
-## Criterios de aceptacion
-
-## Entregable minimo
-
-## Checklist antes de Review
-```
-
-Bug descriptions focus on reproducible failure and expected behavior:
-
-```markdown
-## Problema
-
-## Contexto / impacto
-
-## Pasos para reproducir
-
-## Resultado actual
-
-## Resultado esperado
-
-## Evidencia
-
-## Criterios de aceptacion
-
-## Entregable minimo
-
-## Checklist antes de Review
-```
-
-See [docs/jira-description-format.md](docs/jira-description-format.md) for the exact format.
-
-## Catalog Modes
-
-Jira Task Forge can use two Area catalog modes:
-
-- **Manual mode**: maintain Areas directly in the app. This is best for a quick setup or a personal project with a small stable Area list.
-- **Sync from Notion page**: connect Notion through OAuth, select a catalog page in your own workspace, validate the JSON contract, and sync Areas plus delivery-format mappings.
-
-The public Notion example is only a reference. It is not a usable OAuth source by itself. To sync from Notion, duplicate or copy the example into your own Notion workspace, keep or move it as a top-level page, select/share that owned page in the OAuth picker, validate it in Jira Task Forge, and then sync.
-
-Start here: [docs/catalog-sync.md](docs/catalog-sync.md).
-
-## For Agents
-
-This repository is agent-ready. Before making product, architecture, or implementation changes, read:
-
-- [AGENTS.md](AGENTS.md)
-- [CONTEXT.md](CONTEXT.md)
-- [docs/product-decisions.md](docs/product-decisions.md)
-- [docs/HANDOFF.md](docs/HANDOFF.md)
-
-User-facing UI copy should be English. Jira task content and user-authored task descriptions may be Spanish.
-
-## Development
-
-Install dependencies:
-
-```bash
-npm install
-```
-
-Run the frontend dev server:
-
-```bash
-npm run dev
-```
-
-Open:
-
-```text
-http://127.0.0.1:1420
-```
-
-Run the native app:
-
-```bash
-npm run tauri dev
-```
-
-Build the frontend:
-
-```bash
-npm run build
-```
-
-Regenerate the public animation kit:
-
-```bash
-npm run assets:video-kit
-```
-
-Package the unsigned Windows installer from WSL:
-
-```bash
-CARGO_BUILD_JOBS=1 npm run package:windows:cross
-```
-
-See [docs/windows-packaging.md](docs/windows-packaging.md) for packaging details.
+Jira Task Forge is a personal open project intended for others to use, inspect,
+fork, and adapt. The app is Windows-only today.
