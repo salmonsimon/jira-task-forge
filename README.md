@@ -10,7 +10,7 @@ ready before anything reaches Jira Cloud.
 ### Download The Beta
 
 Download the current public beta from
-[GitHub Releases](https://github.com/salmonsimon/jira-task-forge/releases/tag/v0.1.0-beta.1).
+[GitHub Releases](https://github.com/salmonsimon/jira-task-forge/releases/tag/v0.1.0-beta.2).
 The installer is unsigned, so Windows SmartScreen may display a warning. Report
 reproducible problems through
 [GitHub Issues](https://github.com/salmonsimon/jira-task-forge/issues).
