@@ -47,8 +47,8 @@ description easy to scan in Jira and easy to review before creation:
 <th width="50%">Bug</th>
 </tr>
 <tr>
-<td width="50%" valign="top"><pre><samp>&#35;&#35; User Story&#10;&#10;&#35;&#35; Context&#10;&#10;&#35;&#35; Scope&#10;&#10;&#35;&#35; Acceptance Criteria&#10;&#10;&#35;&#35; Minimum Deliverable&#10;&#10;&#35;&#35; Review Checklist</samp></pre></td>
-<td width="50%" valign="top"><pre><samp>&#35;&#35; Problem&#10;&#10;&#35;&#35; Context And Impact&#10;&#10;&#35;&#35; Steps To Reproduce&#10;&#10;&#35;&#35; Current Result&#10;&#10;&#35;&#35; Expected Result&#10;&#10;&#35;&#35; Evidence&#10;&#10;&#35;&#35; Acceptance Criteria&#10;&#10;&#35;&#35; Minimum Deliverable&#10;&#10;&#35;&#35; Review Checklist</samp></pre></td>
+<td width="50%" valign="top"><samp>&#35;&#35; User Story<br><br>&#35;&#35; Context<br><br>&#35;&#35; Scope<br><br>&#35;&#35; Acceptance Criteria<br><br>&#35;&#35; Minimum Deliverable<br><br>&#35;&#35; Review Checklist</samp></td>
+<td width="50%" valign="top"><samp>&#35;&#35; Problem<br><br>&#35;&#35; Context And Impact<br><br>&#35;&#35; Steps To Reproduce<br><br>&#35;&#35; Current Result<br><br>&#35;&#35; Expected Result<br><br>&#35;&#35; Evidence<br><br>&#35;&#35; Acceptance Criteria<br><br>&#35;&#35; Minimum Deliverable<br><br>&#35;&#35; Review Checklist</samp></td>
 </tr>
 </table>
 
