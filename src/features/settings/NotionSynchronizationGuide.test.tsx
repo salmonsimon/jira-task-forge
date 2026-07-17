@@ -54,7 +54,7 @@ describe("NotionSynchronizationGuide", () => {
     expect(html).toContain("Set Catalog Source");
     expect(html).toContain("Catalog source");
     expect(html).toContain("Catalog mode");
-    expect(html).toContain("Continue to connect Notion, then confirm the dedicated catalog page before saving.");
+    expect(html).toContain("Continue to connect Notion, then choose and validate your catalog page before saving.");
     expect(html).not.toContain("Notion page URL or ID");
     expect(html).not.toContain("New integration token");
     expect(html.indexOf("1. Source")).toBeLessThan(html.indexOf("2. Connect"));
@@ -147,6 +147,37 @@ describe("NotionSynchronizationGuide", () => {
     expect(html).toContain("Test source");
     expect(html).toContain("must pass validation before synchronization can be saved");
     expect(html).not.toContain("Finish connection");
+  });
+
+  it("does not prefill a bundled Notion page and uses neutral catalog copy", () => {
+    const html = renderToStaticMarkup(
+      <NotionSynchronizationGuide
+        settings={{ ...settings, catalogSourceUrl: "" }}
+        hasNotionIntegrationToken={async () => true}
+        onChangeCatalogSettings={async () => true}
+        onClose={() => undefined}
+        onDeleteNotionIntegrationToken={async () => undefined}
+        onOpenCatalogSourceRequirements={() => undefined}
+        onStartNotionOAuthConnection={async () => ({
+          authorizationUrl: "https://api.notion.com/v1/oauth/authorize?state=state-123",
+          state: "state-123"
+        })}
+        onOpenNotionOAuthAuthorizationUrl={async () => undefined}
+        onCompleteNotionOAuthConnection={async () => ({ ok: true, message: "Connection saved" })}
+        onTestNotionCatalogConnection={async () => ({
+          ok: true,
+          message: "Connected",
+          title: "My catalog",
+          extractedBlockCount: 1
+        })}
+        initialStep="catalog"
+      />
+    );
+
+    expect(html).toContain("Paste the Notion page URL or ID selected in the OAuth picker.");
+    expect(html).toContain("https://www.notion.so/your-workspace/your-catalog-page");
+    expect(html).not.toContain("387c335aece481c292baf6991a86a5c3");
+    expect(html).not.toContain("DTS");
   });
 
   it("keeps manual catalog setup free of Notion token, URL, and test prompts", () => {

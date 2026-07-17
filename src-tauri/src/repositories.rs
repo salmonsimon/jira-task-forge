@@ -21,6 +21,9 @@ use crate::project_sync::{
 use crate::sync_audit::SyncAuditDetail;
 
 const APP_SETTINGS_KEY: &str = "app_settings";
+const LEGACY_BUNDLED_JIRA_SITE_URL: &str = "https://dts.atlassian.net";
+const LEGACY_BUNDLED_NOTION_CATALOG_URL: &str =
+    "https://app.notion.com/p/387c335aece481c292baf6991a86a5c3";
 const DEFAULT_PROJECT_CATEGORIES: &[(&str, bool)] = &[("Transversal", false)];
 const DEFAULT_JQL_FAVORITES: &[(&str, &str)] = &[
     (
@@ -92,7 +95,15 @@ impl<'connection> SettingsRepository<'connection> {
             Err(error) => return Err(error.into()),
         };
 
-        serde_json::from_str(&value_json).map_err(|error| DbError::InvalidData(error.to_string()))
+        let mut settings = serde_json::from_str::<AppSettings>(&value_json)
+            .map_err(|error| DbError::InvalidData(error.to_string()))?;
+        if settings.jira_site_url == LEGACY_BUNDLED_JIRA_SITE_URL {
+            settings.jira_site_url.clear();
+        }
+        if settings.catalog_source_url == LEGACY_BUNDLED_NOTION_CATALOG_URL {
+            settings.catalog_source_url.clear();
+        }
+        Ok(settings)
     }
 
     pub fn update_app_settings(&self, mut settings: AppSettings) -> DbResult<AppSettings> {
@@ -5293,8 +5304,10 @@ mod tests {
             .expect("default settings load");
 
         assert_eq!(defaults.theme_mode, "dark");
-        assert_eq!(defaults.jira_site_url, "https://dts.atlassian.net");
+        assert_eq!(defaults.jira_site_url, "");
         assert_eq!(defaults.jira_creation_project_key, "");
+        assert_eq!(defaults.catalog_source_mode, "notion");
+        assert_eq!(defaults.catalog_source_url, "");
 
         let updated = repository
             .update_app_settings(AppSettings {
@@ -5315,6 +5328,40 @@ mod tests {
             repository.get_app_settings().expect("settings reload"),
             updated
         );
+    }
+
+    #[test]
+    fn clears_only_legacy_bundled_setup_urls_when_loading_settings() {
+        let connection = open_in_memory_database().expect("database opens");
+        connection
+            .execute(
+                "
+                INSERT INTO settings (key, value_json, updated_at)
+                VALUES ('app_settings', ?1, '2026-07-16T00:00:00Z')
+                ",
+                [serde_json::json!({
+                    "themeMode": "dark",
+                    "jiraSiteUrl": "https://dts.atlassian.net",
+                    "jiraAccountEmail": "",
+                    "jiraAuthMethod": "api-token",
+                    "jiraCreationProjectKey": "",
+                    "aiProvider": "OpenAI",
+                    "aiModel": "gpt-4.1",
+                    "defaultContentLanguage": "Spanish",
+                    "catalogSourceMode": "notion",
+                    "catalogSourceUrl": "https://app.notion.com/p/387c335aece481c292baf6991a86a5c3",
+                    "projectSyncEnabled": true
+                })
+                .to_string()],
+            )
+            .expect("legacy bundled settings inserted");
+        let repository = SettingsRepository::new(&connection);
+
+        let settings = repository.get_app_settings().expect("settings load");
+
+        assert_eq!(settings.jira_site_url, "");
+        assert_eq!(settings.catalog_source_mode, "notion");
+        assert_eq!(settings.catalog_source_url, "");
     }
 
     #[test]

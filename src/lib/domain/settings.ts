@@ -1,4 +1,22 @@
+import type { AppSettings } from "../types";
+
 export type CredentialDraftTestStatus = "idle" | "testing" | "success" | "failed";
+
+export function createDefaultAppSettings(): AppSettings {
+  return {
+    themeMode: "dark",
+    jiraSiteUrl: "",
+    jiraAccountEmail: "",
+    jiraAuthMethod: "api-token",
+    jiraCreationProjectKey: "",
+    aiProvider: "OpenAI",
+    aiModel: "gpt-4.1",
+    defaultContentLanguage: "Spanish",
+    catalogSourceMode: "notion",
+    catalogSourceUrl: "",
+    projectSyncEnabled: true
+  };
+}
 
 export type CredentialDraftControlInput = {
   hasConnectionSettings: boolean;
