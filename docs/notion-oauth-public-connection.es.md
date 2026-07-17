@@ -1,10 +1,16 @@
 [English](notion-oauth-public-connection.md) | [Español](notion-oauth-public-connection.es.md) · [Volver al README](../README.es.md)
 
-# Conexión pública OAuth de Notion
+# Crear y alojar tu propia conexión pública OAuth de Notion
 
-Jira Task Forge utiliza una conexión pública OAuth de Notion para sincronizar el
-catálogo. La aplicación de escritorio nunca debe contener el secreto de cliente
-de Notion.
+> Esta es una guía avanzada para quienes mantienen un fork o una versión
+> autohospedada de Jira Task Forge. Si utilizas la aplicación estándar desde
+> GitHub Releases, no sigas la configuración de publicación o backend descrita
+> abajo. Selecciona `Connect Notion` en la aplicación y continúa con la
+> [guía de sincronización del catálogo](catalog-sync.es.md).
+
+Este documento explica cómo crear y alojar la conexión pública OAuth de Notion
+que necesita un despliegue independiente de Jira Task Forge. La aplicación de
+escritorio nunca debe contener el secreto de cliente de Notion.
 
 La persona que publica Jira Task Forge crea una única conexión pública. Las
 personas usuarias no crean sus propias integraciones, no pegan secretos de
