@@ -5,7 +5,7 @@
 ## Install The Current Beta
 
 Download Jira Task Forge only from the
-[official GitHub release](https://github.com/salmonsimon/jira-task-forge/releases/tag/v0.1.0-beta.2).
+[official GitHub release](https://github.com/salmonsimon/jira-task-forge/releases/tag/v0.1.0-beta.1).
 
 The Windows installer is currently unsigned. Windows SmartScreen may warn before
 running it, so confirm that the installer came from this repository.
