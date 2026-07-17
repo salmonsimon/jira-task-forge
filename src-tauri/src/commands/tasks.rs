@@ -221,7 +221,8 @@ mod tests {
     #[test]
     fn keeps_manual_area_names_when_the_catalog_does_not_know_them() {
         assert_eq!(
-            official_area_display_name("  Herramienta Recortes  ").expect("manual area is accepted"),
+            official_area_display_name("  Herramienta Recortes  ")
+                .expect("manual area is accepted"),
             "Herramienta Recortes"
         );
     }
@@ -245,6 +246,8 @@ fn official_area_display_name(area: &str) -> Result<String, String> {
             area_display_name, ..
         } => Ok(area_display_name.to_string()),
         CatalogAreaResolution::Blocked if !trimmed_area.is_empty() => Ok(trimmed_area.to_string()),
-        CatalogAreaResolution::Blocked => Err("Choose an area before saving this task.".to_string()),
+        CatalogAreaResolution::Blocked => {
+            Err("Choose an area before saving this task.".to_string())
+        }
     }
 }

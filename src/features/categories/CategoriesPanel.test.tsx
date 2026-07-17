@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import type { Category } from "../../lib/types";
-import { CategoriesPanel, createCatalogSyncErrorResult, isMissingNotionSynchronizationSetup } from "./CategoriesPanel";
+import type { Category, ProjectSyncReview } from "../../lib/types";
+import { CategoriesPanel, ProjectSyncModal, createCatalogSyncErrorResult, isMissingNotionSynchronizationSetup } from "./CategoriesPanel";
 
 const project: Category = {
   id: "project-dts",
@@ -15,6 +15,85 @@ const area: Category = {
   categoryType: "area",
   name: "Bug",
   source: "local"
+};
+
+const emptyProjectSyncReview: ProjectSyncReview = {
+  jiraProjectKey: "SCRUM",
+  jql: "project = SCRUM AND issuetype = Epic ORDER BY updated DESC",
+  sections: {
+    active: [
+      {
+        name: "Transversal",
+        normalizedName: "transversal",
+        jiraIssueKeys: [],
+        status: "active",
+        alreadyLocal: true,
+        willPromoteLocal: false
+      }
+    ],
+    newlyAvailable: [],
+    ignored: [],
+    archived: []
+  },
+  defaultActiveNames: ["Transversal"],
+  notes: []
+};
+
+const nonEmptyProjectSyncReview: ProjectSyncReview = {
+  jiraProjectKey: "SCRUM",
+  jql: "project = SCRUM AND issuetype = Epic ORDER BY updated DESC",
+  sections: {
+    active: [
+      {
+        name: "Transversal",
+        normalizedName: "transversal",
+        jiraIssueKeys: [],
+        status: "active",
+        alreadyLocal: true,
+        willPromoteLocal: false
+      },
+      {
+        name: "Moon Lab",
+        normalizedName: "moon-lab",
+        jiraIssueKeys: ["SCRUM-10"],
+        status: "active",
+        alreadyLocal: true,
+        willPromoteLocal: false
+      }
+    ],
+    newlyAvailable: [
+      {
+        name: "PilotLab",
+        normalizedName: "pilotlab",
+        jiraIssueKeys: ["SCRUM-11"],
+        status: "new",
+        alreadyLocal: false,
+        willPromoteLocal: false
+      }
+    ],
+    ignored: [
+      {
+        name: "Legacy Sandbox",
+        normalizedName: "legacy-sandbox",
+        jiraIssueKeys: ["SCRUM-12"],
+        status: "ignored",
+        alreadyLocal: false,
+        willPromoteLocal: false
+      }
+    ],
+    archived: [
+      {
+        name: "Archived Team",
+        normalizedName: "archived-team",
+        jiraIssueKeys: ["SCRUM-13"],
+        status: "archived",
+        alreadyLocal: true,
+        willPromoteLocal: false
+      }
+    ]
+  },
+  defaultActiveNames: ["Transversal", "Moon Lab", "PilotLab"],
+  notes: []
 };
 
 describe("CategoriesPanel", () => {
@@ -178,6 +257,46 @@ it("places edit and delete actions before the right-aligned source label", () =>
   expect(html).toContain("Delete Manual Project");
   expect(html.indexOf("Rename Manual Project")).toBeLessThan(html.indexOf(">local</span>"));
   expect(html.indexOf("Delete Manual Project")).toBeLessThan(html.indexOf(">local</span>"));
+});
+
+it("renders Project Sync empty discovery as a deliberate empty state without Apply", () => {
+  const html = renderToStaticMarkup(
+    <ProjectSyncModal
+      review={emptyProjectSyncReview}
+      onApply={async () => undefined}
+      onClose={() => undefined}
+      onRetry={async () => undefined}
+    />
+  );
+
+  expect(html).toContain("No Jira Projects found yet");
+  expect(html).toContain("[{Project}] [{Area}] {Scope}");
+  expect(html).toContain("Try again");
+  expect(html).not.toContain("Choose which Jira Projects stay active");
+  expect(html).not.toContain(">Apply<");
+  expect(html).not.toContain('aria-pressed=');
+});
+
+it("keeps non-empty Project Sync decisions actionable", () => {
+  const html = renderToStaticMarkup(
+    <ProjectSyncModal
+      review={nonEmptyProjectSyncReview}
+      onApply={async () => undefined}
+      onClose={() => undefined}
+      onRetry={async () => undefined}
+    />
+  );
+
+  expect(html).toContain("Choose which Jira Projects stay active");
+  expect(html).toContain("Moon Lab");
+  expect(html).toContain("PilotLab");
+  expect(html).toContain("Legacy Sandbox");
+  expect(html).toContain("Archived Team");
+  expect(html).toContain(">Active<");
+  expect(html).toContain(">Ignored<");
+  expect(html).toContain(">Archived<");
+  expect(html).toContain(">Apply<");
+  expect(html).not.toContain("No Jira Projects found yet");
 });
 
 it("keeps Notion catalog areas synchronized instead of manually editable", () => {

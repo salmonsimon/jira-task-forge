@@ -343,6 +343,53 @@ pub struct JiraRemoteMarkerIssue {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct JiraIssueLinkType {
+    pub id: String,
+    pub name: String,
+    pub inward: String,
+    pub outward: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JiraIssueLinkTypesResponse {
+    #[serde(default)]
+    pub issue_link_types: Vec<JiraIssueLinkType>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JiraIssueLinksFieldResponse {
+    pub fields: JiraIssueLinksFields,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JiraIssueLinksFields {
+    #[serde(default)]
+    pub issuelinks: Vec<JiraIssueLink>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JiraIssueLink {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub link_type: JiraIssueLinkType,
+    #[serde(default)]
+    pub inward_issue: Option<JiraIssueLinkIssue>,
+    #[serde(default)]
+    pub outward_issue: Option<JiraIssueLinkIssue>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JiraIssueLinkIssue {
+    pub key: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SyncAuditEvent {
     pub id: String,
     pub sync_attempt_id: Option<String>,

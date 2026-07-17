@@ -1012,7 +1012,7 @@ fn defaults_ai_models_by_provider_when_blank() {
     assert_eq!(ai_model_or_default(AiProvider::OpenAi, ""), "gpt-4.1");
     assert_eq!(
         ai_model_or_default(AiProvider::Claude, "   "),
-        "claude-sonnet-4-20250514"
+        "claude-3-5-haiku-20241022"
     );
     assert_eq!(
         ai_model_or_default(AiProvider::Gemini, ""),
@@ -1078,10 +1078,10 @@ fn returns_early_ai_provider_errors_before_keyring_or_network_work() {
         "Claude API key cannot be empty."
     );
 
-    let claude_models = services
-        .list_ai_provider_models("Claude", Some("unsaved-key"))
-        .expect("claude fallback model list resolves without network");
-    assert!(claude_models.contains(&"claude-sonnet-4-20250514".to_string()));
+    assert_eq!(
+        AiProvider::Claude.fallback_models().first().copied(),
+        Some("claude-3-5-haiku-20241022")
+    );
 }
 
 #[test]

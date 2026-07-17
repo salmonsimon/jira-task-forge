@@ -13,11 +13,12 @@ the OS credential store, Jira connection testing, read-only JQL search with
 favorites/recent history, AI-assisted JQL drafting through the Tauri backend,
 sync audit activity, Jira-admin-import-friendly CSV export, official
 area catalog sync from Notion with public OAuth connection token handling in the
-OS credential store, task
-detail sub-tasks, local issue relationship drafts, attachment metadata and
-managed-file ingestion, assisted description sections/proposals, and a guarded
-`Create in Jira` flow that creates required epics, parent Story/Bug issues,
-accepted sub-tasks, and selected Jira-ready attachments.
+OS credential store, task detail sub-tasks, local issue relationship intents,
+attachment metadata and managed-file ingestion, assisted description
+sections/proposals, and a guarded `Create in Jira` flow that creates required
+epics, parent Story/Bug issues, accepted sub-tasks, selected Jira-ready
+attachments, and Jira `blocks` / `blocked_by` issue links after both tasks have
+Jira keys.
 
 ## Download Beta
 

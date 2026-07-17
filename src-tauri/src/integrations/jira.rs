@@ -12,7 +12,8 @@ use super::jira_mapping::{
 };
 use crate::models::{
     JiraAttachmentSettings, JiraCreateIssueResponse, JiraCreateIssueTypeMetadata,
-    JiraCreateMetadata, JiraMyself, JiraProjectOption, JiraProjectSearchResponse,
+    JiraCreateMetadata, JiraIssueLink, JiraIssueLinkType, JiraIssueLinkTypesResponse,
+    JiraIssueLinksFieldResponse, JiraMyself, JiraProjectOption, JiraProjectSearchResponse,
     JiraRemoteMarkerIssue, JqlSearchResponse,
 };
 use crate::project_sync::JiraEpicProjectCandidate;
@@ -200,6 +201,35 @@ impl JiraClient {
             self.post("/rest/api/3/issue").send_json(payload),
             "Jira issue create",
             None,
+        )
+    }
+
+    pub fn issue_link_types(&self) -> Result<Vec<JiraIssueLinkType>, String> {
+        let response: JiraIssueLinkTypesResponse =
+            self.get_json_with_retry("/rest/api/3/issueLinkType", "Jira issue link metadata")?;
+        Ok(response.issue_link_types)
+    }
+
+    pub fn issue_links(&self, key: &str) -> Result<Vec<JiraIssueLink>, String> {
+        let key = key.trim();
+        if key.is_empty() {
+            return Err("Jira issue key is required.".to_string());
+        }
+
+        let response: JiraIssueLinksFieldResponse = self.get_json_with_retry(
+            &format!(
+                "/rest/api/3/issue/{}?fields=issuelinks",
+                encode_path_segment(key)
+            ),
+            "Jira issue link lookup",
+        )?;
+        Ok(response.fields.issuelinks)
+    }
+
+    pub fn create_issue_link(&self, payload: Value) -> Result<(), String> {
+        parse_empty_response(
+            self.post("/rest/api/3/issueLink").send_json(payload),
+            "Jira issue link create",
         )
     }
 
