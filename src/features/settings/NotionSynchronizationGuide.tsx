@@ -6,8 +6,8 @@ import { appOverlayLayers, useAppOverlay } from "../../lib/app-overlays";
 import { getModalMouseNavigationIntent, isMouseNavigationButton, shouldHandleEnterAsWizardAdvance } from "../../lib/modal-navigation";
 import type { AppSettings, NotionCatalogConnectionTestResult, NotionOAuthConnectionResult, NotionOAuthStartResult } from "../../lib/types";
 
-export const defaultNotionCatalogUrl = "https://app.notion.com/p/387c335aece481c292baf6991a86a5c3";
 export const notionCatalogSourceRequirementsUrl = "https://app.notion.com/p/395c335aece48144b2dbe2cc2e0de298";
+const notionCatalogUrlPlaceholder = "https://www.notion.so/your-workspace/your-catalog-page";
 
 type NotionStep = "source" | "connect" | "catalog" | "review";
 type NotionOAuthStatus = "idle" | "started" | "success" | "error";
@@ -92,7 +92,7 @@ export function NotionSynchronizationGuide({
   const [mode, setMode] = useState<AppSettings["catalogSourceMode"]>(
     settings.catalogSourceMode === "public-exportable" ? "notion" : settings.catalogSourceMode
   );
-  const [sourceUrl, setSourceUrl] = useState(settings.catalogSourceUrl || defaultNotionCatalogUrl);
+  const [sourceUrl, setSourceUrl] = useState(settings.catalogSourceUrl);
   const [hasToken, setHasToken] = useState(false);
   const [oauthCode, setOauthCode] = useState("");
   const [authorizationUrl, setAuthorizationUrl] = useState<string | null>(null);
@@ -327,7 +327,7 @@ export function NotionSynchronizationGuide({
         {isSavingSynchronization ? (
           <BlockingBusyOverlay title="Saving synchronization" detail="Refreshing Areas from the selected catalog source." />
         ) : null}
-        <PanelHeader title="Set Catalog Source" subtitle="Choose Manual catalog for local Areas or connect the JTF Sync Catalog page for official area sync." onClose={onClose} />
+        <PanelHeader title="Set Catalog Source" subtitle="Sync Areas from a Notion catalog or manage them manually without an external connection." onClose={onClose} />
         <div className="border-b border-[#dfe1e6] bg-[#f7f8fa] px-5 py-3">
           <div className={`grid gap-2 ${visibleSteps.length === 1 ? "grid-cols-1" : "grid-cols-4"}`}>
             {visibleSteps.map((candidate, index) => (
@@ -350,10 +350,10 @@ export function NotionSynchronizationGuide({
         </div>
         <div className="min-h-[360px] flex-1 overflow-y-auto p-6">
           {step === "source" ? (
-            <GuideSection title="Catalog source" description="Choose whether Areas are managed locally or synced from the Notion catalog. Manual catalog saves immediately and skips external setup.">
+            <GuideSection title="Catalog source" description="Choose whether Areas sync from Notion or are managed locally. Sync from Notion is selected by default.">
               <SourceModeSelect label="Catalog mode" value={mode} options={catalogModeOptions} onChange={setMode} />
               {mode !== "manual" ? (
-                <FeedbackNote variant="info">Continue to connect Notion, then confirm the dedicated catalog page before saving.</FeedbackNote>
+                <FeedbackNote variant="info">Continue to connect Notion, then choose and validate your catalog page before saving.</FeedbackNote>
               ) : (
                 <FeedbackNote variant="warning">Manual catalog keeps Areas editable in Categories. No Notion token, page URL, or connection test is needed.</FeedbackNote>
               )}
@@ -422,10 +422,10 @@ export function NotionSynchronizationGuide({
             </GuideSection>
           ) : null}
           {step === "catalog" ? (
-            <GuideSection title="Catalog page" description="Paste the dedicated catalog page URL or ID that you selected in the Notion OAuth picker. The page must pass validation before synchronization can be saved.">
+            <GuideSection title="Catalog page" description="Paste the Notion page URL or ID selected in the OAuth picker. The page must pass validation before synchronization can be saved.">
               <GuideInput
                 label="Selected catalog page URL or ID"
-                placeholder={defaultNotionCatalogUrl}
+                placeholder={notionCatalogUrlPlaceholder}
                 value={sourceUrl}
                 onChange={(value) => {
                   setSourceUrl(value);

@@ -732,7 +732,7 @@ function PrivacyDiagnosticsView({ onBack }: { onBack: () => void }) {
         <PrivacyDetail title="External calls" text="Jira actions call Jira Cloud. AI actions use the selected provider only after you trigger them." />
         <PrivacyDetail title="Secrets" text="Jira and AI keys stay in the OS credential store and are excluded from SQLite, backups, and logs." />
         <PrivacyDetail title="Diagnostics" text="Manual npm audit sends dependency metadata to the configured npm registry when agents run it." />
-        <PrivacyDetail title="QA boundary" text="JTFTEST is writable for live QA. DTS remains read-only reference data." />
+        <PrivacyDetail title="Jira permissions" text="Only use Jira projects where you are authorized to create and modify issues." />
       </div>
     </div>
   );
