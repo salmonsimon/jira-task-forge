@@ -49,8 +49,8 @@ la descripción final sea fácil de leer en Jira y de revisar antes de crearla:
 <th width="50%">Bug</th>
 </tr>
 <tr>
-<td width="50%" valign="top"><pre><code>&#35;&#35; Historia de usuario&#10;&#10;&#35;&#35; Contexto&#10;&#10;&#35;&#35; Alcance&#10;&#10;&#35;&#35; Criterios de aceptación&#10;&#10;&#35;&#35; Entregable mínimo&#10;&#10;&#35;&#35; Checklist antes de Review</code></pre></td>
-<td width="50%" valign="top"><pre><code>&#35;&#35; Problema&#10;&#10;&#35;&#35; Contexto e impacto&#10;&#10;&#35;&#35; Pasos para reproducir&#10;&#10;&#35;&#35; Resultado actual&#10;&#10;&#35;&#35; Resultado esperado&#10;&#10;&#35;&#35; Evidencia&#10;&#10;&#35;&#35; Criterios de aceptación&#10;&#10;&#35;&#35; Entregable mínimo&#10;&#10;&#35;&#35; Checklist antes de Review</code></pre></td>
+<td width="50%" valign="top"><pre><samp>&#35;&#35; Historia de usuario&#10;&#10;&#35;&#35; Contexto&#10;&#10;&#35;&#35; Alcance&#10;&#10;&#35;&#35; Criterios de aceptación&#10;&#10;&#35;&#35; Entregable mínimo&#10;&#10;&#35;&#35; Checklist antes de Review</samp></pre></td>
+<td width="50%" valign="top"><pre><samp>&#35;&#35; Problema&#10;&#10;&#35;&#35; Contexto e impacto&#10;&#10;&#35;&#35; Pasos para reproducir&#10;&#10;&#35;&#35; Resultado actual&#10;&#10;&#35;&#35; Resultado esperado&#10;&#10;&#35;&#35; Evidencia&#10;&#10;&#35;&#35; Criterios de aceptación&#10;&#10;&#35;&#35; Entregable mínimo&#10;&#10;&#35;&#35; Checklist antes de Review</samp></pre></td>
 </tr>
 </table>
 
