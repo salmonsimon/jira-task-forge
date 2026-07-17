@@ -530,8 +530,8 @@ happen instead, and what evidence proves the fix. Story descriptions should
 stay focused on user value, scope, and acceptance criteria.
 
 Personal v1 refines the current "Crear descripciones de JIRA" chat format into
-the fixed internal template captured in `docs/jira-description-format.md`. Keep
-the implemented prompt shape and required sections aligned with the dedicated
+the fixed Story and Bug templates described above. Keep the implemented prompt
+shape and required sections aligned with the dedicated
 `docs/assisted-description-context.md` context.
 - The Personal v1 clarification UX should be structured rather than chat-like:
   AI shows the targeted questions it needs answered, Saimon responds in a single
